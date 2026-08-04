@@ -7,8 +7,8 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
-import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
-import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth } from '../view/layout.js';
+import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective, childrenOf } from '../utils/model.js';
+import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStackBox, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, orderedKids, ancestorDepth } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -138,7 +138,8 @@ function updateRip(drag: Drag): void {
   const parent = act.parent ? state.nodes.get(act.parent) : null;
   // An annotation is never "in" a frame for rip purposes — it renders on top, not inside the box —
   // so it detaches ONLY by being dragged past the rip threshold, never by leaving a frame's bounds.
-  const inFrame = !!(parent && isFrame(parent)) && !isAnnotation(act);
+  // isContainer covers a stack too: its child detaches by leaving the stack box, same as a frame.
+  const inFrame = !!(parent && isContainer(parent)) && !isAnnotation(act);
   if (act.parent && !reordering) {
     if (inFrame) {
       rip = !centreInFrame(act, parent!);
@@ -531,7 +532,7 @@ function dragPointerUp(): void {
           // frame's origin (its children live in the frame's coordinate space); anyone else snaps
           // to the world grid.
           const fp = act.parent ? state.nodes.get(act.parent) : null;
-          const inFrame = !!(fp && isFrame(fp));
+          const inFrame = !!(fp && isContainer(fp));   // frame OR stack: snap relative to the box origin
           const ax = inFrame ? fp!.x : 0, ay = inFrame ? fp!.y : 0;
           const g = gridSnap();
           const ddx = (Math.round((act.x - ax) / g) * g + ax) - act.x;
@@ -550,7 +551,7 @@ function dragPointerUp(): void {
             const r = state.nodes.get(rootId);
             if (!r?.parent) continue;
             const rp = state.nodes.get(r.parent);
-            const rInFrame = !!(rp && isFrame(rp)) && !isAnnotation(r);   // annotations detach by rip only
+            const rInFrame = !!(rp && isContainer(rp)) && !isAnnotation(r);   // frame/stack; annotations detach by rip only
             const rOut = rInFrame && !centreInFrame(r, rp!);
             if (!shift && (rInFrame ? rOut : (alt || distanceRip(r)))){
               r.parent = null; r.side = undefined;   // a root has no side / frame host
@@ -743,7 +744,9 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     if (isHidden(m) || sub.has(id)) continue;
     const w = nodeW(m), h = nodeH(m);
     if (!(wx >= m.x && wx <= m.x + w && wy >= m.y && wy <= m.y + h)) continue;
-    if (isFrame(m)) {
+    if (isContainer(m)) {
+      // a frame OR a stack is a container box — plain cards (incl. the container's own children)
+      // win over it, and among nested containers the innermost (deepest) wins.
       const d = ancestorDepth(m);
       if (d > frameHitDepth) { frameHitDepth = d; frameHit = m; }
     } else if (!cardHit) { cardHit = m; }
@@ -793,7 +796,46 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   } else if (hovered) {
     const hoveredNode = state.nodes.get(hovered)!;
     const pf = hoveredNode.parent ? state.nodes.get(hoveredNode.parent) : null;
-    if (frameFlow(hoveredNode)) {
+    const stackHost = hostFrame(hoveredNode);
+    if (isStackBox(hoveredNode) || (stackHost && isStackBox(stackHost))) {
+      // ---- STACK OUTLINER drop ----
+      // Default is REORDER: insert the card between the outline rows, previewed with a horizontal
+      // bar in the gap the cursor is nearest (reorderTarget, by the dragged card's live position).
+      // Only the RIGHT 30% of a row means "make it a CHILD of that row" (indent one level under it),
+      // previewed with a landing ghost instead of the bar.
+      const H = hoveredNode;
+      const rel = (wx - H.x) / Math.max(1, nodeW(H));
+      if (!isStackBox(H) && !isLeafType(H) && rel > 0.7) {
+        target = H.id; mode = 'child'; side = 'down';                  // reparent as a child of H
+      } else {
+        // REORDER — insert the card between the outline rows. A stack is a flat vertical list, so
+        // sideOf is meaningless here (top rows sit above the box centre, bottom rows below); we pick
+        // the slot geometrically instead. Hovering a row inserts among ITS siblings, before/after by
+        // the cursor's half; hovering the stack's own area inserts among the stack's direct children.
+        let p: MindNode | null, anchor: MindNode | null = null, before = true;
+        if (isStackBox(H)) {
+          p = H;
+          const kids = orderedKids(p, childrenOf(p.id).filter(k => !isHidden(k) && !isAnnotation(k) && k.id !== dragged.id));
+          const i = kids.findIndex(k => wy < k.y + nodeH(k) / 2);
+          if (i === -1) { anchor = kids[kids.length - 1] ?? null; before = false; }
+          else { anchor = kids[i]; before = true; }
+        } else {
+          p = H.parent ? state.nodes.get(H.parent) ?? null : null;
+          anchor = H; before = (wy - H.y) < nodeH(H) / 2;
+        }
+        if (p && p.id !== dragged.id && !sub.has(p.id)) {
+          if (!anchor) { target = p.id; mode = 'child'; side = 'down'; }   // empty stack → plain child
+          else {
+            const sibs = orderedKids(p, childrenOf(p.id).filter(k => !isHidden(k) && !isAnnotation(k) && k.id !== dragged.id));
+            const ai = sibs.findIndex(s => s.id === anchor!.id);
+            after = before ? (ai > 0 ? sibs[ai - 1].id : null) : anchor.id;
+            const ly = before ? anchor.y : anchor.y + nodeH(anchor);
+            line = { x0: anchor.x, y0: ly, x1: anchor.x + nodeW(anchor), y1: ly };
+            target = p.id; mode = 'reorder'; side = 'down';
+          }
+        }
+      }
+    } else if (frameFlow(hoveredNode)) {
       // The FLOW frame's own (empty) area → insert into the flow at the slot under the cursor,
       // previewed with an insertion bar (like line layout). Covers dropping an external card in
       // AND reordering a card already inside.

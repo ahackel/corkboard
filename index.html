@@ -51,30 +51,18 @@
   </div>
 
   <div id="stage">
+    <!-- background grid (none/dot/line, toggled by #gridBtn): a SCREEN-SPACE layer, sibling of
+         (and painted below) #world — deliberately NOT inside #world. A pattern that inherits the
+         zoom transform scales its own dots/strokes with it, so at any k≠1 the browser resamples
+         a sub-pixel pattern across the whole canvas — that's the moiré. Here the dots/lines are
+         always exactly 1 screen px and only the spacing follows the zoom. Two nested layers:
+         #grid draws the major cell, #gridFine the sub-grid of 4 cells inside it, and the
+         sub-grid's opacity fades out as you zoom out — by the time its cells get too dense the
+         level has stepped up by a factor of 4 with the sub-grid already invisible, so it never
+         pops. See view/grid.ts for the level-of-detail math. Panning only writes #grid's
+         transform (compositor-only); the gradients are rebuilt only when the level changes. -->
+    <div id="grid"><div id="gridFine"></div></div>
     <div id="world">
-      <!-- background grid (none/dot/line, toggled by #gridBtn): behind everything, incl. group
-           backgrounds. Pattern cell size defaults to 20 world units — matching GRID_SNAP in
-           main.ts, where dragged cards snap to — but is independently adjustable via
-           #gridSizeBtn (view/grid.ts sets width/height/d on gridDotPat/gridLinePat directly).
-           Lives inside #world so it inherits the pan/zoom transform for free, no per-frame
-           position math needed — deliberately a plain scaling stroke, NOT vector-effect
-           non-scaling-stroke: that forces the browser to re-rasterize the stroke geometry against
-           the live CTM on every frame of a zoom gesture instead of just compositing the cached
-           layer, which was jank/flicker severe enough to bleed into the cards painted alongside
-           it. view/camera.ts fades the whole layer out at low on-screen cell density instead
-           (view/grid.ts updateGridZoom) — that alone keeps a dense/zoomed-out grid from ever
-           getting fine enough to moiré. -->
-      <svg id="grid">
-        <defs>
-          <pattern id="gridDotPat" width="20" height="20" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="1" fill="var(--grid-pat)"/>
-          </pattern>
-          <pattern id="gridLinePat" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--grid-pat)" stroke-width="1"/>
-          </pattern>
-        </defs>
-        <rect id="gridRect" x="-100000" y="-100000" width="200000" height="200000" fill="none"/>
-      </svg>
       <!-- group backgrounds: the "encloses card + descendants" tint, behind everything else -->
       <svg id="backgrounds"></svg>
       <!-- freehand sketch layer: ink drawn on the canvas, always on top of the cards (z-index, see styles.css) -->

@@ -88,6 +88,8 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
       icon: SVG_OPEN + DOT(4,12) + '<path d="M6.5 12h3"/>' + DOT(12,12) + '<path d="M14.5 12h3"/>' + DOT(20,12) + '</svg>' },
     { key:'fan', label:'Fan — children spread out, each to whichever side it’s placed on',
       icon: SVG_OPEN + DOT(4,12) + '<path d="M6 12l6-6M6 12h6M6 12l6 6"/>' + DOT(14,6,1.8) + DOT(14,12,1.8) + DOT(14,18,1.8) + '</svg>' },
+    { key:'stack', label:'Stack — children framed in one full-width vertical list; the box auto-sizes',
+      icon: SVG_OPEN + '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.5h16"/><rect x="6.5" y="10.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/><rect x="6.5" y="14.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/></svg>' },
   ],
   frame: [
     { key:'free', label:'Free — children placed freely inside the box',

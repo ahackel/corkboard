@@ -91,7 +91,9 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
     return { type: 'frame', layout };
   }
   if (v === 'two-sided' || v === 'grid') return { type: 'card', layout: 'fan' };
-  if (v === 'free' || v === 'line' || v === 'fan') return { type: 'card', layout: v };
+  // A card omits mm_type (card is the default), so a card's `mm_layout` is read HERE, not via the
+  // mm_type branch above — every card layout value must be listed or it silently reverts to inherit.
+  if (v === 'free' || v === 'line' || v === 'fan' || v === 'stack') return { type: 'card', layout: v };
   return { type: 'card', layout: 'inherit' };
 }
 

@@ -18,12 +18,13 @@
 // Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
 export type NodeType = 'card' | 'frame' | 'image' | 'annotation' | 'query';
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
-//   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread).
+//   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread),
+//             stack (a framed, auto-sized box listing children in one full-width vertical column).
 //   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
 //             down), vertical (auto-flow columns: top→bottom, wrap right).
 //   · image / annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
-export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical';
+export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'stack';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
 // sizing from title/body content — a frame, an image, or a query card.
 export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'image' || t === 'query';
