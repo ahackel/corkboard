@@ -60,7 +60,7 @@ export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' |
   // final position. (When the governor IS the stack it's managed, so it simulates properly below.)
   {
     const h = hostFrame(governor);
-    if (h && isStackBox(h)) return { x: governor.x + STACK_INDENT, y: subtreeBox(governor).y1 + STACK_GAP };
+    if (h && isStack(h)) return { x: governor.x + STACK_INDENT, y: subtreeBox(governor).y1 + STACK_GAP };
   }
   // A frame adopts the card where it's released, snapped to the grid RELATIVE to the frame's
   // origin (its children live in the frame's coordinate space).
@@ -186,7 +186,7 @@ export function subtreeBox(node: MindNode){
 // its footprint and behaviour revert to a normal card, matching how it renders.
 export function isFrame(node: MindNode): boolean { return node.type === 'frame' && !node.collapsed; }
 // Is there a stack in this node's ancestry, with only card ancestors in between (a frame/image/query
-// re-scopes and stops the search)? Uses the RAW `type` field so it never recurses through isStackBox.
+// re-scopes and stops the search)? Uses the RAW `type` field so it never recurses through isStack.
 // A stack that lives inside another stack is DEMOTED to a plain outline row: the outer stack outlines
 // the whole subtree (all descendant layouts ignored), so a nested stack isn't a box of its own — it's
 // just another indented node. The stack test comes FIRST: a stack ancestor's own type isn't 'card', so
@@ -204,13 +204,13 @@ function insideStack(node: MindNode): boolean {
 // A COLLAPSED stack folds to an ordinary card (children hidden), so it isn't a container while folded.
 // A stack INSIDE another stack is demoted (insideStack) to a plain outline row — the outer stack owns
 // the whole subtree and ignores every descendant's own arrangement.
-export function isStackBox(node: MindNode): boolean {
+export function isStack(node: MindNode): boolean {
   return node.type === 'stack' && !node.collapsed && !insideStack(node);
 }
 // Either kind of child-containing box: a frame or a stack. Used at every touchpoint where the box
 // behaves purely as "a container that holds & clips its children" (footprint, hosting, edge
 // clipping, drag adopt/detach) — as opposed to frame-only behaviour (resize, free/flow placement).
-export function isContainer(node: MindNode): boolean { return isFrame(node) || isStackBox(node); }
+export function isContainer(node: MindNode): boolean { return isFrame(node) || isStack(node); }
 // The height a stack reserves above its first row for its OWN title-row — measured live, so a
 // multi-line title pushes the rows down instead of being drawn over (STACK_HEADER is the pre-render
 // fallback). Shared by the layout pass and the drop resolver so both agree where row 0 starts.
@@ -372,9 +372,9 @@ export function effectiveLayout(node: MindNode): { type: string } {
   // lives inside a stack (before hitting a nearer frame) to `free`, so its own layoutSubtree is a
   // no-op and the stack's outline pass places it. Checked before the normal walk so an explicit
   // line/fan on a descendant doesn't override the outliner.
-  if (isStackBox(node)) return { type: 'stack' };
+  if (isStack(node)) return { type: 'stack' };
   for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
-    if (isStackBox(p)) return { type: 'free' };   // governed by the stack's outliner
+    if (isStack(p)) return { type: 'free' };   // governed by the stack's outliner
     if (p.type !== 'card') break;                 // a nearer frame/box governs instead — normal rules
   }
   let n: MindNode | null | undefined = node, guard = 0;
@@ -407,9 +407,9 @@ export function isManagedLayout(node: MindNode): boolean {
 // makes a row count as isManagedLayout, so a drop that re-nests under a row stores its insertion
 // anchor (reparentOnly) instead of falling back to seeding order from raw positions.
 export function stackOf(node: MindNode): MindNode | null {
-  if (isStackBox(node)) return node;
+  if (isStack(node)) return node;
   const h = hostFrame(node);
-  return h && isStackBox(h) ? h : null;
+  return h && isStack(h) ? h : null;
 }
 // Which of the parent's 4 sides a child sits on, computed FRESH from its current position —
 // dominant axis of the offset between the two centers, SCALED by the parent's own aspect ratio

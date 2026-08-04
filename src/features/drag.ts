@@ -8,7 +8,7 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
 import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
-import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStackBox, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth } from '../view/layout.js';
+import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -797,7 +797,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     const hoveredNode = state.nodes.get(hovered)!;
     const pf = hoveredNode.parent ? state.nodes.get(hoveredNode.parent) : null;
     const stackHost = hostFrame(hoveredNode);
-    if (isStackBox(hoveredNode) || (stackHost && isStackBox(stackHost))) {
+    if (isStack(hoveredNode) || (stackHost && isStack(stackHost))) {
       // ---- STACK OUTLINER drop ----
       // One gesture, two axes (see stackDropTarget): the card's VERTICAL position picks the gap
       // between two rows, its HORIZONTAL position picks the depth at that gap. So a straight-down
@@ -805,7 +805,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       // zone to hit by accident. Always previewed by the insertion line (indented to the resolved
       // depth), never a landing ghost. `mode:'reorder'` is right even when the depth (and so the
       // parent) changes: the commit path re-parents onto `target` with `dropAfter` either way.
-      const stack = isStackBox(hoveredNode) ? hoveredNode : stackHost!;
+      const stack = isStack(hoveredNode) ? hoveredNode : stackHost!;
       if (!sub.has(stack.id)) {
         const d = stackDropTarget(stack, dragged, sub);
         const p = state.nodes.get(d.parentId);
