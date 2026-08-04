@@ -22,7 +22,7 @@ import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameFlow } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -381,9 +381,11 @@ export function paintNode(n: MindNode): void {
   // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isAnnotation(n) && !isQueryBox(n) && !state.readOnly && !isLockedEffective(n);
+  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isQueryBox(n) && !state.readOnly && !isLockedEffective(n);
   el.className = 'node c-' + effectiveColor(n)
     + (isFrameBox(n) ? ' frame' : '')
+    + (isStack(n) ? ' stack' : '')
+    + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
     + (isImageBox(n) ? ' image-card' : '')
     + (isQueryBox(n) ? ' query-card' : '')
     + (isAnnotation(n) ? ' annotation' : '')
@@ -392,7 +394,7 @@ export function paintNode(n: MindNode): void {
     + (collapsed ? ' collapsed' : '')
     + (n.locked ? ' locked' : '')
     + (hasBody ? '' : ' no-body')
-    + (isFrameBox(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
+    + (isFrameBox(n) || isStack(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
     + (showDone ? ' show-done' : '')
     + (showDone && n.done ? ' done' : '')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
@@ -439,18 +441,27 @@ export function paintNode(n: MindNode): void {
       // TOP of everything and no frame mask ever clips it. It still tracks its parent: layout keeps
       // n.x/n.y = parent + offset, and drag carries it (it's in the parent's subtreeIds → own transform).
       place(el, n.x, n.y, null);
-    } else if (p && !isFrameBox(p)) {
+    } else if (p && !isContainerBox(p) && !isContainerBox(n)) {
       const pEl = nodeEl(p);
       el.style.left = (n.x - p.x) + 'px';
       el.style.top  = (n.y - p.y) + 'px';
       if (el.parentElement !== pEl) pEl.appendChild(el);
     } else {
-      place(el, n.x, n.y, host);   // root → #world; direct frame child → frame content wrapper
+      // root → #world; direct frame/stack child → container content wrapper. A CONTAINER's own box
+      // takes this branch too, even when its parent is an ordinary card: its content wrapper is
+      // placed by the very same place()/settledHost call (frameContentEl), and the two only stack
+      // correctly — wrapper (and the rows inside it) above the box's own fill — while they're
+      // SIBLINGS in one DOM parent. Nesting the box inside a parent card instead put the two in
+      // different stacking contexts, so the box's fill won the tie and swallowed its own rows'
+      // pointer events (pressing a stack row grabbed the whole stack).
+      place(el, n.x, n.y, host);
     }
   }
   // A frame (or an image card) is its own resizable box; give the element that size and a
-  // drag-to-resize handle. Any other card clears the inline size so a reverted box snaps back
-  // to the CSS-fixed card.
+  // drag-to-resize handle. A stack is a box too (a sized, clipping container) but is NOT resizable —
+  // its size is auto-fitted by layout, so it gets no resize handle. A stack's own child is stretched
+  // to the stack's inner width (its n.w). Any other card clears the inline size so a reverted box
+  // snaps back to the CSS-fixed card.
   if (isBoxNode(n)) {
     el.style.width = (n.w ?? boxDefaultW(n)) + 'px';
     el.style.height = (n.h ?? boxDefaultH(n)) + 'px';
@@ -458,6 +469,16 @@ export function paintNode(n: MindNode): void {
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
     ensureFrameHandle(n);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+  } else if (isStack(n)) {
+    el.style.width = nodeW(n) + 'px';    // fixed STACK_W
+    el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
+    el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
+    frameContentEl(n);                   // clipping content wrapper — no resize handle (not resizable)
+  } else if (inStack(n)) {
+    el.style.width = nodeW(n) + 'px';    // stretched to the stack's inner width; height stays content-driven
+    if (el.style.height) el.style.height = '';
+    el.style.removeProperty('--frame-stroke');
+    el.querySelectorAll('.fh, .frame-resize').forEach(x => x.remove());
   } else if (el.style.width) {
     el.style.width = ''; el.style.height = '';
     el.style.removeProperty('--frame-stroke');
@@ -518,6 +539,13 @@ export const FRAME_W = 360, FRAME_H = 260;   // default frame container size (wo
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
 export const QUERY_W = 280, QUERY_H = 320;   // default query-card size (world px)
 export const FRAME_BORDER = 4;   // must match .node.frame's CSS `border` width (styles.css)
+// Stack geometry (a framed, auto-sized outliner node kind — see isStack in view/layout.ts). Its
+// width is FIXED (not resizable); its height auto-fits its children (computed in layoutSubtree).
+export const STACK_W = NODE_W;   // a stack is the SAME width as a normal card (not wider)
+export const STACK_HEADER = 36;  // title strip reserved above the stacked children
+export const STACK_PAD = 6;      // inset from the border to the content — half a normal card's
+                                 // padding, so full-width child cards still fit in the narrow box
+export const STACK_GAP = 8;      // vertical gap between stacked children
 // Whether a node currently renders as a frame BOX. A collapsed frame folds to an ordinary card, so
 // its footprint reverts to a normal card (matching paintNode). Shared by the geometry helpers below.
 function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.collapsed; }
@@ -525,22 +553,38 @@ function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.coll
 function isImageBox(n: MindNode): boolean { return n.type === 'image' && !n.collapsed; }
 // A query card: a resizable leaf with a search field + scrollable results list — no children.
 function isQueryBox(n: MindNode): boolean { return n.type === 'query' && !n.collapsed; }
-// Any resizable box — shares sizing/resize-handle plumbing below.
+// Any RESIZABLE box — shares sizing/resize-handle plumbing below. A stack is a box too (it gets a
+// size + a .frame-content wrapper) but is NOT resizable, so it's covered by isContainerBox instead.
 function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n) || isQueryBox(n); }
+// Any node that renders as a child-containing BOX with a size + clipping wrapper: a resizable frame
+// OR an auto-sized stack. Used for the size/wrapper plumbing in paintNode.
+function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(n); }
+// Does this card live inside a stack's outliner? True when its nearest CONTAINER ancestor is a
+// stack (a frame in between governs instead). Every such node is laid out by the stack (its n.w is
+// the outline row width, set by the stack branch) and rendered a touch brighter (.stack-child), so
+// it needs its width applied, not cleared — covers the stack's direct children AND deeper rows.
+function inStack(n: MindNode): boolean {
+  const h = hostFrame(n);
+  return !!h && isStack(h);
+}
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : isQueryBox(n) ? QUERY_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQueryBox(n) ? QUERY_H : FRAME_H; }
-// A node's footprint WIDTH: an (expanded) frame/image card is its own resizable box; an
-// annotation shrinks to fit its text (styles.css), so its width is measured live off the
-// element rather than assumed — everything else is the fixed NODE_W.
+// A node's footprint WIDTH: an (expanded) frame/image card is its own resizable box; a stack is its
+// fixed box width, and a stack's child is stretched to the stack's inner width (its own n.w); an
+// annotation shrinks to fit its text (styles.css), so its width is measured live off the element
+// rather than assumed — everything else is the fixed NODE_W.
 export function nodeW(n: MindNode): number {
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
+  if (isStack(n)) return n.w ?? STACK_W;
+  if (inStack(n)) return n.w ?? NODE_W;   // full-width row inside a stack (n.w set by layout)
   if (isAnnotation(n)) return (n.el && n.el.offsetWidth) || NODE_W;
   return NODE_W;
 }
-// live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), not
-// its card.
+// live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
+// stack's height is its auto-fitted box (n.h, set by layout) — not its card.
 export function nodeH(n: MindNode): number {
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
+  if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   return (n.el && n.el.offsetHeight) || 64;
 }
 // Height used for LAYOUT geometry. The selection affordances (+ and the "add note" bubble) are
@@ -548,6 +592,7 @@ export function nodeH(n: MindNode): number {
 // title-only card lays out the same whether or not it's selected. A box node reports its own height.
 export function layoutH(n: MindNode): number {
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
+  if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   const el = n.el; if (!el) return 64;
   return el.offsetHeight;
 }
@@ -606,6 +651,10 @@ function frameContentEl(f: MindNode): HTMLElement {
     place(nodeEl(f), f.x, f.y, settledHost(f));
     w = document.createElement('div'); w.className = 'frame-content'; f.frameContentEl = w;
   }
+  // A stack auto-sizes to its outline, so nothing ever needs clipping — and clipping would cut off
+  // its rows' corner affordances (the +N count / lock badges that overhang the card edge). Mark its
+  // wrapper so CSS lets those overhang (overflow:visible); a resizable frame keeps overflow:hidden.
+  w.classList.toggle('stack-content', isStack(f));
   const box = frameInterior(f);
   place(w, box.x, box.y, settledHost(f));
   w.style.width  = box.w + 'px';
@@ -791,6 +840,12 @@ function withLayoutAnimation(mutate: () => void): void {
   mutate();
   paintAll();          // reveal/hide DOM and measure real heights
   applyLayouts();      // compute FINAL positions into n.x/n.y (DOM not updated yet)
+  // Paint again: a container that AUTO-SIZES only learns its new box in the pass above, and the
+  // first paint wrote the pre-toggle one. animateReflow moves elements' left/top but never their
+  // size, so a stack stayed at its collapsed height while its revealed rows spilled out of the box
+  // until some later, unrelated repaint happened to fix it. Harmless for the animation: the parking
+  // step below immediately rewrites every position before the browser gets a chance to paint.
+  paintAll();
   animateReflow(before);
 }
 // CSS-animate every visible card from its snapshotted `before` spot to its current (final)

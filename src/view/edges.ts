@@ -4,7 +4,7 @@
 // render core's live card heights (nodeH) and branch colour (effectiveColor) from main.
 import { state, backgroundsSvg, edgesSvg, togglesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation, type MindNode, type LayoutSide } from '../core/state.js';
 import { isRoot, isHidden } from '../utils/model.js';
-import { dropLanding, sideOf, subtreeBox, isFrame, hostFrame, frameInterior } from './layout.js';
+import { dropLanding, sideOf, subtreeBox, isFrame, isContainer, hostFrame, frameInterior } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { NODE_W, nodeW, nodeH, effectiveColor, SWATCH_BG } from '../main.js';
 
@@ -115,9 +115,9 @@ function previewReparent(): { parent: MindNode; box: { x: number; y: number; h: 
     ? (tgtNode.parent ? state.nodes.get(tgtNode.parent) : null)
     : tgtNode;
   if (!parent) return null;
-  // Dropping into a frame previews as the frame's own outline highlight (.drop-target), not a
-  // dashed edge into a landing spot — the card lands wherever released, so an edge would mislead.
-  if (isFrame(parent)) return null;
+  // Dropping into a frame/stack previews as the box's own outline highlight (.drop-target), not a
+  // dashed edge into a landing spot — the card lands inside the box, so an edge would mislead.
+  if (isContainer(parent)) return null;
   const h = nodeH(drag.active);
   const land = dropLanding(drag.active, tgtNode, drag.dropMode, drag.dropSide, drag.dropAfter);
   return { parent, box: { x: land.x, y: land.y, h }, side: drag.dropSide };
@@ -223,8 +223,8 @@ export function paintEdges(): void {
       if (inDragGroup(n.id)) dragged += els; else annos += els;
       continue;
     }
-    // A frame IS the container (its own box holds the children), so it draws no child edges.
-    if (isFrame(parent)) continue;
+    // A frame/stack IS the container (its own box holds the children), so it draws no child edges.
+    if (isContainer(parent)) continue;
     // tint by the child's branch colour; soften by how far the child sits from its parent
     const tint = SWATCH_BG[effectiveColor(n)];
     const dist = Math.hypot(n.x - parent.x, n.y - parent.y);

@@ -7,9 +7,9 @@
   color-scheme: dark;
   --bg: #11151c;
   --grid: #1b212c;
-  /* the visible canvas grid pattern (index.html gridDotPat/gridLinePat) wants more contrast than
-     --grid's subtle border/divider use elsewhere, so blend it toward --text instead of a second
-     hardcoded hex per theme — stays correct in both themes for free. */
+  /* the visible canvas grid pattern (view/grid.ts) wants more contrast than --grid's subtle
+     border/divider use elsewhere, so blend it toward --text instead of a second hardcoded hex per
+     theme — stays correct in both themes for free. */
   --grid-pat: color-mix(in srgb, var(--grid) 55%, var(--text) 45%);
   --node: #1e2733;
   --node-border: #34465c;
@@ -244,11 +244,22 @@ input::placeholder { color:var(--muted); opacity:1; }
 body.grabbing, body.grabbing * { cursor:grabbing !important; }
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
-svg#grid, svg#backgrounds, svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
-/* will-change:opacity keeps view/grid.ts's per-frame zoom fade (updateGridZoom) a compositor-only
-   op — without it the JS opacity write can force a repaint that bleeds into the cards painted
-   alongside it during a zoom gesture, seen as flicker. */
-svg#grid { z-index:-1; pointer-events:none; will-change:opacity; }       /* background grid behind everything, incl. group backgrounds */
+svg#backgrounds, svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
+/* Screen-space background grid (view/grid.ts), behind #world and everything in it. view/grid.ts
+   overrides `inset` with one major cell of overhang so panning can be a pure translate of an
+   already-rasterized tile — the layer stays wider than the viewport, so no uncovered strip ever
+   scrolls in. will-change keeps the per-frame transform / crossfade opacity compositor-only, so a
+   pan or zoom never repaints the cards painted alongside it. It sits below #world purely by DOM
+   order — NOT z-index:-1, which would drop it behind #stage's own (non-stacking-context) box and
+   out of sight under the body background.
+   --grid-ink is declared HERE rather than at :root so its var(--grid-pat) substitutes against
+   whichever theme is live on this element (see the light-theme note above); grid.ts's inline
+   gradients just reference it. Deliberately faint — the grid is a hint you read past, not a layer
+   that competes with the cards. This is the MAJOR level's strength; the sub-grid scales it down
+   again by SUB_MAX in grid.ts. */
+#grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
+  --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
+#gridFine { position:absolute; inset:0; will-change:opacity; }
 svg#backgrounds { z-index:0; pointer-events:none; } /* group backgrounds behind everything */
 svg#sketch { z-index:8; pointer-events:none; }      /* freehand ink ABOVE every card (incl. dragging:6, annotation:7) so ink is never occluded (drawing is handled on #stage) */
 svg#edges { z-index:1; pointer-events:none; }      /* curves behind nodes */
@@ -289,9 +300,19 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
 /* margin-left offsets the padding difference (12px left vs 10px top) plus kills the UA default
    margin, so the box sits equally far from the card's top and left edges */
-.node .donebox { display:none; margin:.2em 0 0 calc(.2em - 2px); }
-.node.show-done .donebox { display:block; }
-.node.done .title { text-decoration:line-through; opacity:.65; }
+/* Direct-child combinators only: the donebox belongs to THIS card's own title row (main.ts
+   builds .title-row > .donebox directly under .node). A descendant combinator would leak the
+   show-done state onto DOM-nested descendant cards (a child card nested inside this one has its
+   own .donebox further down the tree), showing a checkbox on a grandchild whose own direct parent
+   has no checklist — see showsDoneCheckbox in main.ts, which is already parent-only. */
+.node > .title-row > .donebox { display:none; margin:.2em 0 0 calc(.2em - 2px); }
+.node.show-done > .title-row > .donebox { display:block; }
+/* Struck-through title = THIS card is checked off. Direct-child combinators for the same reason as
+   .donebox above: a child card is DOM-nested inside its parent's element (paintNode), so a
+   descendant combinator struck out every title below a done card — the whole subtree read as done,
+   and in a stack's outline that looks like the card's own content being crossed out. Checking a
+   parent off says nothing about its children, so only its own title-row is affected. */
+.node.done > .title-row > .title { text-decoration:line-through; opacity:.65; }
 /* checklist owner: this card's own "n/m" progress over its direct children */
 .node .progress { flex:none; margin-left:auto; padding-left:.5em; font-size:11px; font-weight:600; opacity:.7; }
 /* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
@@ -308,14 +329,27 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node.locked .lock-badge { display:inline-flex; }
 .node.locked { outline:2px dashed var(--edge); outline-offset:2px; }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
-/* sits behind normal cards (z-index:2) so the cards it holds render inside it; its own box size
-   is set inline (main.ts paintNode). Border tinted to the card's own colour, like its edges. */
-.node.frame { z-index:1; min-height:0; border-radius:14px;
-  border:4px solid var(--frame-stroke, var(--edge)); padding:8px 10px; }
-.node.frame .title { font-weight:600; }
-/* an uncoloured (c-none) frame stays transparent like before — only a coloured frame fills */
-.node.frame.c-none { background:transparent; }
-.node.frame.c-none .title { color:var(--text); }
+/* z-index:0 sits it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
+   (z-index:2). Below edges so a COLOURED frame's opaque fill never covers the connector curves
+   drawn among its descendants (the edges live in the global #edges SVG, not inside the frame);
+   below cards so the cards it holds render inside it. Its children aren't DOM-descendants of this
+   box — they live in the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't
+   hide them. Its own box size is set inline (main.ts paintNode); border tinted to the card's own
+   colour, like its edges. .stack (a framed card layout) shares the same box behaviour. */
+.node.frame, .node.stack { z-index:0; min-height:0; border-radius:14px;
+  border:4px solid var(--frame-stroke, var(--edge)); }
+.node.frame { padding:8px 10px; }
+/* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
+   card padding — that's what lets full-width child cards fit inside the narrow box. */
+.node.stack { padding:5px 6px; }
+.node.frame .title, .node.stack .title { font-weight:600; }
+/* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills */
+.node.frame.c-none, .node.stack.c-none { background:transparent; }
+.node.frame.c-none .title, .node.stack.c-none .title { color:var(--text); }
+/* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
+   normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
+   uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box. */
+.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, #fff); padding:5px 6px; }
 /* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
    sized to the frame's INTERIOR (inside its 4px border — see FRAME_BORDER), holding every card (and
    nested frame) it hosts as flat DOM children — same "everyone flat under one container" model the
@@ -325,15 +359,23 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    .dragging's z-index:6); pointer-events:none so clicking the frame's empty interior still reaches
    the frame's own element underneath instead of this invisible wrapper. */
 .frame-content { position:absolute; overflow:hidden; border-radius:10px; pointer-events:none; }
+/* a stack's wrapper auto-fits its outline, so it never needs to clip — and mustn't, or it would cut
+   off its rows' overhanging corner affordances (+N count / lock badges). See frameContentEl. */
+.frame-content.stack-content { overflow:visible; }
 .frame-content > .node { pointer-events:auto; }
 /* a frame never shows body content, the "n/m" progress, or the +N chip; and NEVER the "add note"
    pill (the !important beats the .solo.no-body show rule that would otherwise reveal it). */
 .node.frame > .body, .node.frame .progress, .node.frame .hidden-count { display:none; }
 .node.frame .addnote { display:none !important; }
-/* drag-into-frame preview: restyle the frame's OWN border to a white dash — like the other drag
+/* a stack is a container too: it shows only its title header (its children are framed below it), so
+   hide its own body / +N chip / add-note pill — but KEEP its "n/m" progress, since a stack is a
+   natural checklist container (its direct children carry the done-boxes). */
+.node.stack > .body, .node.stack > .hidden-count { display:none; }
+.node.stack .addnote { display:none !important; }
+/* drag-into-container preview: restyle the box's OWN border to a white dash — like the other drag
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
    ring, no width change, no fill; no landing-ghost card or reparent edge (see drag.ts / edges.ts). */
-.node.frame.drop-target { border-style:dashed; border-color:#fff; }
+.node.frame.drop-target, .node.stack.drop-target { border-style:dashed; border-color:#fff; }
 /* 8 invisible resize hit-zones: 4 edge bands (inset from the corners) + 4 corner squares.
    Corners sit at the very corners so the edge bands' insets leave them un-contested.
    Shared by .frame and .image-card — both kinds of resizable box (ensureFrameHandle in main.ts). */

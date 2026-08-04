@@ -7,10 +7,10 @@
 // own placement (spreading same-side siblings wide) ever flipping a child's side purely as a
 // side effect of laying it out. layoutH/NODE_W/subtreeIds come from main (render + tree
 // helpers) — a runtime-only cycle.
-import { state, isAnnotation, type MindNode, type LayoutSide } from '../core/state.js';
+import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, FRAME_BORDER } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_BORDER, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -54,6 +54,14 @@ const LANDING_GAP = 40;   // gap below/beside the hovered card a drag-reparented
 // the order, `undefined` = default: after `target` in sibling mode, append in child mode).
 export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' | 'sibling' | 'reorder', side: LayoutSide, afterId?: string | null): { x: number; y: number } {
   const governor = mode === 'child' || mode === 'reorder' ? target : (target.parent ? state.nodes.get(target.parent) : null) ?? target;
+  // Landing inside a stack's outliner: a row is `free` (the stack owns every position), so there's no
+  // managed simulation to run — put it one indent under the governing row, below its current subtree.
+  // Only an interim value: the drop commits, then applyLayouts re-runs the outline and owns the
+  // final position. (When the governor IS the stack it's managed, so it simulates properly below.)
+  {
+    const h = hostFrame(governor);
+    if (h && isStack(h)) return { x: governor.x + STACK_INDENT, y: subtreeBox(governor).y1 + STACK_GAP };
+  }
   // A frame adopts the card where it's released, snapped to the grid RELATIVE to the frame's
   // origin (its children live in the frame's coordinate space).
   if (isFrame(governor)) {
@@ -147,6 +155,10 @@ const FRAME_FLOW_GAP = 20;  // gap between flowed children — GRID_SNAP, not th
 // 20 gap), so a genuinely different row/column always exceeds it while hand-placed jitter within
 // an intended row doesn't fracture into singleton bands.
 const FLOW_BAND_TOL = 30;
+// Stack outliner: per-depth indent for a stack's descendant rows, and the smallest a deeply-indented
+// row is ever squeezed to (so a deep outline never collapses to zero width).
+const STACK_INDENT = 18;
+const STACK_MIN_ROW_W = 90;
 
 // Bounding box over a node + its VISIBLE descendants (what the layout actually placed).
 export function subtreeBox(node: MindNode){
@@ -161,7 +173,7 @@ export function subtreeBox(node: MindNode){
     if (isHidden(n) || isAnnotation(n)) return;
     x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
     x1 = Math.max(x1, n.x + nodeW(n)); y1 = Math.max(y1, n.y + layoutH(n));
-    if (isFrame(n)) return;   // frame footprint = its box; its children are contained within it
+    if (isContainer(n)) return;   // a frame/stack footprint = its own box; its children are contained within it
     for (const c of childrenOf(n.id)) walk(c);
   };
   walk(node);
@@ -173,6 +185,119 @@ export function subtreeBox(node: MindNode){
 // A COLLAPSED frame folds to an ordinary card (children hidden), so it isn't a frame while folded —
 // its footprint and behaviour revert to a normal card, matching how it renders.
 export function isFrame(node: MindNode): boolean { return node.type === 'frame' && !node.collapsed; }
+// Is there a stack in this node's ancestry, with only card ancestors in between (a frame/image/query
+// re-scopes and stops the search)? Uses the RAW `type` field so it never recurses through isStack.
+// A stack that lives inside another stack is DEMOTED to a plain outline row: the outer stack outlines
+// the whole subtree (all descendant layouts ignored), so a nested stack isn't a box of its own — it's
+// just another indented node. The stack test comes FIRST: a stack ancestor's own type isn't 'card', so
+// checking the re-scope condition before it would bail out before ever spotting the stack.
+function insideStack(node: MindNode): boolean {
+  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+    if (p.type === 'stack') return !p.collapsed;      // an expanded stack governs; folded, it hides us anyway
+    if (p.type !== 'card') return false;              // a frame/image/query ancestor re-scopes
+  }
+  return false;
+}
+// A STACK: a node kind that frames its whole subtree as an OUTLINER (one full-width column, each
+// level indented) inside an auto-sized, non-resizable box. Like a frame, it's a CONTAINER — its
+// descendants live in its coordinate space, clip to its interior, and detach by leaving its bounds.
+// A COLLAPSED stack folds to an ordinary card (children hidden), so it isn't a container while folded.
+// A stack INSIDE another stack is demoted (insideStack) to a plain outline row — the outer stack owns
+// the whole subtree and ignores every descendant's own arrangement.
+export function isStack(node: MindNode): boolean {
+  return node.type === 'stack' && !node.collapsed && !insideStack(node);
+}
+// Either kind of child-containing box: a frame or a stack. Used at every touchpoint where the box
+// behaves purely as "a container that holds & clips its children" (footprint, hosting, edge
+// clipping, drag adopt/detach) — as opposed to frame-only behaviour (resize, free/flow placement).
+export function isContainer(node: MindNode): boolean { return isFrame(node) || isStack(node); }
+// The height a stack reserves above its first row for its OWN title-row — measured live, so a
+// multi-line title pushes the rows down instead of being drawn over (STACK_HEADER is the pre-render
+// fallback). Shared by the layout pass and the drop resolver so both agree where row 0 starts.
+function stackHeaderH(stack: MindNode): number {
+  const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
+  return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
+}
+// Get an outline row ready to be MEASURED: give it the width its depth allows, then paint it so the
+// DOM matches the model before we read its height back. Both halves are needed because a stack is
+// the one place where a card's height depends on layout output:
+//   · WIDTH — everywhere else a card is a constant NODE_W wide, but a row is stretched to its depth's
+//     width and text wraps differently at a different width. Measuring before the DOM knew the new
+//     width laid a re-indented row out at its PREVIOUS width's height, so the rows below overlapped.
+//   · EXISTENCE — a row added this tick has no element yet, and layoutH then falls back to 64px. A
+//     fresh 27px row reserved 64, leaving a 45px hole under it (paintNode creates the element via
+//     nodeEl, so painting here is also what makes it measurable at all).
+// Either way the geometry used to settle only when some later interaction happened to run another
+// pass. Doing it here means one applyLayouts() converges regardless of the order a caller paints and
+// lays out in — which matters because the ~20 relayout call sites don't agree on that order.
+// paintNode leaves an open title/body/query editor alone, so this can't disturb typing.
+function prepRow(row: MindNode, w: number | null): void {
+  if (w != null) row.w = w;
+  paintNode(row);
+}
+// A stack's visible OUTLINE, in visual (top-to-bottom) order: every descendant that gets its own row,
+// paired with the indent depth it renders at (the stack's direct children are depth 0). A nested
+// container or a COLLAPSED card is one opaque row — its contents live in its own box/fold — so the
+// walk doesn't descend into it. `skip` drops a whole subtree from the walk (the dragged cards, which
+// must never act as their own drop anchors). The single source of "what rows does this stack show, in
+// what order, at what depth" — shared by layoutSubtree and stackDropTarget.
+export function stackOutline(stack: MindNode, skip?: Set<string>): { node: MindNode; depth: number }[] {
+  const out: { node: MindNode; depth: number }[] = [];
+  const walk = (parent: MindNode, depth: number): void => {
+    const kids = childrenOf(parent.id).filter(k => !isHidden(k) && !isAnnotation(k) && !skip?.has(k.id));
+    for (const k of orderedKids(parent, kids)) {
+      out.push({ node: k, depth });
+      if (!isContainer(k) && !k.collapsed) walk(k, depth + 1);
+    }
+  };
+  walk(stack, 0);
+  return out;
+}
+// Where a card dragged over a stack would land, resolved the way an OUTLINER does — the two axes
+// carry different meaning, which is what makes one gesture do both reorder and re-nest:
+//   · VERTICAL picks the GAP between two rows (never "onto" a row), so dragging straight down only
+//     ever re-slots — it can't accidentally reparent, and the indicator always sits BETWEEN cards.
+//   · HORIZONTAL picks the DEPTH at that gap, clamped to what the gap can legally express: at most
+//     one level deeper than the row above (become its first child), at least the depth of the row
+//     below (a gap can't outdent past a branch that continues underneath it). So nesting is a
+//     deliberate sideways nudge of the card, exactly like indenting a line in an outline editor.
+// Returns the resolved parent + insertion anchor (`afterId`, null = first child) and the indicator
+// segment, drawn in the CURRENT gap and indented to the resolved depth so the preview shows the
+// nesting the drop will produce. `skip` = the dragged subtree (see stackOutline).
+export function stackDropTarget(stack: MindNode, dragged: MindNode, skip: Set<string>):
+    { parentId: string; afterId: string | null; line: Seg; depth: number } {
+  const rows = stackOutline(stack, skip);
+  const innerLeft = stack.x + FRAME_BORDER + STACK_PAD;
+  const innerRight = stack.x + nodeW(stack) - FRAME_BORDER - STACK_PAD;
+  const midOf = (n: MindNode) => n.y + nodeH(n) / 2, botOf = (n: MindNode) => n.y + nodeH(n);
+  // 1) the gap: how many rows sit above the dragged card's own midpoint
+  const mid = dragged.y + nodeH(dragged) / 2;
+  let i = 0;
+  while (i < rows.length && midOf(rows[i].node) < mid) i++;
+  const prev = i > 0 ? rows[i - 1] : null, next = rows[i] ?? null;
+  // 2) the depth at that gap, from the dragged card's left edge. A leaf can't adopt children, so it
+  //    never offers the deeper slot.
+  const maxDepth = prev ? prev.depth + (isLeafType(prev.node) ? 0 : 1) : 0;
+  const minDepth = next ? next.depth : 0;
+  const depth = Math.max(minDepth, Math.min(maxDepth, Math.round((dragged.x - innerLeft) / STACK_INDENT)));
+  // 3) parent + anchor: one level deeper means "first child of the row above"; otherwise walk up from
+  //    that row to the ancestor sitting AT this depth and slot in right after it.
+  let parentId = stack.id, afterId: string | null = null;
+  if (prev) {
+    if (depth === prev.depth + 1) parentId = prev.node.id;
+    else {
+      let a = prev.node;
+      for (let d = prev.depth; d > depth; d--) a = state.nodes.get(a.parent!) ?? a;
+      parentId = a.parent ?? stack.id; afterId = a.id;
+    }
+  }
+  // 4) the indicator, centred in the gap as it stands right now
+  const y = prev && next ? (botOf(prev.node) + next.node.y) / 2
+          : prev ? botOf(prev.node) + STACK_GAP / 2
+          : next ? next.node.y - STACK_GAP / 2
+          : stack.y + stackHeaderH(stack);
+  return { parentId, afterId, line: { x0: innerLeft + depth * STACK_INDENT, y0: y, x1: innerRight, y1: y }, depth };
+}
 // Does this node live inside a frame (any frame ancestor)? Such nodes are positioned in the
 // frame's coordinate space, so they must track the frame even while HIDDEN — else a collapsed
 // frame moved by its own parent's layout leaves its (hidden, free) children behind, and they
@@ -191,7 +316,7 @@ function insideFrame(node: MindNode): boolean {
 export function hostFrame(node: MindNode): MindNode | null {
   if (isAnnotation(node)) return null;   // annotations render on top, under #world — never hosted/clipped by a frame
   for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    if (isFrame(p)) return p;
+    if (isContainer(p)) return p;   // a frame OR a stack hosts/clips its children's elements + edges
   return null;
 }
 // How many ancestors `node` has (0 for a root). Used to pick the INNERMOST of several nested,
@@ -242,10 +367,20 @@ function shiftSubtree(node: MindNode, dx: number, dy: number): void {
 // line/fan — so returning `free` here is behaviourally identical to before (layoutSubtree only
 // acts on line/fan/flow, ignoring free).
 export function effectiveLayout(node: MindNode): { type: string } {
+  // A stack outlines its ENTIRE subtree (grandchildren indent under their parent), so the stack owns
+  // the layout of every descendant. Resolve the stack node itself to `stack`; resolve any node that
+  // lives inside a stack (before hitting a nearer frame) to `free`, so its own layoutSubtree is a
+  // no-op and the stack's outline pass places it. Checked before the normal walk so an explicit
+  // line/fan on a descendant doesn't override the outliner.
+  if (isStack(node)) return { type: 'stack' };
+  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+    if (isStack(p)) return { type: 'free' };   // governed by the stack's outliner
+    if (p.type !== 'card') break;                 // a nearer frame/box governs instead — normal rules
+  }
   let n: MindNode | null | undefined = node, guard = 0;
   while (n && guard++ < 4096){
     if (n.type !== 'card') return { type: 'free' };   // frame/image → free child placement
-    if (n.layout !== 'inherit') return { type: n.layout };   // free | line | fan
+    if (n.layout !== 'inherit') return { type: n.layout };   // free | line | fan (stack handled above)
     n = n.parent ? state.nodes.get(n.parent) : null;
   }
   return { type: 'free' };   // unresolved inherit → free
@@ -263,7 +398,18 @@ export function frameFlow(node: MindNode): 'flow-h' | 'flow-v' | null {
 // spelling of "is this a managed governor?" shared by layout, drop-landing sim, and order reseeding.
 export function isManagedLayout(node: MindNode): boolean {
   const t = effectiveLayout(node).type;
-  return t === 'line' || t === 'fan' || !!frameFlow(node);
+  return t === 'line' || t === 'fan' || t === 'stack' || !!frameFlow(node) || !!stackOf(node);
+}
+// The stack whose outline governs `node`'s CHILDREN: `node` itself when it's a stack box, otherwise
+// the stack hosting it — a row inside an outline, whose children are rows too, so the stack owns
+// their positions AND their order (stackOutline reads orderedKids at every level). null when no
+// stack governs them. The single test for "is this node's child list stack-managed?" — which is what
+// makes a row count as isManagedLayout, so a drop that re-nests under a row stores its insertion
+// anchor (reparentOnly) instead of falling back to seeding order from raw positions.
+export function stackOf(node: MindNode): MindNode | null {
+  if (isStack(node)) return node;
+  const h = hostFrame(node);
+  return h && isStack(h) ? h : null;
 }
 // Which of the parent's 4 sides a child sits on, computed FRESH from its current position —
 // dominant axis of the offset between the two centers, SCALED by the parent's own aspect ratio
@@ -320,6 +466,17 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
   // share an EXACT top per row, so this clusters them correctly too — but tolerant clustering is
   // what makes a FIRST-time conversion (a free frame's hand-placed cards, never pixel-aligned)
   // group into sensible rows/columns instead of every card landing in its own singleton band.
+  // STACK: a single top→bottom column — order purely by vertical position (subtree box top), so a
+  // child dragged up/down re-slots into the reseeded order at its new row. Applies at EVERY level of
+  // an outline (stackOf, not just the stack itself): a row's own children are rows in the same
+  // column, so they order by y as well — side/midpoint ranking is meaningless in an outline.
+  if (stackOf(node)) {
+    const top = (k: MindNode): number => {
+      const b = subtreeBox(k);
+      return Number.isFinite(b.y0) ? b.y0 : k.y;
+    };
+    return kids.slice().sort((a, b) => top(a) - top(b) || cmpTie(a, b)).map(k => k.id);
+  }
   const flow = frameFlow(node);
   if (flow) {
     const tl = (k: MindNode): { x: number; y: number } => {
@@ -523,12 +680,48 @@ function layoutSubtree(node: MindNode): void {
 
   const type = effectiveLayout(node).type;            // `none` inherits the parent's layout
   const flow = frameFlow(node);                       // flow-h / flow-v for a flow frame, else null
-  if (type !== 'line' && type !== 'fan' && !flow) return;  // free / free-frame / unset: manual
+  if (type !== 'line' && type !== 'fan' && type !== 'stack' && !flow) return;  // free / free-frame / unset: manual
 
   const boxOf = new Map(kids.map(k => [k.id, subtreeBox(k)]));
   const ax = node.x, ay = node.y;
 
   const sorted = orderedKids(node, kids);   // stored order — only a direct child-drag changes it
+
+  // STACK: a framed, auto-sized card that renders its whole subtree as an OUTLINER — a single
+  // full-width column below the header, each level indented under its parent (like an outline tree).
+  // The box has a FIXED width (STACK_W) and an auto-fitted height. A DFS lays out every visible
+  // descendant as a row: a normal expanded card places its own card, then recurses (deeper indent);
+  // a nested container (frame/stack) or a collapsed card is one opaque row (its box/fold owns its
+  // contents), moved as a whole and not descended into.
+  if (type === 'stack') {
+    const innerLeft = ax + FRAME_BORDER + STACK_PAD;
+    const innerW = STACK_W - 2 * FRAME_BORDER - 2 * STACK_PAD;
+    let cy = ay + stackHeaderH(node);
+    // Walk the SHARED outline (stackOutline) rather than a private DFS, so the drop resolver
+    // (stackDropTarget) and this layout pass can never disagree about a row's order or depth.
+    for (const { node: k, depth } of stackOutline(node)) {
+      const x = innerLeft + depth * STACK_INDENT;
+      const w = Math.max(STACK_MIN_ROW_W, innerW - depth * STACK_INDENT);
+      if (isContainer(k) || k.collapsed) {
+        // one opaque row: its own box/fold owns its contents, so move the whole subtree with it
+        prepRow(k, isContainer(k) ? null : w);   // a collapsed plain card stretches; a nested box keeps its own size
+        const b = subtreeBox(k);
+        shiftSubtree(k, x - b.x0, cy - b.y0);
+        cy += (b.y1 - b.y0) + STACK_GAP;
+      } else {
+        k.x = x; k.y = cy; k.dirtyLayout = true;
+        prepRow(k, w);
+        cy += layoutH(k) + STACK_GAP;
+      }
+    }
+    node.w = STACK_W;
+    // Drop the trailing gap, then inset the bottom by the SAME amount as the sides. A row's left edge
+    // sits at FRAME_BORDER + STACK_PAD from the box's outer edge, and borders are inside the box
+    // (box-sizing:border-box), so the bottom needs both terms too — with STACK_PAD alone the gap
+    // under the last row read visibly tighter than the ones beside it.
+    node.h = (cy - STACK_GAP) - ay + STACK_PAD + FRAME_BORDER;
+    return;
+  }
 
   // FLOW frame: fill the content area along the primary axis, wrapping to the next row/column when
   // the next child won't fit. flow-h fills rows left→right (wrap down); flow-v fills columns

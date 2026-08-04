@@ -65,6 +65,7 @@ const DOT = (cx: number, cy: number, r = 2.2) => `<circle cx="${cx}" cy="${cy}" 
 const TYPE_ICONS: Record<NodeType, string> = {
   card: SVG_OPEN + '<rect x="5" y="6" width="14" height="12" rx="2"/><path d="M8 10h8M8 13.5h5"/></svg>',
   frame: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="6.5" y="8.5" width="6" height="4.5" rx="1" fill="currentColor" stroke="none"/></svg>',
+  stack: SVG_OPEN + '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.5h16"/><rect x="6.5" y="10.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/><rect x="6.5" y="14.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/></svg>',
   image: SVG_OPEN + '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" stroke="none"/><path d="M4 15.5l5-5 3.5 3.5 3-3 4.5 4.5"/></svg>',
   annotation: SVG_OPEN + '<path d="M4 4l3.5 3.5" stroke-dasharray="2 2"/><rect x="8" y="8" width="12" height="9" rx="2"/><path d="M10.5 12h7"/></svg>',
   query: SVG_OPEN + '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="10" cy="10" r="3"/><path d="M12.3 12.3l3 3"/></svg>',
@@ -72,6 +73,7 @@ const TYPE_ICONS: Record<NodeType, string> = {
 const NODE_TYPES: { key: NodeType; label: string; icon: string }[] = [
   { key:'card',  label:'Card — an ordinary note',                                        icon: TYPE_ICONS.card },
   { key:'frame', label:'Frame — a resizable box; drag cards inside to hold them, out to release', icon: TYPE_ICONS.frame },
+  { key:'stack', label:'Stack — an outline: the whole subtree listed in one indented column, auto-sized', icon: TYPE_ICONS.stack },
   { key:'image', label:'Image — a resizable box showing one image, nothing else (no children)',   icon: TYPE_ICONS.image },
   { key:'annotation', label:'Annotation — a title-less note pinned on top of its parent, ignored by layout', icon: TYPE_ICONS.annotation },
   { key:'query', label:'Query — a resizable box with a search field over a scrollable list of matching cards', icon: TYPE_ICONS.query },
@@ -97,12 +99,15 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
     { key:'vertical', label:'Vertical — cards flow top to bottom, wrapping right',
       icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="8.5" y="7.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/><rect x="8.5" y="12.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/></svg>' },
   ],
+  // a stack always outlines its whole subtree — there's nothing to choose, so its chip row is empty
+  // and the layout trigger hides itself (markChips), same as for the leaf kinds
+  stack: [],
   image: [],
   annotation: [],
   query: [],
 };
 // The default layout for a freshly-set type — omitted from frontmatter (see serializeMd).
-const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', image: 'free', annotation: 'free', query: 'free' };
+const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', stack: 'inherit', image: 'free', annotation: 'free', query: 'free' };
 // Fit a frame's box snugly around its children: a title strip on top, a margin on the other sides,
 // snapped to the grid and clamped to the min size. Children keep their positions (the box moves to
 // enclose them). With no children it's left as-is, or given the default size when `orDefault` (used

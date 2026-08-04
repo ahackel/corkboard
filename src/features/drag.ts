@@ -8,7 +8,7 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
 import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
-import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth } from '../view/layout.js';
+import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -138,7 +138,8 @@ function updateRip(drag: Drag): void {
   const parent = act.parent ? state.nodes.get(act.parent) : null;
   // An annotation is never "in" a frame for rip purposes — it renders on top, not inside the box —
   // so it detaches ONLY by being dragged past the rip threshold, never by leaving a frame's bounds.
-  const inFrame = !!(parent && isFrame(parent)) && !isAnnotation(act);
+  // isContainer covers a stack too: its child detaches by leaving the stack box, same as a frame.
+  const inFrame = !!(parent && isContainer(parent)) && !isAnnotation(act);
   if (act.parent && !reordering) {
     if (inFrame) {
       rip = !centreInFrame(act, parent!);
@@ -531,7 +532,7 @@ function dragPointerUp(): void {
           // frame's origin (its children live in the frame's coordinate space); anyone else snaps
           // to the world grid.
           const fp = act.parent ? state.nodes.get(act.parent) : null;
-          const inFrame = !!(fp && isFrame(fp));
+          const inFrame = !!(fp && isContainer(fp));   // frame OR stack: snap relative to the box origin
           const ax = inFrame ? fp!.x : 0, ay = inFrame ? fp!.y : 0;
           const g = gridSnap();
           const ddx = (Math.round((act.x - ax) / g) * g + ax) - act.x;
@@ -550,7 +551,7 @@ function dragPointerUp(): void {
             const r = state.nodes.get(rootId);
             if (!r?.parent) continue;
             const rp = state.nodes.get(r.parent);
-            const rInFrame = !!(rp && isFrame(rp)) && !isAnnotation(r);   // annotations detach by rip only
+            const rInFrame = !!(rp && isContainer(rp)) && !isAnnotation(r);   // frame/stack; annotations detach by rip only
             const rOut = rInFrame && !centreInFrame(r, rp!);
             if (!shift && (rInFrame ? rOut : (alt || distanceRip(r)))){
               r.parent = null; r.side = undefined;   // a root has no side / frame host
@@ -743,7 +744,9 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     if (isHidden(m) || sub.has(id)) continue;
     const w = nodeW(m), h = nodeH(m);
     if (!(wx >= m.x && wx <= m.x + w && wy >= m.y && wy <= m.y + h)) continue;
-    if (isFrame(m)) {
+    if (isContainer(m)) {
+      // a frame OR a stack is a container box — plain cards (incl. the container's own children)
+      // win over it, and among nested containers the innermost (deepest) wins.
       const d = ancestorDepth(m);
       if (d > frameHitDepth) { frameHitDepth = d; frameHit = m; }
     } else if (!cardHit) { cardHit = m; }
@@ -793,7 +796,24 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   } else if (hovered) {
     const hoveredNode = state.nodes.get(hovered)!;
     const pf = hoveredNode.parent ? state.nodes.get(hoveredNode.parent) : null;
-    if (frameFlow(hoveredNode)) {
+    const stackHost = hostFrame(hoveredNode);
+    if (isStack(hoveredNode) || (stackHost && isStack(stackHost))) {
+      // ---- STACK OUTLINER drop ----
+      // One gesture, two axes (see stackDropTarget): the card's VERTICAL position picks the gap
+      // between two rows, its HORIZONTAL position picks the depth at that gap. So a straight-down
+      // drag only re-slots, and nesting takes a deliberate nudge to the right — no "onto a card"
+      // zone to hit by accident. Always previewed by the insertion line (indented to the resolved
+      // depth), never a landing ghost. `mode:'reorder'` is right even when the depth (and so the
+      // parent) changes: the commit path re-parents onto `target` with `dropAfter` either way.
+      const stack = isStack(hoveredNode) ? hoveredNode : stackHost!;
+      if (!sub.has(stack.id)) {
+        const d = stackDropTarget(stack, dragged, sub);
+        const p = state.nodes.get(d.parentId);
+        if (p && !isLockedEffective(p)) {
+          target = d.parentId; mode = 'reorder'; side = 'down'; after = d.afterId; line = d.line;
+        }
+      }
+    } else if (frameFlow(hoveredNode)) {
       // The FLOW frame's own (empty) area → insert into the flow at the slot under the cursor,
       // previewed with an insertion bar (like line layout). Covers dropping an external card in
       // AND reordering a card already inside.
@@ -847,7 +867,10 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     const parent = state.nodes.get(dragged.parent);
     // A flow frame is box-flowed (no side-based in-parent reorder bar). Sliding its child just
     // repositions it; the release reseeds the flow order from the dropped positions.
-    if (parent && isManagedLayout(parent) && !frameFlow(parent)) {
+    // A stack row opts out too: its in-outline slot is previewed by the stack branch above (which
+    // needs the cursor INSIDE the box). Out here the cursor has left the stack, so a release means
+    // "leave the outline" — a side-based reorder bar would both mislead and suppress the detach.
+    if (parent && isManagedLayout(parent) && !frameFlow(parent) && !stackOf(parent)) {
       let rt = reorderTarget(parent, dragged);
       // Far along a wide fan, deriveSide flips to the (usually empty) perpendicular bucket and
       // the first/last slots become unreachable — retry with the card's STORED side so sliding
