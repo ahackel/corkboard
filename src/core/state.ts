@@ -16,15 +16,16 @@
 //                  title/body matches across the whole map; no children, keeps its title UI.
 //                  Search text persisted as mm_query.
 // Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
-export type NodeType = 'card' | 'frame' | 'image' | 'annotation' | 'query';
+export type NodeType = 'card' | 'frame' | 'stack' | 'image' | 'annotation' | 'query';
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
-//   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread),
-//             stack (a framed, auto-sized box listing children in one full-width vertical column).
+//   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread).
 //   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
 //             down), vertical (auto-flow columns: top→bottom, wrap right).
+//   · stack → none: a stack always outlines its whole subtree (one indented full-width column), so
+//             it offers no arrangement choice and every descendant's own layout is ignored.
 //   · image / annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
-export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'stack';
+export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
 // sizing from title/body content — a frame, an image, or a query card.
 export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'image' || t === 'query';

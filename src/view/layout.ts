@@ -10,7 +10,7 @@
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, FRAME_BORDER, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_BORDER, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -186,25 +186,26 @@ export function subtreeBox(node: MindNode){
 // its footprint and behaviour revert to a normal card, matching how it renders.
 export function isFrame(node: MindNode): boolean { return node.type === 'frame' && !node.collapsed; }
 // Is there a stack in this node's ancestry, with only card ancestors in between (a frame/image/query
-// re-scopes and stops the search)? Uses the RAW `layout` field so it never recurses through
-// isStackBox. A stack that lives inside another stack is DEMOTED to a plain outline row: the outer
-// stack outlines the whole subtree (all child layouts ignored), so a nested stack isn't a box of its
-// own — it's just another indented node.
+// re-scopes and stops the search)? Uses the RAW `type` field so it never recurses through isStackBox.
+// A stack that lives inside another stack is DEMOTED to a plain outline row: the outer stack outlines
+// the whole subtree (all descendant layouts ignored), so a nested stack isn't a box of its own — it's
+// just another indented node. The stack test comes FIRST: a stack ancestor's own type isn't 'card', so
+// checking the re-scope condition before it would bail out before ever spotting the stack.
 function insideStack(node: MindNode): boolean {
   for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+    if (p.type === 'stack') return !p.collapsed;      // an expanded stack governs; folded, it hides us anyway
     if (p.type !== 'card') return false;              // a frame/image/query ancestor re-scopes
-    if (p.layout === 'stack' && !p.collapsed) return true;
   }
   return false;
 }
-// A STACK card: a card whose layout frames its whole subtree as an OUTLINER (one full-width column,
-// each level indented) inside an auto-sized (non-resizable) box. Like a frame, it's a CONTAINER — its
+// A STACK: a node kind that frames its whole subtree as an OUTLINER (one full-width column, each
+// level indented) inside an auto-sized, non-resizable box. Like a frame, it's a CONTAINER — its
 // descendants live in its coordinate space, clip to its interior, and detach by leaving its bounds.
 // A COLLAPSED stack folds to an ordinary card (children hidden), so it isn't a container while folded.
 // A stack INSIDE another stack is demoted (insideStack) to a plain outline row — the outer stack owns
-// the whole subtree and ignores every descendant's own layout.
+// the whole subtree and ignores every descendant's own arrangement.
 export function isStackBox(node: MindNode): boolean {
-  return node.type === 'card' && node.layout === 'stack' && !node.collapsed && !insideStack(node);
+  return node.type === 'stack' && !node.collapsed && !insideStack(node);
 }
 // Either kind of child-containing box: a frame or a stack. Used at every touchpoint where the box
 // behaves purely as "a container that holds & clips its children" (footprint, hosting, edge
@@ -217,17 +218,22 @@ function stackHeaderH(stack: MindNode): number {
   const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
   return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
 }
-// Stretch an outline row to the width its depth gives it, writing it to the DOM IMMEDIATELY rather
-// than leaving it for the next paintNode. Everywhere else in the app a card's width is the constant
-// NODE_W, so a measured height never depends on layout output — but a stack row is stretched, and
-// text wraps differently at a different width, so its height depends on the very width this pass
-// assigns. Measuring before the DOM knows the new width made a re-indented row lay out at its
-// PREVIOUS width's height: the rows below it overlapped (or left a gap) and only settled once some
-// later interaction happened to run another layout pass. Writing the width here closes that loop, so
-// one applyLayouts() converges no matter what order a caller paints and lays out in.
-function setRowWidth(row: MindNode, w: number): void {
-  row.w = w;
-  if (row.el) row.el.style.width = w + 'px';
+// Get an outline row ready to be MEASURED: give it the width its depth allows, then paint it so the
+// DOM matches the model before we read its height back. Both halves are needed because a stack is
+// the one place where a card's height depends on layout output:
+//   · WIDTH — everywhere else a card is a constant NODE_W wide, but a row is stretched to its depth's
+//     width and text wraps differently at a different width. Measuring before the DOM knew the new
+//     width laid a re-indented row out at its PREVIOUS width's height, so the rows below overlapped.
+//   · EXISTENCE — a row added this tick has no element yet, and layoutH then falls back to 64px. A
+//     fresh 27px row reserved 64, leaving a 45px hole under it (paintNode creates the element via
+//     nodeEl, so painting here is also what makes it measurable at all).
+// Either way the geometry used to settle only when some later interaction happened to run another
+// pass. Doing it here means one applyLayouts() converges regardless of the order a caller paints and
+// lays out in — which matters because the ~20 relayout call sites don't agree on that order.
+// paintNode leaves an open title/body/query editor alone, so this can't disturb typing.
+function prepRow(row: MindNode, w: number | null): void {
+  if (w != null) row.w = w;
+  paintNode(row);
 }
 // A stack's visible OUTLINE, in visual (top-to-bottom) order: every descendant that gets its own row,
 // paired with the indent depth it renders at (the stack's direct children are depth 0). A nested
@@ -698,18 +704,22 @@ function layoutSubtree(node: MindNode): void {
       const w = Math.max(STACK_MIN_ROW_W, innerW - depth * STACK_INDENT);
       if (isContainer(k) || k.collapsed) {
         // one opaque row: its own box/fold owns its contents, so move the whole subtree with it
-        if (!isContainer(k)) setRowWidth(k, w);   // a collapsed plain card stretches; a nested box keeps its own size
+        prepRow(k, isContainer(k) ? null : w);   // a collapsed plain card stretches; a nested box keeps its own size
         const b = subtreeBox(k);
         shiftSubtree(k, x - b.x0, cy - b.y0);
         cy += (b.y1 - b.y0) + STACK_GAP;
       } else {
         k.x = x; k.y = cy; k.dirtyLayout = true;
-        setRowWidth(k, w);
+        prepRow(k, w);
         cy += layoutH(k) + STACK_GAP;
       }
     }
     node.w = STACK_W;
-    node.h = (cy - STACK_GAP) - ay + STACK_PAD;   // drop the trailing gap, add the bottom padding
+    // Drop the trailing gap, then inset the bottom by the SAME amount as the sides. A row's left edge
+    // sits at FRAME_BORDER + STACK_PAD from the box's outer edge, and borders are inside the box
+    // (box-sizing:border-box), so the bottom needs both terms too — with STACK_PAD alone the gap
+    // under the last row read visibly tighter than the ones beside it.
+    node.h = (cy - STACK_GAP) - ay + STACK_PAD + FRAME_BORDER;
     return;
   }
 

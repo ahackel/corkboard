@@ -74,7 +74,7 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // frame(+mm_arrange flow-h/flow-v)→frame·free|horizontal|vertical, frame-h/-v→frame·*, image→image.
 function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayout } {
   const t = fmValue(entries, 'mm_type');
-  if (t === 'frame' || t === 'image' || t === 'card' || t === 'annotation' || t === 'query')
+  if (t === 'frame' || t === 'stack' || t === 'image' || t === 'card' || t === 'annotation' || t === 'query')
     return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout };
   // legacy: infer both from the combined mm_layout token
   const v = fmValue(entries, 'mm_layout');
@@ -91,9 +91,11 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
     return { type: 'frame', layout };
   }
   if (v === 'two-sided' || v === 'grid') return { type: 'card', layout: 'fan' };
+  // stack used to be a card LAYOUT before it became a node type — fold the old spelling over.
+  if (v === 'stack') return { type: 'stack', layout: 'inherit' };
   // A card omits mm_type (card is the default), so a card's `mm_layout` is read HERE, not via the
   // mm_type branch above — every card layout value must be listed or it silently reverts to inherit.
-  if (v === 'free' || v === 'line' || v === 'fan' || v === 'stack') return { type: 'card', layout: v };
+  if (v === 'free' || v === 'line' || v === 'fan') return { type: 'card', layout: v };
   return { type: 'card', layout: 'inherit' };
 }
 
