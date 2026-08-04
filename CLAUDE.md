@@ -99,6 +99,19 @@ frame: `free`/`horizontal`/`vertical`); the rest never write `mm_layout`. The ty
 in `features/float-bar.ts` are driven by `NODE_TYPES` + `LAYOUTS_BY_TYPE` — a kind with an empty
 layout set hides the layout trigger entirely.
 
+**A `frame`'s BOUNDS include its title tab.** The title renders as a folder tab above the box's
+top-left corner (`.node.frame > .title-row`, absolutely positioned), and `n.x/n.y/w/h` cover it:
+`n.y` is the **tab's** top edge, the box element paints `FRAME_TAB_DROP` (= `FRAME_TAB_H - 1`, the
+tab less its 1px overlap into the border) lower, and its inline height is `n.h` minus that drop.
+So the tab is at a fixed offset from `n.y` in **both** collapse states — a folded frame is nothing
+but that tab (`.frame-folded`, `isFrameFold`, rounded all round, `nodeH` = `FRAME_TAB_H`, width
+measured), which is why folding no longer moves the title. Two consequences to respect: the tab must
+stay a single ellipsised line (a wrapping one would make the box's position depend on a live
+measurement — hence the hover tooltip in `paintNode` instead), and every projection of a hosted
+child into its host goes through `frameInsetX`/`frameInsetY` (`view/layout.ts`) rather than a bare
+`FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share those, and
+`elTop` is the one place that applies the drop.
+
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
 subtree as one indented, full-width column inside an auto-sized, non-resizable box (fixed
 `STACK_W` = `NODE_W`), so **every descendant's own layout is ignored** and a stack nested inside a
@@ -114,7 +127,9 @@ laying out must paint again (see `withLayoutAnimation`).
 
 **Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`, `mm_position_y`
 (relative to the parent; world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`,
-`mm_type`, `mm_layout`, `mm_w`/`mm_h` (box kinds only), plus the card flags `mm_locked`,
+`mm_type`, `mm_layout`, `mm_w`/`mm_h` (box kinds only — for a **frame** these are its BOUNDS,
+i.e. they include the title tab: `mm_position_y` is the tab's top edge and the box itself starts
+`FRAME_TAB_DROP` lower, see the frame bullet below), plus the card flags `mm_locked`,
 `mm_done`, `mm_checklist`, `mm_bg` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
 back. Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter

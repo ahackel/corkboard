@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_H, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -112,14 +112,14 @@ const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: '
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
 // no children it's left as-is, or given the default size when `orDefault` (used when a card first
 // becomes a frame). Shared by the frame chip and the Auto-size action.
-// The frame's own title needs no room — it's a tab OUTSIDE the box (styles.css) — but a child that
-// is itself a frame carries such a tab above its box, inside this one, so the TOP margin never
-// shrinks below one tab (FRAME_TAB_H, main.ts) or that child's title would be clipped away.
+// The TOP margin also has to carry the frame's own title tab: n.y is the tab's top edge and the box
+// starts FRAME_TAB_DROP lower (main.ts), so the pad above the content is that drop plus the same
+// margin as the other three sides. n.h then encloses the tab for free, since it measures from n.y.
 // A function, not a const: main.js's exports aren't initialized yet while this module's body runs
 // (the deliberate main↔features import cycle — see CLAUDE.md and the props() note above), so reading
-// FRAME_TAB_H at module scope throws "cannot access before initialization".
+// FRAME_TAB_DROP at module scope throws "cannot access before initialization".
 const FRAME_FIT_PAD = 16;
-function frameFitTop(): number { return Math.max(FRAME_FIT_PAD, FRAME_TAB_H); }
+function frameFitTop(): number { return FRAME_TAB_DROP + FRAME_FIT_PAD; }
 function fitFrameToContent(n: MindNode, orDefault = false): void {
   const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));   // annotations don't size the frame
   const snapStep = gridSnap();

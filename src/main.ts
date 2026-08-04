@@ -22,7 +22,7 @@ import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, frameInsetY, frameFlow, isStack } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -392,7 +392,7 @@ export function paintNode(n: MindNode): void {
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
     + (collapsed ? ' collapsed' : '')
-    + (n.type === 'frame' && collapsed ? ' frame-folded' : '')   // folded to a card: keep a frame's border (styles.css)
+    + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare title tab (styles.css)
     + (n.locked ? ' locked' : '')
     + (hasBody ? '' : ' no-body')
     + (isFrameBox(n) || isStack(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
@@ -424,7 +424,7 @@ export function paintNode(n: MindNode): void {
   const carried = !!(drag && n.hostFrameId != null && drag.targets.has(n.hostFrameId));
   const dragOrig = !carried ? drag?.origins?.get(n.id) : undefined;
   if (dragOrig) {
-    el.style.left = dragOrig.x + 'px'; el.style.top = dragOrig.y + 'px';
+    el.style.left = dragOrig.x + 'px'; el.style.top = elTop(n, dragOrig.y) + 'px';
     el.style.transform = `translate(${n.x - dragOrig.x}px,${n.y - dragOrig.y}px)`;
     const root = dragRoot();
     if (el.parentElement !== root) root.appendChild(el);
@@ -447,7 +447,7 @@ export function paintNode(n: MindNode): void {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
-      el.style.top  = (np.y - pp.y) + 'px';
+      el.style.top  = (elTop(n, np.y) - elTop(p, pp.y)) + 'px';
       if (el.parentElement !== pEl) pEl.appendChild(el);
     } else {
       // root → #world; direct frame/stack child → container content wrapper. A CONTAINER's own box
@@ -457,7 +457,7 @@ export function paintNode(n: MindNode): void {
       // SIBLINGS in one DOM parent. Nesting the box inside a parent card instead put the two in
       // different stacking contexts, so the box's fill won the tie and swallowed its own rows'
       // pointer events (pressing a stack row grabbed the whole stack).
-      place(el, np.x, np.y, host);
+      place(el, np.x, elTop(n, np.y), host);
     }
   }
   // A frame (or an image card) is its own resizable box; give the element that size and a
@@ -467,11 +467,18 @@ export function paintNode(n: MindNode): void {
   // snaps back to the CSS-fixed card.
   if (isBoxNode(n)) {
     el.style.width = (n.w ?? boxDefaultW(n)) + 'px';
-    el.style.height = (n.h ?? boxDefaultH(n)) + 'px';
+    // the element is the BOX, and a frame's bounds height also covers its tab (elTop / FRAME_TAB_DROP)
+    el.style.height = ((n.h ?? boxDefaultH(n)) - (isFrameBox(n) ? FRAME_TAB_DROP : 0)) + 'px';
     // border matches this card's EDGE tint (same colour edges use), falling back to --edge
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
     ensureFrameHandle(n);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+  } else if (isFrameFold(n)) {
+    // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
+    // size, no resize zones, but it keeps --frame-stroke, which tints the tab itself.
+    if (el.style.width) { el.style.width = ''; el.style.height = ''; }
+    el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
+    el.querySelectorAll('.fh, .frame-resize').forEach(x => x.remove());
   } else if (isStack(n)) {
     el.style.width = nodeW(n) + 'px';    // fixed STACK_W
     el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
@@ -492,7 +499,11 @@ export function paintNode(n: MindNode): void {
   // instead (falling back to n.title before any query has been typed), so the card always reads as
   // "what it's searching for" rather than whatever name it happened to be created with.
   if (!(ui.inlineEdit && ui.inlineEdit.id === n.id)) {
-    el.querySelector('.title')!.textContent = isQueryBox(n) ? ((n.query ?? '').trim() || n.title) : n.title;
+    const titleEl = el.querySelector('.title') as HTMLElement;
+    titleEl.textContent = isQueryBox(n) ? ((n.query ?? '').trim() || n.title) : n.title;
+    // A frame's title tab is a single ellipsised line (it must stay exactly FRAME_TAB_H tall), so give
+    // it a native tooltip with the full name. Every other kind wraps and needs none.
+    if (n.type === 'frame') titleEl.title = n.title; else titleEl.removeAttribute('title');
   }
   const bodyEl = el.querySelector('.body') as HTMLElement;
   // don't clobber the body while it's being edited in place (the textarea lives inside .body)
@@ -538,15 +549,22 @@ export const NODE_W = 200;
 // own cell size (state.gridSize, view/grid.ts); 0 (grid off) disables snapping rather than
 // collapsing every position to the origin.
 export function gridSnap(): number { return state.gridSize || 1; }
-export const FRAME_W = 360, FRAME_H = 260;   // default frame container size (world px)
+export const FRAME_W = 360, FRAME_H = 279;   // default frame container size (world px — bounds, tab included)
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
 export const QUERY_W = 280, QUERY_H = 320;   // default query-card size (world px)
 export const FRAME_BORDER = 4;   // must match .node.frame's CSS `border` width (styles.css)
-// Height of a frame's title TAB — it hangs OUTSIDE the box, above the top border (styles.css
-// `.node.frame > .title-row`), folder-style. A frame therefore reserves this much room at the TOP of
-// its own content area, so a nested frame's tab isn't cut off by this frame's clipping wrapper.
-// Must match the CSS (2px padding + 16px line-height + 2px padding).
+// Height of a frame's title TAB — the folder tab attached above the box's top-left corner
+// (styles.css `.node.frame > .title-row`). Must match the CSS (2px padding + 16px line-height + 2px
+// padding), which is why the tab stays a SINGLE ellipsised line: this is a constant, and the frame's
+// whole geometry hangs off it, so a wrapping tab would make the box's world position a function of
+// the rendered line count.
 export const FRAME_TAB_H = 20;
+// A frame's BOUNDS (n.x/n.y/w/h — and so mm_position_y/mm_h on disk) include that tab: n.y is the
+// TAB's top edge and the box starts FRAME_TAB_DROP lower. One tab, less the 1px the tab overlaps the
+// box's top border (styles.css), so the tab spans exactly [n.y, n.y + FRAME_TAB_H] — in BOTH states,
+// which is the point: a folded frame renders as the bare tab at n.y, so the title doesn't move when
+// the box folds away beneath it.
+export const FRAME_TAB_DROP = FRAME_TAB_H - 1;   // 19
 // Stack geometry (a framed, auto-sized outliner node kind — see isStack in view/layout.ts). Its
 // width is FIXED (not resizable); its height auto-fits its children (computed in layoutSubtree).
 export const STACK_W = NODE_W;   // a stack is the SAME width as a normal card (not wider)
@@ -554,9 +572,13 @@ export const STACK_HEADER = 36;  // title strip reserved above the stacked child
 export const STACK_PAD = 6;      // inset from the border to the content — half a normal card's
                                  // padding, so full-width child cards still fit in the narrow box
 export const STACK_GAP = 8;      // vertical gap between stacked children
-// Whether a node currently renders as a frame BOX. A collapsed frame folds to an ordinary card, so
-// its footprint reverts to a normal card (matching paintNode). Shared by the geometry helpers below.
+// Whether a node currently renders as a frame BOX. A collapsed frame folds to its bare title tab
+// (isFrameFold below), so it has no box at all. Shared by the geometry helpers below.
 function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.collapsed; }
+// …and the other half: a FOLDED frame, which renders as nothing but its title tab — a small pill at
+// the bounds top (n.y), i.e. exactly where the expanded frame's tab sits, so folding never moves the
+// title. Its element shrink-wraps the title, so its width is measured (nodeW) rather than assumed.
+function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.collapsed; }
 // An image card: a resizable leaf that shows nothing but its one image — no children, no title UI.
 function isImageBox(n: MindNode): boolean { return n.type === 'image' && !n.collapsed; }
 // A query card: a resizable leaf with a search field + scrollable results list — no children.
@@ -583,6 +605,7 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQ
 // rather than assumed — everything else is the fixed NODE_W.
 export function nodeW(n: MindNode): number {
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
+  if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
   if (isStack(n)) return n.w ?? STACK_W;
   if (inStack(n)) return n.w ?? NODE_W;   // full-width row inside a stack (n.w set by layout)
   if (isAnnotation(n)) return (n.el && n.el.offsetWidth) || NODE_W;
@@ -592,6 +615,7 @@ export function nodeW(n: MindNode): number {
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.
 export function nodeH(n: MindNode): number {
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
+  if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured
   if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   return (n.el && n.el.offsetHeight) || 64;
 }
@@ -600,6 +624,7 @@ export function nodeH(n: MindNode): number {
 // title-only card lays out the same whether or not it's selected. A box node reports its own height.
 export function layoutH(n: MindNode): number {
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
+  if (isFrameFold(n)) return FRAME_TAB_H;
   if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   const el = n.el; if (!el) return 64;
   return el.offsetHeight;
@@ -645,11 +670,28 @@ function dragRoot(): HTMLElement { return (ui.drag && ui.drag.moved) ? dragLayer
 // Deliberately NOT excluding a carried child (one whose host is dragging too): for those, origin- and
 // live-basis give the same host-relative offset, since host and child shift by the very same delta.
 function paintPos(n: MindNode): Pt { return ui.drag?.origins?.get(n.id) ?? { x: n.x, y: n.y }; }
+// Where a node's ELEMENT paints, given a bounds-top y: the SINGLE authority for the tab drop. The same
+// y for everything except a frame BOX, whose element is the box alone — one tab BELOW the bounds top
+// (FRAME_TAB_DROP), with the tab itself an absolutely positioned child hanging back up over that gap
+// (styles.css). A FOLDED frame's element IS that tab, so it paints at the bounds top like any card.
+// Takes y separately from n because a mid-drag paint writes the FROZEN origin, not the live position.
+export function elTop(n: MindNode, y: number): number { return isFrameBox(n) ? y + FRAME_TAB_DROP : y; }
+// elTop's inverse: the BOUNDS top for an element that paints at y. Only followEdges needs it — it
+// reads back interpolated left/top mid-animation to reproject them into world coordinates.
+function boundsTop(n: MindNode, y: number): number { return isFrameBox(n) ? y - FRAME_TAB_DROP : y; }
+// Place an element at absolute world coords, expressed relative to its container: #world (or the drag
+// layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so
+// the offset is the host's own inset (the border, plus a frame's title tab — see frameInsetY).
 function place(el: HTMLElement, absX: number, absY: number, host: MindNode | null): void {
   const container = host ? frameContentEl(host) : dragRoot();
-  const hp = host ? paintPos(host) : null;   // the host's FROZEN origin mid-drag — see paintPos
-  el.style.left = (hp ? absX - hp.x - FRAME_BORDER : absX) + 'px';
-  el.style.top  = (hp ? absY - hp.y - FRAME_BORDER : absY) + 'px';
+  if (host) {
+    const hp = paintPos(host);   // the host's FROZEN origin mid-drag — see paintPos
+    el.style.left = (absX - hp.x - FRAME_BORDER) + 'px';
+    el.style.top  = (absY - hp.y - frameInsetY(host)) + 'px';
+  } else {
+    el.style.left = absX + 'px';
+    el.style.top  = absY + 'px';
+  }
   if (el.parentElement !== container) container.appendChild(el);
 }
 // A frame's own clipping wrapper: a plain overflow:hidden box (styles.css .frame-content) sized to
@@ -668,7 +710,7 @@ function place(el: HTMLElement, absX: number, absY: number, host: MindNode | nul
 function frameContentEl(f: MindNode): HTMLElement {
   let w = f.frameContentEl;
   if (!w) {
-    place(nodeEl(f), f.x, f.y, settledHost(f));
+    place(nodeEl(f), f.x, elTop(f, f.y), settledHost(f));
     w = document.createElement('div'); w.className = 'frame-content'; f.frameContentEl = w;
   }
   // A stack auto-sizes to its outline, so nothing ever needs clipping — and clipping would cut off
@@ -680,13 +722,14 @@ function frameContentEl(f: MindNode): HTMLElement {
   // frame's origin, since applyDragTransform mirrors the box's own transform onto it. Its SIZE comes
   // from frameInterior either way (a drag moves the box, it doesn't resize it).
   const p = paintPos(f);
-  place(w, p.x + FRAME_BORDER, p.y + FRAME_BORDER, settledHost(f));
+  place(w, p.x + FRAME_BORDER, p.y + frameInsetY(f), settledHost(f));
   w.style.width  = box.w + 'px';
   w.style.height = box.h + 'px';
   return w;
 }
 // ---------- frame / image-card resize ----------
-export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;   // a frame is never narrower than a normal card
+// a frame is never narrower than a normal card; its min HEIGHT is bounds, so it carries the tab too
+export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
 export const MIN_IMAGE_W = 60, MIN_IMAGE_H = 60;        // an image card can shrink to a small thumbnail
 export const MIN_QUERY_W = 200, MIN_QUERY_H = 160;      // a query card keeps room for the search field + a couple of rows
 function boxMinW(n: MindNode): number { return isImageBox(n) ? MIN_IMAGE_W : isQueryBox(n) ? MIN_QUERY_W : MIN_FRAME_W; }
@@ -843,7 +886,8 @@ function followEdges(tok: number, ms: number): void {
       const host = settledHost(n);
       const px = parseFloat(c.left), py = parseFloat(c.top);
       n.x = px ? (host ? px + host.x + FRAME_BORDER : px) : n.x;
-      n.y = py ? (host ? py + host.y + FRAME_BORDER : py) : n.y;
+      // boundsTop as well: `top` holds a frame's BOX top, while n.y is its bounds (tab) top.
+      n.y = py ? boundsTop(n, host ? py + host.y + frameInsetY(host) : py) : n.y;
     }
     paintEdges();
     for (const [n,x,y] of saved){ n.x = x; n.y = y; }   // restore logical (final) positions
@@ -1092,9 +1136,9 @@ syncFloatBar();
 // add-child + is hidden. Collapsing is allowed but in-memory only — leaving read-only reloads
 // from disk so the saved collapse state is restored.
 const roBtn = byId('roBtn');
-// closed padlock (locked) vs open padlock (unlocked)
-const ICON_LOCK_CLOSED = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
-const ICON_LOCK_OPEN   = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
+// open padlock (unlocked); the closed one is LOCK_BADGE_SVG up top — one glyph shared by the
+// locked-card badge, the float bar's lock toggle (features/float-bar.ts) and this button.
+export const ICON_LOCK_OPEN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
 export function applyReadOnly(): void {
   const ro = state.readOnly;
   document.body.classList.toggle('readonly', ro);

@@ -354,22 +354,25 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
    card padding — that's what lets full-width child cards fit inside the narrow box. */
 .node.stack { padding:5px 6px; }
-.node.frame .title, .node.stack .title { font-weight:600; }
+.node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
 /* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
    A frame's TAB is filled with --frame-stroke either way (see below), so its text keeps using
    var(--text) here: legible on the grey --edge fill in both themes, where #fff would be too weak. */
 .node.frame.c-none, .node.stack.c-none { background:transparent; }
-.node.frame.c-none .title, .node.stack.c-none .title { color:var(--text); }
-/* ---------- a frame's title: a folder TAB attached OUTSIDE the box's top-left corner ---------- */
-/* Outside, not inside, for two reasons: the box's whole interior belongs to the cards it holds (a
-   child dropped at the top-left used to cover the title), and the box paints BELOW the edges layer
-   and below cards, so an in-box title was occluded by both. Living outside + a z-index of its own
-   (possible only because .node.frame is not a stacking context, see above) makes it always legible.
+.node.frame.c-none .title, .node.frame-folded.c-none .title, .node.stack.c-none .title { color:var(--text); }
+/* ---------- a frame's title: a folder TAB above the box's top-left corner ---------- */
+/* Above the box, not inside it, for two reasons: the box's whole interior belongs to the cards it
+   holds (a child dropped at the top-left used to cover the title), and the box paints BELOW the edges
+   layer and below cards, so an in-box title was occluded by both. Living outside the box + a z-index
+   of its own (possible only because .node.frame is not a stacking context, see above) makes it always
+   legible. The tab is still INSIDE the frame's bounds, though: n.y is the tab's top edge and the box
+   element starts FRAME_TAB_DROP lower (main.ts elTop), which is what keeps the title in one place when
+   the box folds away beneath it (.frame-folded below).
    Direct-child combinators throughout: a frame's own tab only, never some descendant card's title.
    An absolutely positioned child's containing block is the PADDING box — i.e. INSIDE the 4px border
    (FRAME_BORDER) — so both offsets add that 4px back to sit flush with the box's OUTER edge.
-   Height must stay FRAME_TAB_H (main.ts): 2 + 16 + 2 = 20px, the room a frame keeps at the top of
-   its content area for a nested frame's tab. */
+   Height must stay FRAME_TAB_H (main.ts): 2 + 16 + 2 = 20px — hence the single ellipsised line below;
+   the frame's whole geometry is derived from that constant. */
 .node.frame > .title-row {
   /* +3px, not +4px (FRAME_BORDER): the tab's bottom row overlaps the box's top border by 1px. Butted
      exactly edge-to-edge, the two shapes rasterize on a fractionally-scaled layer (any non-integer
@@ -381,16 +384,19 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   max-width:calc(100% + 8px); align-items:center;
   padding:2px 8px; border-radius:8px 8px 0 0;
   background:var(--frame-stroke, var(--edge)); }
-.node.frame > .title-row > .title {
+.node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
   margin-bottom:0; padding-right:0; font-size:12px; line-height:16px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* while renaming, let a long title wrap and spill out of the tab instead of being ellipsised */
-.node.frame > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+.node.frame > .title-row > .title.editing,
+.node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 /* the box's selection ring stops at its border, leaving the tab looking detached — ring it too, but
    only on three sides: the tab's BOTTOM edge is where it joins the box, so a ring there would cut a
    line straight through the middle of one continuous shape. Hence a pseudo-element with
    border-bottom:none rather than a box-shadow ring (which can only go all the way round); it sits
    2px outside the tab, so its radius is the tab's 8px + those 2px. */
+/* (.frame and .frame-folded are mutually exclusive — a folded frame IS the tab, so it just takes the
+   ordinary four-sided .node.sel ring.) */
 .node.frame.sel > .title-row::before {
   /* bottom:1px, i.e. up by the tab's 1px overlap into the border (see above), so the ring's verticals
      stop exactly at the box's outer top edge — where the box's own ring continues — instead of
@@ -398,13 +404,20 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
   border:2px solid var(--node-sel); border-bottom:none; border-radius:10px 10px 0 0; }
 .node.frame.sel:has(> .title-row > .title.editing) > .title-row::before { content:none; }
-/* a COLLAPSED frame folds to an ordinary card — no .frame class, so no box and no title tab. An
-   UNCOLOURED one would then be a fully transparent card with no outline of any kind, i.e. floating
-   text; keep the frame's border so it still reads as a frame waiting to be unfolded. Same 4px
-   var(--edge) the expanded box shows for c-none (SWATCH_BG has no 'none' entry, so --frame-stroke is
-   unset there and its border falls back to --edge too). box-sizing:border-box (top of this file)
-   means the border costs inner space, not footprint — the card keeps its NODE_W/height geometry. */
-.node.frame-folded.c-none { border:4px solid var(--edge); }
+/* ---------- a COLLAPSED frame: the bare tab, rounded all round like a small pill ---------- */
+/* Folding hides the box, not the title: the element IS the tab now (no .frame class, so none of the
+   box rules above apply), which is why it sits at the bounds top — exactly where the expanded frame's
+   tab hangs — and the title doesn't move a pixel when you fold or unfold. The element carries the
+   tab's own fill/padding/radius and shrink-wraps its (single-line) title, so its .title-row goes back
+   in flow; main.ts nodeW measures that width and nodeH reports the FRAME_TAB_H constant. The bottom
+   corners are rounded here (the expanded tab squares them off where it joins the box). */
+.node.frame-folded {
+  border:none; min-height:0; padding:2px 8px; border-radius:8px;
+  width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling */
+  background:var(--frame-stroke, var(--edge)); }
+.node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
+/* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
+.node.frame-folded > .body, .node.frame-folded .progress { display:none; }
 /* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
    normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
    uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box. */

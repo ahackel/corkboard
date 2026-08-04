@@ -10,7 +10,7 @@
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_BORDER, FRAME_TAB_H, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, FRAME_BORDER, FRAME_TAB_DROP, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -333,15 +333,25 @@ export function ancestorDepth(node: MindNode): number {
 // pixel-identical by construction instead of by two hand-synced copies of the same arithmetic.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
   return {
-    x: f.x + FRAME_BORDER, y: f.y + FRAME_BORDER,
-    w: Math.max(0, nodeW(f) - FRAME_BORDER * 2), h: Math.max(0, nodeH(f) - FRAME_BORDER * 2),
+    x: f.x + FRAME_BORDER, y: f.y + frameInsetY(f),
+    w: Math.max(0, nodeW(f) - FRAME_BORDER * 2),
+    h: Math.max(0, nodeH(f) - frameInsetY(f) - FRAME_BORDER),
   };
 }
-// Where a frame's content starts VERTICALLY: the same pad as the other three sides, except that a
-// child which is itself a frame carries its own title TAB hanging above its box (FRAME_TAB_H,
-// styles.css) — inside THIS frame's clipping wrapper, where it would be cut off. So never less than
-// one tab. Shared by the flow layout and its insertion bar so the two can't disagree.
-function frameContentTop(frame: MindNode): number { return frame.y + Math.max(FRAME_PAD, FRAME_TAB_H); }
+// How far DOWN from a container's BOUNDS top its interior starts — the vertical counterpart of the
+// plain FRAME_BORDER inset used on the other three sides, and the single spelling of it: shared by
+// frameInterior and by everything that projects a hosted child into its host's content wrapper
+// (main.ts's place/frameContentEl/followEdges). A FRAME's bounds also cover its title tab, which sits
+// above the box (FRAME_TAB_DROP, main.ts); a stack has no tab. Keyed on `type`, not isFrame, so a paint
+// landing mid-collapse can't flip the inset under a hosted child.
+export function frameInsetY(f: MindNode): number {
+  return FRAME_BORDER + (f.type === 'frame' ? FRAME_TAB_DROP : 0);
+}
+// Where a frame's content starts VERTICALLY: one uniform pad below its BOX's top edge (elTop), matching
+// the `ax + FRAME_PAD` the other sides use from the box's outer edge. A nested frame's own tab lives
+// inside ITS bounds (see frameInsetY), so this frame reserves no room for it. Shared by the flow layout
+// and its insertion bar so the two can't disagree.
+function frameContentTop(frame: MindNode): number { return elTop(frame, frame.y) + FRAME_PAD; }
 // Is `child`'s centre inside `frame`'s OUTER box? The single source of truth for "a frame child is
 // still in its frame" — the trigger drag.ts uses in BOTH the rip PREVIEW (updateRip) and the detach
 // COMMIT (dragPointerUp), so a child ripping out previews the detach exactly where it commits. Uses
