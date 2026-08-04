@@ -373,6 +373,21 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    var(--text) here: legible on the grey --edge fill in both themes, where #fff would be too weak. */
 .node.frame.c-none, .node.stack.c-none { background:transparent; }
 .node.frame.c-none .title, .node.frame-folded.c-none .title, .node.stack.c-none .title { color:var(--text); }
+/* …and a coloured STACK sits one tone DOWN from that fill, so its box is always its own shape. A
+   stack inherits its colour from its ancestors (effectiveColor), so a stack inside a coloured frame
+   resolved to the frame's own --card — same fill, same border tint — and vanished into it completely:
+   all you saw was its rows. This is the mirror image of .stack-child's brightening below, which is
+   what keeps all three levels apart: frame fill > stack fill (darker) > row fill (brighter).
+   :not(.c-none) because --card is `transparent` there, and mixing THAT toward black yields a faint
+   grey wash instead of the transparency the rule above asks for.
+   The BORDER takes the very same step: it's --frame-stroke (the pure palette tint, set inline by
+   main.ts paintNode), so left alone it stood out as a bright rim around the darkened fill on every
+   stack. Matching the two makes the box step down as ONE shape instead of growing an outline.
+   Deliberately kept ABOVE .node.stack.drop-target further down: that rule's white dash has the same
+   specificity, so it only wins the border while it's the later of the two. */
+.node.stack:not(.c-none) {
+  background:   color-mix(in srgb, var(--card, var(--node)) 86%, #000);
+  border-color: color-mix(in srgb, var(--frame-stroke, var(--edge)) 86%, #000); }
 /* ---------- a frame's title: a folder TAB above the box's top-left corner ---------- */
 /* Above the box, not inside it, for two reasons: the box's whole interior belongs to the cards it
    holds (a child dropped at the top-left used to cover the title), and the box paints BELOW the edges
@@ -440,6 +455,55 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
 /* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
 .node.frame-folded > .body, .node.frame-folded .progress { display:none; }
+/* ---------- tab groups: a frame whose child frames are docked as TABS (mm_layout: tabs) ---------- */
+/* The STRIP is the band the tabs' labels are laid out in — the very band the group's own title tab
+   hangs in, above the box (main.ts tabStripEl positions and sizes it; view/layout.ts tabStripRect owns
+   the geometry). It has to live OUTSIDE the group's .frame-content wrapper, which clips to the
+   interior — the band sits above that, so a tab placed in there would be clipped away entirely. Same
+   z-index as a frame's own tab, for the same reason: over #edges (1) and cards (2). Tabs are
+   positioned inside it in world coordinates by the layout pass, like any other node. */
+/* No z-index of its own — so it isn't a stacking context, and each tab can place itself relative to the
+   BOX instead: main.ts tabStripEl keeps the strip right before the box in tree order, so an inactive tab
+   (also z-index auto) paints BEHIND it and the box's border and selection ring run over the top of it,
+   like the sheets tucked behind the front of a folder. Only the open tab lifts above (below). */
+.tab-strip { position:absolute; overflow:hidden; pointer-events:none; }
+.tab-strip > .node { pointer-events:auto; }
+/* A docked tab reuses the folded-frame look above — the element IS the tab, at exactly FRAME_TAB_H,
+   and its max-width already ellipsises a long title. EVERY tab squares off its bottom corners: they all
+   sit ON the box, so a rounded bottom would float them off it (a folded frame, which stands alone, keeps
+   its pill shape). The open one is what the box belongs to, so it alone shows at full strength. */
+.node.frame-folded.docked { opacity:.62; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+/* A tab's selection ring stops where the tab meets the box: a line along its BOTTOM edge would cut
+   straight through one continuous shape (exactly the reasoning behind a frame's own tab ring above).
+   box-shadow can only ring all four sides, so a selected tab swaps it for a three-sided pseudo-element
+   — 2px outside the tab, hence its radius is the tab's own plus those 2px, and 1px up at the bottom so
+   the verticals stop at the box's outer top edge instead of poking into its border. */
+/* `sel-join`: the box and its open tab are one frame, so selecting either rings BOTH — the tab gets the
+   three-sided ring below, the box its ordinary one, and since the tab paints over the box's top edge the
+   two meet as one folder outline (exactly how a plain frame's box + tab already ring together). */
+.node.frame.tabs.sel-join { box-shadow:0 0 0 2px var(--node-sel); }
+.node.frame-folded.docked.sel, .node.frame-folded.docked.sel-join { box-shadow:none; }
+.node.frame-folded.docked.sel::before, .node.frame-folded.docked.sel-join::before {
+  content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
+  border:2px solid var(--node-sel); border-bottom:none;
+  border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
+/* …and it stands down while the tab is being renamed, like every other card's ring */
+.node.frame-folded.docked.sel:has(> .title-row > .title.editing)::before { content:none; }
+/* no +N chip on a tab: a folded frame uses it for "there's more inside", but a CLOSED TAB's contents
+   are one click away in the box, not tucked under a stub — and the bubble would sit over the next tab.
+   The "add note" pill goes for the same reason: on a label this narrow it lands on the title itself
+   (and a frame — docked or not — never shows a body anyway). */
+.node.frame-folded.docked > .hidden-count { display:none; }
+.node.frame-folded.docked .addnote { display:none !important; }
+/* the open tab is the front of the folder: over the box, over #edges (1) and the cards (2) — the same
+   z-index a frame's own title tab takes, and for the same reasons */
+.node.frame-folded.docked.tab-active { opacity:1; z-index:5; }
+/* A group with tabs shows NO tab of its own: it would sit in the same band, look exactly like a tab,
+   and read as one — two docked frames must show two tabs, not three. So the strip starts at the box's
+   left edge and the group's own title lives in the outline, in search, and in its FOLDED state (where
+   the tab is all there is). An empty group keeps its label, or it would have no visible identity at
+   all; `has-tabs` is set by paintNode. Select a group by clicking its box, rename it from there. */
+.node.frame.tabs.has-tabs > .title-row { display:none; }
 /* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
    normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
    uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.

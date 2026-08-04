@@ -133,7 +133,11 @@ export async function exportZip(): Promise<void> {
 
 export async function loadFromDir({ keepView = false }: { keepView?: boolean } = {}): Promise<void> {
   clearHistory();   // ids are minted fresh per load, so no snapshot survives a (re)load / map switch
-  state.nodes.clear(); state.toDelete = []; world.querySelectorAll('[data-id]').forEach(e=>e.remove());
+  // …including the container wrappers, which carry no data-id: a frame's clipping wrapper and a tab
+  // group's strip hang off the NODE object (frameContentEl / tabStripEl), so once state.nodes is
+  // cleared nothing can reach the old ones to remove them and they'd pile up in #world on every load.
+  state.nodes.clear(); state.toDelete = [];
+  world.querySelectorAll('[data-id], .frame-content, .tab-strip').forEach(e=>e.remove());
   resetImageCache();   // blob URLs from the previous map (or store) are stale now
   await loadSketch();  // read the freehand ink layer (sketch.json) for this map, if any
   await loadSettings(); // read this map's view prefs (settings.json), e.g. the background grid

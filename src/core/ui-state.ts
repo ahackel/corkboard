@@ -40,6 +40,13 @@ export interface Drag {
   // Alt-dragging image CARD(s) over a plain body card: the target card's id to fold the image(s)
   // into on drop (instead of reparenting). Set by updateDropTarget, consumed by dragPointerUp.
   imageMerge?: string | null;
+  // The frame whose TAB the dragged frame(s) are poised over: releasing DOCKS them there as tabs
+  // (features/drag.ts tabZoneAt → crud.ts dockFrames). Its own resolution, not a dropMode, because it
+  // isn't a reparent-with-a-landing: dropTarget/dropSide stay null, so every other preview stands
+  // down — same shape as imageMerge above.
+  dock?: string | null;
+  // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
+  dockAfter?: string | null;
 }
 export interface InlineEdit { id: string; orig: string; el: HTMLElement; isNew?: boolean; }
 export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; }

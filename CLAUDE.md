@@ -95,7 +95,7 @@ that. There is no edge list.
 resolved by `foldTypeLayout` (`utils/frontmatter.ts`), which also folds legacy spellings so old
 vaults keep loading. Kinds: `card` (the default, so it's omitted), `frame`, `stack`, `image`,
 `annotation`, `query`. Only card/frame carry a layout (card: `inherit`/`free`/`line`/`fan`;
-frame: `free`/`horizontal`/`vertical`); the rest never write `mm_layout`. The type/layout pickers
+frame: `free`/`horizontal`/`vertical`/`tabs`); the rest never write `mm_layout`. The type/layout pickers
 in `features/float-bar.ts` are driven by `NODE_TYPES` + `LAYOUTS_BY_TYPE` — a kind with an empty
 layout set hides the layout trigger entirely.
 
@@ -131,6 +131,51 @@ must paint again (see `withLayoutAnimation`). A row's width itself is **derived,
 (`stackRowW`: the stack's own width, less the border/padding, less one `STACK_INDENT` per depth) —
 deliberately, so it can't collide with the authored `n.w` a card carries in from outside the stack.
 Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it comes out.
+
+**A frame with `mm_layout: tabs` is a TAB GROUP:** its child *frames* aren't content, they're TABS.
+Their title tabs flow along its own top band (`tabStripRect`/`tabSlots`, DOM wrapper `tabStripEl`) and
+whichever tab is OPEN borrows the whole box for its children — so the group owns the geometry (x/y/w/h,
+border, resize handles) and a tab owns only its contents and its own tint. Zero new frontmatter keys: docking is
+plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs by x), and open/closed is
+`mm_collapsed`. Four invariants hold it together:
+- **A docked tab's bounds ARE its tab rect** — it takes the same render path as a folded frame
+  (`isFrameFold` covers both; `isFrameBox` excludes it), and open vs closed differs only in
+  `mm_collapsed` (which already hides its contents via `isHidden`) plus a CSS class.
+- **Its contents live in the box its group lent it**, which is what `containerBox` spells — the single
+  indirection, shared by `frameInterior`, `centreInFrame`, `frameContentTop`, the flow layout and
+  `dropLanding`, so none of them has to know whether the frame it was handed is docked. A group with
+  tabs shows no tab of its own (`.tabs.has-tabs`): two docked frames must read as two tabs, not three.
+- **At most one tab is open.** `normalizeTabs` (a pre-pass in `applyLayouts`) repairs it, `activateTab`
+  /`openTabFlags` perform it, and every collapse-family path funnels through them — `toggleCollapse` on
+  a tab OPENS it, and `focusNode` opens a closed tab rather than expanding it. Opening one is the single
+  thing a LOCK doesn't forbid (it's how you look at the box, not a change to it), so a locked tab stays
+  pressable — `dragPointerDown`'s `hasLockedAncestor` bail exempts docked tabs — while moving it is still
+  refused. Its lock badge hangs 8px outside the tab, which is what `TAB_STRIP_PAD` leaves room for.
+- **A group holds no content of its own**, so anything added "to the group" goes to the open tab:
+  dropped cards (`features/drag.ts`), `addChild`/`createSibling` and paste (`contentParent`). It has no
+  COLOUR of its own either: `effectiveColor` starts the walk at the open tab, so the box (its border, its
+  incoming edge, its outline swatch) is tinted by whichever tab is showing — which is also why
+  `dockFrames` doesn't copy the target's colour onto the group. Unconditionally, and a colour authored on
+  the group is *not* an override: the walk continues from the tab THROUGH the group, so it just stands in
+  for any tab that inherits. The two also ring as one shape when either is selected — `selJoin` hands the
+  other half the ring (`.sel-join`), the tab's being three-sided like a plain frame's own tab.
+- **A group doesn't exist from the user's side** — there are just tabs, one of them open. So a user-facing
+  action on a selected group lands on the OPEN TAB via `actionTarget`: its colour + checklist (the
+  float-bar properties' id provider), its rename (`startInlineEdit`, the single funnel for F2 / ⋯ / the
+  outline) and its deletion (`deleteNode`/`deleteSelection`, after which `normalizeTabs` promotes the next
+  tab and `dissolveEmptyTabGroups` takes the box away with the last one). What stays on the group is what
+  the box visibly owns: moving, resizing, its kind/layout (the way out of tabs mode) and its lock — plus
+  delete-and-promote, which reads naturally as "ungroup" (the tabs survive as loose frames).
+Dock, undock and re-slot all re-anchor the frame's contents through ONE formula (`reanchorContents`):
+where they sat before the gesture (`interiorAtHome` — the lent box if it was already a tab, else its own
+box at its pre-drag position), where they sit now, minus the drag delta its cards rode along with the
+label. Drop that last term and re-slotting a tab — a gesture that doesn't change the box at all — leaves
+its whole content offset sideways. Each frame's own `mm_w`/`mm_h` are never touched while docked, which is
+what lets it come back out at the size it went in at. A group left with no children dissolves.
+What may become a tab is `canBeTab`: a frame, or a plain CARD, which `dockFrames` turns into a frame on
+the way in (`asFrame`) — so dragging a card onto a frame's tab docks it. The other kinds stay out and fall
+through to the ordinary drop (they land in the box as content): an annotation holds nothing, and a
+stack/image/query is a box whose own shape IS the point.
 
 **Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`, `mm_position_y`
 (relative to the parent; world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`,

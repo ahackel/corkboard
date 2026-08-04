@@ -11,7 +11,7 @@ import { state, stage, setStatus, isBoxType, isImageCard, isAnnotation, isQueryC
 import { NARROW_MQ, ui } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { applyLayouts, subtreeBox } from '../view/layout.js';
+import { applyLayouts, subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget } from '../view/layout.js';
 import { outlineActive } from './outline.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -50,7 +50,12 @@ const edLayoutTypes = byId('edLayoutTypes');
 // is still being imported at main.ts's top — see the main↔features import cycle note in CLAUDE.md.
 let _props: PropertyControls | null = null;
 function props(): PropertyControls {
-  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist }, selectedIds);
+  // actionTarget, not the raw selection: selecting a tab group's box means "this frame" to the user, and
+  // the frame they mean is the OPEN TAB — so its colour (and its checklist) is what the swatches read
+  // and write. Colouring the invisible group would look like nothing happened; colouring the open tab
+  // tints the box too, since that's where the box takes its colour from (effectiveColor).
+  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist },
+    () => selectedIds().map(id => actionTarget(state.nodes.get(id)!).id));
 }
 
 // ---------- layout picker ----------
@@ -97,6 +102,8 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
       icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="6.5" y="9.5" width="4.5" height="5" rx="1" fill="currentColor" stroke="none"/><rect x="13" y="9.5" width="4.5" height="5" rx="1" fill="currentColor" stroke="none"/></svg>' },
     { key:'vertical', label:'Vertical — cards flow top to bottom, wrapping right',
       icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="8.5" y="7.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/><rect x="8.5" y="12.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/></svg>' },
+    { key:'tabs', label:'Tabs — child frames docked as tabs; one open at a time, click a tab to switch',
+      icon: SVG_OPEN + '<rect x="3.5" y="8" width="17" height="11" rx="2"/><path d="M3.5 8V6a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M11 8V6.5a1 1 0 011-1h3a1 1 0 011 1V8" opacity=".55"/></svg>' },
   ],
   // a stack always outlines its whole subtree — there's nothing to choose, so its chip row is empty
   // and the layout trigger hides itself (markChips), same as for the leaf kinds
@@ -216,6 +223,9 @@ function setType(type: NodeType): void {
       // silently keeping it would turn a converted 800px frame into an 800px card.
       // card/annotation/stack: the height is never authored — and the width goes too if we're
       // leaving a 2D box, whose width described its contents rather than its own text.
+      // A tab group is a FRAME with layout tabs; leaving `frame` behind dissolves the group, so its
+      // tabs need their own boxes back (same as switching the layout away — see undockAllTabs).
+      if (n.type === 'frame' && n.layout === 'tabs' && type !== 'frame') undockAllTabs(n);
       if (!isBoxType(type)) { n.h = undefined; if (isBoxType(n.type)) n.w = undefined; }
       if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
       if (type === 'image' && (n.w == null || n.h == null)) { n.w = IMAGE_W; n.h = IMAGE_H; }
@@ -231,12 +241,34 @@ function setType(type: NodeType): void {
   markChips();
   applyLayouts(); paintAll(); scheduleSave();
 }
+// Give a tab group's tabs their own boxes back: open every one (only one was open) and cascade them
+// inside the frame, since as tabs they were all stacked in the same strip band and would otherwise
+// land in a pile. Their authored mm_w/mm_h were never touched while docked, so each comes back at the
+// size it went in at. Run while the frame is still a tabs frame, i.e. BEFORE the layout is reassigned.
+function undockAllTabs(g: MindNode): void {
+  const box = frameInterior(g);
+  tabsOf(g).forEach((t, i) => {
+    touch(...subtreeIds(t.id));   // its whole subtree moves with it, so it all needs undoing
+    const lent = frameInterior(t);   // where its cards sit right now: the interior the group lent it
+    t.collapsed = false;
+    t.x = box.x + 20 + i * 24; t.y = box.y + 20 + i * 24;
+    // Re-anchor its cards to the box they're in rather than carrying them along with the frame: while
+    // docked, their offset was measured from a LABEL in the strip, which says nothing about where they
+    // sit — what has to be preserved is their position inside the interior. Spelt out (border, plus the
+    // frame's own title tab) because the group's layout hasn't flipped yet, so frameInterior would
+    // still hand back the lent box.
+    const dx = (t.x + FRAME_BORDER) - lent.x, dy = (t.y + FRAME_BORDER + FRAME_TAB_DROP) - lent.y;
+    for (const k of childrenOf(t.id)) moveSubtreeTo(k, k.x + dx, k.y + dy);
+    t.dirty = true; t.dirtyLayout = true;
+  });
+}
 // Change the child-ARRANGEMENT of the selection (within its current type).
 function setLayout(layout: NodeLayout): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.layout === layout) continue;
+      if (n.layout === 'tabs') undockAllTabs(n);   // leaving tabs: hand each tab its own box back
       // Drop the stored child order: a switch INTO a managed layout (line/fan/flow) must reseed
       // order from the children's CURRENT positions — a free layout never touches kidOrder, so a
       // stale order from an earlier managed pass would otherwise survive.
@@ -446,17 +478,20 @@ fbMore.addEventListener('click', (e) => {
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 10;
-function anchorEl(): HTMLElement | null | undefined {
+function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
-  return n?.el;
+  return n?.el ? n : undefined;
 }
 function positionBar(): void {
   if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return; }   // CSS docks it to the bottom
-  const el = anchorEl(); if (!el) return;
+  const n = anchorNode(); const el = n?.el; if (!n || !el) return;
   const r = el.getBoundingClientRect();
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   let left = r.left + r.width / 2 - bw / 2;
-  let top = r.top - bh - GAP;
+  // Anchor on the node's BOUNDS top, not its element's: a frame box's element starts FRAME_TAB_DROP
+  // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
+  // would hang the bar over the tab and shift it when a frame is converted to a card or back.
+  let top = r.top - elTop(n, 0) * state.view.k - bh - GAP;
   if (top < 4) top = r.bottom + GAP;   // not enough room above → flip below the card
   left = Math.min(Math.max(left, 4), window.innerWidth - bw - 4);
   top = Math.min(Math.max(top, 4), window.innerHeight - bh - 4);

@@ -22,7 +22,7 @@ import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameInsetY, frameFlow, isStack, stackRowW } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -216,16 +216,29 @@ export function effectiveColor(n: MindNode): string {
   // connector + the anchor dot on its parent); with none ('inherit') it takes the THEME'S CONTRAST
   // colour — white on the dark canvas, black on the light one — so it always stands out on top.
   if (isAnnotation(n)) return n.color || (document.body.classList.contains('light') ? 'black' : 'white');
+  // A tab GROUP's box belongs to whichever tab is OPEN, so it takes that tab's colour — switching tabs
+  // re-tints the box (and its border, its incoming edge and its outline swatch, which all read from
+  // here). Unconditionally, since from the user's side there IS no group to have a colour of its own; a
+  // colour authored on the group still shows through, because the walk continues from the tab THROUGH
+  // the group, so it stands in for any tab that inherits.
+  if (isTabsFrame(n) && !n.collapsed) n = activeTab(n) ?? n;
   const drag = ui.drag;
   let previewId: string | null = null;
   let previewParent: MindNode | null | undefined;
   if (drag && !drag.shift && (drag.alt || drag.rip)) { previewId = drag.active.id; previewParent = null; }
-  else if (drag && drag.dropTarget) {
+  // …and never substitute the dragged card for its OWN parent: the walk below would then never leave
+  // it and would spin forever. A drop target that IS the dragged card is a no-op drop anyway (drag.ts
+  // rules it out), so there's nothing to preview.
+  else if (drag && drag.dropTarget && drag.dropTarget !== drag.active.id) {
     previewId = drag.active.id;
     const tgt = state.nodes.get(drag.dropTarget);
     previewParent = drag.dropMode === 'sibling' ? (tgt?.parent ? state.nodes.get(tgt.parent) : null) : tgt;
+    if (previewParent?.id === previewId) previewParent = null;
   }
-  for (let c: MindNode | null | undefined = n; c; c = (c.id === previewId) ? previewParent : (c.parent ? state.nodes.get(c.parent) : null))
+  // `guard`, like effectiveLayout's: a chain is only as trustworthy as the data behind it, and this
+  // runs on every paint of every card — a cycle must degrade to a fallback colour, not hang the tab.
+  let guard = 0;
+  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : (c.parent ? state.nodes.get(c.parent) : null))
     if (c.color) return c.color;
   // light theme: the neutral fallback card reads better as white than as the dark-grey card
   return document.body.classList.contains('light') ? 'white' : 'grey';
@@ -381,7 +394,7 @@ export function paintNode(n: MindNode): void {
   // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isQueryBox(n) && !state.readOnly && !isLockedEffective(n);
+  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isQueryBox(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
   el.className = 'node c-' + effectiveColor(n)
     + (isFrameBox(n) ? ' frame' : '')
     + (isStack(n) ? ' stack' : '')
@@ -393,6 +406,15 @@ export function paintNode(n: MindNode): void {
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
     + (collapsed ? ' collapsed' : '')
     + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare title tab (styles.css)
+    // a group, and whether it has tabs to show — with tabs, its own title tab is hidden (styles.css),
+    // since a third tab-shaped thing in the strip reads as a third tab
+    + (isTabsFrame(n) ? (tabsOf(n).length ? ' tabs has-tabs' : ' tabs') : '')
+    // a tab: the same bare-tab render as a folded frame, but joined to the group's box while OPEN
+    + (isDockedTab(n) ? (n.collapsed ? ' docked' : ' docked tab-active') : '')
+    // A group's box and its OPEN tab are one frame to the user, so they ring TOGETHER — whichever of the
+    // two the selection actually landed on (clicking the box selects the group, clicking the tab selects
+    // the tab). `sel-join` is the ring the other half then draws; see styles.css.
+    + (selJoin(n) ? ' sel-join' : '')
     + (n.locked ? ' locked' : '')
     + (hasBody ? '' : ' no-body')
     + (isFrameBox(n) || isStack(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
@@ -457,7 +479,8 @@ export function paintNode(n: MindNode): void {
       // SIBLINGS in one DOM parent. Nesting the box inside a parent card instead put the two in
       // different stacking contexts, so the box's fill won the tie and swallowed its own rows'
       // pointer events (pressing a stack row grabbed the whole stack).
-      place(el, np.x, elTop(n, np.y), host);
+      // …and a DOCKED TAB's own label goes to its group's strip instead — see placeSelf.
+      placeSelf(n, np.x, elTop(n, np.y));
     }
   }
   // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card /
@@ -484,6 +507,9 @@ export function paintNode(n: MindNode): void {
     if (el.style.width) { el.style.width = ''; el.style.height = ''; }
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
     clearResizeHandles(el);
+    // An OPEN docked tab still hosts its children — in the box its group lent it, not in this label —
+    // so it keeps a clipping wrapper of its own, positioned at that lent interior (frameInterior).
+    if (isDockedTab(n) && !n.collapsed) frameContentEl(n);
   } else if (isStack(n)) {
     el.style.width = nodeW(n) + 'px';    // authored (n.w, default STACK_W) — resizable on this axis only
     el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
@@ -508,6 +534,11 @@ export function paintNode(n: MindNode): void {
     el.style.removeProperty('--frame-stroke');
     ensureResizeHandles(n, EW_DIRS);
   }
+  // A tab group's STRIP is a second container of its own (tabStripEl), so it's created here rather
+  // than by the sizing branch above — and dropped the moment the node stops being an expanded group,
+  // so switching the layout away (or folding the group) can't strand an empty band on the canvas.
+  if (isTabsFrame(n) && !n.collapsed) tabStripEl(n);
+  else if (n.tabStripEl) { n.tabStripEl.remove(); n.tabStripEl = null; }
   // don't clobber the title while it's being inline-edited (the user is typing into it). A query
   // card has no editable title of its own — its title slot always shows the live query text
   // instead (falling back to n.title before any query has been typed), so the card always reads as
@@ -547,7 +578,9 @@ export function paintNode(n: MindNode): void {
   // an unrelated repaint mid-drag can't destroy a pointer-captured pill (features/tags.ts's
   // bindCardTagPills).
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
-  const noTagRow = isFrameBox(n) || isAnnotation(n) || isQueryBox(n);
+  // isDockedTab: a strip of tabs has no room for pills hanging off each label (they'd overlap the
+  // next tab), and a tab is a handle on a box rather than a note you'd tag.
+  const noTagRow = isFrameBox(n) || isAnnotation(n) || isQueryBox(n) || isDockedTab(n);
   const tagsKey = noTagRow ? '' : n.tags.join(' ') + (showAddTag ? ' +' : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
@@ -555,8 +588,11 @@ export function paintNode(n: MindNode): void {
       (noTagRow ? '' : [...n.tags].reverse().map(t => tagPillHTML(t)).join(''));
     bindCardTagPills(tagRowEl, n);
   }
-  // folded branch → hidden-descendant count; folded leaf → empty bubble (a white dot)
-  if (collapsed) el.querySelector('.hidden-count')!.textContent = collapsedKids ? String(descendantCount(n.id)) : '';
+  // folded branch → hidden-descendant count; folded leaf → empty bubble (a white dot). A CLOSED TAB is
+  // not a folded branch — its contents are one click away in the group's box, not tucked under a stub —
+  // so it shows no count (which would also collide with the next tab in the strip).
+  if (collapsed) el.querySelector('.hidden-count')!.textContent =
+    (collapsedKids && !isDockedTab(n)) ? String(descendantCount(n.id)) : '';
 }
 export const NODE_W = 200;
 // world-px grid dragged positions AND frame/image-card sizes snap to — tracks the visible grid's
@@ -592,12 +628,35 @@ export const STACK_PAD = 6;      // inset from the border to the content — hal
                                  // padding, so full-width child cards still fit in the narrow box
 export const STACK_GAP = 8;      // vertical gap between stacked children
 // Whether a node currently renders as a frame BOX. A collapsed frame folds to its bare title tab
-// (isFrameFold below), so it has no box at all. Shared by the geometry helpers below.
-function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.collapsed; }
-// …and the other half: a FOLDED frame, which renders as nothing but its title tab — a small pill at
-// the bounds top (n.y), i.e. exactly where the expanded frame's tab sits, so folding never moves the
-// title. Its element shrink-wraps the title, so its width is measured (nodeW) rather than assumed.
-function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.collapsed; }
+// (isFrameFold below), so it has no box at all — and neither does a frame DOCKED as a tab, open or
+// not: the box belongs to its group, which is exactly what docking means. Shared by the geometry
+// helpers below.
+function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.collapsed && !isDockedTab(n); }
+// …and the other half: a frame that renders as nothing but its title tab — a small pill at the bounds
+// top (n.y), i.e. exactly where an expanded frame's tab sits, so folding never moves the title. Its
+// element shrink-wraps the title, so its width is measured (nodeW) rather than assumed. TWO ways to
+// get here: FOLDED (its own box hidden below the tab), or DOCKED as a tab (no box of its own at all —
+// its group's box is what its contents show through, and this tab is the handle that opens it). So a
+// docked tab needs no render mode of its own: open vs closed is just `collapsed`, which already
+// decides whether its contents show, plus a CSS class (see paintNode).
+function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && (!!n.collapsed || isDockedTab(n)); }
+// The width a frame's own title TAB renders at — MEASURED, since a title is as wide as its text (up
+// to the CSS max-width, which ellipsises it). When the frame is folded or docked its element IS that
+// tab; otherwise the tab is the .title-row hanging above the box. Shared by the strip layout, the dock
+// hit-test and the dock preview, so all three agree on where a tab starts and ends.
+// Is `n` the OTHER half of a selected tab frame — the open tab of a selected group, or the box of a group
+// whose open tab is selected? Either way the two are one frame on screen and must show one continuous
+// ring, so the half that isn't selected borrows the ring too (styles.css `.sel-join`).
+function selJoin(n: MindNode): boolean {
+  if (isDockedTab(n)) return !n.collapsed && !!n.parent && state.sel.has(n.parent);
+  if (isTabsFrame(n) && !n.collapsed) { const t = activeTab(n); return !!t && state.sel.has(t.id); }
+  return false;
+}
+export function frameLabelW(n: MindNode): number {
+  if (isFrameFold(n)) return nodeW(n);
+  const tr = n.el?.querySelector(':scope > .title-row') as HTMLElement | null;
+  return (tr && tr.offsetWidth) || NODE_W;
+}
 // An image card: a resizable leaf that shows nothing but its one image — no children, no title UI.
 function isImageBox(n: MindNode): boolean { return n.type === 'image' && !n.collapsed; }
 // A query card: a resizable leaf with a search field + scrollable results list — no children.
@@ -608,7 +667,10 @@ function isQueryBox(n: MindNode): boolean { return n.type === 'query' && !n.coll
 function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n) || isQueryBox(n); }
 // Any node that renders as a child-containing BOX with a size + clipping wrapper: a resizable frame
 // OR an auto-sized stack. Used for the size/wrapper plumbing in paintNode.
-function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(n); }
+// A DOCKED TAB counts even though it draws no box: it still HOSTS its children in the box its group
+// lent it, so its children must be placed into its wrapper (place) rather than DOM-nested inside its
+// element — which is only a label in the strip, nowhere near where its contents belong.
+function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(n) || isDockedTab(n); }
 // Does this card live inside a stack's outliner? True when its nearest CONTAINER ancestor is a
 // stack (a frame in between governs instead) — covers the stack's direct children AND deeper rows.
 // Used for the .stack-child tint. For "is this actually an outline ROW" (which drives the row width
@@ -710,16 +772,94 @@ function boundsTop(n: MindNode, y: number): number { return isFrameBox(n) ? y - 
 // layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so
 // the offset is the host's own inset (the border, plus a frame's title tab — see frameInsetY).
 function place(el: HTMLElement, absX: number, absY: number, host: MindNode | null): void {
-  const container = host ? frameContentEl(host) : dragRoot();
-  if (host) {
-    const hp = paintPos(host);   // the host's FROZEN origin mid-drag — see paintPos
-    el.style.left = (absX - hp.x - FRAME_BORDER) + 'px';
-    el.style.top  = (absY - hp.y - frameInsetY(host)) + 'px';
-  } else {
-    el.style.left = absX + 'px';
-    el.style.top  = absY + 'px';
-  }
+  if (!host) return placeIn(el, absX, absY, dragRoot(), 0, 0);
+  const o = contentOrigin(host);
+  placeIn(el, absX, absY, frameContentEl(host), o.x, o.y);
+}
+// The mechanical half of place(): write absolute world (absX,absY) as an offset from `container`'s own
+// world origin and (re)parent into it. Split out so the tab strip — a second container, positioned
+// outside its group's clipping wrapper (tabStripEl) — shares the same arithmetic.
+function placeIn(el: HTMLElement, absX: number, absY: number, container: HTMLElement, ox: number, oy: number): void {
+  el.style.left = (absX - ox) + 'px';
+  el.style.top  = (absY - oy) + 'px';
   if (el.parentElement !== container) container.appendChild(el);
+}
+// Where a container's content wrapper sits in world coords, on the PAINT basis (its frozen origin
+// mid-drag — see paintPos). Everything that has to agree on that point reads it here: place() offsets
+// left/top by it, frameContentEl() positions the wrapper at it, followEdges() projects back through
+// it. Expressed as a delta off the host's own origin rather than re-spelling the insets, so a docked
+// tab (whose interior is the box its GROUP lent it) needs no special case anywhere.
+function contentOrigin(host: MindNode): Pt {
+  const box = frameInterior(host);
+  // Measured off the node the interior actually BELONGS to: for a docked tab that's its group, whose box
+  // doesn't move when the tab does — anchoring to the tab instead would drag its contents along the strip
+  // with it. (Same node either way for everything else.)
+  const basis = tabGroupOf(host) ?? host;
+  const bp = paintPos(basis);
+  return { x: bp.x + (box.x - basis.x), y: bp.y + (box.y - basis.y) };
+}
+// A tab group's STRIP: the band its tabs' labels are laid out in, as a container of its own.
+// UNCLIPPED, and that's the whole point — the strip of a top-level group sits ABOVE its box (the same
+// band its own title tab hangs in), so tabs placed in the group's overflow:hidden content wrapper
+// would be clipped away entirely. A DOCKED group's strip is inside the interior it was lent, so it
+// goes into that group's wrapper and clips with it, exactly as its own box would.
+function tabStripEl(g: MindNode): HTMLElement {
+  let s = g.tabStripEl;
+  if (!s) { s = document.createElement('div'); s.className = 'tab-strip'; g.tabStripEl = s; }
+  const o = stripOrigin(g), r = tabStripRect(g);
+  place(s, o.x, o.y, settledHost(g));
+  s.style.width = (r.w + TAB_STRIP_PAD * 2) + 'px';
+  s.style.height = (r.h + TAB_STRIP_PAD * 2) + 'px';
+  // …and keep it right BEFORE the box among its siblings. Neither carries a z-index, so tree order is
+  // what decides: an inactive tab then paints behind the box, letting its border and selection ring run
+  // across the top of it (styles.css). The open tab lifts back above with a z-index of its own.
+  const boxEl = nodeEl(g);
+  if (s.parentElement && s.parentElement === boxEl.parentElement && s.nextSibling !== boxEl)
+    s.parentElement.insertBefore(s, boxEl);
+  return s;
+}
+// A tab is exactly FRAME_TAB_H tall and the band is too, so a strip clipped to the band would cut off
+// whatever a tab hangs outside itself: its selection ring (2px out — see styles.css `.sel-join`) and, on
+// a locked tab, the lock badge (8px out at the top-left, `.node .lock-badge`). Give the wrapper headroom
+// for the larger of the two all round — stripOrigin shifts with it, so the tabs inside still land on
+// their world positions, and the clip that keeps a long row of tabs inside the box still does its job.
+const TAB_STRIP_PAD = 10;
+// …and where that strip sits, on the paint basis — contentOrigin's counterpart for the tab band.
+function stripOrigin(g: MindNode): Pt {
+  const r = tabStripRect(g), gp = paintPos(g);
+  return { x: gp.x + (r.x - g.x) - TAB_STRIP_PAD, y: gp.y + (r.y - g.y) - TAB_STRIP_PAD };
+}
+// Put a node's OWN element where it belongs. A docked tab's label goes in its group's strip — it
+// isn't content of the box, it's the handle that opens it — and everything else goes in its host
+// container's content wrapper, or straight under #world. The single decision point, shared by
+// paintNode and frameContentEl's ordering guard.
+function placeSelf(n: MindNode, absX: number, absY: number): void {
+  const g = tabGroupOf(n);
+  if (!g) place(nodeEl(n), absX, absY, settledHost(n));
+  else {
+    const o = stripOrigin(g);
+    placeIn(nodeEl(n), absX, absY, tabStripEl(g), o.x, o.y);
+  }
+  orderContentAfterBox(n);
+}
+// Keep a container's own box BEFORE its content wrapper among their shared siblings. The two paint in
+// the same step (both z-index:auto — see .node.frame in styles.css), so document order alone decides
+// which is on top: the wrapper must FOLLOW the box, or the box's opaque fill paints straight over
+// everything inside it that also sits at z-index:auto — a nested stack, a nested frame. (Plain cards
+// are z-index:2 and survive either way, which is exactly what "the stack vanished but its rows didn't"
+// looked like.)
+// Any re-append of the box moves it to the END of its container, inverting the pair whenever the
+// wrapper got there first — which is routine, since Map iteration order isn't parent-before-child, so
+// a child's paint reaches frameContentEl before the container's own paintNode. The case that actually
+// bit: dropping a dragged frame returns box and wrapper from #dragLayer in whatever order the repaint
+// visits them. So re-assert the order after every box placement; frameContentEl's own creation guard
+// covers the mirror case (a wrapper built before its box had ever been placed).
+// A docked tab is the one pair that ISN'T siblings — its label lives in its group's strip while its
+// wrapper sits in the lent interior — and the same-parent test below leaves it alone.
+function orderContentAfterBox(n: MindNode): void {
+  const w = n.frameContentEl, el = n.el;
+  if (!w || !el || w.parentElement !== el.parentElement) return;
+  if (el.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_PRECEDING) el.after(w);
 }
 // A frame's own clipping wrapper: a plain overflow:hidden box (styles.css .frame-content) sized to
 // its INTERIOR (inside the border), holding every card/frame it hosts as flat DOM children. Created
@@ -737,7 +877,7 @@ function place(el: HTMLElement, absX: number, absY: number, host: MindNode | nul
 function frameContentEl(f: MindNode): HTMLElement {
   let w = f.frameContentEl;
   if (!w) {
-    place(nodeEl(f), f.x, elTop(f, f.y), settledHost(f));
+    placeSelf(f, f.x, elTop(f, f.y));
     w = document.createElement('div'); w.className = 'frame-content'; f.frameContentEl = w;
   }
   // A stack auto-sizes to its outline, so nothing ever needs clipping — and clipping would cut off
@@ -751,8 +891,8 @@ function frameContentEl(f: MindNode): HTMLElement {
   // …and its OFFSET comes from the same helper, as a delta off the frame's own origin, rather than
   // re-spelling frameInterior's insets here — otherwise a change to them resizes the wrapper without
   // moving it, sliding the clip off its own box.
-  const p = paintPos(f);
-  place(w, p.x + (box.x - f.x), p.y + (box.y - f.y), settledHost(f));
+  const o = contentOrigin(f);
+  place(w, o.x, o.y, settledHost(f));
   w.style.width  = box.w + 'px';
   w.style.height = box.h + 'px';
   return w;
@@ -995,14 +1135,20 @@ function followEdges(tok: number, ms: number): void {
     const saved: [MindNode, number, number][] = [];
     for (const n of state.nodes.values()){
       if (!n.el || isHidden(n)) continue;
+      // A docked tab's left/top are strip-relative, not host-relative — and its label is never an edge
+      // endpoint anyway (a container draws no edge to its children, and its group's own edge comes off
+      // the group), so there's nothing to project: leave its position alone.
+      if (isDockedTab(n)) continue;
       const c = getComputedStyle(n.el);             // interpolated left/top while transitioning
       saved.push([n, n.x, n.y]);
-      // left/top are HOST-relative for a hosted card — project back to absolute world coords.
+      // left/top are HOST-relative for a hosted card — project back to absolute world coords, through
+      // the same origin place() measured them from (contentOrigin, on its no-drag basis).
       const host = settledHost(n);
+      const o = host ? frameInterior(host) : null;
       const px = parseFloat(c.left), py = parseFloat(c.top);
-      n.x = px ? (host ? px + host.x + FRAME_BORDER : px) : n.x;
+      n.x = px ? (o ? px + o.x : px) : n.x;
       // boundsTop as well: `top` holds a frame's BOX top, while n.y is its bounds (tab) top.
-      n.y = py ? boundsTop(n, host ? py + host.y + frameInsetY(host) : py) : n.y;
+      n.y = py ? boundsTop(n, o ? py + o.y : py) : n.y;
     }
     paintEdges();
     for (const [n,x,y] of saved){ n.x = x; n.y = y; }   // restore logical (final) positions
@@ -1083,8 +1229,39 @@ initEdgeStyle();
 
 // Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
 // children, folds them (and everything below) too. A leaf with a body can fold its body alone.
+// Open one tab of a group: expand it and close every sibling — the "exactly one open tab" invariant
+// as an ACTION (normalizeTabs is the same rule as a repair). Every way of opening a tab funnels here:
+// clicking its label, the collapse toggle on a docked tab, and (later) revealing a search hit inside a
+// closed one. Re-opening the tab that's already open is a no-op, not a fold — a tab has no folded
+// state of its own to toggle into.
+// Allowed on a LOCKED tab, unlike the edits a lock protects against: which tab is open is how you look
+// at the box, not a change to what's in it — a locked tab you can't even open would just be unreachable.
+export function activateTab(t: MindNode): void {
+  const g = tabGroupOf(t); if (!g) return;
+  const tabs = tabsOf(g);
+  if (!t.collapsed && tabs.every(k => k === t || k.collapsed)) return;   // already the open one
+  record(tabs.map(k => k.id), () => withLayoutAnimation(() => openTabFlags(t)));
+  scheduleSave();
+  setStatus(`Tab “${t.title}”`);
+}
+// The flag half of "open this tab": expand it, close its siblings. No history, save or paint of its
+// own, so a caller that has several to open — a reveal walking a chain of nested closed tabs — can
+// batch them into ONE undo step (see focusNode). Returns whether anything actually changed.
+function openTabFlags(t: MindNode): boolean {
+  const g = tabGroupOf(t); if (!g) return false;
+  let changed = false;
+  for (const k of tabsOf(g)) {
+    const want = k !== t;
+    if (k.collapsed !== want) { touch(k.id); k.collapsed = want; k.dirty = true; changed = true; }
+    k.dirtyLayout = true;
+  }
+  return changed;
+}
 export function toggleCollapse(id: string): void {
   const n = state.nodes.get(id); if (!n) return;
+  // A docked tab doesn't fold — it OPENS, closing its siblings (there's always exactly one open tab).
+  // Before the lock check: opening a tab is allowed even when it's locked (see activateTab).
+  if (isDockedTab(n)) { activateTab(n); return; }
   if (isLockedEffective(n)) { setStatus('Locked — can’t collapse/expand'); return; }
   const hasKids = childrenOf(n.id).length > 0;
   const hasBody = !!(n.body && n.body.trim());
@@ -1100,6 +1277,9 @@ export function toggleCollapse(id: string): void {
 export function toggleCollapseSelection(ids: Iterable<string>): void {
   const cards = [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n)
     .filter(n => !isLockedEffective(n))
+    // a docked tab has no fold of its own (it opens, closing its siblings — see activateTab), and a
+    // group fold that closed every tab at once would just be repaired by normalizeTabs anyway
+    .filter(n => !isDockedTab(n))
     .filter(n => childrenOf(n.id).length > 0 || !!(n.body && n.body.trim()));
   if (!cards.length) return;
   const target = !cards.every(n => n.collapsed);   // all collapsed → expand; otherwise collapse all
@@ -1178,6 +1358,13 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
   let revealed = false;
   record(toReveal.map(n => n.id), () => {
     for (const n of toReveal){
+      // A closed TAB doesn't expand, it OPENS — closing its siblings. Expanding it like an ordinary
+      // branch would leave two tabs open, and the next layout pass (normalizeTabs) would close one of
+      // them again, which for a hit buried in a later tab means the reveal quietly does nothing.
+      if (isDockedTab(n)) {
+        if (openTabFlags(n)) { revealed = true; paintAll(); applyLayouts(); }
+        continue;
+      }
       if (!n.collapsed) continue;
       n.collapsed = false; n.dirtyLayout = true; revealed = true;
       paintAll(); applyLayouts();              // settle this level before revealing the next
