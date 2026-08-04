@@ -307,7 +307,12 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    has no checklist — see showsDoneCheckbox in main.ts, which is already parent-only. */
 .node > .title-row > .donebox { display:none; margin:.2em 0 0 calc(.2em - 2px); }
 .node.show-done > .title-row > .donebox { display:block; }
-.node.done .title { text-decoration:line-through; opacity:.65; }
+/* Struck-through title = THIS card is checked off. Direct-child combinators for the same reason as
+   .donebox above: a child card is DOM-nested inside its parent's element (paintNode), so a
+   descendant combinator struck out every title below a done card — the whole subtree read as done,
+   and in a stack's outline that looks like the card's own content being crossed out. Checking a
+   parent off says nothing about its children, so only its own title-row is affected. */
+.node.done > .title-row > .title { text-decoration:line-through; opacity:.65; }
 /* checklist owner: this card's own "n/m" progress over its direct children */
 .node .progress { flex:none; margin-left:auto; padding-left:.5em; font-size:11px; font-weight:600; opacity:.7; }
 /* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
