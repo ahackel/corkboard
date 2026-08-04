@@ -441,13 +441,20 @@ export function paintNode(n: MindNode): void {
       // TOP of everything and no frame mask ever clips it. It still tracks its parent: layout keeps
       // n.x/n.y = parent + offset, and drag carries it (it's in the parent's subtreeIds → own transform).
       place(el, n.x, n.y, null);
-    } else if (p && !isContainerBox(p)) {
+    } else if (p && !isContainerBox(p) && !isContainerBox(n)) {
       const pEl = nodeEl(p);
       el.style.left = (n.x - p.x) + 'px';
       el.style.top  = (n.y - p.y) + 'px';
       if (el.parentElement !== pEl) pEl.appendChild(el);
     } else {
-      place(el, n.x, n.y, host);   // root → #world; direct frame/stack child → container content wrapper
+      // root → #world; direct frame/stack child → container content wrapper. A CONTAINER's own box
+      // takes this branch too, even when its parent is an ordinary card: its content wrapper is
+      // placed by the very same place()/settledHost call (frameContentEl), and the two only stack
+      // correctly — wrapper (and the rows inside it) above the box's own fill — while they're
+      // SIBLINGS in one DOM parent. Nesting the box inside a parent card instead put the two in
+      // different stacking contexts, so the box's fill won the tie and swallowed its own rows'
+      // pointer events (pressing a stack row grabbed the whole stack).
+      place(el, n.x, n.y, host);
     }
   }
   // A frame (or an image card) is its own resizable box; give the element that size and a

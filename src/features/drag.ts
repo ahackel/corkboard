@@ -7,8 +7,8 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
-import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective, childrenOf } from '../utils/model.js';
-import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStackBox, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, orderedKids, ancestorDepth } from '../view/layout.js';
+import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
+import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStackBox, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -799,40 +799,18 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     const stackHost = hostFrame(hoveredNode);
     if (isStackBox(hoveredNode) || (stackHost && isStackBox(stackHost))) {
       // ---- STACK OUTLINER drop ----
-      // Default is REORDER: insert the card between the outline rows, previewed with a horizontal
-      // bar in the gap the cursor is nearest (reorderTarget, by the dragged card's live position).
-      // Only the RIGHT 30% of a row means "make it a CHILD of that row" (indent one level under it),
-      // previewed with a landing ghost instead of the bar.
-      const H = hoveredNode;
-      const rel = (wx - H.x) / Math.max(1, nodeW(H));
-      if (!isStackBox(H) && !isLeafType(H) && rel > 0.7) {
-        target = H.id; mode = 'child'; side = 'down';                  // reparent as a child of H
-      } else {
-        // REORDER — insert the card between the outline rows. A stack is a flat vertical list, so
-        // sideOf is meaningless here (top rows sit above the box centre, bottom rows below); we pick
-        // the slot geometrically instead. Hovering a row inserts among ITS siblings, before/after by
-        // the cursor's half; hovering the stack's own area inserts among the stack's direct children.
-        let p: MindNode | null, anchor: MindNode | null = null, before = true;
-        if (isStackBox(H)) {
-          p = H;
-          const kids = orderedKids(p, childrenOf(p.id).filter(k => !isHidden(k) && !isAnnotation(k) && k.id !== dragged.id));
-          const i = kids.findIndex(k => wy < k.y + nodeH(k) / 2);
-          if (i === -1) { anchor = kids[kids.length - 1] ?? null; before = false; }
-          else { anchor = kids[i]; before = true; }
-        } else {
-          p = H.parent ? state.nodes.get(H.parent) ?? null : null;
-          anchor = H; before = (wy - H.y) < nodeH(H) / 2;
-        }
-        if (p && p.id !== dragged.id && !sub.has(p.id)) {
-          if (!anchor) { target = p.id; mode = 'child'; side = 'down'; }   // empty stack → plain child
-          else {
-            const sibs = orderedKids(p, childrenOf(p.id).filter(k => !isHidden(k) && !isAnnotation(k) && k.id !== dragged.id));
-            const ai = sibs.findIndex(s => s.id === anchor!.id);
-            after = before ? (ai > 0 ? sibs[ai - 1].id : null) : anchor.id;
-            const ly = before ? anchor.y : anchor.y + nodeH(anchor);
-            line = { x0: anchor.x, y0: ly, x1: anchor.x + nodeW(anchor), y1: ly };
-            target = p.id; mode = 'reorder'; side = 'down';
-          }
+      // One gesture, two axes (see stackDropTarget): the card's VERTICAL position picks the gap
+      // between two rows, its HORIZONTAL position picks the depth at that gap. So a straight-down
+      // drag only re-slots, and nesting takes a deliberate nudge to the right — no "onto a card"
+      // zone to hit by accident. Always previewed by the insertion line (indented to the resolved
+      // depth), never a landing ghost. `mode:'reorder'` is right even when the depth (and so the
+      // parent) changes: the commit path re-parents onto `target` with `dropAfter` either way.
+      const stack = isStackBox(hoveredNode) ? hoveredNode : stackHost!;
+      if (!sub.has(stack.id)) {
+        const d = stackDropTarget(stack, dragged, sub);
+        const p = state.nodes.get(d.parentId);
+        if (p && !isLockedEffective(p)) {
+          target = d.parentId; mode = 'reorder'; side = 'down'; after = d.afterId; line = d.line;
         }
       }
     } else if (frameFlow(hoveredNode)) {
@@ -889,7 +867,10 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     const parent = state.nodes.get(dragged.parent);
     // A flow frame is box-flowed (no side-based in-parent reorder bar). Sliding its child just
     // repositions it; the release reseeds the flow order from the dropped positions.
-    if (parent && isManagedLayout(parent) && !frameFlow(parent)) {
+    // A stack row opts out too: its in-outline slot is previewed by the stack branch above (which
+    // needs the cursor INSIDE the box). Out here the cursor has left the stack, so a release means
+    // "leave the outline" — a side-based reorder bar would both mislead and suppress the detach.
+    if (parent && isManagedLayout(parent) && !frameFlow(parent) && !stackOf(parent)) {
       let rt = reorderTarget(parent, dragged);
       // Far along a wide fan, deriveSide flips to the (usually empty) perpendicular bucket and
       // the first/last slots become unreachable — retry with the card's STORED side so sliding
