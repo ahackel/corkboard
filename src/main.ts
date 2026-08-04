@@ -466,10 +466,14 @@ export function paintNode(n: MindNode): void {
   // their inline height is always cleared and left to CSS. The one node that ISN'T resizable is an
   // outline row inside a stack — its width is derived from the stack's, so it gets the width but no
   // handles (see nodeW / stackRowW).
+  // Resolved once up front, not inside the `else if`: nodeW() would run the same ancestor walk a
+  // second time to answer the same question. The earlier branches can't be rows, so they skip it.
+  const rowW = isBoxNode(n) || isFrameFold(n) || isStack(n) ? null : stackRowW(n);
   if (isBoxNode(n)) {
-    el.style.width = (n.w ?? boxDefaultW(n)) + 'px';
-    // the element is the BOX, and a frame's bounds height also covers its tab (elTop / FRAME_TAB_DROP)
-    el.style.height = ((n.h ?? boxDefaultH(n)) - (isFrameBox(n) ? FRAME_TAB_DROP : 0)) + 'px';
+    el.style.width = nodeW(n) + 'px';
+    // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
+    // drop, so the box height is the bounds height less it (never re-spell the drop inline).
+    el.style.height = (nodeH(n) - elTop(n, 0)) + 'px';
     // border matches this card's EDGE tint (same colour edges use), falling back to --edge
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
     ensureResizeHandles(n, FRAME_DIRS);
@@ -486,10 +490,10 @@ export function paintNode(n: MindNode): void {
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
     frameContentEl(n);                   // clipping content wrapper
     ensureResizeHandles(n, EW_DIRS);
-  } else if (stackRowW(n) != null) {
+  } else if (rowW != null) {
     // an OUTLINE ROW — a narrower test than inStack(n), which also catches an annotation parented to a
     // stack; the outline skips those, so they keep their own shrink-to-fit width via the branch below
-    el.style.width = nodeW(n) + 'px';    // stretched to the row width its depth allows (stackRowW)
+    el.style.width = rowW + 'px';        // stretched to the row width its depth allows (stackRowW)
     if (el.style.height) el.style.height = '';
     el.style.removeProperty('--frame-stroke');
     clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
@@ -559,25 +563,30 @@ export const NODE_W = 200;
 // own cell size (state.gridSize, view/grid.ts); 0 (grid off) disables snapping rather than
 // collapsing every position to the origin.
 export function gridSnap(): number { return state.gridSize || 1; }
-export const FRAME_W = 360, FRAME_H = 279;   // default frame container size (world px — bounds, tab included)
-export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
-export const QUERY_W = 280, QUERY_H = 320;   // default query-card size (world px)
 export const FRAME_BORDER = 4;   // must match .node.frame's CSS `border` width (styles.css)
 // Height of a frame's title TAB — the folder tab attached above the box's top-left corner
-// (styles.css `.node.frame > .title-row`). Must match the CSS (2px padding + 16px line-height + 2px
-// padding), which is why the tab stays a SINGLE ellipsised line: this is a constant, and the frame's
+// (styles.css `.node.frame > .title-row`). Must match the CSS (10px padding + 20px line-height + 10px
+// padding — a normal card's own padding and title metric, so the tab reads like a collapsed card),
+// which is why the tab stays a SINGLE ellipsised line: this is a constant, and the frame's
 // whole geometry hangs off it, so a wrapping tab would make the box's world position a function of
 // the rendered line count.
-export const FRAME_TAB_H = 20;
+export const FRAME_TAB_H = 40;
 // A frame's BOUNDS (n.x/n.y/w/h — and so mm_position_y/mm_h on disk) include that tab: n.y is the
 // TAB's top edge and the box starts FRAME_TAB_DROP lower. One tab, less the 1px the tab overlaps the
 // box's top border (styles.css), so the tab spans exactly [n.y, n.y + FRAME_TAB_H] — in BOTH states,
 // which is the point: a folded frame renders as the bare tab at n.y, so the title doesn't move when
 // the box folds away beneath it.
-export const FRAME_TAB_DROP = FRAME_TAB_H - 1;   // 19
+export const FRAME_TAB_DROP = FRAME_TAB_H - 1;   // 39
+// Default frame container size (world px). The height is BOUNDS — a 260px box plus the tab above it —
+// so it's written as that sum rather than a literal, which is what keeps a new frame's usable
+// interior fixed when the tab height changes (declared after FRAME_TAB_DROP so the sum is in scope).
+export const FRAME_W = 360, FRAME_H = 260 + FRAME_TAB_DROP;
+export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
+export const QUERY_W = 280, QUERY_H = 320;   // default query-card size (world px)
 // Stack geometry (a framed, auto-sized outliner node kind — see isStack in view/layout.ts). Its
-// width is FIXED (not resizable); its height auto-fits its children (computed in layoutSubtree).
-export const STACK_W = NODE_W;   // a stack is the SAME width as a normal card (not wider)
+// width is AUTHORED (n.w, defaulting to STACK_W — it takes the EW handle set like a card); its
+// height auto-fits its children and is never authored (computed in layoutSubtree).
+export const STACK_W = NODE_W;   // a stack STARTS the same width as a normal card (not wider)
 export const STACK_HEADER = 36;  // title strip reserved above the stacked children
 export const STACK_PAD = 6;      // inset from the border to the content — half a normal card's
                                  // padding, so full-width child cards still fit in the narrow box
@@ -593,8 +602,9 @@ function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.co
 function isImageBox(n: MindNode): boolean { return n.type === 'image' && !n.collapsed; }
 // A query card: a resizable leaf with a search field + scrollable results list — no children.
 function isQueryBox(n: MindNode): boolean { return n.type === 'query' && !n.collapsed; }
-// Any RESIZABLE box — shares sizing/resize-handle plumbing below. A stack is a box too (it gets a
-// size + a .frame-content wrapper) but is NOT resizable, so it's covered by isContainerBox instead.
+// Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
+// below. A stack is a box too (it gets a size + a .frame-content wrapper) but authors only a width,
+// so it takes the EW handles in paintNode and is covered by isContainerBox instead.
 function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n) || isQueryBox(n); }
 // Any node that renders as a child-containing BOX with a size + clipping wrapper: a resizable frame
 // OR an auto-sized stack. Used for the size/wrapper plumbing in paintNode.
@@ -633,13 +643,14 @@ export function nodeH(n: MindNode): number {
   if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   return (n.el && n.el.offsetHeight) || 64;
 }
-// Height used for LAYOUT geometry. The selection affordances (+ and the "add note" bubble) are
-// absolutely positioned and overhang the card, so they don't inflate its measured height — a
-// title-only card lays out the same whether or not it's selected. A box node reports its own height.
+// Height used for LAYOUT geometry. Identical to nodeH for every kind whose height is DECLARED
+// (box / folded frame / stack), so it defers to it rather than restating the ladder — a new kind
+// added to nodeH must not have to be remembered here too. The two differ only for a MEASURED card:
+// nodeH treats a zero-height element as unrendered and falls back to 64, while layout wants the real
+// 0 (the selection affordances — + and the "add note" bubble — are absolutely positioned and
+// overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
-  if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
-  if (isFrameFold(n)) return FRAME_TAB_H;
-  if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
+  if (isBoxNode(n) || isFrameFold(n) || isStack(n)) return nodeH(n);
   const el = n.el; if (!el) return 64;
   return el.offsetHeight;
 }
@@ -683,7 +694,9 @@ function dragRoot(): HTMLElement { return (ui.drag && ui.drag.moved) ? dragLayer
 // it holds spilling out from behind the box instead of riding inside it.
 // Deliberately NOT excluding a carried child (one whose host is dragging too): for those, origin- and
 // live-basis give the same host-relative offset, since host and child shift by the very same delta.
-function paintPos(n: MindNode): Pt { return ui.drag?.origins?.get(n.id) ?? { x: n.x, y: n.y }; }
+// `?? n` rather than `?? {x: n.x, y: n.y}`: a MindNode already IS a Pt structurally, and this runs
+// 2-4× per node per repaint — the object literal was pure allocation on the paint path.
+function paintPos(n: MindNode): Pt { return ui.drag?.origins?.get(n.id) ?? n; }
 // Where a node's ELEMENT paints, given a bounds-top y: the SINGLE authority for the tab drop. The same
 // y for everything except a frame BOX, whose element is the box alone — one tab BELOW the bounds top
 // (FRAME_TAB_DROP), with the tab itself an absolutely positioned child hanging back up over that gap
@@ -735,8 +748,11 @@ function frameContentEl(f: MindNode): HTMLElement {
   // Position from paintPos, not box.x/box.y: mid-drag the wrapper's left/top must stay frozen at the
   // frame's origin, since applyDragTransform mirrors the box's own transform onto it. Its SIZE comes
   // from frameInterior either way (a drag moves the box, it doesn't resize it).
+  // …and its OFFSET comes from the same helper, as a delta off the frame's own origin, rather than
+  // re-spelling frameInterior's insets here — otherwise a change to them resizes the wrapper without
+  // moving it, sliding the clip off its own box.
   const p = paintPos(f);
-  place(w, p.x + FRAME_BORDER, p.y + frameInsetY(f), settledHost(f));
+  place(w, p.x + (box.x - f.x), p.y + (box.y - f.y), settledHost(f));
   w.style.width  = box.w + 'px';
   w.style.height = box.h + 'px';
   return w;
@@ -746,12 +762,10 @@ function frameContentEl(f: MindNode): HTMLElement {
 export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
 export const MIN_IMAGE_W = 60, MIN_IMAGE_H = 60;        // an image card can shrink to a small thumbnail
 export const MIN_QUERY_W = 200, MIN_QUERY_H = 160;      // a query card keeps room for the search field + a couple of rows
-// A width-only kind can only ever get WIDER than the width it has by default — the whole point is
-// trading height for width on a card whose text wraps badly, so its natural size is the floor.
-export const MIN_CARD_W = NODE_W, MIN_STACK_W = STACK_W;
-// The one exception: an annotation shrink-wraps its text (styles.css), so it has no fixed natural
-// width to floor at — it can be narrowed too, down to something still readable.
-export const MIN_ANNO_W = 80;
+// The one exception to "a kind's default width is its floor": an annotation shrink-wraps its text
+// (styles.css), so it has no fixed natural width to floor at — it can be narrowed too, down to
+// something still readable.
+const MIN_ANNO_W = 80;
 // An annotation's UN-AUTHORED width: what the element measures with no authored width in play. Its
 // current offsetWidth is useless as a floor once a width HAS been authored (it just reports that
 // width back), so strip both halves of the authored sizing for one measurement and put them straight
@@ -766,13 +780,15 @@ function naturalW(n: MindNode): number {
   el.style.width = prev; el.classList.toggle('w-set', hadSet);
   return Math.max(MIN_ANNO_W, w);
 }
+// A width-only kind can only ever get WIDER than the width it has by default — the whole point is
+// trading height for width on a card whose text wraps badly, so its natural size is the floor. That
+// floor is NODE_W for a plain card, a stack (STACK_W is NODE_W) and a frame alike, so they share the
+// one fall-through rather than three aliases that had to be kept equal by hand.
 function minWOf(n: MindNode): number {
   if (isImageBox(n)) return MIN_IMAGE_W;
   if (isQueryBox(n)) return MIN_QUERY_W;
-  if (isFrameBox(n)) return MIN_FRAME_W;
-  if (isStack(n)) return MIN_STACK_W;
   if (isAnnotation(n)) return naturalW(n);
-  return MIN_CARD_W;
+  return NODE_W;
 }
 function minHOf(n: MindNode): number { return isImageBox(n) ? MIN_IMAGE_H : isQueryBox(n) ? MIN_QUERY_H : MIN_FRAME_H; }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
@@ -802,6 +818,7 @@ function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
   el.dataset.fhDirs = key;
 }
 function clearResizeHandles(el: HTMLElement): void {
+  if (!el.dataset.fhDirs) return;   // no handles to remove — skip the query, this runs every repaint
   el.querySelectorAll(':scope > .fh').forEach(x => x.remove());
   delete el.dataset.fhDirs;
 }
@@ -1106,6 +1123,13 @@ export function toggleDone(n: MindNode): void {
 // whole subtree becomes unselectable too (see utils/model.ts). Unlocking never touches descendants
 // (lock is per-card, not stored on them). A descendant of a locked ancestor can't be selected, so
 // it never reaches this function as a target; only cards actually selectable can be (un)locked.
+// Does a selection count as LOCKED for toggle purposes? A mixed selection does, so the toggle
+// unlocks all. Lives next to the mutator because both the L shortcut and the float bar's lock
+// button need it, and the two must never disagree on the mixed-selection rule — that button is the
+// only escape hatch out of a locked selection.
+export function anyLocked(ids: Iterable<string>): boolean {
+  return [...ids].some(id => { const n = state.nodes.get(id); return !!n && isLockedEffective(n); });
+}
 export function setLockedSelection(ids: Iterable<string>, locked: boolean): void {
   if (state.readOnly) return;
   const cards = [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n && n.locked !== locked);
@@ -1345,8 +1369,7 @@ window.addEventListener('keydown', (e) => {
   }
   if ((e.key === 'l' || e.key === 'L') && state.sel.size && !e.metaKey && !e.ctrlKey && !state.readOnly){
     e.preventDefault();
-    const anyLocked = [...state.sel].some(id => isLockedEffective(state.nodes.get(id)!));
-    setLockedSelection(state.sel, !anyLocked);
+    setLockedSelection(state.sel, !anyLocked(state.sel));
     return;
   }
   // image cards have no title/body UI to rename or edit — they're a leaf that shows only the image

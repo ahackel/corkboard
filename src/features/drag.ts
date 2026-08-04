@@ -15,7 +15,7 @@ import { ui, NARROW_MQ, type Pt, type Seg, type Drag } from '../core/ui-state.js
 import { paintEdges } from '../view/edges.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { NODE_W, nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
          subtreeIds, foldNodeOrGroup } from '../main.js';
 import { startInlineEdit, startBodyEdit, endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { leaveClone, foldImageCardsIntoBody } from './crud.js';

@@ -105,12 +105,15 @@ top-left corner (`.node.frame > .title-row`, absolutely positioned), and `n.x/n.
 tab less its 1px overlap into the border) lower, and its inline height is `n.h` minus that drop.
 So the tab is at a fixed offset from `n.y` in **both** collapse states — a folded frame is nothing
 but that tab (`.frame-folded`, `isFrameFold`, rounded all round, `nodeH` = `FRAME_TAB_H`, width
-measured), which is why folding no longer moves the title. Two consequences to respect: the tab must
+measured), which is why folding no longer moves the title. `FRAME_TAB_H` is **40px** — a normal card's
+padding and title metric, so the tab reads like a collapsed card — and it must equal what the CSS
+actually renders, so the tab's `padding`/`font-size`/`line-height` are pinned in `styles.css` rather
+than inherited from `.node .title`. Two consequences to respect: the tab must
 stay a single ellipsised line (a wrapping one would make the box's position depend on a live
-measurement — hence the hover tooltip in `paintNode` instead), and every projection of a hosted
-child into its host goes through `frameInsetX`/`frameInsetY` (`view/layout.ts`) rather than a bare
-`FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share those, and
-`elTop` is the one place that applies the drop.
+measurement — hence the hover tooltip in `paintNode` instead), and the vertical projection of a hosted
+child into its host goes through `frameInsetY` (`view/layout.ts`) rather than a bare
+`FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share it (the X axis
+has no such helper; it uses `FRAME_BORDER` directly), and `elTop` is the one place that applies the drop.
 
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
 subtree as one indented, full-width column inside a box that is **width-resizable** (`n.w`,

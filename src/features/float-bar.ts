@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -214,8 +214,9 @@ function setType(type: NodeType): void {
       // (the new kind measures or derives its own), and so does the width — a frame's box is sized to
       // enclose its children, which says nothing about how wide its own title/body wants to be, and
       // silently keeping it would turn a converted 800px frame into an 800px card.
-      if (isBoxType(n.type) && !isBoxType(type)) { n.w = undefined; n.h = undefined; }
-      else if (!isBoxType(type)) n.h = undefined;   // card/annotation/stack: the height is never authored
+      // card/annotation/stack: the height is never authored — and the width goes too if we're
+      // leaving a 2D box, whose width described its contents rather than its own text.
+      if (!isBoxType(type)) { n.h = undefined; if (isBoxType(n.type)) n.w = undefined; }
       if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
       if (type === 'image' && (n.w == null || n.h == null)) { n.w = IMAGE_W; n.h = IMAGE_H; }
       if (type === 'query' && (n.w == null || n.h == null)) { n.w = QUERY_W; n.h = QUERY_H; }
@@ -292,12 +293,9 @@ function markColorTrigger(): void {
 // Replaces the old Lock/Unlock context-menu entry. A locked card can't be moved, folded, renamed,
 // re-typed, re-coloured or deleted (isLockedEffective), so every OTHER control in the bar would be
 // a no-op — hence `.locked-sel`, which collapses the bar down to this one button (styles.css). A
-// mixed selection counts as locked (same rule as the L shortcut in main.ts): the button unlocks all.
-function anyLockedInSelection(): boolean {
-  return selectedIds().some(id => { const n = state.nodes.get(id); return !!n && isLockedEffective(n); });
-}
+// mixed selection counts as locked — anyLocked (main.ts) owns that rule, shared with the L shortcut.
 function markLock(): void {
-  const locked = anyLockedInSelection();
+  const locked = anyLocked(state.sel);
   bar.classList.toggle('locked-sel', locked);
   fbLock.innerHTML = locked ? LOCK_BADGE_SVG : ICON_LOCK_OPEN;
   fbLock.title = locked ? 'Unlock (L)' : 'Lock (L) — freeze this card in place';
@@ -306,7 +304,7 @@ function markLock(): void {
 fbLock.addEventListener('click', (e) => {
   e.stopPropagation();
   closePopovers();
-  setLockedSelection(state.sel, !anyLockedInSelection());
+  setLockedSelection(state.sel, !anyLocked(state.sel));
 });
 
 function syncControls(): void {

@@ -10,7 +10,7 @@
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, FRAME_BORDER, FRAME_TAB_DROP, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, FRAME_BORDER, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -245,22 +245,18 @@ function stackHeaderH(stack: MindNode): number {
   const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
   return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
 }
-// Get an outline row ready to be MEASURED: paint it, so the DOM matches the model before we read its
-// height back. Both halves of that matter because a stack is the one place where a card's height
-// depends on layout output:
+// NOTE — the two loops below call paintNode(k) BEFORE measuring the row, and must keep doing so: a
+// stack is the one place where a card's height depends on layout output, in two ways.
 //   · WIDTH — a row is stretched to the width its depth allows (stackRowW, which paintNode applies),
 //     and text wraps differently at a different width. Measuring before the DOM knew the new width
 //     laid a re-indented row out at its PREVIOUS width's height, so the rows below overlapped.
 //   · EXISTENCE — a row added this tick has no element yet, and layoutH then falls back to 64px. A
 //     fresh 27px row reserved 64, leaving a 45px hole under it (paintNode creates the element via
-//     nodeEl, so painting here is also what makes it measurable at all).
+//     nodeEl, so painting there is also what makes it measurable at all).
 // Either way the geometry used to settle only when some later interaction happened to run another
-// pass. Doing it here means one applyLayouts() converges regardless of the order a caller paints and
-// lays out in — which matters because the ~20 relayout call sites don't agree on that order.
+// pass. Painting first means one applyLayouts() converges regardless of the order a caller paints
+// and lays out in — which matters because the ~20 relayout call sites don't agree on that order.
 // paintNode leaves an open title/body/query editor alone, so this can't disturb typing.
-function prepRow(row: MindNode): void {
-  paintNode(row);
-}
 // A stack's visible OUTLINE, in visual (top-to-bottom) order: every descendant that gets its own row,
 // paired with the indent depth it renders at (the stack's direct children are depth 0). A nested
 // container or a COLLAPSED card is one opaque row — its contents live in its own box/fold — so the
@@ -748,13 +744,13 @@ function layoutSubtree(node: MindNode): void {
       const x = innerLeft + depth * STACK_INDENT;
       if (isContainer(k) || k.collapsed) {
         // one opaque row: its own box/fold owns its contents, so move the whole subtree with it
-        prepRow(k);
+        paintNode(k);
         const b = subtreeBox(k);
         shiftSubtree(k, x - b.x0, cy - b.y0);
         cy += (b.y1 - b.y0) + STACK_GAP;
       } else {
         k.x = x; k.y = cy; k.dirtyLayout = true;
-        prepRow(k);
+        paintNode(k);
         cy += layoutH(k) + STACK_GAP;
       }
     }

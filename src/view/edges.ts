@@ -6,7 +6,7 @@ import { state, edgesSvg, togglesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation
 import { isRoot, isHidden } from '../utils/model.js';
 import { dropLanding, sideOf, isFrame, isContainer, hostFrame, frameInterior } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { NODE_W, nodeW, nodeH, effectiveColor, SWATCH_BG } from '../main.js';
+import { nodeW, nodeH, effectiveColor, SWATCH_BG } from '../main.js';
 
 const EDGE_R = 12;   // corner radius on orthogonal elbows
 // Longer parent→child edges read as more "distant" if they're softened — full opacity up close,
@@ -29,7 +29,9 @@ function edgeOpacity(dist: number): number {
 export function branchTint(n: MindNode): string { return SWATCH_BG[effectiveColor(n)] ?? SWATCH_BG.grey; }
 
 function nodeCenter(n: MindNode): Pt { return { x: n.x + nodeW(n)/2, y: n.y + nodeH(n)/2 }; }
-function boxCenter(box: { x: number; y: number; h: number; w?: number }): Pt { return { x: box.x + (box.w ?? NODE_W)/2, y: box.y + box.h/2 }; }
+// `w` is REQUIRED, deliberately: it used to be optional with a NODE_W fallback, which silently
+// attached a widened card's edge to the wrong point. Every caller now measures the real box.
+function boxCenter(box: { x: number; y: number; w: number; h: number }): Pt { return { x: box.x + box.w/2, y: box.y + box.h/2 }; }
 // The point on `node`'s OWN border where every child edge on `side` converges — shared by every
 // child on that side (a fan bundles them from one spot), and by the socket disk drawn there.
 function anchorPoint(node: MindNode, side: LayoutSide): Pt {
@@ -80,7 +82,7 @@ function connect(a: Pt, b: Pt, horizontal: boolean): string {
     : [a, { x:a.x, y:(a.y+b.y)/2 }, { x:b.x, y:(a.y+b.y)/2 }, b];
   return roundedPath(pts, EDGE_R);
 }
-function edgePathBox(parent: MindNode, box: { x: number; y: number; h: number; w?: number }, side: LayoutSide): string {
+function edgePathBox(parent: MindNode, box: { x: number; y: number; w: number; h: number }, side: LayoutSide): string {
   const cc = boxCenter(box);
   const horizontal = side === 'left' || side === 'right';
   const a = anchorPoint(parent, side);
@@ -88,11 +90,8 @@ function edgePathBox(parent: MindNode, box: { x: number; y: number; h: number; w
   if (side === 'down')      b = { x:cc.x, y:box.y };
   else if (side === 'up')   b = { x:cc.x, y:box.y + box.h };
   else if (side === 'right')b = { x:box.x, y:cc.y };
-  else                      b = { x:box.x + (box.w ?? NODE_W), y:cc.y };
+  else                      b = { x:box.x + box.w, y:cc.y };
   return connect(a, b, horizontal);
-}
-function edgePath(parent: MindNode, child: MindNode): string {
-  return edgePathBox(parent, { x: child.x, y: child.y, h: nodeH(child) }, sideOf(parent, child));
 }
 // While poised over a valid reparent target, the box the dragged card will land in once
 // dropped (see features/drag.ts landing-ghost) plus the new parent it'll connect to and the
