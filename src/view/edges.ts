@@ -4,7 +4,7 @@
 // render core's live card heights (nodeH) and branch colour (effectiveColor) from main.
 import { state, edgesSvg, togglesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation, type MindNode, type LayoutSide } from '../core/state.js';
 import { isRoot, isHidden } from '../utils/model.js';
-import { dropLanding, sideOf, isFrame, isContainer, hostFrame, frameInterior } from './layout.js';
+import { dropLanding, sideOf, isFrame, isContainer, stackOf, hostFrame, frameInterior } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { nodeW, nodeH, effectiveColor, SWATCH_BG } from '../main.js';
 
@@ -189,7 +189,11 @@ export function paintEdges(): void {
       continue;
     }
     // A frame/stack IS the container (its own box holds the children), so it draws no child edges.
-    if (isContainer(parent)) continue;
+    // …and neither does anything INSIDE a stack: an outline row's own children are rows of the same
+    // outline (stackOf, not just isStack(parent) — that only covers the stack's direct children), and
+    // the indentation already says who nests under whom, so a connector between two rows is noise
+    // drawn across the box.
+    if (isContainer(parent) || stackOf(parent)) continue;
     // tint by the child's branch colour; soften by how far the child sits from its parent
     const tint = SWATCH_BG[effectiveColor(n)];
     const dist = Math.hypot(n.x - parent.x, n.y - parent.y);
