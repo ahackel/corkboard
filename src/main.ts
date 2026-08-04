@@ -840,6 +840,12 @@ function withLayoutAnimation(mutate: () => void): void {
   mutate();
   paintAll();          // reveal/hide DOM and measure real heights
   applyLayouts();      // compute FINAL positions into n.x/n.y (DOM not updated yet)
+  // Paint again: a container that AUTO-SIZES only learns its new box in the pass above, and the
+  // first paint wrote the pre-toggle one. animateReflow moves elements' left/top but never their
+  // size, so a stack stayed at its collapsed height while its revealed rows spilled out of the box
+  // until some later, unrelated repaint happened to fix it. Harmless for the animation: the parking
+  // step below immediately rewrites every position before the browser gets a chance to paint.
+  paintAll();
   animateReflow(before);
 }
 // CSS-animate every visible card from its snapshotted `before` spot to its current (final)

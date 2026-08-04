@@ -59,8 +59,10 @@ selection core and wires the global keyboard/toolbar events.
 - `data/persistence.ts` — disk-I/O orchestration: the active `store` binding + `useStore`,
   debounced autosave (`scheduleSave`/`flushSave`/`saveAll`), `loadFromDir`, `reloadFromDisk`,
   import/export `.zip`. Signals recents-UI changes via `setOnRecentsChanged` (never renders UI).
-- `view/` — `camera.ts` (pan/zoom/`fit`/`frameBox`), `layout.ts` (radial + line/fan/two-sided
-  node layout: `applyLayouts`/`radialLayout`/`collapseAtDepth`/`effectiveLayout`), `edges.ts`
+- `view/` — `camera.ts` (pan/zoom/`fit`/`frameBox`), `layout.ts` (all node placement:
+  `applyLayouts`/`effectiveLayout`/`collapseAtDepth`, the free/line/fan arrangements, a frame's
+  flow modes (`frameFlow`), and the stack outliner (`stackOutline`/`stackDropTarget`/`stackOf`) +
+  the container predicates `isFrame`/`isStack`/`isContainer`), `edges.ts`
   (parent→child connector geometry + `paintEdges`), `theme.ts`, `icons.ts` (loads
   `assets/icons/*.svg` via `import.meta.glob` `?raw`, fills `[data-icon]`).
 - `features/` — the interactive subsystems split out of `main.ts`, each owning its concern and
@@ -89,9 +91,32 @@ every load — never persist them.
 note's relative path) in its frontmatter; the tree and all edges are computed from
 that. There is no edge list.
 
-**Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_x`, `mm_y`,
-`mm_collapsed`, `mm_layout`, `mm_dir`. `parseMd` (line ~577) reads them;
-`serializeMd` (line ~606) writes them back. Serialization rewrites **only**
+**A node's KIND is `mm_type`; its child ARRANGEMENT is `mm_layout`** — two separate axes, both
+resolved by `foldTypeLayout` (`utils/frontmatter.ts`), which also folds legacy spellings so old
+vaults keep loading. Kinds: `card` (the default, so it's omitted), `frame`, `stack`, `image`,
+`annotation`, `query`. Only card/frame carry a layout (card: `inherit`/`free`/`line`/`fan`;
+frame: `free`/`horizontal`/`vertical`); the rest never write `mm_layout`. The type/layout pickers
+in `features/float-bar.ts` are driven by `NODE_TYPES` + `LAYOUTS_BY_TYPE` — a kind with an empty
+layout set hides the layout trigger entirely.
+
+**A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
+subtree as one indented, full-width column inside an auto-sized, non-resizable box (fixed
+`STACK_W` = `NODE_W`), so **every descendant's own layout is ignored** and a stack nested inside a
+stack is demoted to a plain row (`insideStack`). Its `w`/`h` are derived by the layout pass, never
+persisted (`isBoxType` excludes it). Dropping into one is resolved on two axes by
+`stackDropTarget`: the vertical position picks the GAP between rows, the horizontal position picks
+the DEPTH there — so a straight drag only re-slots and nesting takes a deliberate sideways nudge.
+It was briefly a card *layout* (`mm_layout: stack`); that spelling still migrates to the type.
+Two invariants worth knowing before touching stack code: a stack row's measured height depends on
+the width the layout assigns it (text re-wraps), so `prepRow` paints a row **before** measuring it —
+and a container's box size is only known *after* `applyLayouts`, so anything that paints before
+laying out must paint again (see `withLayoutAnimation`).
+
+**Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`, `mm_position_y`
+(relative to the parent; world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`,
+`mm_type`, `mm_layout`, `mm_w`/`mm_h` (box kinds only), plus the card flags `mm_locked`,
+`mm_done`, `mm_checklist`, `mm_bg` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
+back. Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter
 field and the note body verbatim — be careful to keep that property when touching
 frontmatter code (`parseFM`/`fmSet`/`fmRemove`).
