@@ -280,11 +280,14 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   background: var(--card, var(--node)); border:none;
   border-radius:var(--r-card); padding:10px 12px; cursor:default; color:#ffffff;
   user-select:none; -webkit-touch-callout:none; touch-action:none;
-  /* fade opacity (search dim) & selection ring smoothly; NOT left/top — keeps dragging crisp */
-  transition: opacity .2s ease, box-shadow .15s ease;
+  /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
+     the selection ring must appear INSTANTLY, so that a frame's ring (on its box) and its title
+     tab's ring (styles.css .node.frame.sel > .title-row) land in the same frame instead of the box
+     fading in behind an already-ringed tab. */
+  transition: opacity .2s ease;
 }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
-.node.lt-anim { transition: opacity .2s ease, box-shadow .15s ease,
+.node.lt-anim { transition: opacity .2s ease,
   left .3s cubic-bezier(.22,1,.36,1), top .3s cubic-bezier(.22,1,.36,1); }
 /* bodyless cards shrink to just fit the title (no reserved body height) */
 .node.no-body { min-height:0; }
@@ -329,23 +332,72 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node.locked .lock-badge { display:inline-flex; }
 .node.locked { outline:2px dashed var(--edge); outline-offset:2px; }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
-/* z-index:0 sits it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
-   (z-index:2). Below edges so a COLOURED frame's opaque fill never covers the connector curves
-   drawn among its descendants (the edges live in the global #edges SVG, not inside the frame);
-   below cards so the cards it holds render inside it. Its children aren't DOM-descendants of this
-   box — they live in the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't
-   hide them. Its own box size is set inline (main.ts paintNode); border tinted to the card's own
-   colour, like its edges. .stack (a framed card layout) shares the same box behaviour. */
-.node.frame, .node.stack { z-index:0; min-height:0; border-radius:14px;
+/* z-index:auto paints it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
+   (z-index:2) — a positioned `auto` element paints in the same step as z-index:0, in tree order.
+   Below edges so a COLOURED frame's opaque fill never covers the connector curves drawn among its
+   descendants (the edges live in the global #edges SVG, not inside the frame); below cards so the
+   cards it holds render inside it. Its children aren't DOM-descendants of this box — they live in
+   the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't hide them.
+   `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is
+   what lets its own title tab (below) lift above the edges/cards that would otherwise cover it.
+   Its own box size is set inline (main.ts paintNode); border tinted to the card's own colour, like
+   its edges. .stack (a framed card layout) shares the same box behaviour. */
+.node.frame, .node.stack { z-index:auto; min-height:0; border-radius:14px;
   border:4px solid var(--frame-stroke, var(--edge)); }
-.node.frame { padding:8px 10px; }
+/* …except a frame's TOP-LEFT corner, which is square so the title tab sitting on it lines up flush
+   with the box's left edge (a rounded corner left the tab's straight left side floating off it). */
+.node.frame { border-top-left-radius:0; }
+/* no padding: a frame shows nothing but its (absolutely positioned) title tab — the padding only
+   ever positioned the title back when it sat INSIDE the box. Children are placed by main.ts place()
+   relative to the interior (frameInterior), which counts the border only. */
+.node.frame { padding:0; }
 /* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
    card padding — that's what lets full-width child cards fit inside the narrow box. */
 .node.stack { padding:5px 6px; }
 .node.frame .title, .node.stack .title { font-weight:600; }
-/* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills */
+/* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
+   A frame's TAB is filled with --frame-stroke either way (see below), so its text keeps using
+   var(--text) here: legible on the grey --edge fill in both themes, where #fff would be too weak. */
 .node.frame.c-none, .node.stack.c-none { background:transparent; }
 .node.frame.c-none .title, .node.stack.c-none .title { color:var(--text); }
+/* ---------- a frame's title: a folder TAB attached OUTSIDE the box's top-left corner ---------- */
+/* Outside, not inside, for two reasons: the box's whole interior belongs to the cards it holds (a
+   child dropped at the top-left used to cover the title), and the box paints BELOW the edges layer
+   and below cards, so an in-box title was occluded by both. Living outside + a z-index of its own
+   (possible only because .node.frame is not a stacking context, see above) makes it always legible.
+   Direct-child combinators throughout: a frame's own tab only, never some descendant card's title.
+   An absolutely positioned child's containing block is the PADDING box — i.e. INSIDE the 4px border
+   (FRAME_BORDER) — so both offsets add that 4px back to sit flush with the box's OUTER edge.
+   Height must stay FRAME_TAB_H (main.ts): 2 + 16 + 2 = 20px, the room a frame keeps at the top of
+   its content area for a nested frame's tab. */
+.node.frame > .title-row {
+  /* +3px, not +4px (FRAME_BORDER): the tab's bottom row overlaps the box's top border by 1px. Butted
+     exactly edge-to-edge, the two shapes rasterize on a fractionally-scaled layer (any non-integer
+     canvas zoom) with a hairline of canvas showing between them. The overlap is invisible — the tab
+     fill and the border are both var(--frame-stroke) — and the tab still needs only 19px of room
+     above the box, inside FRAME_TAB_H. */
+  position:absolute; left:-4px; bottom:calc(100% + 3px);
+  z-index:5;                    /* over #edges (1), cards (2), #dragEdges (4); under .dragging (6) */
+  max-width:calc(100% + 8px); align-items:center;
+  padding:2px 8px; border-radius:8px 8px 0 0;
+  background:var(--frame-stroke, var(--edge)); }
+.node.frame > .title-row > .title {
+  margin-bottom:0; padding-right:0; font-size:12px; line-height:16px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* while renaming, let a long title wrap and spill out of the tab instead of being ellipsised */
+.node.frame > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+/* the box's selection ring stops at its border, leaving the tab looking detached — ring it too, but
+   only on three sides: the tab's BOTTOM edge is where it joins the box, so a ring there would cut a
+   line straight through the middle of one continuous shape. Hence a pseudo-element with
+   border-bottom:none rather than a box-shadow ring (which can only go all the way round); it sits
+   2px outside the tab, so its radius is the tab's 8px + those 2px. */
+.node.frame.sel > .title-row::before {
+  /* bottom:1px, i.e. up by the tab's 1px overlap into the border (see above), so the ring's verticals
+     stop exactly at the box's outer top edge — where the box's own ring continues — instead of
+     poking 1px down into the border beside the tab. */
+  content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
+  border:2px solid var(--node-sel); border-bottom:none; border-radius:10px 10px 0 0; }
+.node.frame.sel:has(> .title-row > .title.editing) > .title-row::before { content:none; }
 /* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
    normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
    uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box. */
@@ -359,6 +411,8 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    .dragging's z-index:6); pointer-events:none so clicking the frame's empty interior still reaches
    the frame's own element underneath instead of this invisible wrapper. */
 .frame-content { position:absolute; overflow:hidden; border-radius:10px; pointer-events:none; }
+/* follow the box's square top-left corner (above) so the clip edge doesn't curve away from it */
+.frame-content:not(.stack-content) { border-top-left-radius:0; }
 /* a stack's wrapper auto-fits its outline, so it never needs to clip — and mustn't, or it would cut
    off its rows' overhanging corner affordances (+N count / lock badges). See frameContentEl. */
 .frame-content.stack-content { overflow:visible; }
@@ -380,6 +434,11 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    Corners sit at the very corners so the edge bands' insets leave them un-contested.
    Shared by .frame and .image-card — both kinds of resizable box (ensureFrameHandle in main.ts). */
 .node.frame .fh, .node.image-card .fh { position:absolute; z-index:2; touch-action:none; }
+/* …but a FRAME is not a stacking context (z-index:auto above), so a z-index:2 handle would escape
+   into #world's stacking order and start winning presses against cards that overlap the frame's
+   border. `auto` pins the handles back into the frame's own paint level — still above its fill (a
+   positioned child paints after its parent's background), still below every card, as before. */
+.node.frame > .fh { z-index:auto; }
 .node.frame .fh-n, .node.image-card .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
 .node.frame .fh-s, .node.image-card .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
 .node.frame .fh-e, .node.image-card .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }

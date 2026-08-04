@@ -10,7 +10,7 @@
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_BORDER, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_BORDER, FRAME_TAB_H, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -148,7 +148,6 @@ const LAYOUT_CHAIN = 22;
 // the flow gap below) grid multiples means every computed cx/cy stays on the grid, with no
 // runtime rounding needed.
 const FRAME_PAD = 20;       // inset from a frame's border to its content area (flow arrange)
-const FRAME_TITLE_H = 40;   // top strip a frame reserves for its title, above the flowed content
 const FRAME_FLOW_GAP = 20;  // gap between flowed children — GRID_SNAP, not the line/fan LAYOUT_CHAIN
 // Cross-axis tolerance for clustering a flow frame's children into rows/columns when (re)seeding
 // order from raw position (kidsByPosition) — roughly half a default card's row pitch (40 height +
@@ -338,6 +337,11 @@ export function frameInterior(f: MindNode): { x: number; y: number; w: number; h
     w: Math.max(0, nodeW(f) - FRAME_BORDER * 2), h: Math.max(0, nodeH(f) - FRAME_BORDER * 2),
   };
 }
+// Where a frame's content starts VERTICALLY: the same pad as the other three sides, except that a
+// child which is itself a frame carries its own title TAB hanging above its box (FRAME_TAB_H,
+// styles.css) — inside THIS frame's clipping wrapper, where it would be cut off. So never less than
+// one tab. Shared by the flow layout and its insertion bar so the two can't disagree.
+function frameContentTop(frame: MindNode): number { return frame.y + Math.max(FRAME_PAD, FRAME_TAB_H); }
 // Is `child`'s centre inside `frame`'s OUTER box? The single source of truth for "a frame child is
 // still in its frame" — the trigger drag.ts uses in BOTH the rip PREVIEW (updateRip) and the detach
 // COMMIT (dragPointerUp), so a child ripping out previews the detach exactly where it commits. Uses
@@ -650,8 +654,8 @@ function flowLine(frame: MindNode, prev: MindNode | null, next: MindNode | null,
   if (pb && nb && sameBand) { pos = (alongHi(pb) + alongLo(nb)) / 2; spanLo = Math.min(crossLo(pb), crossLo(nb)); spanHi = Math.max(crossHi(pb), crossHi(nb)); }
   else if (nb) { pos = alongLo(nb) - G; spanLo = crossLo(nb); spanHi = crossHi(nb); }
   else if (pb) { pos = alongHi(pb) + G; spanLo = crossLo(pb); spanHi = crossHi(pb); }
-  else if (flow === 'flow-h') { pos = frame.x + FRAME_PAD; spanLo = frame.y + FRAME_TITLE_H; spanHi = spanLo + 40; }
-  else { pos = frame.y + FRAME_TITLE_H; spanLo = frame.x + FRAME_PAD; spanHi = spanLo + NODE_W; }
+  else if (flow === 'flow-h') { pos = frame.x + FRAME_PAD; spanLo = frameContentTop(frame); spanHi = spanLo + 40; }
+  else { pos = frameContentTop(frame); spanLo = frame.x + FRAME_PAD; spanHi = spanLo + NODE_W; }
   return flow === 'flow-h' ? { x0: pos, y0: spanLo, x1: pos, y1: spanHi } : { x0: spanLo, y0: pos, x1: spanHi, y1: pos };
 }
 // After a drag the dropped positions are authoritative (heights didn't change), so refresh the
@@ -728,7 +732,7 @@ function layoutSubtree(node: MindNode): void {
   // top→bottom (wrap right). Reflows as the frame is resized (content width/height changes).
   if (flow) {
     const gap = FRAME_FLOW_GAP;
-    const left = ax + FRAME_PAD, top = ay + FRAME_TITLE_H;
+    const left = ax + FRAME_PAD, top = frameContentTop(node);
     const right = ax + nodeW(node) - FRAME_PAD, bottom = ay + nodeH(node) - FRAME_PAD;
     let cx = left, cy = top, band = 0;   // band = tallest row (flow-h) / widest column (flow-v) so far
     for (const k of sorted) {

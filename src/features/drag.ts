@@ -281,6 +281,11 @@ export function bindNodeDrag(n: MindNode): void {
     // itself (checked further below) remains reachable this way.
     if (hasLockedAncestor(n)) { e.stopPropagation(); return; }
     const tgt = e.target as HTMLElement;
+    // A frame's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
+    // A press there is a press on the frame ITSELF: it must take the ordinary card path below —
+    // click selects, a slow second click renames, a drag moves the frame — so both frame-specific
+    // intercepts further down exempt it. `.node` scoping keeps it to this frame's OWN tab.
+    const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
     if (tgt.classList.contains('addnote')) return;
     if (tgt.closest('input.taskbox') && isLockedEffective(n)) { e.stopPropagation(); e.preventDefault(); return; }  // locked: no task toggling
     if (tgt.closest('a.lk, input.taskbox, .img-zoom')) { e.stopPropagation(); return; }  // let links/checkboxes/zoom click, not drag
@@ -299,8 +304,10 @@ export function bindNodeDrag(n: MindNode): void {
     // press may be an OUTER one. Prefer the INNERMOST frame under the pointer: hand the gesture off
     // to it by re-firing the press on its element (its own handler then finds itself innermost and
     // proceeds). Only when the pressed node is an (expanded) frame — a card on top, or a collapsed
-    // frame (which is just a card), is always taken as-is.
-    if (isFrame(n)) {
+    // frame (which is just a card), is always taken as-is — and so is a press on this frame's own
+    // title tab, which hangs outside its box (so innermostFrameAt, a pure box hit-test, would
+    // otherwise hand every nested frame's tab press to the parent frame the tab overlaps).
+    if (isFrame(n) && !onOwnTitle) {
       const inner = innermostFrameAt(e.clientX, e.clientY);
       if (inner && inner !== n && inner.el) {
         e.stopPropagation();
@@ -317,10 +324,14 @@ export function bindNodeDrag(n: MindNode): void {
     // while this card's title/body is being edited, let clicks place the caret — don't start a drag
     if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) { e.stopPropagation(); return; }
     clearTimeout(ui.renameTimer);   // any fresh interaction cancels a pending slow-click rename
-    // A drag on an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather than
-    // moving the frame — you move the frame only once it's selected. A no-move click selects the
-    // frame (endMarquee). ⌘/Ctrl-click still falls through to the normal add-to-selection toggle.
-    if (isFrame(n) && !n.collapsed && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
+    // A drag inside an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather
+    // than moving the frame — you move the frame from its interior only once it's selected. A
+    // no-move click selects the frame (endMarquee). ⌘/Ctrl-click still falls through to the normal
+    // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the frame's
+    // own handle, so pressing it always takes the card path — which is also what gives the gesture a
+    // ui.drag (hence a downTarget) and so makes the slow-click rename below reachable on a FIRST
+    // click, the way a card's title is.
+    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
       e.stopPropagation();
       beginMarqueeFromNode(e, n.id);
       return;

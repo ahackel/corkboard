@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_H, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -108,11 +108,18 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
 };
 // The default layout for a freshly-set type — omitted from frontmatter (see serializeMd).
 const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', stack: 'inherit', image: 'free', annotation: 'free', query: 'free' };
-// Fit a frame's box snugly around its children: a title strip on top, a margin on the other sides,
-// snapped to the grid and clamped to the min size. Children keep their positions (the box moves to
-// enclose them). With no children it's left as-is, or given the default size when `orDefault` (used
-// when a card first becomes a frame). Shared by the frame chip and the Auto-size action.
-const FRAME_FIT_PAD = 16, FRAME_FIT_TITLE = 36;   // side/bottom margin; top strip for the title
+// Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
+// and clamped to the min size. Children keep their positions (the box moves to enclose them). With
+// no children it's left as-is, or given the default size when `orDefault` (used when a card first
+// becomes a frame). Shared by the frame chip and the Auto-size action.
+// The frame's own title needs no room — it's a tab OUTSIDE the box (styles.css) — but a child that
+// is itself a frame carries such a tab above its box, inside this one, so the TOP margin never
+// shrinks below one tab (FRAME_TAB_H, main.ts) or that child's title would be clipped away.
+// A function, not a const: main.js's exports aren't initialized yet while this module's body runs
+// (the deliberate main↔features import cycle — see CLAUDE.md and the props() note above), so reading
+// FRAME_TAB_H at module scope throws "cannot access before initialization".
+const FRAME_FIT_PAD = 16;
+function frameFitTop(): number { return Math.max(FRAME_FIT_PAD, FRAME_TAB_H); }
 function fitFrameToContent(n: MindNode, orDefault = false): void {
   const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));   // annotations don't size the frame
   const snapStep = gridSnap();
@@ -124,7 +131,7 @@ function fitFrameToContent(n: MindNode, orDefault = false): void {
   }
   if (!isFinite(x0)) { if (orDefault) { n.w = FRAME_W; n.h = FRAME_H; } return; }
   n.x = snap(x0 - FRAME_FIT_PAD);
-  n.y = snap(y0 - FRAME_FIT_TITLE);
+  n.y = snap(y0 - frameFitTop());
   n.w = Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - n.x));
   n.h = Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - n.y));
 }
@@ -162,7 +169,7 @@ export function groupSelectionIntoFrame(): void {
     const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
     const fx = isFinite(x0) ? snap(x0 - FRAME_FIT_PAD) : 0;
-    const fy = isFinite(y0) ? snap(y0 - FRAME_FIT_TITLE) : 0;
+    const fy = isFinite(y0) ? snap(y0 - frameFitTop()) : 0;
     const fw = isFinite(x1) ? Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - fx)) : FRAME_W;
     const fh = isFinite(y1) ? Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - fy)) : FRAME_H;
     const frame = mkNode({

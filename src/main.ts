@@ -539,6 +539,11 @@ export const FRAME_W = 360, FRAME_H = 260;   // default frame container size (wo
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
 export const QUERY_W = 280, QUERY_H = 320;   // default query-card size (world px)
 export const FRAME_BORDER = 4;   // must match .node.frame's CSS `border` width (styles.css)
+// Height of a frame's title TAB — it hangs OUTSIDE the box, above the top border (styles.css
+// `.node.frame > .title-row`), folder-style. A frame therefore reserves this much room at the TOP of
+// its own content area, so a nested frame's tab isn't cut off by this frame's clipping wrapper.
+// Must match the CSS (2px padding + 16px line-height + 2px padding).
+export const FRAME_TAB_H = 20;
 // Stack geometry (a framed, auto-sized outliner node kind — see isStack in view/layout.ts). Its
 // width is FIXED (not resizable); its height auto-fits its children (computed in layoutSubtree).
 export const STACK_W = NODE_W;   // a stack is the SAME width as a normal card (not wider)
@@ -636,9 +641,9 @@ function place(el: HTMLElement, absX: number, absY: number, host: MindNode | nul
 // its INTERIOR (inside the border), holding every card/frame it hosts as flat DOM children. Created
 // once and kept live (idempotent — safe to call from a child's paint before the frame's own paint
 // runs in the same pass, since Map iteration order isn't parent-before-child).
-// Every frame box shares the same z-index:1 (styles.css), so a nested frame's own box only ends up
-// visually on top of its ancestor's fill because it sits LATER in DOM/tree order (equal-z-index
-// stacking falls back to document order) — the two share one flattened stacking context since
+// Every frame box paints at the same level (z-index:auto, styles.css), so a nested frame's own box
+// only ends up visually on top of its ancestor's fill because it sits LATER in DOM/tree order (same
+// paint step ⇒ document order decides) — the two share one flattened stacking context since
 // .frame-content sets no z-index of its own. That invariant breaks if THIS wrapper gets appended to
 // its container before the frame's own box does, which happens whenever a child paints (and so
 // calls this) before the frame itself gets its first paintNode pass (Map iteration order isn't
