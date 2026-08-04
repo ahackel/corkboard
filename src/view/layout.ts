@@ -217,6 +217,18 @@ function stackHeaderH(stack: MindNode): number {
   const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
   return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
 }
+// Stretch an outline row to the width its depth gives it, writing it to the DOM IMMEDIATELY rather
+// than leaving it for the next paintNode. Everywhere else in the app a card's width is the constant
+// NODE_W, so a measured height never depends on layout output — but a stack row is stretched, and
+// text wraps differently at a different width, so its height depends on the very width this pass
+// assigns. Measuring before the DOM knows the new width made a re-indented row lay out at its
+// PREVIOUS width's height: the rows below it overlapped (or left a gap) and only settled once some
+// later interaction happened to run another layout pass. Writing the width here closes that loop, so
+// one applyLayouts() converges no matter what order a caller paints and lays out in.
+function setRowWidth(row: MindNode, w: number): void {
+  row.w = w;
+  if (row.el) row.el.style.width = w + 'px';
+}
 // A stack's visible OUTLINE, in visual (top-to-bottom) order: every descendant that gets its own row,
 // paired with the indent depth it renders at (the stack's direct children are depth 0). A nested
 // container or a COLLAPSED card is one opaque row — its contents live in its own box/fold — so the
@@ -686,12 +698,13 @@ function layoutSubtree(node: MindNode): void {
       const w = Math.max(STACK_MIN_ROW_W, innerW - depth * STACK_INDENT);
       if (isContainer(k) || k.collapsed) {
         // one opaque row: its own box/fold owns its contents, so move the whole subtree with it
+        if (!isContainer(k)) setRowWidth(k, w);   // a collapsed plain card stretches; a nested box keeps its own size
         const b = subtreeBox(k);
         shiftSubtree(k, x - b.x0, cy - b.y0);
-        if (!isContainer(k)) k.w = w;   // a collapsed plain card stretches; a nested box keeps its own size
         cy += (b.y1 - b.y0) + STACK_GAP;
       } else {
-        k.x = x; k.y = cy; k.w = w; k.dirtyLayout = true;
+        k.x = x; k.y = cy; k.dirtyLayout = true;
+        setRowWidth(k, w);
         cy += layoutH(k) + STACK_GAP;
       }
     }
