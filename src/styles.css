@@ -398,6 +398,13 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
   border:2px solid var(--node-sel); border-bottom:none; border-radius:10px 10px 0 0; }
 .node.frame.sel:has(> .title-row > .title.editing) > .title-row::before { content:none; }
+/* a COLLAPSED frame folds to an ordinary card — no .frame class, so no box and no title tab. An
+   UNCOLOURED one would then be a fully transparent card with no outline of any kind, i.e. floating
+   text; keep the frame's border so it still reads as a frame waiting to be unfolded. Same 4px
+   var(--edge) the expanded box shows for c-none (SWATCH_BG has no 'none' entry, so --frame-stroke is
+   unset there and its border falls back to --edge too). box-sizing:border-box (top of this file)
+   means the border costs inner space, not footprint — the card keeps its NODE_W/height geometry. */
+.node.frame-folded.c-none { border:4px solid var(--edge); }
 /* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
    normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
    uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box. */
@@ -618,6 +625,12 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
    landing ghost / insert bar (z-index:5). Translucency is applied to the whole #dragLayer as
    ONE group (below), not per card, so overlapping dragged items don't shine through each other. */
 .node.dragging { z-index:6; }
+/* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
+   .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
+   raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
+   dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
+   the rest of the canvas, because #dragLayer (below) is itself a z-index:6 stacking context. */
+.node.frame.dragging, .node.stack.dragging { z-index:auto; }
 /* the group-opacity layer: while dragging, main.ts moves the dragged cards AND their connectors
    (dragLayerEdges, kept first so it sits behind the cards) in here. Opacity on the layer composites
    the whole set once — you see the canvas below, but the items never show through one another. */

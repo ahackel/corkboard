@@ -392,6 +392,7 @@ export function paintNode(n: MindNode): void {
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
     + (collapsed ? ' collapsed' : '')
+    + (n.type === 'frame' && collapsed ? ' frame-folded' : '')   // folded to a card: keep a frame's border (styles.css)
     + (n.locked ? ' locked' : '')
     + (hasBody ? '' : ' no-body')
     + (isFrameBox(n) || isStack(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
@@ -435,16 +436,18 @@ export function paintNode(n: MindNode): void {
     // no per-descendant left/top rewrite. Roots stay under #world; a direct frame child stays in the
     // frame's overflow:hidden wrapper (place()). isFrameBox covers frames (image cards are leaves).
     const p = n.parent ? state.nodes.get(n.parent) : null;
+    const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
     if (isAnnotation(n)) {
       // An annotation always renders directly under #world at absolute coords — never nested in its
       // parent nor in a frame's overflow:hidden wrapper — so a high z-index (styles.css) floats it on
       // TOP of everything and no frame mask ever clips it. It still tracks its parent: layout keeps
       // n.x/n.y = parent + offset, and drag carries it (it's in the parent's subtreeIds → own transform).
-      place(el, n.x, n.y, null);
+      place(el, np.x, np.y, null);
     } else if (p && !isContainerBox(p) && !isContainerBox(n)) {
       const pEl = nodeEl(p);
-      el.style.left = (n.x - p.x) + 'px';
-      el.style.top  = (n.y - p.y) + 'px';
+      const pp = paintPos(p);
+      el.style.left = (np.x - pp.x) + 'px';
+      el.style.top  = (np.y - pp.y) + 'px';
       if (el.parentElement !== pEl) pEl.appendChild(el);
     } else {
       // root → #world; direct frame/stack child → container content wrapper. A CONTAINER's own box
@@ -454,7 +457,7 @@ export function paintNode(n: MindNode): void {
       // SIBLINGS in one DOM parent. Nesting the box inside a parent card instead put the two in
       // different stacking contexts, so the box's fill won the tie and swallowed its own rows'
       // pointer events (pressing a stack row grabbed the whole stack).
-      place(el, n.x, n.y, host);
+      place(el, np.x, np.y, host);
     }
   }
   // A frame (or an image card) is its own resizable box; give the element that size and a
@@ -631,10 +634,22 @@ function settledHost(n: MindNode): MindNode | null {
 // Only DRAGGED nodes are painted mid-drag, so this only ever relocates them (and a dragged frame's
 // own content wrapper); resting content is untouched. On drop ui.drag is nulled → back to #world.
 function dragRoot(): HTMLElement { return (ui.drag && ui.drag.moved) ? dragLayer : world; }
+// Which coordinates a left/top write must use for `n` RIGHT NOW: its live position normally, but its
+// PRE-DRAG origin while it's part of a live drag. A dragged element's left/top stay frozen at that
+// origin and the movement is a compositor transform on top (see the dragOrig branch in paintNode and
+// applyDragTransform in features/drag.ts) — so a repaint that lands MID-drag (updateRip's rip-preview
+// repaint, a drop-target change, …) must write the origin too. Writing the live position there bakes
+// the drag delta into left/top while the transform still adds it, putting the element twice as far
+// out: that stranded a dragged container's content wrapper away from its own box, leaving the cards
+// it holds spilling out from behind the box instead of riding inside it.
+// Deliberately NOT excluding a carried child (one whose host is dragging too): for those, origin- and
+// live-basis give the same host-relative offset, since host and child shift by the very same delta.
+function paintPos(n: MindNode): Pt { return ui.drag?.origins?.get(n.id) ?? { x: n.x, y: n.y }; }
 function place(el: HTMLElement, absX: number, absY: number, host: MindNode | null): void {
   const container = host ? frameContentEl(host) : dragRoot();
-  el.style.left = (host ? absX - host.x - FRAME_BORDER : absX) + 'px';
-  el.style.top  = (host ? absY - host.y - FRAME_BORDER : absY) + 'px';
+  const hp = host ? paintPos(host) : null;   // the host's FROZEN origin mid-drag — see paintPos
+  el.style.left = (hp ? absX - hp.x - FRAME_BORDER : absX) + 'px';
+  el.style.top  = (hp ? absY - hp.y - FRAME_BORDER : absY) + 'px';
   if (el.parentElement !== container) container.appendChild(el);
 }
 // A frame's own clipping wrapper: a plain overflow:hidden box (styles.css .frame-content) sized to
@@ -661,7 +676,11 @@ function frameContentEl(f: MindNode): HTMLElement {
   // wrapper so CSS lets those overhang (overflow:visible); a resizable frame keeps overflow:hidden.
   w.classList.toggle('stack-content', isStack(f));
   const box = frameInterior(f);
-  place(w, box.x, box.y, settledHost(f));
+  // Position from paintPos, not box.x/box.y: mid-drag the wrapper's left/top must stay frozen at the
+  // frame's origin, since applyDragTransform mirrors the box's own transform onto it. Its SIZE comes
+  // from frameInterior either way (a drag moves the box, it doesn't resize it).
+  const p = paintPos(f);
+  place(w, p.x + FRAME_BORDER, p.y + FRAME_BORDER, settledHost(f));
   w.style.width  = box.w + 'px';
   w.style.height = box.h + 'px';
   return w;
