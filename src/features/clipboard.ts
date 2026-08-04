@@ -19,7 +19,7 @@ import { state, setStatus, isImageCard, type MindNode, type LayoutSide } from '.
 import { serializeMd, parseMd, type ParsedNote } from '../utils/frontmatter.js';
 import { isAncestor } from '../utils/model.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
-import { mkNode, uniqueTitle, deleteSelection } from './crud.js';
+import { mkNode, uniqueTitle, deleteSelection, contentParent } from './crud.js';
 import { touch, record } from './history.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
@@ -120,7 +120,10 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
   const rootIds: string[] = [];
   record([], () => {
-    const parentNode = at.parent ? state.nodes.get(at.parent) : undefined;
+    // contentParent: pasting "into" a tab group means into the tab that's OPEN — the group itself shows
+    // no content of its own (same routing as an added child or a dropped card).
+    const at0 = at.parent ? state.nodes.get(at.parent) : undefined;
+    const parentNode = at0 ? contentParent(at0) : undefined;
     if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }   // reveal the drop
     const newIds = new Map<string, string>();   // payload name -> minted id
     for (const c of cards){
@@ -130,7 +133,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
         title: uniqueTitle(c.p.title),
         color: c.p.color, keepStatus: c.p.keepStatus,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
-        collapsed: c.p.mm.collapsed, done: c.p.mm.done, checklist: c.p.mm.checklist, bg: c.p.mm.bg,
+        collapsed: c.p.mm.collapsed, done: c.p.mm.done, checklist: c.p.mm.checklist,
         type: c.p.mm.type, layout: c.p.mm.layout,
         // a root reattaches to the paste target — its old side is meaningless there
         side: root ? undefined : (c.p.mm.side || undefined) as LayoutSide | undefined,

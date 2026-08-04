@@ -1,7 +1,7 @@
-// ---------- shared card-property controls (colour / tags / checklist / group background) ----------
+// ---------- shared card-property controls (colour / tags / checklist) ----------
 // ONE implementation, used by both the canvas floating bar (#floatBar) and the branch-view bottom sheet
 // (#branchProps). Given the control elements plus a "which cards am I editing" provider, it wires
-// the swatch row, the tags input and the two toggles to the same undo / paint / save contract the
+// the swatch row, the tags input and the checklist toggle to the same undo / paint / save contract the
 // sidebar always used. Title & body are edited elsewhere (inline editors / branch cards), so this
 // deliberately owns only the sidebar-style properties. Layout chips stay in main.ts — they're
 // canvas geometry with no meaning in the outline, so the branch sheet doesn't get them.
@@ -17,7 +17,6 @@ export interface PropEls {
   colors: HTMLElement;
   tagRow?: HTMLElement;   // omitted where there's no tags UI at all (this factory has no canvas caller — the canvas card renders its own tag row directly, see main.ts)
   checklist: HTMLInputElement;
-  bg: HTMLInputElement;
 }
 export interface PropertyControls {
   sync(): void;            // reflect the current target(s) into the controls
@@ -59,22 +58,21 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
       sw.classList.toggle('active', sw.dataset.color === active));
   }
 
-  // ---- checklist / group-background toggles (set on every target; mixed → indeterminate) ----
-  function setBool(key: 'checklist' | 'bg', on: boolean): void {
+  // ---- checklist toggle (set on every target; mixed → indeterminate) ----
+  function setChecklist(on: boolean): void {
     const ids = getIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
     record(ids, () => {
-      for (const id of ids){ const n = state.nodes.get(id); if (n){ n[key] = on; n.dirty = true; } }
+      for (const id of ids){ const n = state.nodes.get(id); if (n){ n.checklist = on; n.dirty = true; } }
     });
-    markToggle(els[key === 'checklist' ? 'checklist' : 'bg'], key);
+    markChecklist();
     paintAll(); scheduleSave();
   }
-  function markToggle(el: HTMLInputElement, key: 'checklist' | 'bg'): void {
-    const vals = new Set(getIds().map(id => !!state.nodes.get(id)?.[key]));
-    el.indeterminate = vals.size > 1;
-    el.checked = vals.size === 1 && [...vals][0];
+  function markChecklist(): void {
+    const vals = new Set(getIds().map(id => !!state.nodes.get(id)?.checklist));
+    els.checklist.indeterminate = vals.size > 1;
+    els.checklist.checked = vals.size === 1 && [...vals][0];
   }
-  els.checklist.addEventListener('change', () => setBool('checklist', els.checklist.checked));
-  els.bg.addEventListener('change', () => setBool('bg', els.bg.checked));
+  els.checklist.addEventListener('change', () => setChecklist(els.checklist.checked));
 
   // ---- tags: emoji pills + a trailing "+" that opens the shared MRU picker (features/emoji-picker.ts).
   // Tags are per-card, so they only apply to a single target. Optional: this factory is only used
@@ -100,8 +98,7 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
 
   function sync(): void {
     markSwatch();
-    markToggle(els.checklist, 'checklist');
-    markToggle(els.bg, 'bg');
+    markChecklist();
     renderTagRow();
   }
 

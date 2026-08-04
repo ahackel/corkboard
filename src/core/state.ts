@@ -20,12 +20,14 @@ export type NodeType = 'card' | 'frame' | 'stack' | 'image' | 'annotation' | 'qu
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
 //   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread).
 //   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
-//             down), vertical (auto-flow columns: top→bottom, wrap right).
+//             down), vertical (auto-flow columns: top→bottom, wrap right), tabs (its child FRAMES
+//             are docked as tabs: their title tabs flow along the frame's top band and whichever
+//             tab is open borrows the whole box — see isTabsFrame in view/layout.ts).
 //   · stack → none: a stack always outlines its whole subtree (one indented full-width column), so
 //             it offers no arrangement choice and every descendant's own layout is ignored.
 //   · image / annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
-export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical';
+export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'tabs';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
 // sizing from title/body content — a frame, an image, or a query card.
 export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'image' || t === 'query';
@@ -67,8 +69,6 @@ export interface MindNode {
   checklist: boolean;              // Trello-style: treat my DIRECT children as a checklist — each
                                     // gets a done checkbox and I show their `n/m` progress. Doesn't
                                     // cascade further down; a child can run its own checklist too.
-  bg: boolean;                     // draw a translucent background enclosing me + all my visible
-                                    // descendants (see view/edges.ts paintBackgrounds)
   type: NodeType;                  // card | frame | image | query — the node's kind (persisted as mm_type)
   layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
   // Resizable box size (world px). Meaningful for a frame (the box whose interior adopts cards
@@ -95,6 +95,7 @@ export interface MindNode {
   kidOrder?: string[];             // stored child order (line/fan layouts); reseeded only on child drag
   el?: HTMLElement | null;         // the rendered card (added during paint)
   frameContentEl?: HTMLElement | null;   // this frame's overflow:hidden content wrapper (frames only)
+  tabStripEl?: HTMLElement | null;       // this tab GROUP's strip: the unclipped band holding its tabs' labels
   hostFrameId?: string | null;     // which frame's content wrapper el/frameContentEl currently live
                                     // in, DOM-wise (null = directly under #world) — transient render
                                     // bookkeeping, settled outside gestures (see main.ts settledHost)
@@ -162,7 +163,6 @@ export const state: AppState = {
 
 export const world = document.getElementById('world') as HTMLElement;
 export const stage = document.getElementById('stage') as HTMLElement;
-export const backgroundsSvg = document.getElementById('backgrounds') as unknown as SVGSVGElement;
 // Freehand sketch layer — sits behind the cards (see index.html / styles.css z-index).
 export const sketchSvg = document.getElementById('sketch') as unknown as SVGSVGElement;
 export const edgesSvg = document.getElementById('edges') as unknown as SVGSVGElement;

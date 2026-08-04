@@ -10,7 +10,7 @@
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_BORDER, STACK_W, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -18,11 +18,20 @@ import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, FRAME_B
 // origin for a root — what serializeMd writes as mm_position_x/y). commitRel() derives the
 // persisted form from the working form; it's the only bridge, called just before every save
 // (saveAll / exportZip). Load does the reverse — see data/persistence.ts loadFromDir.
+// A node's persisted position is an OFFSET from its parent, so moving the PARENT restales every
+// child's file even though nothing about the child moved on screen — dragging a frame's west edge
+// (which shifts the frame's own x), or undoing such a resize, leaves each child's mm_position_x on
+// disk describing the OLD offset. saveAll only writes nodes flagged dirty, so those files were
+// silently skipped and the next load placed the children at the stale offset. Catching it here, in
+// the one bridge every save goes through, covers every mover (resize, undo/redo, layout, drag)
+// instead of asking each of them to remember. Compared ROUNDED, since that's what serializeMd
+// writes — raw float noise would otherwise mark every node dirty on every save.
 export function commitRel(): void {
   for (const n of state.nodes.values()) {
     const p = n.parent ? state.nodes.get(n.parent) : null;
-    n.rx = n.x - (p ? p.x : 0);
-    n.ry = n.y - (p ? p.y : 0);
+    const rx = n.x - (p ? p.x : 0), ry = n.y - (p ? p.y : 0);
+    if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) n.dirty = true;
+    n.rx = rx; n.ry = ry;
   }
 }
 
@@ -63,11 +72,13 @@ export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' |
     if (h && isStack(h)) return { x: governor.x + STACK_INDENT, y: subtreeBox(governor).y1 + STACK_GAP };
   }
   // A frame adopts the card where it's released, snapped to the grid RELATIVE to the frame's
-  // origin (its children live in the frame's coordinate space).
+  // origin (its children live in the frame's coordinate space) — containerBox, so a docked tab
+  // snaps against the box its group lent it rather than its own label in the strip.
   if (isFrame(governor)) {
     const g = gridSnap();
+    const box = containerBox(governor);
     const rel = (v: number, o: number): number => Math.round((v - o) / g) * g + o;
-    return { x: rel(dragged.x, governor.x), y: rel(dragged.y, governor.y) };
+    return { x: rel(dragged.x, box.x), y: rel(dragged.y, box.y) };
   }
   if (!isManagedLayout(governor)) {
     // Nudge the cross-axis in child mode (a fresh attachment, offset from target) but keep it
@@ -76,8 +87,8 @@ export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' |
     const nudge = mode === 'child' ? LANDING_GAP : 0;
     switch (side) {
       case 'up':    return { x: target.x + nudge, y: target.y - nodeH(dragged) - LANDING_GAP };
-      case 'left':  return { x: target.x - NODE_W - LANDING_GAP, y: target.y + nudge };
-      case 'right': return { x: target.x + NODE_W + LANDING_GAP, y: target.y + nudge };
+      case 'left':  return { x: target.x - nodeW(dragged) - LANDING_GAP, y: target.y + nudge };
+      case 'right': return { x: target.x + nodeW(target) + LANDING_GAP, y: target.y + nudge };
       default:      return { x: target.x + nudge, y: target.y + nodeH(target) + LANDING_GAP };
     }
   }
@@ -148,7 +159,6 @@ const LAYOUT_CHAIN = 22;
 // the flow gap below) grid multiples means every computed cx/cy stays on the grid, with no
 // runtime rounding needed.
 const FRAME_PAD = 20;       // inset from a frame's border to its content area (flow arrange)
-const FRAME_TITLE_H = 40;   // top strip a frame reserves for its title, above the flowed content
 const FRAME_FLOW_GAP = 20;  // gap between flowed children — GRID_SNAP, not the line/fan LAYOUT_CHAIN
 // Cross-axis tolerance for clustering a flow frame's children into rows/columns when (re)seeding
 // order from raw position (kidsByPosition) — roughly half a default card's row pitch (40 height +
@@ -159,6 +169,8 @@ const FLOW_BAND_TOL = 30;
 // row is ever squeezed to (so a deep outline never collapses to zero width).
 const STACK_INDENT = 18;
 const STACK_MIN_ROW_W = 90;
+// Gap between two tabs in a group's strip (and between the group's own label and the first tab).
+export const TAB_GAP = 4;
 
 // Bounding box over a node + its VISIBLE descendants (what the layout actually placed).
 export function subtreeBox(node: MindNode){
@@ -207,10 +219,135 @@ function insideStack(node: MindNode): boolean {
 export function isStack(node: MindNode): boolean {
   return node.type === 'stack' && !node.collapsed && !insideStack(node);
 }
+// ---------- tab groups: a frame whose child FRAMES are docked as tabs ----------
+// A TABS frame (mm_layout: tabs): its child frames aren't content, they're TABS. Their title tabs
+// flow along this frame's own top band (tabStripRect) and whichever tab is OPEN borrows the whole
+// box for its children — so the group owns the geometry (x/y/w/h, colour, resize handles, border)
+// and a tab owns only its contents. Keyed on the RAW type + layout rather than isFrame, so
+// collapsing the group can't flip a hosted tab's identity mid-paint (same caution as frameInsetY).
+export function isTabsFrame(node: MindNode): boolean { return node.type === 'frame' && node.layout === 'tabs'; }
+// The group `node` is docked into as a tab, or null. A tab is always a FRAME child of a tabs frame:
+// any other child kind is ordinary content (e.g. a card dropped into the box), never a tab.
+export function tabGroupOf(node: MindNode): MindNode | null {
+  if (node.type !== 'frame' || !node.parent) return null;
+  const p = state.nodes.get(node.parent);
+  return p && isTabsFrame(p) ? p : null;
+}
+export function isDockedTab(node: MindNode): boolean { return !!tabGroupOf(node); }
+// A group's tabs in strip order (left to right) — stored like any child order, i.e. seeded from the
+// tabs' own positions along the strip (kidsByPosition) and only changed by dragging one.
+export function tabsOf(g: MindNode): MindNode[] {
+  return orderedKids(g, childrenOf(g.id).filter(k => k.type === 'frame'));
+}
+// The one OPEN tab. Exactly one tab is open at a time (normalizeTabs), which is what lets a tab
+// reuse the plain collapse machinery: an open tab is an expanded frame that happens to render as
+// just its label, a closed one is a folded frame, and a closed tab's contents hide themselves
+// (isHidden — an ancestor is collapsed). No `mm_active` key, no second notion of visibility.
+export function activeTab(g: MindNode): MindNode | null {
+  return tabsOf(g).find(t => !t.collapsed) ?? null;
+}
+// What can be dropped on a frame's tab to become a tab of it. A frame already is one; a plain CARD is
+// turned into a frame on the way in (crud.ts dockFrames), since that's what a tab is. The other kinds
+// keep out: an annotation is a note pinned on top of something else and holds nothing, a stack's whole
+// nature is its outliner box, and an image/query card is a leaf whose box IS its content.
+export function canBeTab(n: MindNode): boolean { return n.type === 'frame' || n.type === 'card'; }
+// The node a user-facing action on `n` should actually hit. A tab group doesn't exist from the outside:
+// what you see, colour, rename or delete is the OPEN TAB, so those land there. The box-shaped actions
+// stay on the group, because the box is the one thing it visibly owns — moving it, resizing it, its
+// kind/layout (which is how you leave tabs mode) and its lock, all of which apply to every tab at once.
+export function actionTarget(n: MindNode): MindNode {
+  return isTabsFrame(n) && !n.collapsed ? (activeTab(n) ?? n) : n;
+}
+// Enforce "exactly one open tab" — the single invariant this feature adds. Run as a pre-pass in
+// applyLayouts so every path that could break it (a tab click, collapse-all, expand-all, a
+// hand-edited vault with none or three tabs open) is covered by ONE funnel instead of each having to
+// remember. Marks what it changes dirty, so a vault that disagreed is healed on disk too.
+export function normalizeTabs(g: MindNode): void {
+  const tabs = tabsOf(g);
+  if (!tabs.length) return;
+  const keep = tabs.find(t => !t.collapsed) ?? tabs[0];   // first open wins; none open → open the first
+  for (const t of tabs) {
+    const want = t !== keep;
+    if (t.collapsed !== want) { t.collapsed = want; t.dirty = true; t.dirtyLayout = true; }
+  }
+}
+// The box a container actually holds its children in. Its own bounds for everything else — but a
+// DOCKED TAB has no box: its bounds are just its label up in the strip, and its contents live in the
+// interior its group lent it. The single spelling of that indirection, shared by frameInterior, the
+// flow layout, the drop landing and the in-frame/out-of-frame rip test, so none of them has to know
+// whether the frame it's given is docked.
+export function containerBox(f: MindNode): { x: number; y: number; w: number; h: number } {
+  const g = tabGroupOf(f);
+  if (g) return frameInterior(g);
+  return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
+}
+// Where a group lays its tabs out: the band across the top of its BOUNDS — exactly where its own
+// title tab hangs (styles.css `.node.frame > .title-row`), since the tabs are that tab's siblings in
+// the same band. A DOCKED group has no band above it (it's a tab itself), so its strip takes the top
+// of the interior it was lent instead; frameInterior reserves that room (see below).
+export function tabStripRect(g: MindNode): { x: number; y: number; w: number; h: number } {
+  const box = containerBox(g);
+  return { x: box.x, y: box.y, w: box.w, h: FRAME_TAB_H };
+}
+// Where each tab sits along its group's strip, plus `next` — the slot PAST the last tab, where a newly
+// docked one lands. The single spelling of the strip's arithmetic: the layout pass places tabs from it
+// and the dock preview draws its ghost tab at `next`, so the preview can't disagree with the result.
+// Reads measured label widths (frameLabelW), so callers must have painted the tabs first.
+export function tabSlots(g: MindNode): { xs: number[]; next: number } {
+  const strip = tabStripRect(g);
+  // From the very left of the band: a group with tabs shows no tab of its own (styles.css
+  // `.tabs.has-tabs > .title-row`), so there's nothing to start past — two docked frames must read as
+  // two tabs, not three.
+  let cx = strip.x;
+  const xs: number[] = [];
+  for (const t of tabsOf(g)) { xs.push(cx); cx += nodeW(t) + TAB_GAP; }
+  return { xs, next: cx };
+}
+// Where a frame dropped on a group's strip slots in: the tab it lands AFTER (`null` = first), plus the
+// insertion bar to draw in that gap. The strip's analogue of flowReorderTarget — one row of tabs, so
+// it's a plain midpoint comparison along x, and dragging a tab sideways past its neighbour re-slots it.
+// `skip` drops the dragged frames from the ordering, so a tab can't anchor against itself.
+export function tabDropTarget(g: MindNode, wx: number, skip: Set<string>): { afterId: string | null; line: Seg } {
+  const strip = tabStripRect(g);
+  const tabs = tabsOf(g).filter(t => !skip.has(t.id));
+  let afterId: string | null = null;
+  let pos = strip.x;                      // the front slot, at the strip's left edge
+  for (const t of tabs) {
+    if (wx < t.x + nodeW(t) / 2) break;   // left of this tab's middle → it goes in front of it
+    afterId = t.id; pos = t.x + nodeW(t) + TAB_GAP / 2;
+  }
+  return { afterId, line: { x0: pos, y0: strip.y, x1: pos, y1: strip.y + strip.h } };
+}
+// The band that counts as "on this frame's tab" — the DOCK zone, i.e. what a dragged frame has to be
+// released over to become a tab of it. For a plain frame that's its own folder tab (its label in the
+// top band of its bounds); for a GROUP it's the whole strip, so anywhere along the row of tabs docks.
+export function tabBandRect(f: MindNode): { x: number; y: number; w: number; h: number } {
+  if (isTabsFrame(f) && !f.collapsed) return tabStripRect(f);
+  return { x: f.x, y: f.y, w: frameLabelW(f), h: FRAME_TAB_H };
+}
 // Either kind of child-containing box: a frame or a stack. Used at every touchpoint where the box
 // behaves purely as "a container that holds & clips its children" (footprint, hosting, edge
 // clipping, drag adopt/detach) — as opposed to frame-only behaviour (resize, free/flow placement).
 export function isContainer(node: MindNode): boolean { return isFrame(node) || isStack(node); }
+// The width an outline ROW is stretched to inside its stack, or null if this node isn't one. DERIVED,
+// never stored: it's a pure function of the stack's own width and the row's indent depth — the same
+// two inputs layoutSubtree's stack branch uses — so keeping it as a function is what stops a row's
+// transient width from colliding with the AUTHORED `n.w` a card carries in from outside the stack
+// (drop a 400px card into a stack and it must come back out at 400px, not at the row width). Mirrors
+// the stack branch's own arithmetic; the two must agree, which is why they read the same constants.
+export function stackRowW(node: MindNode): number | null {
+  if (isAnnotation(node)) return null;   // stackOutline skips annotations — they float, they don't stack
+  let depth = 0;
+  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+    // isStack(p), not p.type — a stack nested in another stack is itself just a row of the outer one
+    if (isStack(p)) return Math.max(STACK_MIN_ROW_W, stackInnerW(p) - depth * STACK_INDENT);
+    if (isContainer(p) || p.collapsed) return null;   // a nearer frame governs, or we're folded away
+    depth++;
+  }
+  return null;
+}
+// A stack's INNER width — its box less the border and padding on both sides. Row 0 spans all of it.
+function stackInnerW(stack: MindNode): number { return nodeW(stack) - 2 * FRAME_BORDER - 2 * STACK_PAD; }
 // The height a stack reserves above its first row for its OWN title-row — measured live, so a
 // multi-line title pushes the rows down instead of being drawn over (STACK_HEADER is the pre-render
 // fallback). Shared by the layout pass and the drop resolver so both agree where row 0 starts.
@@ -218,23 +355,18 @@ function stackHeaderH(stack: MindNode): number {
   const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
   return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
 }
-// Get an outline row ready to be MEASURED: give it the width its depth allows, then paint it so the
-// DOM matches the model before we read its height back. Both halves are needed because a stack is
-// the one place where a card's height depends on layout output:
-//   · WIDTH — everywhere else a card is a constant NODE_W wide, but a row is stretched to its depth's
-//     width and text wraps differently at a different width. Measuring before the DOM knew the new
-//     width laid a re-indented row out at its PREVIOUS width's height, so the rows below overlapped.
+// NOTE — the two loops below call paintNode(k) BEFORE measuring the row, and must keep doing so: a
+// stack is the one place where a card's height depends on layout output, in two ways.
+//   · WIDTH — a row is stretched to the width its depth allows (stackRowW, which paintNode applies),
+//     and text wraps differently at a different width. Measuring before the DOM knew the new width
+//     laid a re-indented row out at its PREVIOUS width's height, so the rows below overlapped.
 //   · EXISTENCE — a row added this tick has no element yet, and layoutH then falls back to 64px. A
 //     fresh 27px row reserved 64, leaving a 45px hole under it (paintNode creates the element via
-//     nodeEl, so painting here is also what makes it measurable at all).
+//     nodeEl, so painting there is also what makes it measurable at all).
 // Either way the geometry used to settle only when some later interaction happened to run another
-// pass. Doing it here means one applyLayouts() converges regardless of the order a caller paints and
-// lays out in — which matters because the ~20 relayout call sites don't agree on that order.
+// pass. Painting first means one applyLayouts() converges regardless of the order a caller paints
+// and lays out in — which matters because the ~20 relayout call sites don't agree on that order.
 // paintNode leaves an open title/body/query editor alone, so this can't disturb typing.
-function prepRow(row: MindNode, w: number | null): void {
-  if (w != null) row.w = w;
-  paintNode(row);
-}
 // A stack's visible OUTLINE, in visual (top-to-bottom) order: every descendant that gets its own row,
 // paired with the indent depth it renders at (the stack's direct children are depth 0). A nested
 // container or a COLLAPSED card is one opaque row — its contents live in its own box/fold — so the
@@ -333,21 +465,57 @@ export function ancestorDepth(node: MindNode): number {
 // which can't be DOM-reparented into that wrapper) so the two containment mechanisms stay
 // pixel-identical by construction instead of by two hand-synced copies of the same arithmetic.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
+  // A DOCKED TAB draws no box of its own — its group lends it the whole interior, which is the point
+  // of docking (one box, several tabs). It reserves room at the top only when it is ITSELF a group:
+  // a top-level group's strip hangs in the band above its box, but a docked one has nothing above it,
+  // so its own tabs have to come off the interior it was lent.
+  const g = tabGroupOf(f);
+  if (g) {
+    const lent = frameInterior(g);
+    const strip = isTabsFrame(f) ? FRAME_TAB_H : 0;
+    return { x: lent.x, y: lent.y + strip, w: lent.w, h: Math.max(0, lent.h - strip) };
+  }
   return {
-    x: f.x + FRAME_BORDER, y: f.y + FRAME_BORDER,
-    w: Math.max(0, nodeW(f) - FRAME_BORDER * 2), h: Math.max(0, nodeH(f) - FRAME_BORDER * 2),
+    x: f.x + FRAME_BORDER, y: f.y + frameInsetY(f),
+    w: Math.max(0, nodeW(f) - FRAME_BORDER * 2),
+    h: Math.max(0, nodeH(f) - frameInsetY(f) - FRAME_BORDER),
   };
+}
+// How far DOWN from a container's BOUNDS top its interior starts — the vertical counterpart of the
+// plain FRAME_BORDER inset used on the other three sides, and the single spelling of it: shared by
+// frameInterior and by everything that projects a hosted child into its host's content wrapper
+// (main.ts's place/frameContentEl/followEdges). A FRAME's bounds also cover its title tab, which sits
+// above the box (FRAME_TAB_DROP, main.ts); a stack has no tab. Keyed on `type`, not isFrame, so a paint
+// landing mid-collapse can't flip the inset under a hosted child.
+export function frameInsetY(f: MindNode): number {
+  return FRAME_BORDER + (f.type === 'frame' ? FRAME_TAB_DROP : 0);
+}
+// Where a frame's content starts VERTICALLY: one uniform pad below its BOX's top edge (elTop), matching
+// the `ax + FRAME_PAD` the other sides use from the box's outer edge. A nested frame's own tab lives
+// inside ITS bounds (see frameInsetY), so this frame reserves no room for it. Shared by the flow layout
+// and its insertion bar so the two can't disagree.
+// (A docked tab's lent box already starts below its group's border, and has no tab band of its own
+// above it, so the FRAME_PAD comes straight off it — hence containerBox rather than frame.y here.)
+function frameContentTop(frame: MindNode): number {
+  const box = containerBox(frame);
+  return (isDockedTab(frame) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
 }
 // Is `child`'s centre inside `frame`'s OUTER box? The single source of truth for "a frame child is
 // still in its frame" — the trigger drag.ts uses in BOTH the rip PREVIEW (updateRip) and the detach
 // COMMIT (dragPointerUp), so a child ripping out previews the detach exactly where it commits. Uses
 // the full box (not frameInterior's inset) deliberately: a card counts as inside until its centre
 // clears the frame edge.
+// containerBox, not the frame's own bounds: a DOCKED TAB's child is "in" the box its group lent it,
+// not in the tab's label up in the strip.
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {
-  const cx = child.x + NODE_W/2, cy = child.y + nodeH(child)/2;
-  return cx >= frame.x && cx <= frame.x + nodeW(frame)
-      && cy >= frame.y && cy <= frame.y + nodeH(frame);
+  const cx = child.x + nodeW(child)/2, cy = child.y + nodeH(child)/2;
+  const b = containerBox(frame);
+  return cx >= b.x && cx <= b.x + b.w
+      && cy >= b.y && cy <= b.y + b.h;
 }
+// Move a node so its bounds top-left lands at (x,y), carrying its whole subtree with it — what a bare
+// `n.x = …` assignment can't do (it would leave the children behind, outside the box for a frame).
+export function moveSubtreeTo(node: MindNode, x: number, y: number): void { shiftSubtree(node, x - node.x, y - node.y); }
 function shiftSubtree(node: MindNode, dx: number, dy: number): void {
   // Saved positions are integers; layout targets are floats. Ignore sub-pixel nudges so a
   // re-opened, already-laid-out map settles to zero movement (no spurious rewrites, no drift).
@@ -398,7 +566,9 @@ export function frameFlow(node: MindNode): 'flow-h' | 'flow-v' | null {
 // spelling of "is this a managed governor?" shared by layout, drop-landing sim, and order reseeding.
 export function isManagedLayout(node: MindNode): boolean {
   const t = effectiveLayout(node).type;
-  return t === 'line' || t === 'fan' || t === 'stack' || !!frameFlow(node) || !!stackOf(node);
+  // isTabsFrame: a group owns its tabs' positions (they're slots in its strip, not free placements),
+  // so a dragged tab's order is reseeded from where it was dropped — like a flow frame's children.
+  return t === 'line' || t === 'fan' || t === 'stack' || !!frameFlow(node) || !!stackOf(node) || isTabsFrame(node);
 }
 // The stack whose outline governs `node`'s CHILDREN: `node` itself when it's a stack box, otherwise
 // the stack hosting it — a row inside an outline, whose children are rows too, so the stack owns
@@ -421,10 +591,10 @@ export function stackOf(node: MindNode): MindNode | null {
 // headroom before a wide fan spuriously flips side. Used to BACKFILL `child.side` when it's
 // unset (see sideOf) and to refresh it after a plain reposition with no explicit drop target.
 export function deriveSide(parent: MindNode, child: MindNode): LayoutSide {
-  const dx = (child.x + NODE_W/2) - (parent.x + NODE_W/2);
+  const dx = (child.x + nodeW(child)/2) - (parent.x + nodeW(parent)/2);
   const dy = (child.y + nodeH(child)/2) - (parent.y + nodeH(parent)/2);
-  const h = nodeH(parent) || 1;
-  return Math.abs(dx) / NODE_W >= Math.abs(dy) / h ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+  const w = nodeW(parent) || 1, h = nodeH(parent) || 1;
+  return Math.abs(dx) / w >= Math.abs(dy) / h ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
 }
 // A child's side, from the STORED field — backfilling (and caching) it via deriveSide the
 // first time it's asked for a child that doesn't have one yet (a legacy note with no mm_side,
@@ -455,7 +625,7 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
     const b = subtreeBox(k);
     return Number.isFinite(b.x0)
       ? { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 }
-      : { x: k.x + NODE_W / 2, y: k.y + nodeH(k) / 2 };
+      : { x: k.x + nodeW(k) / 2, y: k.y + nodeH(k) / 2 };
   };
   // FLOW frame: order by reading order along the flow axis. Read the subtree box's TOP-LEFT — NOT
   // its midpoint — because that's exactly what the flow layout aligns to a row/column line, so all
@@ -477,6 +647,10 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
     };
     return kids.slice().sort((a, b) => top(a) - top(b) || cmpTie(a, b)).map(k => k.id);
   }
+  // TABS: one left→right strip, so order is purely the tab's own x — the slot it sits in, which is
+  // what mm_position_x persists (no separate order key). The tab's OWN x, not its subtree box: an
+  // open tab's contents sit in the box the group lent it, nowhere near its label in the strip.
+  if (isTabsFrame(node)) return kids.slice().sort((a, b) => a.x - b.x || cmpTie(a, b)).map(k => k.id);
   const flow = frameFlow(node);
   if (flow) {
     const tl = (k: MindNode): { x: number; y: number } => {
@@ -546,7 +720,7 @@ export function reorderTarget(parent: MindNode, dragged: MindNode, forcedSide?: 
   const kids = childrenOf(parent.id).filter(k => !isHidden(k) && k.id !== dragged.id);
   const sibs = orderedKids(parent, kids).filter(k => sideOf(parent, k) === side);
   const useX = orderAxisIsX(parent, side);
-  const mid = useX ? dragged.x + NODE_W / 2 : dragged.y + nodeH(dragged) / 2;
+  const mid = useX ? dragged.x + nodeW(dragged) / 2 : dragged.y + nodeH(dragged) / 2;
   let afterId: string | null = null;
   let idx = -1;   // index of the `afterId` sibling in sibs
   for (const s of sibs) {
@@ -569,14 +743,15 @@ export function reorderTarget(parent: MindNode, dragged: MindNode, forcedSide?: 
       line = { x0: x, y0, x1: x, y1 };
       const crossMid = dragged.y + nodeH(dragged) / 2;
       near = crossMid > y0 - (nodeH(dragged) + LANDING_GAP) && crossMid < y1 + (nodeH(dragged) + LANDING_GAP)
-          && (!!(prev && next) || Math.abs(mid - x) < NODE_W);
+          && (!!(prev && next) || Math.abs(mid - x) < nodeW(dragged));
     } else {
       const y = pb && nb ? (pb.y1 + nb.y0) / 2 : pb ? pb.y1 + END : nb!.y0 - END;
       const x0 = Math.min(prev?.x ?? Infinity, next?.x ?? Infinity);
-      const x1 = Math.max(prev ? prev.x + NODE_W : -Infinity, next ? next.x + NODE_W : -Infinity);
+      const x1 = Math.max(prev ? prev.x + nodeW(prev) : -Infinity, next ? next.x + nodeW(next) : -Infinity);
       line = { x0, y0: y, x1, y1: y };
-      const crossMid = dragged.x + NODE_W / 2;
-      near = crossMid > x0 - NODE_W && crossMid < x1 + NODE_W
+      const crossMid = dragged.x + nodeW(dragged) / 2;
+      const tol = nodeW(dragged);
+      near = crossMid > x0 - tol && crossMid < x1 + tol
           && (!!(prev && next) || Math.abs(mid - y) < nodeH(dragged) + LANDING_GAP);
     }
   }
@@ -650,8 +825,9 @@ function flowLine(frame: MindNode, prev: MindNode | null, next: MindNode | null,
   if (pb && nb && sameBand) { pos = (alongHi(pb) + alongLo(nb)) / 2; spanLo = Math.min(crossLo(pb), crossLo(nb)); spanHi = Math.max(crossHi(pb), crossHi(nb)); }
   else if (nb) { pos = alongLo(nb) - G; spanLo = crossLo(nb); spanHi = crossHi(nb); }
   else if (pb) { pos = alongHi(pb) + G; spanLo = crossLo(pb); spanHi = crossHi(pb); }
-  else if (flow === 'flow-h') { pos = frame.x + FRAME_PAD; spanLo = frame.y + FRAME_TITLE_H; spanHi = spanLo + 40; }
-  else { pos = frame.y + FRAME_TITLE_H; spanLo = frame.x + FRAME_PAD; spanHi = spanLo + NODE_W; }
+  else if (flow === 'flow-h') { pos = containerBox(frame).x + FRAME_PAD; spanLo = frameContentTop(frame); spanHi = spanLo + 40; }
+  // empty frame: no sibling box to span, so the bar gets a nominal one-card length (like the 40 above)
+  else { pos = frameContentTop(frame); spanLo = containerBox(frame).x + FRAME_PAD; spanHi = spanLo + NODE_W; }
   return flow === 'flow-h' ? { x0: pos, y0: spanLo, x1: pos, y1: spanHi } : { x0: spanLo, y0: pos, x1: spanHi, y1: pos };
 }
 // After a drag the dropped positions are authoritative (heights didn't change), so refresh the
@@ -678,6 +854,24 @@ function layoutSubtree(node: MindNode): void {
   // lay out each child's own subtree first, so subtreeBox() reflects the grandchildren
   for (const k of kids) layoutSubtree(k);
 
+  // TABS: the group's child frames are docked as tabs, so this pass places their LABELS along the
+  // strip — a tab's bounds ARE its label (isFrameFold, main.ts) and its own contents are placed by its
+  // own layoutSubtree (already run above) inside the interior the group lent it (containerBox). Which
+  // is why a tab's label moves WITHOUT shiftSubtree: its contents aren't attached to the label, they
+  // live in the box. (Their mm_position_x, being an offset from the tab, is rewritten when a tab
+  // changes slot — harmless churn, and it reloads to the same absolute spot either way.)
+  if (isTabsFrame(node)) {
+    const tabs = tabsOf(node);
+    // paint BEFORE measuring: a tab shrink-wraps its title, so both its own width and the slot maths
+    // that follows are live measurements (nodeW → offsetWidth) that don't exist until it has been
+    // rendered at all — the same paint-then-measure rule the stack outliner above follows.
+    for (const t of tabs) paintNode(t);
+    const y = tabStripRect(node).y;
+    const { xs } = tabSlots(node);
+    tabs.forEach((t, i) => { t.x = xs[i]; t.y = y; t.dirtyLayout = true; paintNode(t); });
+    return;
+  }
+
   const type = effectiveLayout(node).type;            // `none` inherits the parent's layout
   const flow = frameFlow(node);                       // flow-h / flow-v for a flow frame, else null
   if (type !== 'line' && type !== 'fan' && type !== 'stack' && !flow) return;  // free / free-frame / unset: manual
@@ -689,32 +883,32 @@ function layoutSubtree(node: MindNode): void {
 
   // STACK: a framed, auto-sized card that renders its whole subtree as an OUTLINER — a single
   // full-width column below the header, each level indented under its parent (like an outline tree).
-  // The box has a FIXED width (STACK_W) and an auto-fitted height. A DFS lays out every visible
-  // descendant as a row: a normal expanded card places its own card, then recurses (deeper indent);
-  // a nested container (frame/stack) or a collapsed card is one opaque row (its box/fold owns its
-  // contents), moved as a whole and not descended into.
+  // The box's width is authored (n.w, defaulting to STACK_W — the one axis a stack can be resized on)
+  // and its height is auto-fitted to the outline. A DFS lays out every visible descendant as a row: a
+  // normal expanded card places its own card, then recurses (deeper indent); a nested container
+  // (frame/stack) or a collapsed card is one opaque row (its box/fold owns its contents), moved as a
+  // whole and not descended into. A row's WIDTH isn't set here — it's derived by stackRowW from this
+  // box's width and the row's depth, which paintNode applies; that's what keeps a card's own authored
+  // width intact while it sits in the outline, ready for when it's dragged back out.
   if (type === 'stack') {
     const innerLeft = ax + FRAME_BORDER + STACK_PAD;
-    const innerW = STACK_W - 2 * FRAME_BORDER - 2 * STACK_PAD;
     let cy = ay + stackHeaderH(node);
     // Walk the SHARED outline (stackOutline) rather than a private DFS, so the drop resolver
     // (stackDropTarget) and this layout pass can never disagree about a row's order or depth.
     for (const { node: k, depth } of stackOutline(node)) {
       const x = innerLeft + depth * STACK_INDENT;
-      const w = Math.max(STACK_MIN_ROW_W, innerW - depth * STACK_INDENT);
       if (isContainer(k) || k.collapsed) {
         // one opaque row: its own box/fold owns its contents, so move the whole subtree with it
-        prepRow(k, isContainer(k) ? null : w);   // a collapsed plain card stretches; a nested box keeps its own size
+        paintNode(k);
         const b = subtreeBox(k);
         shiftSubtree(k, x - b.x0, cy - b.y0);
         cy += (b.y1 - b.y0) + STACK_GAP;
       } else {
         k.x = x; k.y = cy; k.dirtyLayout = true;
-        prepRow(k, w);
+        paintNode(k);
         cy += layoutH(k) + STACK_GAP;
       }
     }
-    node.w = STACK_W;
     // Drop the trailing gap, then inset the bottom by the SAME amount as the sides. A row's left edge
     // sits at FRAME_BORDER + STACK_PAD from the box's outer edge, and borders are inside the box
     // (box-sizing:border-box), so the bottom needs both terms too — with STACK_PAD alone the gap
@@ -728,8 +922,10 @@ function layoutSubtree(node: MindNode): void {
   // top→bottom (wrap right). Reflows as the frame is resized (content width/height changes).
   if (flow) {
     const gap = FRAME_FLOW_GAP;
-    const left = ax + FRAME_PAD, top = ay + FRAME_TITLE_H;
-    const right = ax + nodeW(node) - FRAME_PAD, bottom = ay + nodeH(node) - FRAME_PAD;
+    // containerBox, so a flow frame docked as a TAB flows inside the box its group lent it
+    const box = containerBox(node);
+    const left = box.x + FRAME_PAD, top = frameContentTop(node);
+    const right = box.x + box.w - FRAME_PAD, bottom = box.y + box.h - FRAME_PAD;
     let cx = left, cy = top, band = 0;   // band = tallest row (flow-h) / widest column (flow-v) so far
     for (const k of sorted) {
       const b = boxOf.get(k.id)!, w = b.x1 - b.x0, h = b.y1 - b.y0;
@@ -752,10 +948,10 @@ function layoutSubtree(node: MindNode): void {
     const hz = sd === 'left' || sd === 'right';
     const cross = ids.map(k => { const b=boxOf.get(k.id)!; return hz ? (b.y1-b.y0) : (b.x1-b.x0); });
     const total = cross.reduce((s,v)=>s+v,0) + LAYOUT_CROSS*Math.max(0, ids.length-1);
-    let cur = (hz ? ay + layoutH(node)/2 : ax + NODE_W/2) - total/2;
+    let cur = (hz ? ay + layoutH(node)/2 : ax + nodeW(node)/2) - total/2;
     ids.forEach((k,i)=>{
       const b = boxOf.get(k.id)!; let dx=0, dy=0;
-      if (hz){ dx = sd==='right' ? (ax+NODE_W+LAYOUT_MAIN - b.x0) : (ax-LAYOUT_MAIN - b.x1); dy = cur - b.y0; }
+      if (hz){ dx = sd==='right' ? (ax+nodeW(node)+LAYOUT_MAIN - b.x0) : (ax-LAYOUT_MAIN - b.x1); dy = cur - b.y0; }
       else   { dy = sd==='down'  ? (ay+layoutH(node)+LAYOUT_MAIN - b.y0) : (ay-LAYOUT_MAIN - b.y1); dx = cur - b.x0; }
       shiftSubtree(k, dx, dy); cur += cross[i] + LAYOUT_CROSS;
     });
@@ -767,7 +963,7 @@ function layoutSubtree(node: MindNode): void {
   // to the top snaps it to the bottom.)
   const lineSide = (ids: MindNode[], sd: string) => {
     const hz = sd === 'left' || sd === 'right';
-    let cur = hz ? (sd==='right' ? ax+NODE_W+LAYOUT_MAIN : ax-LAYOUT_MAIN)
+    let cur = hz ? (sd==='right' ? ax+nodeW(node)+LAYOUT_MAIN : ax-LAYOUT_MAIN)
                  : (sd==='down'  ? ay+layoutH(node)+LAYOUT_MAIN : ay-LAYOUT_MAIN);
     const seq = (sd==='left' || sd==='up') ? ids.slice().reverse() : ids;
     seq.forEach((k)=>{
@@ -780,7 +976,7 @@ function layoutSubtree(node: MindNode): void {
       } else {
         const h = b.y1 - b.y0;
         dy = sd==='down' ? (cur - b.y0) : (cur - b.y1);
-        dx = (ax + NODE_W/2) - (k.x + NODE_W/2);          // centre child on the parent's x
+        dx = (ax + nodeW(node)/2) - (k.x + nodeW(k)/2);   // centre child on the parent's x
         cur += sd==='down' ? (h+LAYOUT_CHAIN) : -(h+LAYOUT_CHAIN);
       }
       shiftSubtree(k, dx, dy);
@@ -803,6 +999,10 @@ function layoutSubtree(node: MindNode): void {
 // never persists: scheduleSave is a no-op there, so the in-memory positions are discarded
 // when read-only is left and the map is reloaded from disk.
 export function applyLayouts(): void {
+  // Settle every tab group on exactly one open tab FIRST: the pass below (and the paints it triggers)
+  // reads `collapsed` all over, so the invariant has to hold before any of it runs — and doing it
+  // here covers every caller at once (~20 relayout sites) instead of per gesture.
+  for (const n of state.nodes.values()) if (isTabsFrame(n)) normalizeTabs(n);
   for (const n of state.nodes.values()) if (isRoot(n)) layoutSubtree(n);
 }
 

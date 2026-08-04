@@ -29,7 +29,6 @@ export interface ParsedNote {
     locked: boolean;
     done: boolean;
     checklist: boolean;
-    bg: boolean;
     type: NodeType;
     layout: NodeLayout;
     side: string;
@@ -129,7 +128,6 @@ export function parseMd(text: string, fileName: string): ParsedNote {
       locked: fmValue(entries, 'mm_locked') === 'true',
       done: fmValue(entries, 'mm_done') === 'true',
       checklist: fmValue(entries, 'mm_checklist') === 'true',
-      bg: fmValue(entries, 'mm_bg') === 'true',
       ...foldTypeLayout(entries),
       // left | right | up | down | '' (unset — backfilled from position once loaded, see
       // data/persistence.ts). This is the CHILD's own attachment side, not the parent's.
@@ -159,17 +157,17 @@ export function serializeMd(n: MindNode): string {
   if (n.locked) entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
   if (n.done) entries.push({ key:'mm_done', lines:['mm_done: true'] });
   if (n.checklist) entries.push({ key:'mm_checklist', lines:['mm_checklist: true'] });
-  if (n.bg) entries.push({ key:'mm_bg', lines:['mm_bg: true'] });
   if (n.type !== 'card') entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
   // Only card/frame carry a layout; omit it when it's the type's default (card→inherit, frame→free).
   // image/annotation are leaves with no layout, so they never write mm_layout.
   const layoutDefault = n.type === 'frame' ? 'free' : 'inherit';
   if ((n.type === 'card' || n.type === 'frame') && n.layout !== layoutDefault)
     entries.push({ key:'mm_layout', lines:[`mm_layout: ${n.layout}`] });
-  if (isBoxType(n.type)) {   // the resizable box's own size (a frame, an image, or a query card)
-    if (n.w != null) entries.push({ key:'mm_w', lines:[`mm_w: ${Math.round(n.w)}`] });
-    if (n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
-  }
+  // The AUTHORED width — every kind can carry one (a card/annotation/stack is resizable on this axis
+  // alone). The HEIGHT is box-kinds-only: a card measures its own from its content and a stack derives
+  // its own from its outline, so writing an mm_h for either would freeze a value they recompute anyway.
+  if (n.w != null) entries.push({ key:'mm_w', lines:[`mm_w: ${Math.round(n.w)}`] });
+  if (isBoxType(n.type) && n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
   if (n.type === 'query' && n.query) entries.push({ key:'mm_query', lines:[`mm_query: ${n.query}`] });
   const fm = entries.flatMap(e => e.lines).join('\n');
   const body = n.body.trim();

@@ -37,7 +37,11 @@
   --pal-black: #000000;
 
   /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 8px;    /* mindmap cards + the ghost/template card */
+  --r-card: 10px;   /* mindmap cards + the ghost/template card, and every box kind (frame/stack/image/query) */
+  /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 4px is
+     FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
+     against the corners it's supposed to sit inside. */
+  --r-inner: calc(var(--r-card) - 4px);
   --r-panel: 16px;  /* floating panels (editor, sketch, start card) */
   --r-menu: 12px;   /* dropdowns / context menus */
   --r-ctl: 10px;    /* inputs, list rows, small controls */
@@ -244,7 +248,7 @@ input::placeholder { color:var(--muted); opacity:1; }
 body.grabbing, body.grabbing * { cursor:grabbing !important; }
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
-svg#backgrounds, svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
+svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
 /* Screen-space background grid (view/grid.ts), behind #world and everything in it. view/grid.ts
    overrides `inset` with one major cell of overhang so panning can be a pure translate of an
    already-rasterized tile — the layer stays wider than the viewport, so no uncovered strip ever
@@ -260,7 +264,6 @@ svg#backgrounds, svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:ab
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
-svg#backgrounds { z-index:0; pointer-events:none; } /* group backgrounds behind everything */
 svg#sketch { z-index:8; pointer-events:none; }      /* freehand ink ABOVE every card (incl. dragging:6, annotation:7) so ink is never occluded (drawing is handled on #stage) */
 svg#edges { z-index:1; pointer-events:none; }      /* curves behind nodes */
 .node { z-index:2; }                               /* nodes in the middle */
@@ -280,11 +283,14 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   background: var(--card, var(--node)); border:none;
   border-radius:var(--r-card); padding:10px 12px; cursor:default; color:#ffffff;
   user-select:none; -webkit-touch-callout:none; touch-action:none;
-  /* fade opacity (search dim) & selection ring smoothly; NOT left/top — keeps dragging crisp */
-  transition: opacity .2s ease, box-shadow .15s ease;
+  /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
+     the selection ring must appear INSTANTLY, so that a frame's ring (on its box) and its title
+     tab's ring (styles.css .node.frame.sel > .title-row) land in the same frame instead of the box
+     fading in behind an already-ringed tab. */
+  transition: opacity .2s ease;
 }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
-.node.lt-anim { transition: opacity .2s ease, box-shadow .15s ease,
+.node.lt-anim { transition: opacity .2s ease,
   left .3s cubic-bezier(.22,1,.36,1), top .3s cubic-bezier(.22,1,.36,1); }
 /* bodyless cards shrink to just fit the title (no reserved body height) */
 .node.no-body { min-height:0; }
@@ -317,8 +323,8 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node .progress { flex:none; margin-left:auto; padding-left:.5em; font-size:11px; font-weight:600; opacity:.7; }
 /* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
    .hidden-count's upper-right collapse bubble (same footprint, opposite corner so the two never
-   collide on a card that's both locked and collapsed) — plus a dashed outline as an at-a-glance
-   cue that it can't be moved, (un)collapsed, or edited. See isLockedEffective (utils/model.ts).
+   collide on a card that's both locked and collapsed). That badge is the ONLY cue — no dashed
+   outline: it read as noise on every locked card. See isLockedEffective (utils/model.ts).
    Filled glyph (no circle backing), colour inherited from the card so it always matches the
    title text exactly (see .node's color / .c-* overrides above). */
 .node .lock-badge { position:absolute; left:-8px; top:-8px;
@@ -327,29 +333,184 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   display:none; align-items:center; justify-content:center; }
 .node .lock-badge svg { width:100%; height:100%; }
 .node.locked .lock-badge { display:inline-flex; }
-.node.locked { outline:2px dashed var(--edge); outline-offset:2px; }
+/* A frame's own element is the BOX, which starts FRAME_TAB_DROP below the frame's bounds — so the
+   offsets above would pin the badge to the box's corner, mid-frame, instead of the frame's actual
+   upper-left corner. Put it on the TITLE TAB's corner instead: the tab's left edge is the box's
+   outer edge (4px = FRAME_BORDER left of the padding box that positions both) and its top edge is
+   39px above that outer edge (FRAME_TAB_H less the 1px overlap — see the tab's own rule below), so
+   the badge moves 4px left and 43px up from the box corner (that 39 + the tab's own 4px offset from
+   the padding box). z-index matches the tab's: a frame is not a stacking context,
+   so without it the badge would be occluded by the edges layer and the cards the frame holds.
+   A FOLDED frame IS the tab and sits at the bounds top already — it keeps the offsets above. */
+.node.frame > .lock-badge { left:-12px; top:-51px; z-index:5; }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
-/* z-index:0 sits it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
-   (z-index:2). Below edges so a COLOURED frame's opaque fill never covers the connector curves
-   drawn among its descendants (the edges live in the global #edges SVG, not inside the frame);
-   below cards so the cards it holds render inside it. Its children aren't DOM-descendants of this
-   box — they live in the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't
-   hide them. Its own box size is set inline (main.ts paintNode); border tinted to the card's own
-   colour, like its edges. .stack (a framed card layout) shares the same box behaviour. */
-.node.frame, .node.stack { z-index:0; min-height:0; border-radius:14px;
+/* z-index:auto paints it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
+   (z-index:2) — a positioned `auto` element paints in the same step as z-index:0, in tree order.
+   Below edges so a COLOURED frame's opaque fill never covers the connector curves drawn among its
+   descendants (the edges live in the global #edges SVG, not inside the frame); below cards so the
+   cards it holds render inside it. Its children aren't DOM-descendants of this box — they live in
+   the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't hide them.
+   `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is
+   what lets its own title tab (below) lift above the edges/cards that would otherwise cover it.
+   Its own box size is set inline (main.ts paintNode); border tinted to the card's own colour, like
+   its edges. .stack (a framed card layout) shares the same box behaviour. */
+.node.frame, .node.stack { z-index:auto; min-height:0; border-radius:var(--r-card);
   border:4px solid var(--frame-stroke, var(--edge)); }
-.node.frame { padding:8px 10px; }
+/* (Both are on --r-card like every other box kind; their rows/contents step down to --r-inner.) */
+/* …except a frame's TOP-LEFT corner, which is square so the title tab sitting on it lines up flush
+   with the box's left edge (a rounded corner left the tab's straight left side floating off it). */
+.node.frame { border-top-left-radius:0; }
+/* no padding: a frame shows nothing but its (absolutely positioned) title tab — the padding only
+   ever positioned the title back when it sat INSIDE the box. Children are placed by main.ts place()
+   relative to the interior (frameInterior), which counts the border only. */
+.node.frame { padding:0; }
 /* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
    card padding — that's what lets full-width child cards fit inside the narrow box. */
 .node.stack { padding:5px 6px; }
-.node.frame .title, .node.stack .title { font-weight:600; }
-/* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills */
+.node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
+/* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
+   A frame's TAB is filled with --frame-stroke either way (see below), so its text keeps using
+   var(--text) here: legible on the grey --edge fill in both themes, where #fff would be too weak. */
 .node.frame.c-none, .node.stack.c-none { background:transparent; }
-.node.frame.c-none .title, .node.stack.c-none .title { color:var(--text); }
+.node.frame.c-none .title, .node.frame-folded.c-none .title, .node.stack.c-none .title { color:var(--text); }
+/* …and a coloured STACK sits one tone DOWN from that fill, so its box is always its own shape. A
+   stack inherits its colour from its ancestors (effectiveColor), so a stack inside a coloured frame
+   resolved to the frame's own --card — same fill, same border tint — and vanished into it completely:
+   all you saw was its rows. This is the mirror image of .stack-child's brightening below, which is
+   what keeps all three levels apart: frame fill > stack fill (darker) > row fill (brighter).
+   :not(.c-none) because --card is `transparent` there, and mixing THAT toward black yields a faint
+   grey wash instead of the transparency the rule above asks for.
+   The BORDER takes the very same step: it's --frame-stroke (the pure palette tint, set inline by
+   main.ts paintNode), so left alone it stood out as a bright rim around the darkened fill on every
+   stack. Matching the two makes the box step down as ONE shape instead of growing an outline.
+   Deliberately kept ABOVE .node.stack.drop-target further down: that rule's white dash has the same
+   specificity, so it only wins the border while it's the later of the two. */
+.node.stack:not(.c-none) {
+  background:   color-mix(in srgb, var(--card, var(--node)) 86%, #000);
+  border-color: color-mix(in srgb, var(--frame-stroke, var(--edge)) 86%, #000); }
+/* ---------- a frame's title: a folder TAB above the box's top-left corner ---------- */
+/* Above the box, not inside it, for two reasons: the box's whole interior belongs to the cards it
+   holds (a child dropped at the top-left used to cover the title), and the box paints BELOW the edges
+   layer and below cards, so an in-box title was occluded by both. Living outside the box + a z-index
+   of its own (possible only because .node.frame is not a stacking context, see above) makes it always
+   legible. The tab is still INSIDE the frame's bounds, though: n.y is the tab's top edge and the box
+   element starts FRAME_TAB_DROP lower (main.ts elTop), which is what keeps the title in one place when
+   the box folds away beneath it (.frame-folded below).
+   Direct-child combinators throughout: a frame's own tab only, never some descendant card's title.
+   An absolutely positioned child's containing block is the PADDING box — i.e. INSIDE the 4px border
+   (FRAME_BORDER) — so both offsets add that 4px back to sit flush with the box's OUTER edge.
+   Height must stay FRAME_TAB_H (main.ts): 10 + 20 + 10 = 40px — hence the single ellipsised line below;
+   the frame's whole geometry is derived from that constant. Those are a normal card's own padding
+   (.node, 10px 12px) and title metric (14px on a pinned 20px line box), so the tab reads with the same
+   weight as a collapsed card. The line-height is written out rather than inherited from .node .title
+   on purpose: it must be pinned HERE, or a later tweak to the card title would silently desync
+   FRAME_TAB_H from what actually renders. */
+.node.frame > .title-row {
+  /* +3px, not +4px (FRAME_BORDER): the tab's bottom row overlaps the box's top border by 1px. Butted
+     exactly edge-to-edge, the two shapes rasterize on a fractionally-scaled layer (any non-integer
+     canvas zoom) with a hairline of canvas showing between them. The overlap is invisible — the tab
+     fill and the border are both var(--frame-stroke) — and the tab still needs only 39px of room
+     above the box, inside FRAME_TAB_H. */
+  position:absolute; left:-4px; bottom:calc(100% + 3px);
+  z-index:5;                    /* over #edges (1), cards (2), #dragEdges (4); under .dragging (6) */
+  max-width:calc(100% + 8px); align-items:center;
+  /* --r-card, not a literal: the tab is modelled on a collapsed card (its padding and title metric
+     are the card's too), so its corners must track the card radius rather than drift from it. Only
+     the TOP corners are rounded — the bottom pair is where the tab joins the box. */
+  padding:10px 12px; border-radius:var(--r-card) var(--r-card) 0 0;
+  background:var(--frame-stroke, var(--edge)); }
+.node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
+  margin-bottom:0; padding-right:0; font-size:14px; line-height:20px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* while renaming, let a long title wrap and spill out of the tab instead of being ellipsised */
+.node.frame > .title-row > .title.editing,
+.node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+/* the box's selection ring stops at its border, leaving the tab looking detached — ring it too, but
+   only on three sides: the tab's BOTTOM edge is where it joins the box, so a ring there would cut a
+   line straight through the middle of one continuous shape. Hence a pseudo-element with
+   border-bottom:none rather than a box-shadow ring (which can only go all the way round); it sits
+   2px outside the tab, so its radius is the tab's own (--r-card) plus those 2px. */
+/* (.frame and .frame-folded are mutually exclusive — a folded frame IS the tab, so it just takes the
+   ordinary four-sided .node.sel ring.) */
+.node.frame.sel > .title-row::before {
+  /* bottom:1px, i.e. up by the tab's 1px overlap into the border (see above), so the ring's verticals
+     stop exactly at the box's outer top edge — where the box's own ring continues — instead of
+     poking 1px down into the border beside the tab. */
+  content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
+  border:2px solid var(--node-sel); border-bottom:none;
+  border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
+.node.frame.sel:has(> .title-row > .title.editing) > .title-row::before { content:none; }
+/* ---------- a COLLAPSED frame: the bare tab, rounded all round like a small pill ---------- */
+/* Folding hides the box, not the title: the element IS the tab now (no .frame class, so none of the
+   box rules above apply), which is why it sits at the bounds top — exactly where the expanded frame's
+   tab hangs — and the title doesn't move a pixel when you fold or unfold. The element carries the
+   tab's own fill/padding/radius and shrink-wraps its (single-line) title, so its .title-row goes back
+   in flow; main.ts nodeW measures that width and nodeH reports the FRAME_TAB_H constant. The bottom
+   corners are rounded here (the expanded tab squares them off where it joins the box). */
+.node.frame-folded {
+  border:none; min-height:0; padding:10px 12px; border-radius:var(--r-card);
+  width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling, at
+                                           exactly the same 176px text column as a collapsed card */
+  background:var(--frame-stroke, var(--edge)); }
+.node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
+/* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
+.node.frame-folded > .body, .node.frame-folded .progress { display:none; }
+/* ---------- tab groups: a frame whose child frames are docked as TABS (mm_layout: tabs) ---------- */
+/* The STRIP is the band the tabs' labels are laid out in — the very band the group's own title tab
+   hangs in, above the box (main.ts tabStripEl positions and sizes it; view/layout.ts tabStripRect owns
+   the geometry). It has to live OUTSIDE the group's .frame-content wrapper, which clips to the
+   interior — the band sits above that, so a tab placed in there would be clipped away entirely. Same
+   z-index as a frame's own tab, for the same reason: over #edges (1) and cards (2). Tabs are
+   positioned inside it in world coordinates by the layout pass, like any other node. */
+/* No z-index of its own — so it isn't a stacking context, and each tab can place itself relative to the
+   BOX instead: main.ts tabStripEl keeps the strip right before the box in tree order, so an inactive tab
+   (also z-index auto) paints BEHIND it and the box's border and selection ring run over the top of it,
+   like the sheets tucked behind the front of a folder. Only the open tab lifts above (below). */
+.tab-strip { position:absolute; overflow:hidden; pointer-events:none; }
+.tab-strip > .node { pointer-events:auto; }
+/* A docked tab reuses the folded-frame look above — the element IS the tab, at exactly FRAME_TAB_H,
+   and its max-width already ellipsises a long title. EVERY tab squares off its bottom corners: they all
+   sit ON the box, so a rounded bottom would float them off it (a folded frame, which stands alone, keeps
+   its pill shape). The open one is what the box belongs to, so it alone shows at full strength. */
+.node.frame-folded.docked { opacity:.62; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+/* A tab's selection ring stops where the tab meets the box: a line along its BOTTOM edge would cut
+   straight through one continuous shape (exactly the reasoning behind a frame's own tab ring above).
+   box-shadow can only ring all four sides, so a selected tab swaps it for a three-sided pseudo-element
+   — 2px outside the tab, hence its radius is the tab's own plus those 2px, and 1px up at the bottom so
+   the verticals stop at the box's outer top edge instead of poking into its border. */
+/* `sel-join`: the box and its open tab are one frame, so selecting either rings BOTH — the tab gets the
+   three-sided ring below, the box its ordinary one, and since the tab paints over the box's top edge the
+   two meet as one folder outline (exactly how a plain frame's box + tab already ring together). */
+.node.frame.tabs.sel-join { box-shadow:0 0 0 2px var(--node-sel); }
+.node.frame-folded.docked.sel, .node.frame-folded.docked.sel-join { box-shadow:none; }
+.node.frame-folded.docked.sel::before, .node.frame-folded.docked.sel-join::before {
+  content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
+  border:2px solid var(--node-sel); border-bottom:none;
+  border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
+/* …and it stands down while the tab is being renamed, like every other card's ring */
+.node.frame-folded.docked.sel:has(> .title-row > .title.editing)::before { content:none; }
+/* no +N chip on a tab: a folded frame uses it for "there's more inside", but a CLOSED TAB's contents
+   are one click away in the box, not tucked under a stub — and the bubble would sit over the next tab.
+   The "add note" pill goes for the same reason: on a label this narrow it lands on the title itself
+   (and a frame — docked or not — never shows a body anyway). */
+.node.frame-folded.docked > .hidden-count { display:none; }
+.node.frame-folded.docked .addnote { display:none !important; }
+/* the open tab is the front of the folder: over the box, over #edges (1) and the cards (2) — the same
+   z-index a frame's own title tab takes, and for the same reasons */
+.node.frame-folded.docked.tab-active { opacity:1; z-index:5; }
+/* A group with tabs shows NO tab of its own: it would sit in the same band, look exactly like a tab,
+   and read as one — two docked frames must show two tabs, not three. So the strip starts at the box's
+   left edge and the group's own title lives in the outline, in search, and in its FOLDED state (where
+   the tab is all there is). An empty group keeps its label, or it would have no visible identity at
+   all; `has-tabs` is set by paintNode. Select a group by clicking its box, rename it from there. */
+.node.frame.tabs.has-tabs > .title-row { display:none; }
 /* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
    normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
-   uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box. */
-.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, #fff); padding:5px 6px; }
+   uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.
+   Its corners take --r-inner (one step inside the box's border) — a row on the full card radius
+   bulged against the stack's corners instead of sitting inside them. */
+.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, #fff); padding:5px 6px;
+  border-radius:var(--r-inner); }
 /* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
    sized to the frame's INTERIOR (inside its 4px border — see FRAME_BORDER), holding every card (and
    nested frame) it hosts as flat DOM children — same "everyone flat under one container" model the
@@ -358,7 +519,10 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    z-order directly against everything outside it, e.g. a dragged card still floats above all via
    .dragging's z-index:6); pointer-events:none so clicking the frame's empty interior still reaches
    the frame's own element underneath instead of this invisible wrapper. */
-.frame-content { position:absolute; overflow:hidden; border-radius:10px; pointer-events:none; }
+/* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
+.frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
+/* follow the box's square top-left corner (above) so the clip edge doesn't curve away from it */
+.frame-content:not(.stack-content) { border-top-left-radius:0; }
 /* a stack's wrapper auto-fits its outline, so it never needs to clip — and mustn't, or it would cut
    off its rows' overhanging corner affordances (+N count / lock badges). See frameContentEl. */
 .frame-content.stack-content { overflow:visible; }
@@ -376,18 +540,40 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
    ring, no width change, no fill; no landing-ghost card or reparent edge (see drag.ts / edges.ts). */
 .node.frame.drop-target, .node.stack.drop-target { border-style:dashed; border-color:#fff; }
-/* 8 invisible resize hit-zones: 4 edge bands (inset from the corners) + 4 corner squares.
-   Corners sit at the very corners so the edge bands' insets leave them un-contested.
-   Shared by .frame and .image-card — both kinds of resizable box (ensureFrameHandle in main.ts). */
-.node.frame .fh, .node.image-card .fh { position:absolute; z-index:2; touch-action:none; }
-.node.frame .fh-n, .node.image-card .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.frame .fh-s, .node.image-card .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.frame .fh-e, .node.image-card .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.frame .fh-w, .node.image-card .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.frame .fh-ne, .node.image-card .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
-.node.frame .fh-nw, .node.image-card .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
-.node.frame .fh-se, .node.image-card .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
-.node.frame .fh-sw, .node.image-card .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+/* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
+/* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
+   box (frame / image card / query card) gets all 8: 4 edge bands inset from the corners, plus 4
+   corner squares at the very corners, which is what those insets leave un-contested. A width-only
+   kind (card / annotation / stack) gets just fh-e/fh-w, restyled further down.
+   `>` throughout, and no per-kind prefix: handles only exist on a node that was given them, and
+   child cards are DOM-nested inside their parent, so a descendant selector would style (and a
+   descendant QUERY would find — see ensureResizeHandles) a nested card's handles as if they were
+   this card's own. */
+.node > .fh { position:absolute; z-index:2; touch-action:none; }
+/* …but a FRAME is not a stacking context (z-index:auto above), so a z-index:2 handle would escape
+   into #world's stacking order and start winning presses against cards that overlap the frame's
+   border. `auto` pins the handles back into the frame's own paint level — still above its fill (a
+   positioned child paints after its parent's background), still below every card, as before. */
+.node.frame > .fh { z-index:auto; }
+.node > .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
+.node > .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
+.node > .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
+.node > .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
+.node > .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
+.node > .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
+.node > .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
+.node > .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+/* WIDTH-ONLY kinds — a card, an annotation, a stack. Two differences from a box's side bands:
+   · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
+     constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
+   · a taller band (4px inset, not 12px): there are no corner squares here to leave room for, and on
+     a 32px-tall annotation a 12px inset either side would leave an 8px strip nobody can hit. */
+.node:not(.frame):not(.image-card):not(.query-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
+.node:not(.frame):not(.image-card):not(.query-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
+/* Nothing to grab while the card is being typed into (the zones would sit over the text caret's own
+   edges) or while it's read-only/locked — mirrors the .addnote/.tag-add-btn rules further down. */
+.node:has(.title.editing) > .fh, .node:has(.body.editing) > .fh,
+body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
 /* no title/body chrome at all — just the image filling the box (see isImageBox in main.ts).
    Background is the same --card variable every card's own colour swatch sets (.c-blue etc. at
@@ -403,7 +589,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    add-note buttons float outside the card's own border (see .node .tag-row / .addnote above) and
    would otherwise get clipped along with the image. The image's own rounding comes from
    `border-radius:inherit` on .md-img itself, so nothing relies on the node clipping its content. */
-.node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:10px;
+.node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
 .node.image-card .title-row, .node.image-card .progress, .node.image-card .hidden-count { display:none; }
 .node.image-card .addnote { display:none !important; }
@@ -445,7 +631,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    competes visually with the coloured result cards it contains. Keeps its title row (unlike
    image/annotation), but the title itself isn't renamable — it always shows the live query text
    (see paintNode); only its (unused) body is hidden. */
-.node.query-card { z-index:2; min-height:0; border-radius:14px; background:transparent;
+.node.query-card { z-index:2; min-height:0; border-radius:var(--r-card); background:transparent;
   border:4px solid var(--frame-stroke, var(--edge)); padding:8px 10px;
   display:flex; flex-direction:column; }
 .node.query-card > .body, .node.query-card .progress, .node.query-card .hidden-count { display:none; }
@@ -513,16 +699,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   display:flex; align-items:center; justify-content:center; }
 .node.query-card .qi-more:hover { opacity:1; background:rgba(255,255,255,.12); }
 .node.query-card .query-empty { padding:5px 7px; font-size:12px; opacity:.65; }
-/* resize handles: shares the frame/image-card hit-zones (main.ts ensureFrameHandle) */
-.node.query-card .fh { position:absolute; z-index:2; touch-action:none; }
-.node.query-card .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.query-card .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.query-card .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.query-card .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.query-card .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
-.node.query-card .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
-.node.query-card .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
-.node.query-card .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+/* resize handles: the shared `.node > .fh-*` hit-zones above cover this card too */
 /* ---------- annotation: a title-less note pinned ON TOP of its parent ---------- */
 /* z-index above every other #world child (cards:2, frames:1, edges:1, toggles:3, dragEdges:4,
    a dragged card:6) so it never sits behind anything and — placed directly under #world, never in
@@ -544,6 +721,11 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    (a handful of px), wrapping every keystroke onto its own line. Give the box a stable editing
    width instead; it reverts to fit-content (sized off the committed text) once editing ends. */
 .node.annotation:has(.body.editing) { width:220px; }
+/* An annotation whose width was RESIZED (paintNode sets both the class and the inline width). Its
+   shrink-to-fit cap has to go, or the element would render at 280 while nodeW reported the authored
+   width — desyncing every consumer of it (edges, marquee, subtreeBox). The inline width also beats
+   the editing width above, so a resized annotation keeps its size while its body is edited. */
+.node.annotation.w-set { max-width:none; }
 /* an uncoloured card sits on the page background, so its text follows the theme, not white */
 .node.c-none { color: var(--text); }
 /* white is the one palette colour too light for white text — dark grey instead, both themes */
@@ -559,6 +741,12 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
    landing ghost / insert bar (z-index:5). Translucency is applied to the whole #dragLayer as
    ONE group (below), not per card, so overlapping dragged items don't shine through each other. */
 .node.dragging { z-index:6; }
+/* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
+   .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
+   raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
+   dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
+   the rest of the canvas, because #dragLayer (below) is itself a z-index:6 stacking context. */
+.node.frame.dragging, .node.stack.dragging { z-index:auto; }
 /* the group-opacity layer: while dragging, main.ts moves the dragged cards AND their connectors
    (dragLayerEdges, kept first so it sits behind the cards) in here. Opacity on the layer composites
    the whole set once — you see the canvas below, but the items never show through one another. */
@@ -590,9 +778,9 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
 .node .title { font-weight:600; font-size:14px; margin-bottom:9px; padding-right:16px;
   overflow-wrap:anywhere; overflow:hidden; }
 /* inline title rename (slow-click / F2 / on-create): edit the card's title in place.
-   border-radius a touch smaller than --r-card so it still reads as sitting INSIDE the card
-   corners — same treatment (and radius) as .oc-title/.oc-note in the outliner below. */
-.node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;
+   --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
+   as .oc-title/.oc-note in the outliner below, which take the same variable. */
+.node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-inner);
   cursor:text; white-space:pre-wrap; overflow:visible; background:rgba(0,0,0,.5);
   box-shadow:0 0 0 2px rgba(0,0,0,.5); }   /* fill the outline-offset gap so the dark reaches the border */
 /* tag pills on a card — float along the card's lower edge, OUTSIDE the border, the same way
@@ -688,7 +876,10 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
    comment above). Only shown on a lone-selected, body-less card, to open the in-place note editor;
    direct child of .node so a nested CHILD CARD's own addnote (they're real DOM descendants — see
    nodeEl/paintNode in main.ts) never also matches. */
-.node .addnote { position:absolute; right:-11px; top:50%; transform:translateY(-50%); z-index:2;
+/* z-index:3, like .tag-row and for the same reason: it sits dead centre of the card's own east
+   resize band (.fh-e, z-index:2, appended AFTER it in the DOM — so at an equal z-index the band
+   would win the hit-test and swallow the whole button). */
+.node .addnote { position:absolute; right:-11px; top:50%; transform:translateY(-50%); z-index:3;
   width:22px; height:22px; padding:0; border:none; border-radius:50%;
   background:var(--accent); color:#fff; cursor:pointer; display:none;
   align-items:center; justify-content:center; }
@@ -881,13 +1072,19 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-icon { background:transparent; color:var(--muted); }
 .fb-icon svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 .fb-icon:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
-/* checklist / group-bg toggles: a real (visually hidden) checkbox drives the icon's state */
+/* the checklist toggle: a real (visually hidden) checkbox drives the icon's state */
 .fb-toggle input { position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
 .fb-toggle:has(input:checked) { color:#fff; background:var(--accent); }
 .fb-toggle:has(input:indeterminate) { color:var(--accent); }
 /* stretches past the bar's own padding (align-self:stretch + negative margin) so it touches the
    bar's top/bottom edges instead of floating as a short centred tick */
 .fb-sep { flex:none; width:1px; align-self:stretch; margin:-4px 2px; background:var(--node-border); }
+/* locked selection: nothing about the card can be changed, so the bar shrinks to just the lock
+   button (float-bar.ts's markLock) — one obvious way back out, no dead controls. The ID+class
+   prefix is what out-specifies `#floatBar button, #floatBar label` above (markChips only ever
+   CLEARS its inline display, so it can't fight this). Red padlock: same cue as #roBtn.locked. */
+#floatBar.locked-sel > *:not(#fbLock) { display:none; }
+#floatBar.locked-sel #fbLock { color:#e0564f; }
 #floatBar .fb-swatch { width:24px; height:24px; margin:0 4px; }   /* .swatch already sizes to 22px */
 
 /* small popover anchored under/over its trigger button (colour / layout pickers) — borderless,
@@ -1023,6 +1220,12 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   .swatches { flex-wrap:wrap; }
   /* context-menu rows big enough for a finger (also used by the outline's ⋯ menu) */
   #ctxMenu .cm-item { padding:10px 12px; font-size:14px; }
+  /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
+     border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
+     touch, so the zone being generous is the only affordance there is. The .addnote pill above grows
+     to right:-14px on coarse pointers, but it's z-index:3 and still wins the overlap. */
+  .node:not(.frame):not(.image-card):not(.query-card) > .fh-e { right:-16px; width:16px; }
+  .node:not(.frame):not(.image-card):not(.query-card) > .fh-w { left:-16px;  width:16px; }
 }
 
 /* ---- narrow screens: the floating bar docks to the BOTTOM EDGE instead of floating next to
@@ -1118,7 +1321,7 @@ body.outline #floatBar { display:none !important; }
 
 /* ---- outline branch editor: this card + its siblings as full editable cards (features/
    branch-editor.ts) ---- Rendered into #olCards inside the outline panel; body.ol-editing swaps
-   the row list for it INSTANTLY (no slide). Colour/tags/checklist/group-bg live in the bottom
+   the row list for it INSTANTLY (no slide). Colour/tags/checklist live in the bottom
    properties sheet (#branchProps); duplicate/delete stay in the row ⋯ menu. */
 .ol-cards { display:none; max-width:640px; margin:0 auto; }
 /* hide the row list while editing; the + button (in .ol-head) stays — it adds a card to the group */
@@ -1153,7 +1356,7 @@ body.ol-editing .oc-back { display:inline-flex; }
 body.light .oc-card:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color:#000; }
 /* title + note edit in place; transparent fields so the card's own tint shows through */
 .oc-title, .oc-note { width:100%; background:transparent; border:none; color:inherit;
-  font-family:inherit; padding:2px 4px; border-radius:4px; }
+  font-family:inherit; padding:2px 4px; border-radius:var(--r-inner); }
 .oc-title { font-size:16px; font-weight:600; }
 /* editing a field darkens its background + shows an accent ring — the same treatment as the
    in-card title/body editors on the canvas (.node .title.editing / .body-edit). */
@@ -1172,7 +1375,7 @@ body.light .oc-card:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { colo
 .oc-card.active { box-shadow:0 0 0 2px var(--accent); }
 
 /* ---- branch-view properties sheet (features/branch-editor.ts + properties.ts) ----
-   Colour / tags / checklist / group background for the active card. Kept OUTSIDE #outline so its
+   Colour / tags / checklist for the active card. Kept OUTSIDE #outline so its
    position:fixed pins to the VIEWPORT bottom (a fixed child of the transformed, scrolling drawer
    rides the scroll instead of staying put). Phone → spans the screen bottom; desktop → aligned to
    the outliner drawer (see the min-width:701 rule below). Parked below (translateY) until

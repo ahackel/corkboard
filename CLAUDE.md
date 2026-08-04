@@ -95,31 +95,115 @@ that. There is no edge list.
 resolved by `foldTypeLayout` (`utils/frontmatter.ts`), which also folds legacy spellings so old
 vaults keep loading. Kinds: `card` (the default, so it's omitted), `frame`, `stack`, `image`,
 `annotation`, `query`. Only card/frame carry a layout (card: `inherit`/`free`/`line`/`fan`;
-frame: `free`/`horizontal`/`vertical`); the rest never write `mm_layout`. The type/layout pickers
+frame: `free`/`horizontal`/`vertical`/`tabs`); the rest never write `mm_layout`. The type/layout pickers
 in `features/float-bar.ts` are driven by `NODE_TYPES` + `LAYOUTS_BY_TYPE` — a kind with an empty
 layout set hides the layout trigger entirely.
 
+**A `frame`'s BOUNDS include its title tab.** The title renders as a folder tab above the box's
+top-left corner (`.node.frame > .title-row`, absolutely positioned), and `n.x/n.y/w/h` cover it:
+`n.y` is the **tab's** top edge, the box element paints `FRAME_TAB_DROP` (= `FRAME_TAB_H - 1`, the
+tab less its 1px overlap into the border) lower, and its inline height is `n.h` minus that drop.
+So the tab is at a fixed offset from `n.y` in **both** collapse states — a folded frame is nothing
+but that tab (`.frame-folded`, `isFrameFold`, rounded all round, `nodeH` = `FRAME_TAB_H`, width
+measured), which is why folding no longer moves the title. `FRAME_TAB_H` is **40px** — a normal card's
+padding and title metric, so the tab reads like a collapsed card — and it must equal what the CSS
+actually renders, so the tab's `padding`/`font-size`/`line-height` are pinned in `styles.css` rather
+than inherited from `.node .title`. Two consequences to respect: the tab must
+stay a single ellipsised line (a wrapping one would make the box's position depend on a live
+measurement — hence the hover tooltip in `paintNode` instead), and the vertical projection of a hosted
+child into its host goes through `frameInsetY` (`view/layout.ts`) rather than a bare
+`FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share it (the X axis
+has no such helper; it uses `FRAME_BORDER` directly), and `elTop` is the one place that applies the drop.
+
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
-subtree as one indented, full-width column inside an auto-sized, non-resizable box (fixed
-`STACK_W` = `NODE_W`), so **every descendant's own layout is ignored** and a stack nested inside a
-stack is demoted to a plain row (`insideStack`). Its `w`/`h` are derived by the layout pass, never
-persisted (`isBoxType` excludes it). Dropping into one is resolved on two axes by
+subtree as one indented, full-width column inside a box that is **width-resizable** (`n.w`,
+defaulting to `STACK_W` = `NODE_W`) and auto-fitted in height, so **every descendant's own layout is
+ignored** and a stack nested inside a stack is demoted to a plain row (`insideStack`). Its `h` is
+derived by the layout pass and never persisted (`isBoxType` excludes it from `mm_h`); its `w` is
+authored like any other kind's. Dropping into one is resolved on two axes by
 `stackDropTarget`: the vertical position picks the GAP between rows, the horizontal position picks
 the DEPTH there — so a straight drag only re-slots and nesting takes a deliberate sideways nudge.
 It was briefly a card *layout* (`mm_layout: stack`); that spelling still migrates to the type.
 Two invariants worth knowing before touching stack code: a stack row's measured height depends on
-the width the layout assigns it (text re-wraps), so `prepRow` paints a row **before** measuring it —
-and a container's box size is only known *after* `applyLayouts`, so anything that paints before
-laying out must paint again (see `withLayoutAnimation`).
+the width it renders at (text re-wraps), so `prepRow` paints a row **before** measuring it — and a
+container's box size is only known *after* `applyLayouts`, so anything that paints before laying out
+must paint again (see `withLayoutAnimation`). A row's width itself is **derived, not stored**
+(`stackRowW`: the stack's own width, less the border/padding, less one `STACK_INDENT` per depth) —
+deliberately, so it can't collide with the authored `n.w` a card carries in from outside the stack.
+Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it comes out.
+
+**A frame with `mm_layout: tabs` is a TAB GROUP:** its child *frames* aren't content, they're TABS.
+Their title tabs flow along its own top band (`tabStripRect`/`tabSlots`, DOM wrapper `tabStripEl`) and
+whichever tab is OPEN borrows the whole box for its children — so the group owns the geometry (x/y/w/h,
+border, resize handles) and a tab owns only its contents and its own tint. Zero new frontmatter keys: docking is
+plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs by x), and open/closed is
+`mm_collapsed`. Four invariants hold it together:
+- **A docked tab's bounds ARE its tab rect** — it takes the same render path as a folded frame
+  (`isFrameFold` covers both; `isFrameBox` excludes it), and open vs closed differs only in
+  `mm_collapsed` (which already hides its contents via `isHidden`) plus a CSS class.
+- **Its contents live in the box its group lent it**, which is what `containerBox` spells — the single
+  indirection, shared by `frameInterior`, `centreInFrame`, `frameContentTop`, the flow layout and
+  `dropLanding`, so none of them has to know whether the frame it was handed is docked. A group with
+  tabs shows no tab of its own (`.tabs.has-tabs`): two docked frames must read as two tabs, not three.
+- **At most one tab is open.** `normalizeTabs` (a pre-pass in `applyLayouts`) repairs it, `activateTab`
+  /`openTabFlags` perform it, and every collapse-family path funnels through them — `toggleCollapse` on
+  a tab OPENS it, and `focusNode` opens a closed tab rather than expanding it. Opening one is the single
+  thing a LOCK doesn't forbid (it's how you look at the box, not a change to it), so a locked tab stays
+  pressable — `dragPointerDown`'s `hasLockedAncestor` bail exempts docked tabs — while moving it is still
+  refused. Its lock badge hangs 8px outside the tab, which is what `TAB_STRIP_PAD` leaves room for.
+- **A group holds no content of its own**, so anything added "to the group" goes to the open tab:
+  dropped cards (`features/drag.ts`), `addChild`/`createSibling` and paste (`contentParent`). It has no
+  COLOUR of its own either: `effectiveColor` starts the walk at the open tab, so the box (its border, its
+  incoming edge, its outline swatch) is tinted by whichever tab is showing — which is also why
+  `dockFrames` doesn't copy the target's colour onto the group. Unconditionally, and a colour authored on
+  the group is *not* an override: the walk continues from the tab THROUGH the group, so it just stands in
+  for any tab that inherits. The two also ring as one shape when either is selected — `selJoin` hands the
+  other half the ring (`.sel-join`), the tab's being three-sided like a plain frame's own tab.
+- **A group doesn't exist from the user's side** — there are just tabs, one of them open. So a user-facing
+  action on a selected group lands on the OPEN TAB via `actionTarget`: its colour + checklist (the
+  float-bar properties' id provider), its rename (`startInlineEdit`, the single funnel for F2 / ⋯ / the
+  outline) and its deletion (`deleteNode`/`deleteSelection`, after which `normalizeTabs` promotes the next
+  tab and `dissolveEmptyTabGroups` takes the box away with the last one). What stays on the group is what
+  the box visibly owns: moving, resizing, its kind/layout (the way out of tabs mode) and its lock — plus
+  delete-and-promote, which reads naturally as "ungroup" (the tabs survive as loose frames).
+Dock, undock and re-slot all re-anchor the frame's contents through ONE formula (`reanchorContents`):
+where they sat before the gesture (`interiorAtHome` — the lent box if it was already a tab, else its own
+box at its pre-drag position), where they sit now, minus the drag delta its cards rode along with the
+label. Drop that last term and re-slotting a tab — a gesture that doesn't change the box at all — leaves
+its whole content offset sideways. Each frame's own `mm_w`/`mm_h` are never touched while docked, which is
+what lets it come back out at the size it went in at. A group left with no children dissolves.
+What may become a tab is `canBeTab`: a frame, or a plain CARD, which `dockFrames` turns into a frame on
+the way in (`asFrame`) — so dragging a card onto a frame's tab docks it. The other kinds stay out and fall
+through to the ordinary drop (they land in the box as content): an annotation holds nothing, and a
+stack/image/query is a box whose own shape IS the point.
 
 **Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`, `mm_position_y`
 (relative to the parent; world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`,
-`mm_type`, `mm_layout`, `mm_w`/`mm_h` (box kinds only), plus the card flags `mm_locked`,
-`mm_done`, `mm_checklist`, `mm_bg` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
+`mm_type`, `mm_layout`, `mm_w`/`mm_h`, plus the card flags `mm_locked`,
+`mm_done`, `mm_checklist` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
 back. Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter
 field and the note body verbatim — be careful to keep that property when touching
 frontmatter code (`parseFM`/`fmSet`/`fmRemove`).
+
+**Sizing: `n.w` is always AUTHORED; `n.h` only for the 2D box kinds.** Every kind can be resized
+horizontally by dragging its left/right edge, and `n.w` (→ `mm_w`) is that dragged width and nothing
+else — never a value some layout pass computed. Two axes' worth of handles come off that split
+(`ensureResizeHandles`, `startNodeResize` in `main.ts`):
+- `frame`/`image`/`query` are **2D boxes** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`,
+  gated by `isBoxType`). For a **frame** these are its BOUNDS, i.e. they include the title tab:
+  `mm_position_y` is the tab's top edge and the box itself starts `FRAME_TAB_DROP` lower.
+- `card`/`annotation`/`stack` are **width-only** — 2 side zones (`EW_DIRS`), and their height is
+  never authored, written inline, or persisted: a card/annotation measures it from its content
+  (`nodeH` → `offsetHeight`) and a stack derives it from its outline. Minimum width is the kind's
+  own natural width (`minWOf`), so a card only ever gets *wider*; drag back to it and `n.w` is
+  dropped rather than persisting a redundant `mm_w`. An annotation is the exception that can also be
+  narrowed (it shrink-wraps its text, so it has no fixed natural width — `naturalW` measures it with
+  the authored sizing stripped, which is what makes narrowing possible at all).
+Widening a width-only node changes its measured height as text re-wraps, so the resize gesture
+paints *then* re-lays-out on every frame (same paint-before-measure rule as `prepRow`), and any
+**annotation** attached to it is latched to the nearer border on each axis at pointerdown and rides
+that edge — including the bottom edge, which moves on its own as the card re-wraps.
 
 **The app is local-first.** It boots straight onto the canvas with the last map (no start
 gate) via `boot()`; the start screen (`#startScreen`) is now a **home/storage panel** opened

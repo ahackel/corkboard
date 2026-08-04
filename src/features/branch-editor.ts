@@ -4,7 +4,7 @@
 // note editor while in outline mode (slow-click the row / E / ↓ from the title — see
 // features/inline-edit.ts's startBodyEdit). Renders into #olCards inside the outline panel and
 // toggles `body.ol-editing` (instant, no slide-in). The open card slides up a properties sheet from
-// the bottom (#branchProps): colour / tags / checklist / group background, the same controls as the
+// the bottom (#branchProps): colour / tags / checklist, the same controls as the
 // canvas sidebar (features/properties.ts). Duplicate / delete still live in the row's ⋯ menu; the
 // "+" button here adds a CHILD of the open card and drills straight into it, so you can build out a
 // branch card-by-card. Editing reuses the in-card editors' contract: one undo step per focus→blur
@@ -34,7 +34,7 @@ let activeId: string | null = null;   // the card currently focused → the prop
 // yet (createProperties builds the swatch row eagerly), so we defer to first open.
 const bpEl = document.getElementById('branchProps') as HTMLElement;
 bpEl.inert = true;   // stays in the DOM (transform:translateY, not display:none) so its slide-up
-// animates — but that also leaves #bpTagRow/#bpChecklist/#bpBg focusable while "closed", which
+// animates — but that also leaves #bpTagRow/#bpChecklist focusable while "closed", which
 // iOS Safari counts towards showing the keyboard's Prev/Next accessory bar even for an unrelated
 // focused field elsewhere on the page. `inert` drops it from the focus/tab order without
 // touching layout or the transition; toggled alongside body.branch-props-open below.
@@ -44,7 +44,6 @@ function props(): PropertyControls {
     colors: document.getElementById('bpColors') as HTMLElement,
     tagRow: document.getElementById('bpTagRow') as HTMLElement,
     checklist: document.getElementById('bpChecklist') as HTMLInputElement,
-    bg: document.getElementById('bpBg') as HTMLInputElement,
   }, () => (activeId ? [activeId] : []));
 }
 function markActiveCard(id: string | null): void {

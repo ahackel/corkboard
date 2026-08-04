@@ -14,7 +14,7 @@ import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { childrenOf, isRoot, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, focusNode, effectiveColor, subtreeIds, nodeH, NODE_W, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG } from '../main.js';
+import { paintAll, selectNode, focusNode, effectiveColor, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
 import { titleProblem } from './inline-edit.js';
@@ -452,7 +452,7 @@ function extentAlong(n: MindNode, axisX: boolean): { min: number; max: number } 
     const m = state.nodes.get(id); if (!m) continue;
     const a = axisX ? m.x : m.y;
     min = Math.min(min, a);
-    max = Math.max(max, a + (axisX ? NODE_W : nodeH(m)));
+    max = Math.max(max, a + (axisX ? nodeW(m) : nodeH(m)));
   }
   return { min, max };
 }

@@ -7,7 +7,7 @@ import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
 import { ui, gPointers, type Pt, type GestureEvt } from '../core/ui-state.js';
-import { NODE_W, nodeH, selectNode, setSelectionSet } from '../main.js';
+import { nodeW, nodeH, selectNode, setSelectionSet } from '../main.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
 
@@ -162,7 +162,7 @@ function selectWithinMarquee(cx: number, cy: number): void {
     // A marquee started from inside a frame (clickNode) never selects that frame itself — dragging
     // within its box would otherwise always enclose it. Only its CONTENTS get rubber-banded.
     if (n.id === marquee.clickNode) continue;
-    if (n.x < b.x && n.x + NODE_W > a.x && n.y < b.y && n.y + nodeH(n) > a.y) hits.push(n.id);
+    if (n.x < b.x && n.x + nodeW(n) > a.x && n.y < b.y && n.y + nodeH(n) > a.y) hits.push(n.id);
   }
   setSelectionSet(marquee.add ? new Set([...marquee.base, ...hits]) : hits);
 }

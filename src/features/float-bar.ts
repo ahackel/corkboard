@@ -2,16 +2,16 @@
 // Replaces the old #editor right-hand sidebar: a compact row of icon buttons anchored right
 // next to the selected card (Miro/Figma-style), instead of a persistent docked panel. Colour
 // and layout each collapse to one trigger button that opens a small popover with the full
-// picker (the same #edColors/#edLayoutTypes markup the old sidebar used); checklist/group-bg
-// are icon toggles; a trailing kebab button replaces the old always-visible action row via the
+// picker (the same #edColors/#edLayoutTypes markup the old sidebar used); checklist is an icon
+// toggle; a trailing kebab button replaces the old always-visible action row via the
 // existing generic context menu (openMenu, features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, isImageCard, isAnnotation, isQueryCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, stage, setStatus, isBoxType, isImageCard, isAnnotation, isQueryCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { NARROW_MQ, ui } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { applyLayouts, subtreeBox } from '../view/layout.js';
+import { applyLayouts, subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget } from '../view/layout.js';
 import { outlineActive } from './outline.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -30,11 +30,10 @@ const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbType = byId<HTMLButtonElement>('fbType');
 const fbLayout = byId<HTMLButtonElement>('fbLayout');
 const fbChecklist = byId<HTMLInputElement>('fbChecklist');
-const fbBg = byId<HTMLInputElement>('fbBg');
-// the <label> wrapping each toggle (markup: <label class="fb-toggle"><input id="fb...">...) —
+// the <label> wrapping the toggle (markup: <label class="fb-toggle"><input id="fbChecklist">...) —
 // hidden entirely for an annotation selection, see markChips below.
 const fbChecklistLabel = fbChecklist.parentElement!;
-const fbBgLabel = fbBg.parentElement!;
+const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
 const typePop = byId('fbTypePop');
@@ -44,14 +43,19 @@ const edColors = byId('edColors');
 const edTypes = byId('edTypes');
 const edLayoutTypes = byId('edLayoutTypes');
 
-// colour / checklist / group-bg share the SAME control wiring the sidebar (and the outline's
+// colour / checklist share the SAME control wiring the sidebar (and the outline's
 // branch-editor sheet) used — see features/properties.ts. Tags are omitted: no room in the bar.
 // Deferred to first use (like branch-editor.ts's own instance): createProperties() eagerly builds
 // the swatch row from main.js's PALETTE/SWATCH_BG, which aren't initialized yet while this module
 // is still being imported at main.ts's top — see the main↔features import cycle note in CLAUDE.md.
 let _props: PropertyControls | null = null;
 function props(): PropertyControls {
-  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist, bg: fbBg }, selectedIds);
+  // actionTarget, not the raw selection: selecting a tab group's box means "this frame" to the user, and
+  // the frame they mean is the OPEN TAB — so its colour (and its checklist) is what the swatches read
+  // and write. Colouring the invisible group would look like nothing happened; colouring the open tab
+  // tints the box too, since that's where the box takes its colour from (effectiveColor).
+  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist },
+    () => selectedIds().map(id => actionTarget(state.nodes.get(id)!).id));
 }
 
 // ---------- layout picker ----------
@@ -98,6 +102,8 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
       icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="6.5" y="9.5" width="4.5" height="5" rx="1" fill="currentColor" stroke="none"/><rect x="13" y="9.5" width="4.5" height="5" rx="1" fill="currentColor" stroke="none"/></svg>' },
     { key:'vertical', label:'Vertical — cards flow top to bottom, wrapping right',
       icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="8.5" y="7.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/><rect x="8.5" y="12.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/></svg>' },
+    { key:'tabs', label:'Tabs — child frames docked as tabs; one open at a time, click a tab to switch',
+      icon: SVG_OPEN + '<rect x="3.5" y="8" width="17" height="11" rx="2"/><path d="M3.5 8V6a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M11 8V6.5a1 1 0 011-1h3a1 1 0 011 1V8" opacity=".55"/></svg>' },
   ],
   // a stack always outlines its whole subtree — there's nothing to choose, so its chip row is empty
   // and the layout trigger hides itself (markChips), same as for the leaf kinds
@@ -108,11 +114,18 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
 };
 // The default layout for a freshly-set type — omitted from frontmatter (see serializeMd).
 const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', stack: 'inherit', image: 'free', annotation: 'free', query: 'free' };
-// Fit a frame's box snugly around its children: a title strip on top, a margin on the other sides,
-// snapped to the grid and clamped to the min size. Children keep their positions (the box moves to
-// enclose them). With no children it's left as-is, or given the default size when `orDefault` (used
-// when a card first becomes a frame). Shared by the frame chip and the Auto-size action.
-const FRAME_FIT_PAD = 16, FRAME_FIT_TITLE = 36;   // side/bottom margin; top strip for the title
+// Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
+// and clamped to the min size. Children keep their positions (the box moves to enclose them). With
+// no children it's left as-is, or given the default size when `orDefault` (used when a card first
+// becomes a frame). Shared by the frame chip and the Auto-size action.
+// The TOP margin also has to carry the frame's own title tab: n.y is the tab's top edge and the box
+// starts FRAME_TAB_DROP lower (main.ts), so the pad above the content is that drop plus the same
+// margin as the other three sides. n.h then encloses the tab for free, since it measures from n.y.
+// A function, not a const: main.js's exports aren't initialized yet while this module's body runs
+// (the deliberate main↔features import cycle — see CLAUDE.md and the props() note above), so reading
+// FRAME_TAB_DROP at module scope throws "cannot access before initialization".
+const FRAME_FIT_PAD = 16;
+function frameFitTop(): number { return FRAME_TAB_DROP + FRAME_FIT_PAD; }
 function fitFrameToContent(n: MindNode, orDefault = false): void {
   const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));   // annotations don't size the frame
   const snapStep = gridSnap();
@@ -124,7 +137,7 @@ function fitFrameToContent(n: MindNode, orDefault = false): void {
   }
   if (!isFinite(x0)) { if (orDefault) { n.w = FRAME_W; n.h = FRAME_H; } return; }
   n.x = snap(x0 - FRAME_FIT_PAD);
-  n.y = snap(y0 - FRAME_FIT_TITLE);
+  n.y = snap(y0 - frameFitTop());
   n.w = Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - n.x));
   n.h = Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - n.y));
 }
@@ -162,7 +175,7 @@ export function groupSelectionIntoFrame(): void {
     const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
     const fx = isFinite(x0) ? snap(x0 - FRAME_FIT_PAD) : 0;
-    const fy = isFinite(y0) ? snap(y0 - FRAME_FIT_TITLE) : 0;
+    const fy = isFinite(y0) ? snap(y0 - frameFitTop()) : 0;
     const fw = isFinite(x1) ? Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - fx)) : FRAME_W;
     const fh = isFinite(y1) ? Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - fy)) : FRAME_H;
     const frame = mkNode({
@@ -204,6 +217,16 @@ function setType(type: NodeType): void {
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.type === type) continue;
+      // Leaving a 2D box for a width-only kind: drop BOTH axes of its box size. The height has to go
+      // (the new kind measures or derives its own), and so does the width — a frame's box is sized to
+      // enclose its children, which says nothing about how wide its own title/body wants to be, and
+      // silently keeping it would turn a converted 800px frame into an 800px card.
+      // card/annotation/stack: the height is never authored — and the width goes too if we're
+      // leaving a 2D box, whose width described its contents rather than its own text.
+      // A tab group is a FRAME with layout tabs; leaving `frame` behind dissolves the group, so its
+      // tabs need their own boxes back (same as switching the layout away — see undockAllTabs).
+      if (n.type === 'frame' && n.layout === 'tabs' && type !== 'frame') undockAllTabs(n);
+      if (!isBoxType(type)) { n.h = undefined; if (isBoxType(n.type)) n.w = undefined; }
       if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
       if (type === 'image' && (n.w == null || n.h == null)) { n.w = IMAGE_W; n.h = IMAGE_H; }
       if (type === 'query' && (n.w == null || n.h == null)) { n.w = QUERY_W; n.h = QUERY_H; }
@@ -218,12 +241,34 @@ function setType(type: NodeType): void {
   markChips();
   applyLayouts(); paintAll(); scheduleSave();
 }
+// Give a tab group's tabs their own boxes back: open every one (only one was open) and cascade them
+// inside the frame, since as tabs they were all stacked in the same strip band and would otherwise
+// land in a pile. Their authored mm_w/mm_h were never touched while docked, so each comes back at the
+// size it went in at. Run while the frame is still a tabs frame, i.e. BEFORE the layout is reassigned.
+function undockAllTabs(g: MindNode): void {
+  const box = frameInterior(g);
+  tabsOf(g).forEach((t, i) => {
+    touch(...subtreeIds(t.id));   // its whole subtree moves with it, so it all needs undoing
+    const lent = frameInterior(t);   // where its cards sit right now: the interior the group lent it
+    t.collapsed = false;
+    t.x = box.x + 20 + i * 24; t.y = box.y + 20 + i * 24;
+    // Re-anchor its cards to the box they're in rather than carrying them along with the frame: while
+    // docked, their offset was measured from a LABEL in the strip, which says nothing about where they
+    // sit — what has to be preserved is their position inside the interior. Spelt out (border, plus the
+    // frame's own title tab) because the group's layout hasn't flipped yet, so frameInterior would
+    // still hand back the lent box.
+    const dx = (t.x + FRAME_BORDER) - lent.x, dy = (t.y + FRAME_BORDER + FRAME_TAB_DROP) - lent.y;
+    for (const k of childrenOf(t.id)) moveSubtreeTo(k, k.x + dx, k.y + dy);
+    t.dirty = true; t.dirtyLayout = true;
+  });
+}
 // Change the child-ARRANGEMENT of the selection (within its current type).
 function setLayout(layout: NodeLayout): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.layout === layout) continue;
+      if (n.layout === 'tabs') undockAllTabs(n);   // leaving tabs: hand each tab its own box back
       // Drop the stored child order: a switch INTO a managed layout (line/fan/flow) must reseed
       // order from the children's CURRENT positions — a free layout never touches kidOrder, so a
       // stale order from an earlier managed pass would otherwise survive.
@@ -246,12 +291,9 @@ function markChips(): void {
     c.classList.toggle('active', c.dataset.type === type));
   fbType.innerHTML = type ? TYPE_ICONS[type] : TYPE_ICONS.card;
 
-  // checklist / group-background are meaningless on an annotation (a title-less leaf that can
-  // never have children — no subtree to check off or tint) — hide both toggles entirely rather
-  // than leave a no-op control in the bar.
-  const isAnno = type === 'annotation';
-  fbChecklistLabel.style.display = isAnno ? 'none' : '';
-  fbBgLabel.style.display = isAnno ? 'none' : '';
+  // a checklist is meaningless on an annotation (a title-less leaf that can never have children —
+  // no subtree to check off) — hide the toggle entirely rather than leave a no-op control in the bar.
+  fbChecklistLabel.style.display = type === 'annotation' ? 'none' : '';
 
   const forType: NodeType = type ?? 'card';
   rebuildLayoutChips(forType);
@@ -279,10 +321,29 @@ function markColorTrigger(): void {
   else fbColor.style.setProperty('--sw', active.style.getPropertyValue('--sw'));
 }
 
+// ---------- lock toggle ----------
+// Replaces the old Lock/Unlock context-menu entry. A locked card can't be moved, folded, renamed,
+// re-typed, re-coloured or deleted (isLockedEffective), so every OTHER control in the bar would be
+// a no-op — hence `.locked-sel`, which collapses the bar down to this one button (styles.css). A
+// mixed selection counts as locked — anyLocked (main.ts) owns that rule, shared with the L shortcut.
+function markLock(): void {
+  const locked = anyLocked(state.sel);
+  bar.classList.toggle('locked-sel', locked);
+  fbLock.innerHTML = locked ? LOCK_BADGE_SVG : ICON_LOCK_OPEN;
+  fbLock.title = locked ? 'Unlock (L)' : 'Lock (L) — freeze this card in place';
+  fbLock.setAttribute('aria-label', locked ? 'Unlock' : 'Lock');
+}
+fbLock.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closePopovers();
+  setLockedSelection(state.sel, !anyLocked(state.sel));
+});
+
 function syncControls(): void {
   props().sync();
   markChips();
   markColorTrigger();
+  markLock();
 }
 
 // ---------- popovers (colour / layout) ----------
@@ -382,9 +443,8 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
     entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
     entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: anyLocked });
-    entries.push('sep');
-    entries.push({ label: (multi ? anyLocked : locked) ? 'Unlock' : 'Lock', shortcut:'L',
-      run: () => { selectTargetFirst(); setLockedSelection(state.sel, !(multi ? anyLocked : locked)); } });
+    // Lock/unlock is NOT here: it lives on the float bar's own lock toggle (markLock above), which
+    // is the only control left in the bar once a card is locked. The L shortcut still works too.
     entries.push('sep');
   }
   // copy/collapse/fit/export never mutate → allowed in read-only mode too
@@ -418,17 +478,20 @@ fbMore.addEventListener('click', (e) => {
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 10;
-function anchorEl(): HTMLElement | null | undefined {
+function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
-  return n?.el;
+  return n?.el ? n : undefined;
 }
 function positionBar(): void {
   if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return; }   // CSS docks it to the bottom
-  const el = anchorEl(); if (!el) return;
+  const n = anchorNode(); const el = n?.el; if (!n || !el) return;
   const r = el.getBoundingClientRect();
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   let left = r.left + r.width / 2 - bw / 2;
-  let top = r.top - bh - GAP;
+  // Anchor on the node's BOUNDS top, not its element's: a frame box's element starts FRAME_TAB_DROP
+  // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
+  // would hang the bar over the tab and shift it when a frame is converted to a card or back.
+  let top = r.top - elTop(n, 0) * state.view.k - bh - GAP;
   if (top < 4) top = r.bottom + GAP;   // not enough room above → flip below the card
   left = Math.min(Math.max(left, 4), window.innerWidth - bw - 4);
   top = Math.min(Math.max(top, 4), window.innerHeight - bh - 4);
