@@ -163,10 +163,11 @@ export function serializeMd(n: MindNode): string {
   const layoutDefault = n.type === 'frame' ? 'free' : 'inherit';
   if ((n.type === 'card' || n.type === 'frame') && n.layout !== layoutDefault)
     entries.push({ key:'mm_layout', lines:[`mm_layout: ${n.layout}`] });
-  if (isBoxType(n.type)) {   // the resizable box's own size (a frame, an image, or a query card)
-    if (n.w != null) entries.push({ key:'mm_w', lines:[`mm_w: ${Math.round(n.w)}`] });
-    if (n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
-  }
+  // The AUTHORED width — every kind can carry one (a card/annotation/stack is resizable on this axis
+  // alone). The HEIGHT is box-kinds-only: a card measures its own from its content and a stack derives
+  // its own from its outline, so writing an mm_h for either would freeze a value they recompute anyway.
+  if (n.w != null) entries.push({ key:'mm_w', lines:[`mm_w: ${Math.round(n.w)}`] });
+  if (isBoxType(n.type) && n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
   if (n.type === 'query' && n.query) entries.push({ key:'mm_query', lines:[`mm_query: ${n.query}`] });
   const fm = entries.flatMap(e => e.lines).join('\n');
   const body = n.body.trim();

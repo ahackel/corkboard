@@ -99,7 +99,7 @@ function edgePath(parent: MindNode, child: MindNode): string {
 // side it'll land on — or null if there's no active/valid drop target. The landing spot depends
 // on which zone of the hovered card is poised (child: nested below, offset right; sibling:
 // aligned below).
-function previewReparent(): { parent: MindNode; box: { x: number; y: number; h: number }; side: LayoutSide } | null {
+function previewReparent(): { parent: MindNode; box: { x: number; y: number; w: number; h: number }; side: LayoutSide } | null {
   const drag = ui.drag;
   if (!drag || !drag.dropTarget || !drag.dropSide) return null;
   // annotations preview as just a dashed outline on the candidate parent (drag.ts) — no would-be edge
@@ -118,9 +118,11 @@ function previewReparent(): { parent: MindNode; box: { x: number; y: number; h: 
   // Dropping into a frame/stack previews as the box's own outline highlight (.drop-target), not a
   // dashed edge into a landing spot — the card lands inside the box, so an edge would mislead.
   if (isContainer(parent)) return null;
-  const h = nodeH(drag.active);
+  // the dragged card's OWN size — without the width, boxCenter/edgePathBox fall back to NODE_W and
+  // the dashed preview edge attaches to the wrong point for a card that's been widened
+  const w = nodeW(drag.active), h = nodeH(drag.active);
   const land = dropLanding(drag.active, tgtNode, drag.dropMode, drag.dropSide, drag.dropAfter);
-  return { parent, box: { x: land.x, y: land.y, h }, side: drag.dropSide };
+  return { parent, box: { x: land.x, y: land.y, w, h }, side: drag.dropSide };
 }
 // Frame content is DOM-clipped (main.ts .frame-content), but edges live in their own global,
 // unclipped SVG — a connector involving a card hosted inside a

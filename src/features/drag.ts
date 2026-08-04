@@ -39,10 +39,10 @@ function landingGhostEl(): HTMLElement {
   world.appendChild(el);
   return _landingGhost = el;
 }
-function showLandingGhost(x: number, y: number, h: number): void {
+function showLandingGhost(x: number, y: number, w: number, h: number): void {
   const el = landingGhostEl();
   el.style.left = x + 'px'; el.style.top = y + 'px';
-  el.style.width = NODE_W + 'px'; el.style.height = h + 'px';
+  el.style.width = w + 'px'; el.style.height = h + 'px';
   // .node has a 64px min-height (for bodied cards); without this the ghost for a shorter
   // title-only card would get clamped taller than the real card it's previewing.
   el.style.minHeight = h + 'px';
@@ -937,7 +937,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       hideLandingGhost();
     } else {
       const land = dropLanding(dragged, targetNode, mode, side, after);
-      showLandingGhost(land.x, land.y, nodeH(dragged));
+      showLandingGhost(land.x, land.y, nodeW(dragged), nodeH(dragged));
     }
   } else {
     hideLandingGhost();

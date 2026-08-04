@@ -1,10 +1,10 @@
 // ---------- view camera: pan / zoom / fit / frame ----------
 // Pure camera math over state.view (the {x,y,k} pan+zoom). No painting — callers repaint
-// if needed. NODE_W/nodeH come from main.js (render) for measuring; isHidden from model.
+// if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { NODE_W, nodeH } from '../main.js';
+import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 
@@ -85,7 +85,7 @@ export function fit(): void {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of ns) {
     minX = Math.min(minX, n.x);          minY = Math.min(minY, n.y);
-    maxX = Math.max(maxX, n.x + NODE_W); maxY = Math.max(maxY, n.y + nodeH(n));
+    maxX = Math.max(maxX, n.x + nodeW(n)); maxY = Math.max(maxY, n.y + nodeH(n));
   }
   if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const r = stageSize();
@@ -106,7 +106,7 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStro
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of group){
     minX = Math.min(minX, n.x);            minY = Math.min(minY, n.y);
-    maxX = Math.max(maxX, n.x + NODE_W);   maxY = Math.max(maxY, n.y + nodeH(n));
+    maxX = Math.max(maxX, n.x + nodeW(n));   maxY = Math.max(maxY, n.y + nodeH(n));
   }
   if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const bw = maxX - minX, bh = maxY - minY, cx = (minX+maxX)/2, cy = (minY+maxY)/2;

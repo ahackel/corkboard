@@ -10,15 +10,19 @@ import { state, stage, setStatus, type MindNode, type Stroke } from '../core/sta
 import { applyLayouts } from '../view/layout.js';
 import { frameBox } from '../view/camera.js';
 import { scheduleSave, scheduleSaveSketch } from '../data/persistence.js';
-import { paintAll, setSelectionSet, NODE_W, nodeH } from '../main.js';
+import { paintAll, setSelectionSet, nodeW, nodeH } from '../main.js';
 import { paintStrokes } from './sketch.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
 // still exists — see applyImages. rx/ry are omitted too: they're the persisted relative form of
-// x/y, re-derived by commitRel() before each save, so restoring x/y suffices.
-type NodeSnap = Omit<MindNode, 'id' | 'el' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
+// x/y, re-derived by commitRel() before each save, so restoring x/y suffices. `w`/`h` ARE
+// snapshotted — without them a resize that only moves the east/south edge left x/y unchanged, so
+// sameSnap() saw no difference and commitStep() discarded the whole step (⌘Z then undid the
+// PREVIOUS action instead). A stack's `h` is derived, but restoring it is harmless: applyStep
+// re-runs applyLayouts(), which recomputes it.
+type NodeSnap = Omit<MindNode, 'id' | 'el' | 'frameContentEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
 type Images = Map<string, NodeSnap | null>;      // null = the node does not exist
 // A step captures node before/after images and, when a sketch gesture changed the ink layer,
 // the whole strokes array before/after — one unified timeline covers both (see touchStrokes).
@@ -38,7 +42,7 @@ function snap(n: MindNode): NodeSnap {
   return {
     file: n.file, x: n.x, y: n.y, parent: n.parent,
     collapsed: n.collapsed, locked: n.locked, done: n.done, checklist: n.checklist,
-    type: n.type, layout: n.layout, side: n.side,
+    type: n.type, layout: n.layout, side: n.side, w: n.w, h: n.h,
     title: n.title, color: n.color, keepStatus: n.keepStatus,
     tags: [...n.tags], body: n.body,
     fmEntries: n.fmEntries?.map(e => ({ key: e.key, lines: [...e.lines] })),
@@ -131,7 +135,7 @@ function frameIfOffscreen(ids: string[]): void {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of nodes) {
     minX = Math.min(minX, n.x * v.k + v.x);            minY = Math.min(minY, n.y * v.k + v.y);
-    maxX = Math.max(maxX, (n.x + NODE_W) * v.k + v.x); maxY = Math.max(maxY, (n.y + nodeH(n)) * v.k + v.y);
+    maxX = Math.max(maxX, (n.x + nodeW(n)) * v.k + v.x); maxY = Math.max(maxY, (n.y + nodeH(n)) * v.k + v.y);
   }
   if (maxX < 0 || minX > r.width || maxY < 0 || minY > r.height) frameBox(nodes);
 }

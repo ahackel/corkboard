@@ -4,7 +4,7 @@
 // elsewhere calls scheduleSave(); a burst coalesces into one write ~400ms later.
 // `store` is the active backend (reassigned by useStore); main holds the open() flows.
 // ============================================================
-import { state, world, setStatus, type MindNode, type LayoutSide } from '../core/state.js';
+import { state, world, setStatus, isBoxType, type MindNode, type LayoutSide } from '../core/state.js';
 import { parseMd, serializeMd } from '../utils/frontmatter.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
@@ -14,7 +14,7 @@ import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
-import { paintAll, selectNode } from '../main.js';
+import { paintAll, selectNode, NODE_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { paintStrokes } from '../features/sketch.js';
 import { refreshGrid } from '../view/grid.js';
@@ -160,6 +160,17 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // (serializeMd only re-emits mm_position_*, so the first save of any note drops its mm_x/mm_y).
   const relSeed = new Set<string>();
   const legacySeed = new Set<string>();
+  // mm_w is now written for every kind (an authored width), but it USED to be written ungated for a
+  // while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
+  // width from a time when `n.w` also held derived values (a stack outline row's stretched width, for
+  // one). Those are all NARROWER than a normal card, and a card/stack can only ever be widened past
+  // its default, so anything under the default is junk from that era: drop it. An annotation is the
+  // one width-only kind that legitimately goes narrower, and it never had a width written back then.
+  const authoredW = (w: number | null | undefined, type: MindNode['type']): number | undefined => {
+    if (w == null) return undefined;
+    if (isBoxType(type) || type === 'annotation') return w;
+    return w >= NODE_W ? w : undefined;
+  };
   for (const { rel, parsed } of entries) {
     const { mm, ...rest } = parsed;
     const hasRel = (mm.px != null && mm.py != null);
@@ -176,7 +187,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       done: !!mm.done,
       checklist: !!mm.checklist,
       type: mm.type, layout: mm.layout,
-      w: mm.w ?? undefined,
+      w: authoredW(mm.w, mm.type),
       h: mm.h ?? undefined,
       query: mm.query || undefined,
       side: (mm.side || undefined) as LayoutSide | undefined,

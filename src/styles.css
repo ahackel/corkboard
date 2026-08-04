@@ -458,23 +458,40 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
    ring, no width change, no fill; no landing-ghost card or reparent edge (see drag.ts / edges.ts). */
 .node.frame.drop-target, .node.stack.drop-target { border-style:dashed; border-color:#fff; }
-/* 8 invisible resize hit-zones: 4 edge bands (inset from the corners) + 4 corner squares.
-   Corners sit at the very corners so the edge bands' insets leave them un-contested.
-   Shared by .frame and .image-card — both kinds of resizable box (ensureFrameHandle in main.ts). */
-.node.frame .fh, .node.image-card .fh { position:absolute; z-index:2; touch-action:none; }
+/* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
+/* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
+   box (frame / image card / query card) gets all 8: 4 edge bands inset from the corners, plus 4
+   corner squares at the very corners, which is what those insets leave un-contested. A width-only
+   kind (card / annotation / stack) gets just fh-e/fh-w, restyled further down.
+   `>` throughout, and no per-kind prefix: handles only exist on a node that was given them, and
+   child cards are DOM-nested inside their parent, so a descendant selector would style (and a
+   descendant QUERY would find — see ensureResizeHandles) a nested card's handles as if they were
+   this card's own. */
+.node > .fh { position:absolute; z-index:2; touch-action:none; }
 /* …but a FRAME is not a stacking context (z-index:auto above), so a z-index:2 handle would escape
    into #world's stacking order and start winning presses against cards that overlap the frame's
    border. `auto` pins the handles back into the frame's own paint level — still above its fill (a
    positioned child paints after its parent's background), still below every card, as before. */
 .node.frame > .fh { z-index:auto; }
-.node.frame .fh-n, .node.image-card .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.frame .fh-s, .node.image-card .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.frame .fh-e, .node.image-card .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.frame .fh-w, .node.image-card .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.frame .fh-ne, .node.image-card .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
-.node.frame .fh-nw, .node.image-card .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
-.node.frame .fh-se, .node.image-card .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
-.node.frame .fh-sw, .node.image-card .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+.node > .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
+.node > .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
+.node > .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
+.node > .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
+.node > .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
+.node > .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
+.node > .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
+.node > .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+/* WIDTH-ONLY kinds — a card, an annotation, a stack. Two differences from a box's side bands:
+   · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
+     constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
+   · a taller band (4px inset, not 12px): there are no corner squares here to leave room for, and on
+     a 32px-tall annotation a 12px inset either side would leave an 8px strip nobody can hit. */
+.node:not(.frame):not(.image-card):not(.query-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
+.node:not(.frame):not(.image-card):not(.query-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
+/* Nothing to grab while the card is being typed into (the zones would sit over the text caret's own
+   edges) or while it's read-only/locked — mirrors the .addnote/.tag-add-btn rules further down. */
+.node:has(.title.editing) > .fh, .node:has(.body.editing) > .fh,
+body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
 /* no title/body chrome at all — just the image filling the box (see isImageBox in main.ts).
    Background is the same --card variable every card's own colour swatch sets (.c-blue etc. at
@@ -600,16 +617,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   display:flex; align-items:center; justify-content:center; }
 .node.query-card .qi-more:hover { opacity:1; background:rgba(255,255,255,.12); }
 .node.query-card .query-empty { padding:5px 7px; font-size:12px; opacity:.65; }
-/* resize handles: shares the frame/image-card hit-zones (main.ts ensureFrameHandle) */
-.node.query-card .fh { position:absolute; z-index:2; touch-action:none; }
-.node.query-card .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.query-card .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
-.node.query-card .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.query-card .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node.query-card .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
-.node.query-card .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
-.node.query-card .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
-.node.query-card .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+/* resize handles: the shared `.node > .fh-*` hit-zones above cover this card too */
 /* ---------- annotation: a title-less note pinned ON TOP of its parent ---------- */
 /* z-index above every other #world child (cards:2, frames:1, edges:1, toggles:3, dragEdges:4,
    a dragged card:6) so it never sits behind anything and — placed directly under #world, never in
@@ -631,6 +639,11 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    (a handful of px), wrapping every keystroke onto its own line. Give the box a stable editing
    width instead; it reverts to fit-content (sized off the committed text) once editing ends. */
 .node.annotation:has(.body.editing) { width:220px; }
+/* An annotation whose width was RESIZED (paintNode sets both the class and the inline width). Its
+   shrink-to-fit cap has to go, or the element would render at 280 while nodeW reported the authored
+   width — desyncing every consumer of it (edges, marquee, subtreeBox). The inline width also beats
+   the editing width above, so a resized annotation keeps its size while its body is edited. */
+.node.annotation.w-set { max-width:none; }
 /* an uncoloured card sits on the page background, so its text follows the theme, not white */
 .node.c-none { color: var(--text); }
 /* white is the one palette colour too light for white text — dark grey instead, both themes */
@@ -781,7 +794,10 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
    comment above). Only shown on a lone-selected, body-less card, to open the in-place note editor;
    direct child of .node so a nested CHILD CARD's own addnote (they're real DOM descendants — see
    nodeEl/paintNode in main.ts) never also matches. */
-.node .addnote { position:absolute; right:-11px; top:50%; transform:translateY(-50%); z-index:2;
+/* z-index:3, like .tag-row and for the same reason: it sits dead centre of the card's own east
+   resize band (.fh-e, z-index:2, appended AFTER it in the DOM — so at an equal z-index the band
+   would win the hit-test and swallow the whole button). */
+.node .addnote { position:absolute; right:-11px; top:50%; transform:translateY(-50%); z-index:3;
   width:22px; height:22px; padding:0; border:none; border-radius:50%;
   background:var(--accent); color:#fff; cursor:pointer; display:none;
   align-items:center; justify-content:center; }
@@ -1122,6 +1138,12 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   .swatches { flex-wrap:wrap; }
   /* context-menu rows big enough for a finger (also used by the outline's ⋯ menu) */
   #ctxMenu .cm-item { padding:10px 12px; font-size:14px; }
+  /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
+     border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
+     touch, so the zone being generous is the only affordance there is. The .addnote pill above grows
+     to right:-14px on coarse pointers, but it's z-index:3 and still wins the overlap. */
+  .node:not(.frame):not(.image-card):not(.query-card) > .fh-e { right:-16px; width:16px; }
+  .node:not(.frame):not(.image-card):not(.query-card) > .fh-w { left:-16px;  width:16px; }
 }
 
 /* ---- narrow screens: the floating bar docks to the BOTTOM EDGE instead of floating next to

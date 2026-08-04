@@ -113,28 +113,49 @@ child into its host goes through `frameInsetX`/`frameInsetY` (`view/layout.ts`) 
 `elTop` is the one place that applies the drop.
 
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
-subtree as one indented, full-width column inside an auto-sized, non-resizable box (fixed
-`STACK_W` = `NODE_W`), so **every descendant's own layout is ignored** and a stack nested inside a
-stack is demoted to a plain row (`insideStack`). Its `w`/`h` are derived by the layout pass, never
-persisted (`isBoxType` excludes it). Dropping into one is resolved on two axes by
+subtree as one indented, full-width column inside a box that is **width-resizable** (`n.w`,
+defaulting to `STACK_W` = `NODE_W`) and auto-fitted in height, so **every descendant's own layout is
+ignored** and a stack nested inside a stack is demoted to a plain row (`insideStack`). Its `h` is
+derived by the layout pass and never persisted (`isBoxType` excludes it from `mm_h`); its `w` is
+authored like any other kind's. Dropping into one is resolved on two axes by
 `stackDropTarget`: the vertical position picks the GAP between rows, the horizontal position picks
 the DEPTH there — so a straight drag only re-slots and nesting takes a deliberate sideways nudge.
 It was briefly a card *layout* (`mm_layout: stack`); that spelling still migrates to the type.
 Two invariants worth knowing before touching stack code: a stack row's measured height depends on
-the width the layout assigns it (text re-wraps), so `prepRow` paints a row **before** measuring it —
-and a container's box size is only known *after* `applyLayouts`, so anything that paints before
-laying out must paint again (see `withLayoutAnimation`).
+the width it renders at (text re-wraps), so `prepRow` paints a row **before** measuring it — and a
+container's box size is only known *after* `applyLayouts`, so anything that paints before laying out
+must paint again (see `withLayoutAnimation`). A row's width itself is **derived, not stored**
+(`stackRowW`: the stack's own width, less the border/padding, less one `STACK_INDENT` per depth) —
+deliberately, so it can't collide with the authored `n.w` a card carries in from outside the stack.
+Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it comes out.
 
 **Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`, `mm_position_y`
 (relative to the parent; world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`,
-`mm_type`, `mm_layout`, `mm_w`/`mm_h` (box kinds only — for a **frame** these are its BOUNDS,
-i.e. they include the title tab: `mm_position_y` is the tab's top edge and the box itself starts
-`FRAME_TAB_DROP` lower, see the frame bullet below), plus the card flags `mm_locked`,
+`mm_type`, `mm_layout`, `mm_w`/`mm_h`, plus the card flags `mm_locked`,
 `mm_done`, `mm_checklist` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
 back. Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter
 field and the note body verbatim — be careful to keep that property when touching
 frontmatter code (`parseFM`/`fmSet`/`fmRemove`).
+
+**Sizing: `n.w` is always AUTHORED; `n.h` only for the 2D box kinds.** Every kind can be resized
+horizontally by dragging its left/right edge, and `n.w` (→ `mm_w`) is that dragged width and nothing
+else — never a value some layout pass computed. Two axes' worth of handles come off that split
+(`ensureResizeHandles`, `startNodeResize` in `main.ts`):
+- `frame`/`image`/`query` are **2D boxes** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`,
+  gated by `isBoxType`). For a **frame** these are its BOUNDS, i.e. they include the title tab:
+  `mm_position_y` is the tab's top edge and the box itself starts `FRAME_TAB_DROP` lower.
+- `card`/`annotation`/`stack` are **width-only** — 2 side zones (`EW_DIRS`), and their height is
+  never authored, written inline, or persisted: a card/annotation measures it from its content
+  (`nodeH` → `offsetHeight`) and a stack derives it from its outline. Minimum width is the kind's
+  own natural width (`minWOf`), so a card only ever gets *wider*; drag back to it and `n.w` is
+  dropped rather than persisting a redundant `mm_w`. An annotation is the exception that can also be
+  narrowed (it shrink-wraps its text, so it has no fixed natural width — `naturalW` measures it with
+  the authored sizing stripped, which is what makes narrowing possible at all).
+Widening a width-only node changes its measured height as text re-wraps, so the resize gesture
+paints *then* re-lays-out on every frame (same paint-before-measure rule as `prepRow`), and any
+**annotation** attached to it is latched to the nearer border on each axis at pointerdown and rides
+that edge — including the bottom edge, which moves on its own as the card re-wraps.
 
 **The app is local-first.** It boots straight onto the canvas with the last map (no start
 gate) via `boot()`; the start screen (`#startScreen`) is now a **home/storage panel** opened

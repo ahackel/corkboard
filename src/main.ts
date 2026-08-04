@@ -22,7 +22,7 @@ import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameInsetY, frameFlow, isStack } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, frameInsetY, frameFlow, isStack, stackRowW } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -460,39 +460,49 @@ export function paintNode(n: MindNode): void {
       place(el, np.x, elTop(n, np.y), host);
     }
   }
-  // A frame (or an image card) is its own resizable box; give the element that size and a
-  // drag-to-resize handle. A stack is a box too (a sized, clipping container) but is NOT resizable —
-  // its size is auto-fitted by layout, so it gets no resize handle. A stack's own child is stretched
-  // to the stack's inner width (its n.w). Any other card clears the inline size so a reverted box
-  // snaps back to the CSS-fixed card.
+  // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card /
+  // query card is its own 2D box (8 handles). Everything else authors only a WIDTH (2 side handles):
+  // a stack's height is auto-fitted by layout, and a card's/annotation's comes from its content, so
+  // their inline height is always cleared and left to CSS. The one node that ISN'T resizable is an
+  // outline row inside a stack — its width is derived from the stack's, so it gets the width but no
+  // handles (see nodeW / stackRowW).
   if (isBoxNode(n)) {
     el.style.width = (n.w ?? boxDefaultW(n)) + 'px';
     // the element is the BOX, and a frame's bounds height also covers its tab (elTop / FRAME_TAB_DROP)
     el.style.height = ((n.h ?? boxDefaultH(n)) - (isFrameBox(n) ? FRAME_TAB_DROP : 0)) + 'px';
     // border matches this card's EDGE tint (same colour edges use), falling back to --edge
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
-    ensureFrameHandle(n);
+    ensureResizeHandles(n, FRAME_DIRS);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
   } else if (isFrameFold(n)) {
     // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
     // size, no resize zones, but it keeps --frame-stroke, which tints the tab itself.
     if (el.style.width) { el.style.width = ''; el.style.height = ''; }
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
-    el.querySelectorAll('.fh, .frame-resize').forEach(x => x.remove());
+    clearResizeHandles(el);
   } else if (isStack(n)) {
-    el.style.width = nodeW(n) + 'px';    // fixed STACK_W
+    el.style.width = nodeW(n) + 'px';    // authored (n.w, default STACK_W) — resizable on this axis only
     el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
     el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
-    frameContentEl(n);                   // clipping content wrapper — no resize handle (not resizable)
-  } else if (inStack(n)) {
-    el.style.width = nodeW(n) + 'px';    // stretched to the stack's inner width; height stays content-driven
+    frameContentEl(n);                   // clipping content wrapper
+    ensureResizeHandles(n, EW_DIRS);
+  } else if (stackRowW(n) != null) {
+    // an OUTLINE ROW — a narrower test than inStack(n), which also catches an annotation parented to a
+    // stack; the outline skips those, so they keep their own shrink-to-fit width via the branch below
+    el.style.width = nodeW(n) + 'px';    // stretched to the row width its depth allows (stackRowW)
     if (el.style.height) el.style.height = '';
     el.style.removeProperty('--frame-stroke');
-    el.querySelectorAll('.fh, .frame-resize').forEach(x => x.remove());
-  } else if (el.style.width) {
-    el.style.width = ''; el.style.height = '';
+    clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
+  } else {
+    // A plain card or an annotation: an authored width if it has one (else back to the CSS-fixed
+    // card / the annotation's shrink-to-fit), never an inline height.
+    const authored = n.w != null;
+    el.style.width = authored ? n.w + 'px' : '';
+    if (el.style.height) el.style.height = '';
+    // an annotation's CSS max-width would otherwise cap — and so desync — an authored width
+    el.classList.toggle('w-set', authored);
     el.style.removeProperty('--frame-stroke');
-    el.querySelectorAll('.fh, .frame-resize').forEach(x => x.remove());
+    ensureResizeHandles(n, EW_DIRS);
   }
   // don't clobber the title while it's being inline-edited (the user is typing into it). A query
   // card has no editable title of its own — its title slot always shows the live query text
@@ -590,26 +600,30 @@ function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n)
 // OR an auto-sized stack. Used for the size/wrapper plumbing in paintNode.
 function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(n); }
 // Does this card live inside a stack's outliner? True when its nearest CONTAINER ancestor is a
-// stack (a frame in between governs instead). Every such node is laid out by the stack (its n.w is
-// the outline row width, set by the stack branch) and rendered a touch brighter (.stack-child), so
-// it needs its width applied, not cleared — covers the stack's direct children AND deeper rows.
+// stack (a frame in between governs instead) — covers the stack's direct children AND deeper rows.
+// Used for the .stack-child tint. For "is this actually an outline ROW" (which drives the row width
+// and excludes annotations) use stackRowW instead — see the sizing branch above.
 function inStack(n: MindNode): boolean {
   const h = hostFrame(n);
   return !!h && isStack(h);
 }
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : isQueryBox(n) ? QUERY_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQueryBox(n) ? QUERY_H : FRAME_H; }
-// A node's footprint WIDTH: an (expanded) frame/image card is its own resizable box; a stack is its
-// fixed box width, and a stack's child is stretched to the stack's inner width (its own n.w); an
-// annotation shrinks to fit its text (styles.css), so its width is measured live off the element
-// rather than assumed — everything else is the fixed NODE_W.
+// A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
+// mm_w — and every kind can carry one: a frame/image/query card sizes its whole box with it, while a
+// card/annotation/stack authors only this axis (their height comes from content/outline instead).
+// The two widths that are NOT authored come first, so they win: an outline ROW inside a stack is
+// stretched to the width its indent depth allows (stackRowW, derived — a row can't be resized, and a
+// card keeps whatever width it authored OUTSIDE the stack for when it's dragged back out), and a
+// folded frame's tab shrink-wraps its title. An annotation shrinks to fit its text (styles.css)
+// unless a width was authored, so it's measured live off the element rather than assumed.
 export function nodeW(n: MindNode): number {
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
+  const row = stackRowW(n); if (row != null) return row;             // outline row — derived, not authored
   if (isStack(n)) return n.w ?? STACK_W;
-  if (inStack(n)) return n.w ?? NODE_W;   // full-width row inside a stack (n.w set by layout)
-  if (isAnnotation(n)) return (n.el && n.el.offsetWidth) || NODE_W;
-  return NODE_W;
+  if (isAnnotation(n)) return n.w ?? ((n.el && n.el.offsetWidth) || NODE_W);
+  return n.w ?? NODE_W;
 }
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.
@@ -727,27 +741,69 @@ function frameContentEl(f: MindNode): HTMLElement {
   w.style.height = box.h + 'px';
   return w;
 }
-// ---------- frame / image-card resize ----------
+// ---------- resize ----------
 // a frame is never narrower than a normal card; its min HEIGHT is bounds, so it carries the tab too
 export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
 export const MIN_IMAGE_W = 60, MIN_IMAGE_H = 60;        // an image card can shrink to a small thumbnail
 export const MIN_QUERY_W = 200, MIN_QUERY_H = 160;      // a query card keeps room for the search field + a couple of rows
-function boxMinW(n: MindNode): number { return isImageBox(n) ? MIN_IMAGE_W : isQueryBox(n) ? MIN_QUERY_W : MIN_FRAME_W; }
-function boxMinH(n: MindNode): number { return isImageBox(n) ? MIN_IMAGE_H : isQueryBox(n) ? MIN_QUERY_H : MIN_FRAME_H; }
+// A width-only kind can only ever get WIDER than the width it has by default — the whole point is
+// trading height for width on a card whose text wraps badly, so its natural size is the floor.
+export const MIN_CARD_W = NODE_W, MIN_STACK_W = STACK_W;
+// The one exception: an annotation shrink-wraps its text (styles.css), so it has no fixed natural
+// width to floor at — it can be narrowed too, down to something still readable.
+export const MIN_ANNO_W = 80;
+// An annotation's UN-AUTHORED width: what the element measures with no authored width in play. Its
+// current offsetWidth is useless as a floor once a width HAS been authored (it just reports that
+// width back), so strip both halves of the authored sizing for one measurement and put them straight
+// back. The `w-set` class matters as much as the inline width: it's what lifts the shrink-to-fit
+// max-width cap, and measuring with the cap still lifted returns the full one-line text width — which
+// as a floor would mean a widened annotation could never be narrowed again.
+function naturalW(n: MindNode): number {
+  const el = n.el; if (!el) return NODE_W;
+  const prev = el.style.width, hadSet = el.classList.contains('w-set');
+  el.style.width = ''; el.classList.remove('w-set');
+  const w = el.offsetWidth;
+  el.style.width = prev; el.classList.toggle('w-set', hadSet);
+  return Math.max(MIN_ANNO_W, w);
+}
+function minWOf(n: MindNode): number {
+  if (isImageBox(n)) return MIN_IMAGE_W;
+  if (isQueryBox(n)) return MIN_QUERY_W;
+  if (isFrameBox(n)) return MIN_FRAME_W;
+  if (isStack(n)) return MIN_STACK_W;
+  if (isAnnotation(n)) return naturalW(n);
+  return MIN_CARD_W;
+}
+function minHOf(n: MindNode): number { return isImageBox(n) ? MIN_IMAGE_H : isQueryBox(n) ? MIN_QUERY_H : MIN_FRAME_H; }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 type FrameDir = typeof FRAME_DIRS[number];
-// Ensure the frame has its 8 (invisible) resize hit-zones — one per edge/corner (added once,
-// reused). No visible grip: the resize cursors on the border/corners are the affordance.
-function ensureFrameHandle(n: MindNode): void {
-  const el = n.el!; if (el.querySelector('.fh')) return;
-  for (const dir of FRAME_DIRS) {
+// …and the width-only set: a card / annotation / stack authors a WIDTH but never a height (its
+// height stays whatever its content measures, or — for a stack — whatever its outline needs), so it
+// gets the two side bands and no corners.
+const EW_DIRS = ['e', 'w'] as const;
+// Ensure the node has exactly the (invisible) resize hit-zones its kind wants — one per edge/corner,
+// added once and reused. No visible grip: the resize cursors on the border are the affordance.
+// `:scope >` throughout, NOT a descendant query: child cards are DOM-nested inside their parent
+// (see place/settledHost), so a plain card containing a nested image card would otherwise see the
+// CHILD's handles, conclude it already had its own, and never get any.
+function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
+  const el = n.el!;
+  const key = dirs.join('');
+  if (el.dataset.fhDirs === key) return;   // keyed by the direction SET, so a type flip rebuilds
+  clearResizeHandles(el);
+  for (const dir of dirs) {
     const h = document.createElement('div');
     h.className = 'fh fh-' + dir;
-    h.addEventListener('pointerdown', (e) => startFrameResize(e as PointerEvent, n, dir));
+    h.addEventListener('pointerdown', (e) => startNodeResize(e as PointerEvent, n, dir));
     el.appendChild(h);
   }
+  el.dataset.fhDirs = key;
+}
+function clearResizeHandles(el: HTMLElement): void {
+  el.querySelectorAll(':scope > .fh').forEach(x => x.remove());
+  delete el.dataset.fhDirs;
 }
 // Drag an edge/corner to resize. Work in edge coordinates (left/top/right/bottom) so the edges NOT
 // being dragged stay fixed; the dragged edges snap to the grid and clamp to the min size. Top/left
@@ -762,16 +818,40 @@ function imageAspect(n: MindNode): number {
   const w = n.w ?? IMAGE_W, h = n.h ?? IMAGE_H;
   return w / (h || 1);
 }
-function startFrameResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
+function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   if (state.readOnly || isLockedEffective(n)) return;
   e.stopPropagation(); e.preventDefault();
-  const minW = boxMinW(n), minH = boxMinH(n);
+  // Does this kind author its own HEIGHT, or only a width? A card/annotation measures its height from
+  // its content and a stack derives its own from its outline, so for those the resize writes w only.
+  const sizeH = isBoxNode(n);
+  const minW = minWOf(n), minH = minHOf(n);
   const aspect = isImageBox(n) ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   const flow = !!frameFlow(n);   // frame-h/frame-v: reflow its children live as the box resizes, not just on release
-  const left0 = n.x, top0 = n.y, right0 = n.x + (n.w ?? boxDefaultW(n)), bottom0 = n.y + (n.h ?? boxDefaultH(n));
+  // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
+  // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
+  const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
   const sx = e.clientX, sy = e.clientY;
   const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
+  // Attached annotations ride the BORDER they sit on. An annotation is pinned on top of its parent at
+  // an offset, so a resize that moves an edge it was hugging would otherwise leave it stranded mid-card
+  // (or hanging off the end). Latch each one to its nearer edge on each axis NOW, at the size the user
+  // grabbed, and move it by whatever that edge ends up doing — including the BOTTOM edge of a
+  // width-only card, whose height changes on its own as the text re-wraps.
+  const annos = childrenOf(n.id).filter(isAnnotation).map(a => ({
+    a, x0: a.x, y0: a.y,
+    toRight:  Math.abs((a.x + nodeW(a)) - right0)  < Math.abs(a.x - left0),
+    toBottom: Math.abs((a.y + nodeH(a)) - bottom0) < Math.abs(a.y - top0),
+  }));
+  const shiftAnnos = (): void => {
+    for (const t of annos) {
+      t.a.x = t.x0 + (t.toRight  ? (n.x + nodeW(n)) - right0  : n.x - left0);
+      t.a.y = t.y0 + (t.toBottom ? (n.y + nodeH(n)) - bottom0 : n.y - top0);
+      t.a.dirty = true;
+      paintNode(t.a);
+    }
+  };
   touch(n.id);
+  for (const t of annos) touch(t.a.id);   // one undo step covers the box AND the annotations it carried
   let lastDx = 0, lastDy = 0;
   let subtreeRAF: number | null = null;
   const identity = (v: number): number => v;
@@ -811,18 +891,26 @@ function startFrameResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       if (south) { const h = Math.max(minH, round(bottom0 + lastDy - top0));   bottom = top0 + h; }
       if (north) { const h = Math.max(minH, round(bottom0 - (top0 + lastDy))); top = bottom0 - h; }
     }
-    n.x = left; n.y = top; n.w = right - left; n.h = bottom - top;
+    n.x = left; n.w = right - left;
+    // a width-only kind never gets a y/h written — see sizeH
+    if (sizeH) { n.y = top; n.h = bottom - top; }
     n.dirty = true;
   };
   const move = (ev: PointerEvent): void => {
     lastDx = (ev.clientX - sx) / state.view.k; lastDy = (ev.clientY - sy) / state.view.k;
     resize(identity);
-    paintNode(n); paintEdges();
+    paintNode(n);        // paint FIRST: shiftAnnos reads back the re-wrapped height for a bottom latch
+    shiftAnnos();
+    paintEdges();
     // A flow frame (frame-h/frame-v) arranges its children by wrapping them into the box's own
     // width/height — reflow them live as that box changes size, not just once on release, so the
     // wrap point visibly updates while dragging. Coalesced to once per animation frame (applyLayouts
     // walks every root's subtree, so it's not free) rather than once per raw pointermove.
-    if (flow && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
+    // A width-only kind needs the same live pass for a different reason: its HEIGHT is measured, and
+    // re-wrapping the text at the new width changes it — so its parent's line/fan arrangement (and a
+    // stack's own auto-fitted box) has to settle around the new shape as the drag goes, or everything
+    // below it jumps on release. paintNode(n) above already ran, so the measurement is current.
+    if ((flow || !sizeH) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
       subtreeRAF = null;
       applyLayouts(); paintAll();
     });
@@ -843,6 +931,16 @@ function startFrameResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     window.removeEventListener('pointerup', up);
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // snap to the grid on release, like a dropped card
+    // Back at (or under) the natural width → drop the authored width entirely rather than persisting
+    // a redundant mm_w on every card the user so much as nudges. For an annotation that also restores
+    // its shrink-to-fit sizing, which an explicit width would otherwise pin forever.
+    if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
+    // paint BEFORE laying out: a width-only node's height (and a stack's title-row header, which is
+    // measured) only matches the snapped width once the DOM has it — see prepRow in view/layout.ts.
+    paintNode(n);
+    shiftAnnos();        // settle the latched annotations against the snapped edges
+    // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
+    // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
     applyLayouts(); paintAll(); scheduleSave(); commitStep();
   };
   window.addEventListener('pointermove', move);

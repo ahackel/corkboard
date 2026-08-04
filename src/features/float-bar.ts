@@ -7,7 +7,7 @@
 // existing generic context menu (openMenu, features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, isImageCard, isAnnotation, isQueryCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, stage, setStatus, isBoxType, isImageCard, isAnnotation, isQueryCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { NARROW_MQ, ui } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -210,6 +210,12 @@ function setType(type: NodeType): void {
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.type === type) continue;
+      // Leaving a 2D box for a width-only kind: drop BOTH axes of its box size. The height has to go
+      // (the new kind measures or derives its own), and so does the width — a frame's box is sized to
+      // enclose its children, which says nothing about how wide its own title/body wants to be, and
+      // silently keeping it would turn a converted 800px frame into an 800px card.
+      if (isBoxType(n.type) && !isBoxType(type)) { n.w = undefined; n.h = undefined; }
+      else if (!isBoxType(type)) n.h = undefined;   // card/annotation/stack: the height is never authored
       if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
       if (type === 'image' && (n.w == null || n.h == null)) { n.w = IMAGE_W; n.h = IMAGE_H; }
       if (type === 'query' && (n.w == null || n.h == null)) { n.w = QUERY_W; n.h = QUERY_H; }
