@@ -175,7 +175,6 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       locked: !!mm.locked,
       done: !!mm.done,
       checklist: !!mm.checklist,
-      bg: !!mm.bg,
       type: mm.type, layout: mm.layout,
       w: mm.w ?? undefined,
       h: mm.h ?? undefined,

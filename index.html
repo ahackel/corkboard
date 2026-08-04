@@ -63,8 +63,6 @@
          transform (compositor-only); the gradients are rebuilt only when the level changes. -->
     <div id="grid"><div id="gridFine"></div></div>
     <div id="world">
-      <!-- group backgrounds: the "encloses card + descendants" tint, behind everything else -->
-      <svg id="backgrounds"></svg>
       <!-- freehand sketch layer: ink drawn on the canvas, always on top of the cards (z-index, see styles.css) -->
       <svg id="sketch"></svg>
       <svg id="edges"></svg>
@@ -116,7 +114,7 @@
     </div>
   </div>
 
-  <!-- properties for the active branch card: colour / tags / checklist / group background (the same
+  <!-- properties for the active branch card: colour / tags / checklist (the same
        shared control logic as the canvas float bar, features/properties.ts). Kept OUTSIDE #outline — like the
        New-card button above — so its position:fixed resolves against the VIEWPORT and pins to the
        bottom (a fixed child of the transformed, scrolling drawer would ride the scroll instead). On
@@ -130,7 +128,6 @@
     </div>
     <div class="bp-toggles">
       <label class="checkbox-label"><input id="bpChecklist" type="checkbox"> Checklist</label>
-      <label class="checkbox-label"><input id="bpBg" type="checkbox"> Group background</label>
     </div>
     <div class="fgroup fg-tags">
       <label>Tags</label>
@@ -147,8 +144,6 @@
     <button id="fbLayout" class="fb-icon" title="Layout — click for options" aria-label="Layout"></button>
     <label class="fb-icon fb-toggle" title="Checklist" aria-label="Checklist">
       <input id="fbChecklist" type="checkbox"><span class="ic" data-icon="checklist"></span></label>
-    <label class="fb-icon fb-toggle" title="Group background" aria-label="Group background">
-      <input id="fbBg" type="checkbox"><span class="ic" data-icon="group-bg"></span></label>
     <span class="fb-sep"></span>
     <!-- lock toggle: icon (open/closed padlock) + title set from the selection in float-bar.ts.
          While the selection IS locked the bar collapses to just this button (see .locked-sel). -->

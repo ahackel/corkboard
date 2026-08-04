@@ -63,9 +63,9 @@ setupGrid();
 
 
 // ---------- rendering ----------
-// small closed-padlock badge shown at a locked card's upper-left corner (shares the glyph the
-// read-only toolbar button uses — see ICON_LOCK_CLOSED further down); exported for the outline
-// row (features/outline.ts), which shows the same badge next to its title.
+// small closed-padlock badge shown at a locked card's upper-left corner; exported for the outline
+// row (features/outline.ts), the float bar's lock toggle (features/float-bar.ts) and the read-only
+// toolbar button (applyReadOnly, further down) — all four share this one glyph.
 export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
 // magnifier glyph shown in front of a query card's title; tapping it reveals the query-input in
 // the title's place (see the query-icon click handler + endQueryEdit below).
@@ -1003,7 +1003,7 @@ export function toggleDone(n: MindNode): void {
   if (n.parent){ const p = state.nodes.get(n.parent); if (p) paintNode(p); }
   scheduleSave();
 }
-// Lock/unlock every selected card (context menu). Locking freezes that card in place — no move,
+// Lock/unlock every selected card (the float bar's lock toggle / L). Locking freezes that card in place — no move,
 // (un)collapse, rename/body/color/type/layout edit, add-child, or delete — and cascades so its
 // whole subtree becomes unselectable too (see utils/model.ts). Unlocking never touches descendants
 // (lock is per-card, not stored on them). A descendant of a locked ancestor can't be selected, so
@@ -1014,6 +1014,7 @@ export function setLockedSelection(ids: Iterable<string>, locked: boolean): void
   if (!cards.length) return;
   record(cards.map(n => n.id), () => { for (const n of cards){ n.locked = locked; n.dirty = true; } });
   paintAll();
+  syncFloatBar();   // the bar collapses to just its lock toggle while the selection is locked
   scheduleSave();
   setStatus(`${locked ? 'Locked' : 'Unlocked'} ${cards.length} card${cards.length===1?'':'s'}`);
 }
@@ -1094,7 +1095,7 @@ const pal = (name: string): string => getComputedStyle(document.body).getPropert
 const SWATCH_KEYS = PALETTE;
 export const SWATCH_BG: Record<string, string> = Object.fromEntries(SWATCH_KEYS.map(c => [c, pal(c)]));
 // re-derive the palette hexes after a theme switch (light/dark have different --pal-* values)
-// and repaint everything that bakes them in as literal hex (edges, group backgrounds, swatches).
+// and repaint everything that bakes them in as literal hex (edges, swatches).
 export function refreshPalette(): void {
   for (const c of SWATCH_KEYS) SWATCH_BG[c] = pal(c);
   refreshSwatches();
@@ -1143,7 +1144,7 @@ export function applyReadOnly(): void {
   const ro = state.readOnly;
   document.body.classList.toggle('readonly', ro);
   roBtn.classList.toggle('locked', ro);          // red when locked
-  roBtn.innerHTML = ro ? ICON_LOCK_CLOSED : ICON_LOCK_OPEN;
+  roBtn.innerHTML = ro ? LOCK_BADGE_SVG : ICON_LOCK_OPEN;
   roBtn.title = ro ? 'Read-only — click to unlock & edit (R)' : 'Lock to read-only (R) — view & collapse only';
   // ghost card visibility is driven by body.readonly CSS rule
   updateUndoButtons();

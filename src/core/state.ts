@@ -67,8 +67,6 @@ export interface MindNode {
   checklist: boolean;              // Trello-style: treat my DIRECT children as a checklist — each
                                     // gets a done checkbox and I show their `n/m` progress. Doesn't
                                     // cascade further down; a child can run its own checklist too.
-  bg: boolean;                     // draw a translucent background enclosing me + all my visible
-                                    // descendants (see view/edges.ts paintBackgrounds)
   type: NodeType;                  // card | frame | image | query — the node's kind (persisted as mm_type)
   layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
   // Resizable box size (world px). Meaningful for a frame (the box whose interior adopts cards
@@ -162,7 +160,6 @@ export const state: AppState = {
 
 export const world = document.getElementById('world') as HTMLElement;
 export const stage = document.getElementById('stage') as HTMLElement;
-export const backgroundsSvg = document.getElementById('backgrounds') as unknown as SVGSVGElement;
 // Freehand sketch layer — sits behind the cards (see index.html / styles.css z-index).
 export const sketchSvg = document.getElementById('sketch') as unknown as SVGSVGElement;
 export const edgesSvg = document.getElementById('edges') as unknown as SVGSVGElement;

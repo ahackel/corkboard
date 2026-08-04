@@ -130,7 +130,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
         title: uniqueTitle(c.p.title),
         color: c.p.color, keepStatus: c.p.keepStatus,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
-        collapsed: c.p.mm.collapsed, done: c.p.mm.done, checklist: c.p.mm.checklist, bg: c.p.mm.bg,
+        collapsed: c.p.mm.collapsed, done: c.p.mm.done, checklist: c.p.mm.checklist,
         type: c.p.mm.type, layout: c.p.mm.layout,
         // a root reattaches to the paste target — its old side is meaningless there
         side: root ? undefined : (c.p.mm.side || undefined) as LayoutSide | undefined,

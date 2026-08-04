@@ -244,7 +244,7 @@ input::placeholder { color:var(--muted); opacity:1; }
 body.grabbing, body.grabbing * { cursor:grabbing !important; }
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
-svg#backgrounds, svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
+svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
 /* Screen-space background grid (view/grid.ts), behind #world and everything in it. view/grid.ts
    overrides `inset` with one major cell of overhang so panning can be a pure translate of an
    already-rasterized tile — the layer stays wider than the viewport, so no uncovered strip ever
@@ -260,7 +260,6 @@ svg#backgrounds, svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:ab
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
-svg#backgrounds { z-index:0; pointer-events:none; } /* group backgrounds behind everything */
 svg#sketch { z-index:8; pointer-events:none; }      /* freehand ink ABOVE every card (incl. dragging:6, annotation:7) so ink is never occluded (drawing is handled on #stage) */
 svg#edges { z-index:1; pointer-events:none; }      /* curves behind nodes */
 .node { z-index:2; }                               /* nodes in the middle */
@@ -320,8 +319,8 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node .progress { flex:none; margin-left:auto; padding-left:.5em; font-size:11px; font-weight:600; opacity:.7; }
 /* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
    .hidden-count's upper-right collapse bubble (same footprint, opposite corner so the two never
-   collide on a card that's both locked and collapsed) — plus a dashed outline as an at-a-glance
-   cue that it can't be moved, (un)collapsed, or edited. See isLockedEffective (utils/model.ts).
+   collide on a card that's both locked and collapsed). That badge is the ONLY cue — no dashed
+   outline: it read as noise on every locked card. See isLockedEffective (utils/model.ts).
    Filled glyph (no circle backing), colour inherited from the card so it always matches the
    title text exactly (see .node's color / .c-* overrides above). */
 .node .lock-badge { position:absolute; left:-8px; top:-8px;
@@ -330,7 +329,16 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   display:none; align-items:center; justify-content:center; }
 .node .lock-badge svg { width:100%; height:100%; }
 .node.locked .lock-badge { display:inline-flex; }
-.node.locked { outline:2px dashed var(--edge); outline-offset:2px; }
+/* A frame's own element is the BOX, which starts FRAME_TAB_DROP below the frame's bounds — so the
+   offsets above would pin the badge to the box's corner, mid-frame, instead of the frame's actual
+   upper-left corner. Put it on the TITLE TAB's corner instead: the tab's left edge is the box's
+   outer edge (4px = FRAME_BORDER left of the padding box that positions both) and its top edge is
+   19px above that outer edge (FRAME_TAB_H less the 1px overlap — see the tab's own rule below), so
+   the badge moves 4px left and 23px up from the box corner (that 19 + the tab's own 4px offset from
+   the padding box). z-index matches the tab's: a frame is not a stacking context,
+   so without it the badge would be occluded by the edges layer and the cards the frame holds.
+   A FOLDED frame IS the tab and sits at the bounds top already — it keeps the offsets above. */
+.node.frame > .lock-badge { left:-12px; top:-31px; z-index:5; }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
 /* z-index:auto paints it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
    (z-index:2) — a positioned `auto` element paints in the same step as z-index:0, in tree order.
@@ -966,13 +974,19 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-icon { background:transparent; color:var(--muted); }
 .fb-icon svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 .fb-icon:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
-/* checklist / group-bg toggles: a real (visually hidden) checkbox drives the icon's state */
+/* the checklist toggle: a real (visually hidden) checkbox drives the icon's state */
 .fb-toggle input { position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
 .fb-toggle:has(input:checked) { color:#fff; background:var(--accent); }
 .fb-toggle:has(input:indeterminate) { color:var(--accent); }
 /* stretches past the bar's own padding (align-self:stretch + negative margin) so it touches the
    bar's top/bottom edges instead of floating as a short centred tick */
 .fb-sep { flex:none; width:1px; align-self:stretch; margin:-4px 2px; background:var(--node-border); }
+/* locked selection: nothing about the card can be changed, so the bar shrinks to just the lock
+   button (float-bar.ts's markLock) — one obvious way back out, no dead controls. The ID+class
+   prefix is what out-specifies `#floatBar button, #floatBar label` above (markChips only ever
+   CLEARS its inline display, so it can't fight this). Red padlock: same cue as #roBtn.locked. */
+#floatBar.locked-sel > *:not(#fbLock) { display:none; }
+#floatBar.locked-sel #fbLock { color:#e0564f; }
 #floatBar .fb-swatch { width:24px; height:24px; margin:0 4px; }   /* .swatch already sizes to 22px */
 
 /* small popover anchored under/over its trigger button (colour / layout pickers) — borderless,
@@ -1203,7 +1217,7 @@ body.outline #floatBar { display:none !important; }
 
 /* ---- outline branch editor: this card + its siblings as full editable cards (features/
    branch-editor.ts) ---- Rendered into #olCards inside the outline panel; body.ol-editing swaps
-   the row list for it INSTANTLY (no slide). Colour/tags/checklist/group-bg live in the bottom
+   the row list for it INSTANTLY (no slide). Colour/tags/checklist live in the bottom
    properties sheet (#branchProps); duplicate/delete stay in the row ⋯ menu. */
 .ol-cards { display:none; max-width:640px; margin:0 auto; }
 /* hide the row list while editing; the + button (in .ol-head) stays — it adds a card to the group */
@@ -1257,7 +1271,7 @@ body.light .oc-card:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { colo
 .oc-card.active { box-shadow:0 0 0 2px var(--accent); }
 
 /* ---- branch-view properties sheet (features/branch-editor.ts + properties.ts) ----
-   Colour / tags / checklist / group background for the active card. Kept OUTSIDE #outline so its
+   Colour / tags / checklist for the active card. Kept OUTSIDE #outline so its
    position:fixed pins to the VIEWPORT bottom (a fixed child of the transformed, scrolling drawer
    rides the scroll instead of staying put). Phone → spans the screen bottom; desktop → aligned to
    the outliner drawer (see the min-width:701 rule below). Parked below (translateY) until

@@ -2,8 +2,8 @@
 // Replaces the old #editor right-hand sidebar: a compact row of icon buttons anchored right
 // next to the selected card (Miro/Figma-style), instead of a persistent docked panel. Colour
 // and layout each collapse to one trigger button that opens a small popover with the full
-// picker (the same #edColors/#edLayoutTypes markup the old sidebar used); checklist/group-bg
-// are icon toggles; a trailing kebab button replaces the old always-visible action row via the
+// picker (the same #edColors/#edLayoutTypes markup the old sidebar used); checklist is an icon
+// toggle; a trailing kebab button replaces the old always-visible action row via the
 // existing generic context menu (openMenu, features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -30,11 +30,10 @@ const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbType = byId<HTMLButtonElement>('fbType');
 const fbLayout = byId<HTMLButtonElement>('fbLayout');
 const fbChecklist = byId<HTMLInputElement>('fbChecklist');
-const fbBg = byId<HTMLInputElement>('fbBg');
-// the <label> wrapping each toggle (markup: <label class="fb-toggle"><input id="fb...">...) —
+// the <label> wrapping the toggle (markup: <label class="fb-toggle"><input id="fbChecklist">...) —
 // hidden entirely for an annotation selection, see markChips below.
 const fbChecklistLabel = fbChecklist.parentElement!;
-const fbBgLabel = fbBg.parentElement!;
+const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
 const typePop = byId('fbTypePop');
@@ -44,14 +43,14 @@ const edColors = byId('edColors');
 const edTypes = byId('edTypes');
 const edLayoutTypes = byId('edLayoutTypes');
 
-// colour / checklist / group-bg share the SAME control wiring the sidebar (and the outline's
+// colour / checklist share the SAME control wiring the sidebar (and the outline's
 // branch-editor sheet) used — see features/properties.ts. Tags are omitted: no room in the bar.
 // Deferred to first use (like branch-editor.ts's own instance): createProperties() eagerly builds
 // the swatch row from main.js's PALETTE/SWATCH_BG, which aren't initialized yet while this module
 // is still being imported at main.ts's top — see the main↔features import cycle note in CLAUDE.md.
 let _props: PropertyControls | null = null;
 function props(): PropertyControls {
-  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist, bg: fbBg }, selectedIds);
+  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist }, selectedIds);
 }
 
 // ---------- layout picker ----------
@@ -253,12 +252,9 @@ function markChips(): void {
     c.classList.toggle('active', c.dataset.type === type));
   fbType.innerHTML = type ? TYPE_ICONS[type] : TYPE_ICONS.card;
 
-  // checklist / group-background are meaningless on an annotation (a title-less leaf that can
-  // never have children — no subtree to check off or tint) — hide both toggles entirely rather
-  // than leave a no-op control in the bar.
-  const isAnno = type === 'annotation';
-  fbChecklistLabel.style.display = isAnno ? 'none' : '';
-  fbBgLabel.style.display = isAnno ? 'none' : '';
+  // a checklist is meaningless on an annotation (a title-less leaf that can never have children —
+  // no subtree to check off) — hide the toggle entirely rather than leave a no-op control in the bar.
+  fbChecklistLabel.style.display = type === 'annotation' ? 'none' : '';
 
   const forType: NodeType = type ?? 'card';
   rebuildLayoutChips(forType);
@@ -286,10 +282,32 @@ function markColorTrigger(): void {
   else fbColor.style.setProperty('--sw', active.style.getPropertyValue('--sw'));
 }
 
+// ---------- lock toggle ----------
+// Replaces the old Lock/Unlock context-menu entry. A locked card can't be moved, folded, renamed,
+// re-typed, re-coloured or deleted (isLockedEffective), so every OTHER control in the bar would be
+// a no-op — hence `.locked-sel`, which collapses the bar down to this one button (styles.css). A
+// mixed selection counts as locked (same rule as the L shortcut in main.ts): the button unlocks all.
+function anyLockedInSelection(): boolean {
+  return selectedIds().some(id => { const n = state.nodes.get(id); return !!n && isLockedEffective(n); });
+}
+function markLock(): void {
+  const locked = anyLockedInSelection();
+  bar.classList.toggle('locked-sel', locked);
+  fbLock.innerHTML = locked ? LOCK_BADGE_SVG : ICON_LOCK_OPEN;
+  fbLock.title = locked ? 'Unlock (L)' : 'Lock (L) — freeze this card in place';
+  fbLock.setAttribute('aria-label', locked ? 'Unlock' : 'Lock');
+}
+fbLock.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closePopovers();
+  setLockedSelection(state.sel, !anyLockedInSelection());
+});
+
 function syncControls(): void {
   props().sync();
   markChips();
   markColorTrigger();
+  markLock();
 }
 
 // ---------- popovers (colour / layout) ----------
@@ -389,9 +407,8 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
     entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
     entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: anyLocked });
-    entries.push('sep');
-    entries.push({ label: (multi ? anyLocked : locked) ? 'Unlock' : 'Lock', shortcut:'L',
-      run: () => { selectTargetFirst(); setLockedSelection(state.sel, !(multi ? anyLocked : locked)); } });
+    // Lock/unlock is NOT here: it lives on the float bar's own lock toggle (markLock above), which
+    // is the only control left in the bar once a card is locked. The L shortcut still works too.
     entries.push('sep');
   }
   // copy/collapse/fit/export never mutate → allowed in read-only mode too

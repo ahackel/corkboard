@@ -20,7 +20,7 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
   touch(id);   // not in state.nodes yet → before-image is null (undo of a create = remove it)
   return {
     id, file:null,
-    x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false, done:false, checklist:false, bg:false,
+    x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false, done:false, checklist:false,
     title:'', color:'', keepStatus:'', tags:[], body:'',
     type:'card', layout:'inherit',
     dirty:true, dirtyLayout:true,
@@ -112,7 +112,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     parent: s.parent,
     title: copyTitle(s.title),
     color: s.color,
-    tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist, bg: s.bg,
+    tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist,
     type: s.type, layout: s.layout, side: s.side,
     w: s.w, h: s.h,   // a frame/image card's own box size
   });

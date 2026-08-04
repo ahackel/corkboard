@@ -130,7 +130,7 @@ laying out must paint again (see `withLayoutAnimation`).
 `mm_type`, `mm_layout`, `mm_w`/`mm_h` (box kinds only — for a **frame** these are its BOUNDS,
 i.e. they include the title tab: `mm_position_y` is the tab's top edge and the box itself starts
 `FRAME_TAB_DROP` lower, see the frame bullet below), plus the card flags `mm_locked`,
-`mm_done`, `mm_checklist`, `mm_bg` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
+`mm_done`, `mm_checklist` and `mm_query`. `parseMd` reads them; `serializeMd` writes them
 back. Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter
 field and the note body verbatim — be careful to keep that property when touching
