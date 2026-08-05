@@ -15,4 +15,4 @@ This is a **local-first mindmap editor** for a folder of Markdown notes.
 
 ## Take the tour
 
-The cards around this one each cover a topic. **Expand one** (double-click, or press `X`) to reveal its details, then go deeper into the nested cards.
+The cards around this one each cover a topic. **Expand one** — click the `+N` button at its top-right corner, or press `X` — to reveal its details, then go deeper into the nested cards.

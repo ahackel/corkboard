@@ -8,7 +8,9 @@ mm_y: -43
 mm_collapsed: true
 ---
 
-- **New card:** Drag the **＋** button on the lower left or press `Space` (drops at the pointer).
+- **New card:** **double-click empty canvas**, drag the **＋** button on the lower left, or press `Space` (drops at the pointer).
+
+- **Inside a frame:** double-click its empty interior and the card lands in that frame. Double-clicking a stack adds a row at the end.
 
 - **Child:** select a card, then press `Tab` — it branches off the selection.
 

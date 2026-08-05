@@ -33,8 +33,13 @@ export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'v
 export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'image' || t === 'query';
 export type LayoutSide = 'left' | 'right' | 'up' | 'down';
 export type EdgeStyle = 'straight' | 'orthogonal' | 'bezier';
-export type GridStyle = 'none' | 'dot' | 'line';
+export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
 export type GridSize = 0 | 20 | 40 | 80 | 160 | 320;
+// The grid button's cycle order (least ink → most) and the size picker's choices, kept here beside
+// their types because they're also the lists data/persistence.ts validates settings.json against —
+// two copies of either would drift the moment a style or step is added.
+export const GRID_STYLES: GridStyle[] = ['none', 'dot', 'mesh', 'line'];
+export const GRID_SIZES: GridSize[] = [0, 20, 40, 80, 160, 320];
 
 // One ordered frontmatter entry: a top-level `key:` line plus its continuation lines.
 // `key` is null for leading content with no key (preserved verbatim on save).

@@ -11,8 +11,9 @@ import { state, stage, setStatus, isBoxType, isImageCard, isAnnotation, isQueryC
 import { NARROW_MQ, ui } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { applyLayouts, subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget } from '../view/layout.js';
+import { applyLayouts, subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget, isTabsFrame } from '../view/layout.js';
 import { outlineActive } from './outline.js';
+import { FOLDER_PATH } from '../view/icons.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, addChild, createSibling, mkNode, uniqueTitle } from './crud.js';
@@ -21,7 +22,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, toggleCollapse, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -64,11 +65,18 @@ function props(): PropertyControls {
 // render core.
 const SVG_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">';
 const DOT = (cx: number, cy: number, r = 2.2) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="currentColor" stroke="none"/>`;
+// One card in a layout icon — the arrangement glyphs below are nothing but these, laid out the way
+// the layout lays children out.
+const BLOCK = (x: number, y: number, w: number, h: number) =>
+  `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="currentColor" stroke="none"/>`;
 // A node's KIND. Selecting one seeds/tears down its box (see setType) and swaps which layout
 // chips the layout popover offers (LAYOUTS_BY_TYPE below).
 const TYPE_ICONS: Record<NodeType, string> = {
-  card: SVG_OPEN + '<rect x="5" y="6" width="14" height="12" rx="2"/><path d="M8 10h8M8 13.5h5"/></svg>',
-  frame: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="6.5" y="8.5" width="6" height="4.5" rx="1" fill="currentColor" stroke="none"/></svg>',
+  // A plain box: the FRAME's folder less its tab, and shallower — the two kinds differ by exactly
+  // that tab on the canvas too. Nothing inside it, so it can't be read as "a card with two lines of
+  // something"; the dashed `inherit` layout chip is the only other hollow rect and stays distinct.
+  card: SVG_OPEN + '<rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>',
+  frame: SVG_OPEN + FOLDER_PATH + '</svg>',
   stack: SVG_OPEN + '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.5h16"/><rect x="6.5" y="10.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/><rect x="6.5" y="14.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/></svg>',
   image: SVG_OPEN + '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="8.5" cy="9.5" r="1.5" fill="currentColor" stroke="none"/><path d="M4 15.5l5-5 3.5 3.5 3-3 4.5 4.5"/></svg>',
   annotation: SVG_OPEN + '<path d="M4 4l3.5 3.5" stroke-dasharray="2 2"/><rect x="8" y="8" width="12" height="9" rx="2"/><path d="M10.5 12h7"/></svg>',
@@ -82,28 +90,40 @@ const NODE_TYPES: { key: NodeType; label: string; icon: string }[] = [
   { key:'annotation', label:'Annotation — a title-less note pinned on top of its parent, ignored by layout', icon: TYPE_ICONS.annotation },
   { key:'query', label:'Query — a resizable box with a search field over a scrollable list of matching cards', icon: TYPE_ICONS.query },
 ];
+// An ARRANGEMENT, one glyph per layout key — deliberately generic: none of them draws the container
+// it sits in, so the same chip means the same thing whichever kind offers it (`free` is shared by
+// card and frame already, and a kind added later inherits the vocabulary for free). Blocks are cards:
+// scattered for free, three columns for horizontal, three rows for vertical. `tabs` is excluded from
+// the map, not just from the rows below — it's never a chip (see LAYOUTS_BY_TYPE.frame).
+const LAYOUT_ICONS: Record<Exclude<NodeLayout, 'tabs'>, string> = {
+  inherit: SVG_OPEN + '<rect x="5" y="7" width="14" height="10" rx="2" stroke-dasharray="3 2.5"/></svg>',
+  // Cards where they were dropped — the same BLOCKs the two flow glyphs use, just not lined up. Dots
+  // are the CONNECTOR vocabulary (line/fan below, where what matters is the chain, not the card).
+  free: SVG_OPEN + BLOCK(3.5, 4.8, 7.5, 4) + BLOCK(13, 10, 7.5, 4) + BLOCK(5.5, 15.2, 7.5, 4) + '</svg>',
+  line: SVG_OPEN + DOT(4,12) + '<path d="M6.5 12h3"/>' + DOT(12,12) + '<path d="M14.5 12h3"/>' + DOT(20,12) + '</svg>',
+  fan: SVG_OPEN + DOT(4,12) + '<path d="M6 12l6-6M6 12h6M6 12l6 6"/>' + DOT(14,6,1.8) + DOT(14,12,1.8) + DOT(14,18,1.8) + '</svg>',
+  horizontal: SVG_OPEN + BLOCK(3.5, 5, 4.6, 14) + BLOCK(9.7, 5, 4.6, 14) + BLOCK(15.9, 5, 4.6, 14) + '</svg>',
+  vertical: SVG_OPEN + BLOCK(3.5, 5, 17, 3.2) + BLOCK(3.5, 10.4, 17, 3.2) + BLOCK(3.5, 15.8, 17, 3.2) + '</svg>',
+};
 // How a node of each type arranges its children. The layout popover shows exactly this type's set
 // (image has none — it's a leaf, so its layout chip row is empty and the trigger is hidden).
 const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: string }[]> = {
   card: [
-    { key:'inherit', label:'Inherit — take the parent’s layout (default)',
-      icon: SVG_OPEN + '<rect x="5" y="7" width="14" height="10" rx="2" stroke-dasharray="3 2.5"/></svg>' },
-    { key:'free', label:'Free — children stay where you drag them',
-      icon: SVG_OPEN + DOT(6,7) + DOT(17,8) + DOT(11,17) + '</svg>' },
+    { key:'inherit', label:'Inherit — take the parent’s layout (default)', icon: LAYOUT_ICONS.inherit },
+    { key:'free', label:'Free — children stay where you drag them', icon: LAYOUT_ICONS.free },
     { key:'line', label:'Line — children chained one after another, each on whichever side it sits on',
-      icon: SVG_OPEN + DOT(4,12) + '<path d="M6.5 12h3"/>' + DOT(12,12) + '<path d="M14.5 12h3"/>' + DOT(20,12) + '</svg>' },
-    { key:'fan', label:'Fan — children spread out, each to whichever side it’s placed on',
-      icon: SVG_OPEN + DOT(4,12) + '<path d="M6 12l6-6M6 12h6M6 12l6 6"/>' + DOT(14,6,1.8) + DOT(14,12,1.8) + DOT(14,18,1.8) + '</svg>' },
+      icon: LAYOUT_ICONS.line },
+    { key:'fan', label:'Fan — children spread out, each to whichever side it’s placed on', icon: LAYOUT_ICONS.fan },
   ],
   frame: [
-    { key:'free', label:'Free — children placed freely inside the box',
-      icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="6.5" y="8.5" width="6" height="4.5" rx="1" fill="currentColor" stroke="none"/></svg>' },
-    { key:'horizontal', label:'Horizontal — cards flow left to right, wrapping down',
-      icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="6.5" y="9.5" width="4.5" height="5" rx="1" fill="currentColor" stroke="none"/><rect x="13" y="9.5" width="4.5" height="5" rx="1" fill="currentColor" stroke="none"/></svg>' },
-    { key:'vertical', label:'Vertical — cards flow top to bottom, wrapping right',
-      icon: SVG_OPEN + '<rect x="3.5" y="5" width="17" height="14" rx="2"/><rect x="8.5" y="7.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/><rect x="8.5" y="12.5" width="7" height="4" rx="1" fill="currentColor" stroke="none"/></svg>' },
-    { key:'tabs', label:'Tabs — child frames docked as tabs; one open at a time, click a tab to switch',
-      icon: SVG_OPEN + '<rect x="3.5" y="8" width="17" height="11" rx="2"/><path d="M3.5 8V6a1 1 0 011-1h4a1 1 0 011 1v2"/><path d="M11 8V6.5a1 1 0 011-1h3a1 1 0 011 1V8" opacity=".55"/></svg>' },
+    { key:'free', label:'Free — children placed freely inside the box', icon: LAYOUT_ICONS.free },
+    { key:'horizontal', label:'Horizontal — cards flow left to right, wrapping down', icon: LAYOUT_ICONS.horizontal },
+    { key:'vertical', label:'Vertical — cards flow top to bottom, wrapping right', icon: LAYOUT_ICONS.vertical },
+    // No `tabs` chip, deliberately: a tab group is made by DRAGGING one frame's title onto another's
+    // tab and unmade by dragging its tabs back out (the last one takes the empty box with it), so
+    // `mm_layout: tabs` is bookkeeping the user never picks. It's also unreachable from here — an open
+    // group can't be selected at all (main.ts selTarget) — and markChips hides this whole row for the
+    // one group that still can be, the folded pill.
   ],
   // a stack always outlines its whole subtree — there's nothing to choose, so its chip row is empty
   // and the layout trigger hides itself (markChips), same as for the leaf kinds
@@ -244,7 +264,9 @@ function setType(type: NodeType): void {
 // Give a tab group's tabs their own boxes back: open every one (only one was open) and cascade them
 // inside the frame, since as tabs they were all stacked in the same strip band and would otherwise
 // land in a pile. Their authored mm_w/mm_h were never touched while docked, so each comes back at the
-// size it went in at. Run while the frame is still a tabs frame, i.e. BEFORE the layout is reassigned.
+// size it went in at. Run while the frame is still a tabs frame, i.e. BEFORE the type is reassigned —
+// setType (retyping a folded group to a card/stack/…) is the one caller left, since the layout picker
+// no longer offers tabs at all and hides itself for a group.
 function undockAllTabs(g: MindNode): void {
   const box = frameInterior(g);
   tabsOf(g).forEach((t, i) => {
@@ -268,7 +290,8 @@ function setLayout(layout: NodeLayout): void {
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.layout === layout) continue;
-      if (n.layout === 'tabs') undockAllTabs(n);   // leaving tabs: hand each tab its own box back
+      // No tabs case here: this row is hidden for a tab group (markChips), so a layout is never
+      // reassigned over one. Leaving tabs behind is the KIND picker's job (setType → undockAllTabs).
       // Drop the stored child order: a switch INTO a managed layout (line/fan/flow) must reseed
       // order from the children's CURRENT positions — a free layout never touches kidOrder, so a
       // stale order from an earlier managed pass would otherwise survive.
@@ -297,7 +320,12 @@ function markChips(): void {
 
   const forType: NodeType = type ?? 'card';
   rebuildLayoutChips(forType);
-  const hasLayout = LAYOUTS_BY_TYPE[forType].length > 0;
+  // A tab group has no arrangement to choose — its open tab lays out the box's contents, and tabs
+  // mode itself is entered/left by dragging (no chip, see LAYOUTS_BY_TYPE.frame). Only a FOLDED group
+  // reaches this at all, and showing it three chips with none active would read as a layout it lost;
+  // worse, clicking one would silently dissolve the group. Hide the row for any selection holding one.
+  const hasTabs = ids.some(id => { const n = state.nodes.get(id); return !!n && isTabsFrame(n); });
+  const hasLayout = LAYOUTS_BY_TYPE[forType].length > 0 && !hasTabs;
   fbLayout.style.display = hasLayout ? '' : 'none';
   if (!hasLayout) { fbLayout.innerHTML = ''; return; }
   const layoutSet = new Set(ids.map(id => state.nodes.get(id)?.layout));
@@ -394,9 +422,18 @@ fbLayout.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(l
 // already closes itself in setLayout above). Runs after properties.ts's own listener has already
 // set the new .active swatch (bubble phase fires the target's listener before this ancestor one).
 colorPop.addEventListener('click', (e) => {
-  if (!(e.target as HTMLElement).closest('.swatch')) return;
+  const sw = (e.target as HTMLElement).closest('.swatch');
+  if (!sw) return;
   markColorTrigger();
+  // …except the custom chip, whose click OPENS the native colour sheet rather than picking anything:
+  // closing here would tear the swatch row down while the user is still choosing, and the trigger
+  // has nothing to mirror yet. It closes the ordinary way — a tap outside, or Esc.
+  if (sw.classList.contains('custom')) return;
   closePopovers();
+});
+// …and while that sheet is open, keep the trigger's swatch in step with the live preview.
+colorPop.addEventListener('input', (e) => {
+  if ((e.target as HTMLElement).closest('.swatch.custom')) markColorTrigger();
 });
 document.addEventListener('pointerdown', (e) => {
   const t = e.target as Node;
@@ -450,7 +487,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   // copy/collapse/fit/export never mutate → allowed in read-only mode too
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
   if (!multi)
-    entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => foldNodeOrGroup(n),
+    entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id),
       disabled: locked || (!childrenOf(n.id).length && !(n.body && n.body.trim())) });
   entries.push({ label:'Fit view', shortcut:'F', run: () => frameBox(targetIds.map(id => state.nodes.get(id))) });
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: !n.file });
@@ -477,17 +514,43 @@ fbMore.addEventListener('click', (e) => {
 });
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
-const GAP = 10;
+const GAP = 20;
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;
 }
-function positionBar(): void {
-  if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return; }   // CSS docks it to the bottom
-  const n = anchorNode(); const el = n?.el; if (!n || !el) return;
+// What the bar centres itself over HORIZONTALLY: the node's TITLE, not its box. A frame's box can be
+// many times wider than its label, and the bar belongs over the thing you selected and are about to
+// rename/recolour — centred on a wide box it drifts far from the tab it acts on. Via actionTarget, so a
+// selected tab GROUP (which shows no title of its own) uses its OPEN TAB's label, the same node its
+// colour/rename/delete already land on. labelEl (main.ts) owns WHICH element that is, so the folded /
+// docked case needs no second spelling here; an image card / annotation renders its title row empty,
+// hence the width guard falling back to the whole box.
+function labelRect(n: MindNode): DOMRect {
+  const t = actionTarget(n);
+  const el = t.el ?? n.el!;
+  const lr = labelEl(t)?.getBoundingClientRect();
+  return (lr && lr.width > 4) ? lr : el.getBoundingClientRect();
+}
+// Put the bar over its anchor card. Returns whether it could actually be placed — false when the
+// selection has nothing MEASURABLE behind it, which is not a theoretical case:
+//   · the anchor id resolves to no node, or to a node with no element yet — a selection carried over
+//     from before a (re)load, whose ids are all minted fresh (see loadFromDir);
+//   · the anchor is HIDDEN (an ancestor folded under it, a tab closed over it) — `display:none`, so
+//     every rect it reports is 0×0.
+// Both used to leave the bar visible in the top-left corner of the SCREEN: the first because it bailed
+// before writing left/top, so a bar that had never been placed kept its static position; the second
+// because a zero rect lands at the world origin and then gets clamped to the 4px viewport margin. The
+// caller hides it instead (`unanchored`) and keeps polling, so it comes back the moment the card does —
+// unfolding the branch, or the next real selection, puts it right back over its card.
+function positionBar(): boolean {
+  if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return true; }   // CSS docks it to the bottom
+  const n = anchorNode(); const el = n?.el; if (!n || !el) return false;
   const r = el.getBoundingClientRect();
+  if (!r.width && !r.height) return false;   // hidden (display:none) — nothing to hang off
+  const lr = labelRect(n);
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
-  let left = r.left + r.width / 2 - bw / 2;
+  let left = lr.left + lr.width / 2 - bw / 2;
   // Anchor on the node's BOUNDS top, not its element's: a frame box's element starts FRAME_TAB_DROP
   // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
   // would hang the bar over the tab and shift it when a frame is converted to a card or back.
@@ -498,6 +561,7 @@ function positionBar(): void {
   bar.style.left = `${left}px`;
   bar.style.top = `${top}px`;
   if (activePopover) positionPopover(activePopover.pop, activePopover.anchor);
+  return true;
 }
 // ---------- hide during drag / pan / zoom ----------
 // The bar gets in the way while the card underneath (or the whole canvas) is moving, so it hides
@@ -519,18 +583,28 @@ stage.addEventListener('gestureend', () => { wheelBusy = false; });
 function isInteracting(): boolean {
   return !!(ui.drag || ui.pan || ui.pinch || ui.marquee || ui.inlineEdit || ui.bodyEdit) || wheelBusy;
 }
+// ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
+// here, so it can never paint a frame sitting in the screen corner with nothing behind it. Reports
+// whether it's anchored, for the popovers that hang off it (they'd float alone otherwise).
+function placeBar(): boolean {
+  const placed = positionBar();
+  bar.classList.toggle('unanchored', !placed);
+  return placed;
+}
 // Tracks the anchor card across camera pan/zoom and node drag without threading a hook through
 // drag.ts/camera.ts — cheap (one rect read + one style write per frame) and only runs while open.
+// It's also what un-hides an `unanchored` bar again: the check re-runs every frame while the bar is
+// open, so unfolding the branch that swallowed its card brings it straight back.
 let raf: number | null = null;
 function followLoop(): void {
-  positionBar();   // also repositions the active popover, if any (keeps it glued to its trigger)
+  const placed = placeBar();
   const interacting = isInteracting();
   bar.classList.toggle('hide-interact', interacting);
   // an open colour/layout popover would otherwise sit at a stale position mid-pan/drag/zoom —
   // hide it right along with the bar it hangs off, same rule, same class.
   if (activePopover){
-    activePopover.pop.classList.toggle('hide-interact', interacting);
-    popConnector.classList.toggle('hide-interact', interacting);
+    activePopover.pop.classList.toggle('hide-interact', interacting || !placed);
+    popConnector.classList.toggle('hide-interact', interacting || !placed);
   }
   // a selected card's own add-emoji/add-note buttons (main.ts's showAddTag/.addnote) float outside
   // its border and don't reposition themselves — they'd lag behind mid-pan/zoom the same way the
@@ -538,7 +612,7 @@ function followLoop(): void {
   document.body.classList.toggle('canvas-interacting', interacting);
   raf = bar.classList.contains('open') ? requestAnimationFrame(followLoop) : null;
 }
-window.addEventListener('resize', () => { closePopovers(); positionBar(); });
+window.addEventListener('resize', () => { closePopovers(); placeBar(); });
 
 // ---------- visibility ----------
 // Outline mode only hides the bar on a narrow/phone screen, where the outliner replaces the
@@ -567,7 +641,7 @@ export function syncFloatBar(): void {
   }
   if (bar.classList.contains('open')) {   // already showing — update in place, no delay needed
     syncControls();
-    positionBar();
+    placeBar();
     if (raf == null) followLoop();
     return;
   }
@@ -577,7 +651,7 @@ export function syncFloatBar(): void {
     if (!(state.sel.size > 0 && !state.readOnly && !(outlineActive() && NARROW_MQ.matches))) return;
     bar.classList.add('open');
     syncControls();
-    positionBar();
+    placeBar();
     if (raf == null) followLoop();
   }, SHOW_DELAY);
 }

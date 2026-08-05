@@ -35,7 +35,7 @@ export interface Drag {
   // would-be-edge preview — they never show together (see features/drag.ts, view/edges.ts).
   dropLine: Seg | null;
   alt: boolean; shift: boolean; cloned: boolean; rip: boolean;
-  downTarget: EventTarget | null; meta: boolean; touch: boolean;
+  meta: boolean; touch: boolean;
   clones?: MindNode[] | null;
   // Alt-dragging image CARD(s) over a plain body card: the target card's id to fold the image(s)
   // into on drop (instead of reparenting). Set by updateDropTarget, consumed by dragPointerUp.
@@ -62,7 +62,6 @@ export interface SheetEdit { id: string; origTitle: string; origBody: string; is
 // full-screen sheet) — same shape as SheetEdit and the same contract: while set, persistence
 // freezes the node's filename (rename lands on blur) and skips the focus-reload so live typing
 // isn't clobbered.
-export interface GroupFold { ids: Set<string>; node: string; t: number; }
 export interface PanState { sx: number; sy: number; ox: number; oy: number; }
 export interface Marquee { sx: number; sy: number; add: boolean; base: Set<string>; moved: boolean;
   // When a marquee is started from an unselected FRAME (drag inside it rubber-band-selects its
@@ -77,9 +76,6 @@ export const ui = {
   drag: null as Drag | null,
   dragRAF: null as number | null,   // pending rAF for drag paint; coalesces moves per frame
   autoPanRAF: null as number | null,
-  // ---- slow-click / fold disambiguation (main render + drag) ----
-  renameTimer: undefined as number | undefined,  // pending slow-click rename; any interaction cancels it
-  pendingGroupFold: null as GroupFold | null,     // remembered group so a dblclick folds it all
   // ---- pan / zoom gestures (features/gestures.ts) ----
   pan: null as PanState | null,
   marquee: null as Marquee | null,

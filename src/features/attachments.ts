@@ -9,7 +9,7 @@ import { store, scheduleSave } from '../data/persistence.js';
 import { applyLayouts } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { paintAll, selectNode, IMAGE_W, IMAGE_H } from '../main.js';
-import { createNode, uniqueTitle, newCardTitle } from './crud.js';
+import { createNode, uniqueTitle, newCardTitle, centredAt } from './crud.js';
 import { autosizeBody } from './inline-edit.js';
 import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
@@ -192,7 +192,7 @@ function cardOptsAt(sx: number | null, sy: number | null, parent: string | null)
     if (pn?.collapsed){ touch(parent); pn.collapsed = false; }   // reveal so the new child is visible
   }
   const p = sx != null && sy != null ? screenToWorld(sx, sy) : null;
-  return { ...(p ? { x: p.x - 100, y: p.y - 32 } : {}), parent, edit: false };
+  return { ...(p ? centredAt(p) : {}), parent, edit: false };
 }
 // Does this URL load as an image? <img> load/error fires cross-origin without CORS headers.
 function probeImage(url: string): Promise<boolean> {

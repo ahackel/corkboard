@@ -108,7 +108,9 @@ export function parseMd(text: string, fileName: string): ParsedNote {
   return {
     title,
     fmEntries: entries,                    // full original frontmatter, preserved on save
-    color: fmValue(entries, 'color'),      // palette key, e.g. 'blue'
+    // a palette key (`blue`) or a custom hex — which is written QUOTED, since a bare #rrggbb is a
+    // comment to every other YAML reader (Obsidian included), so strip the quotes back off here
+    color: fmValue(entries, 'color').replace(/^["']|["']$/g, ''),
     keepStatus: fmValue(entries, 'status'),
     tags: fmTags(entries),
     body: body.trim(),
@@ -144,7 +146,10 @@ export function serializeMd(n: MindNode): string {
   // strip any stale mm_* (re-added fresh below); the prefix match covers every layout key
   entries.filter(e => e.key && e.key.startsWith('mm_')).forEach(e => fmRemove(entries, e.key as string));
   fmSet(entries, 'tags', `tags: ${n.tags.length ? `[${n.tags.join(', ')}]` : '[]'}`);
-  if (n.color) fmSet(entries, 'color', `color: ${n.color}`); else fmRemove(entries, 'color');
+  // A custom colour is a hex, and `color: #ff8800` reads as an EMPTY value plus a comment to any
+  // real YAML parser — so quote it. Palette keys stay bare, the way every existing vault has them.
+  if (n.color) fmSet(entries, 'color', `color: ${n.color.startsWith('#') ? `"${n.color}"` : n.color}`);
+  else fmRemove(entries, 'color');
   if (!fmEntry(entries, 'date')) entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
   const parentNode = n.parent ? state.nodes.get(n.parent) : null;
   if (parentNode) entries.push({ key:'mm_parent', lines:[`mm_parent: ${parentNode.file}`] });

@@ -41,11 +41,12 @@
       <span class="ic" data-icon="search"></span></button>
   </div>
 
-  <!-- floating search bar: opened by #searchBtn, drops below the toolbar (features/search.ts) -->
+  <!-- floating search bar: opened by #searchBtn, and it REPLACES the toolbar above while open
+       (same position; #toolbar is hidden by CSS for as long as it is) — see features/search.ts -->
   <div id="searchWrap">
     <span class="ic" data-icon="search"></span>
     <input id="searchBox" type="text" placeholder="Find a card…" title="Find card (/)" aria-label="Find a card" autocomplete="off" spellcheck="false" />
-    <button id="searchClear" title="Clear search" aria-label="Clear search">
+    <button id="searchClear" title="Clear search · close (Esc)" aria-label="Clear search or close">
       <span class="ic" data-icon="close"></span></button>
     <div id="searchResults"></div>
   </div>

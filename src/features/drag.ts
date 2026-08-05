@@ -16,8 +16,8 @@ import { paintEdges } from '../view/edges.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
-         subtreeIds, foldNodeOrGroup, activateTab, frameLabelW, FRAME_TAB_H } from '../main.js';
-import { startInlineEdit, startBodyEdit, endInlineEdit, endBodyEdit } from './inline-edit.js';
+         subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin } from '../main.js';
+import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { leaveClone, foldImageCardsIntoBody, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
@@ -264,21 +264,24 @@ function innermostFrameAt(clientX: number, clientY: number): MindNode | null {
 }
 export function bindNodeDrag(n: MindNode): void {
   const el = n.el!;
-  // Double-tap on touch -> collapse/expand (mirrors dblclick on desktop; also prevents iOS double-tap zoom)
-  let lastTouchTap = 0, lastTouchTapTarget: EventTarget | null = null;
+  // Double-tap on touch -> open the node for editing (mirrors dblclick on desktop, and prevents iOS
+  // double-tap zoom). Folding is the corner chip's job on both — tap the card, tap the chip.
+  let lastTouchTap = 0;
   el.addEventListener('touchstart', (e) => {
     // While editing this card, let the browser handle double-tap normally (word selection)
     if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) { lastTouchTap = 0; return; }
+    // The card's own controls act on a single tap (main.ts isNodeControlAt): a tap there must not also
+    // count toward a double-tap, or the second one would fire the button AND open the card.
+    const t0 = e.touches[0];
+    if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = 0; return; }
     const now = performance.now();
     if (e.touches.length === 1 && now - lastTouchTap < 300) {
       e.preventDefault(); // stop double-tap zoom and synthetic dblclick
-      clearTimeout(ui.renameTimer);
-      foldNodeOrGroup(n);   // mirror the dblclick handler: fold/unfold the card or group
+      activateNode(n, t0.clientX, t0.clientY);   // mirror the dblclick handler
       lastTouchTap = 0;
       return;
     }
     lastTouchTap = now;
-    lastTouchTapTarget = e.target;
   }, { passive: false });
   el.addEventListener('pointerdown', (e) => {
     if (e.button === 2) { e.stopPropagation(); return; }   // right-click = context menu only: no drag/select/rename
@@ -291,7 +294,7 @@ export function bindNodeDrag(n: MindNode): void {
     const tgt = e.target as HTMLElement;
     // A frame's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
     // A press there is a press on the frame ITSELF: it must take the ordinary card path below —
-    // click selects, a slow second click renames, a drag moves the frame — so both frame-specific
+    // click selects, a double-click renames, a drag moves the frame — so both frame-specific
     // intercepts further down exempt it. `.node` scoping keeps it to this frame's OWN tab.
     const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
     if (tgt.classList.contains('addnote')) return;
@@ -331,15 +334,16 @@ export function bindNodeDrag(n: MindNode): void {
     if (ui.bodyEdit   && ui.bodyEdit.id   !== n.id) endBodyEdit();
     // while this card's title/body is being edited, let clicks place the caret — don't start a drag
     if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) { e.stopPropagation(); return; }
-    clearTimeout(ui.renameTimer);   // any fresh interaction cancels a pending slow-click rename
     // A drag inside an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather
     // than moving the frame — you move the frame from its interior only once it's selected. A
     // no-move click selects the frame (endMarquee). ⌘/Ctrl-click still falls through to the normal
     // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the frame's
-    // own handle, so pressing it always takes the card path — which is also what gives the gesture a
-    // ui.drag (hence a downTarget) and so makes the slow-click rename below reachable on a FIRST
-    // click, the way a card's title is.
-    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
+    // own handle, so pressing it always takes the card path — a press there selects and drags the
+    // frame itself, the way a card's title does, rather than rubber-banding its contents.
+    // A tab group's box is never itself selected (main.ts selTarget hands its open TAB the selection),
+    // so `selJoin` is what "selected" means for it — otherwise its interior could only ever rubber-band
+    // and the box would have no way to be moved at all.
+    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && !selJoin(n) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
       e.stopPropagation();
       beginMarqueeFromNode(e, n.id);
       return;
@@ -370,7 +374,6 @@ export function bindNodeDrag(n: MindNode): void {
     const origins = new Map(ids.map(id => { const m2 = state.nodes.get(id)!; return [id, { x:m2.x, y:m2.y }] as [string, Pt]; }));
     ui.drag = { n, active:n, multi, sx:e.clientX, sy:e.clientY, cx:e.clientX, cy:e.clientY, start, targets, origins, selRoots,
              moved:false, dropTarget:null as string | null, dropMode:'child', dropSide:null, dropAfter:undefined, dropLine:null, alt:e.altKey, shift:e.shiftKey, cloned:false, rip:false,
-             downTarget:e.target,              // where the press landed -> slow-click edits title or body
              meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
              touch: e.pointerType === 'touch',  // higher move threshold for finger taps
              imageMerge: null };
@@ -408,7 +411,7 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   const drag = ui.drag;
   if (!drag) return;
   if (state.readOnly) return;        // no moving/reparenting in read-only (click & dbl-click still work)
-  // Pressing directly on a locked card: never treat it as a drag (click/slow-click select/rename
+  // Pressing directly on a locked card: never treat it as a drag (click/double-click select/rename
   // still resolve normally on release since drag.moved stays false) — no move, no reparent.
   if (isLockedEffective(drag.n)) return;
   drag.alt = e.altKey; drag.shift = e.shiftKey;   // Shift = clone (live — release to cancel), Alt = detach
@@ -459,27 +462,14 @@ function dragPointerUp(): void {
         // semi-transparent. Nulling here means the repaint sees no active drag.
         ui.drag = null;
         // Clicking a TAB opens it (closing its siblings) as well as selecting it — that's what a tab
-        // is for. Before the selection branches below, so it happens on the FIRST click, whether or
-        // not this tab was already the selected node; the slow-second-click rename still works, since
-        // re-opening the tab that's already open is a no-op. Locked tabs included (see activateTab).
+        // is for. Before the selection branch below, so it happens on the FIRST click, whether or not
+        // this tab was already the selected node. Locked tabs included (see activateTab).
         if (isDockedTab(n) && !state.readOnly) activateTab(n);
         if (drag.meta) toggleSel(n.id);                 // ⌘/Ctrl-click: add/remove from selection
-        else if (state.selId !== n.id || state.sel.size !== 1) {
-          // clicking one card of a multi-selection reduces to it — but remember the group so a
-          // double-click can fold them all (see the dblclick handler).
-          if (state.sel.has(n.id) && state.sel.size > 1)
-            ui.pendingGroupFold = { ids:new Set(state.sel), node:n.id, t:performance.now() };
-          selectNode(n.id);
-        }
-        else if (!state.readOnly) {
-          // a second (slow) click on the already-sole-selected card = edit in place, Finder-style.
-          // Click the title -> rename; click anywhere else on the card -> edit the note.
-          // Delay it so a double-click (which fires dblclick first) can cancel it and fold instead.
-          clearTimeout(ui.renameTimer);
-          const dt = drag.downTarget as HTMLElement | null;
-          const onTitle = !!(dt && dt.closest && dt.closest('.title'));
-          ui.renameTimer = setTimeout(() => onTitle ? startInlineEdit(n) : startBodyEdit(n), 260);
-        }
+        else if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);   // reduce a multi-selection to this card
+        // A click only ever SELECTS. Editing in place is the double-click's job (main.ts
+        // activateNode) — the slow-second-click rename this used to schedule was a 260ms timer racing
+        // that double-click, and every fresh interaction had to remember to cancel it.
       } else {
         // dropped onto a node? re-parent (the whole multi-selection, if that's what's dragging).
         // Alt+drop on empty canvas? detach to root. Otherwise it's just a move.
@@ -664,7 +654,7 @@ export function startNodeDrag(n: MindNode, clientX: number, clientY: number): vo
   const origins = new Map<string, Pt>([[n.id, { x:n.x, y:n.y }]]);
   ui.drag = { n, active:n, multi:false, sx:clientX, sy:clientY, cx:clientX, cy:clientY,
     start, targets, origins, selRoots:[n.id], moved:true, dropTarget:null, dropMode:'child', dropSide:null, dropAfter:undefined, dropLine:null,
-    alt:false, shift:false, cloned:false, rip:false, downTarget:null, meta:false, touch:false, imageMerge:null };
+    alt:false, shift:false, cloned:false, rip:false, meta:false, touch:false, imageMerge:null };
   if (n.el){ n.el.style.willChange = 'transform'; n.el.classList.add('dragging'); }
   document.body.classList.add('grabbing');
 }

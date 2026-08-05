@@ -20,7 +20,9 @@
   --accent: #5aa9ff;
   --panel: #1f2734;   /* bar/chrome surface — brighter than the canvas */
 
-  /* 8-colour muted card palette + grey (the "no colour" fallback) — identical in both themes.
+  /* 8-colour muted card palette + grey (the "no colour" fallback) + white/black — TRULY identical in
+     both themes: body.light overrides none of them (it used to swap in a pastel set), so a card looks
+     the same wherever the map is opened and its ink is decided once, by the colour itself.
      The SINGLE SOURCE OF TRUTH for these hexes: main.ts's SWATCH_BG reads them straight from
      here (getComputedStyle) at load, so JS (edges/backgrounds/swatch fills) and CSS (.c-*
      below, #ghostCard) never drift apart. Change a colour here only. */
@@ -76,31 +78,44 @@ body.light {
   --accent: #2f6fe0;
   --panel: #ffffff;
 
-  /* light theme only: brighter/more vibrant card colours (grey & white stay as-is) */
-  --pal-slate: #8b9bff;
-  --pal-red: #ff8a97;
-  --pal-amber: #ffcb66;
-  --pal-green: #6ef0ae;
-  --pal-teal: #6de9f5;
-  --pal-blue: #7cbcff;
-  --pal-violet: #cd9bff;
-  --pal-pink: #ff9bd6;
+  /* NO card-colour overrides here, deliberately: the --pal-* set above is shared by both themes, so
+     a card is the same colour (and therefore the same INK — see the .c-* block below) wherever it's
+     opened. The light theme used to swap in a brighter, pastel set; that made the same map read as
+     two different maps, and it's what forced ink to be decided per theme in the first place. */
 }
 
-/* card colours are identical in both themes; text on a card is always white */
-.c-slate  { --card:var(--pal-slate); }
-.c-red    { --card:var(--pal-red); }
-.c-amber  { --card:var(--pal-amber); }
-.c-green  { --card:var(--pal-green); }
-.c-teal   { --card:var(--pal-teal); }
-.c-blue   { --card:var(--pal-blue); }
-.c-violet { --card:var(--pal-violet); }
-.c-pink   { --card:var(--pal-pink); }
-.c-grey   { --card:var(--pal-grey); }
-.c-white  { --card:var(--pal-white); }
-.c-black  { --card:var(--pal-black); }
-/* "none" = no colour at all: truly transparent, not just canvas-bg-coloured (border returns when selected) */
-.c-none   { --card:transparent; }
+/* Each palette key hands a surface three things: its FILL (--card), the INK that fill demands
+   (--ink, the text colour) and the SCRIM an in-place editor paints behind that ink (--scrim).
+   Only --card is authored. The other two are COMPUTED from it — main.ts's deriveInk measures the
+   fill's WCAG contrast and injects a --pal-ink-* plus --pal-scrim-* pair per key (utils/ink.ts) —
+   so ink is a property of the CARD's colour, not of the theme and not of an enumerated exception
+   list. That's why nothing below this line ever names a colour key to fix its text: one
+   `color: var(--ink)` on each surface that wears a .c-* class (.node, .query-item, .oc-card,
+   .ol-row) replaces the four per-surface "which keys are exceptions" lists that used to have to
+   agree with each other, and an off-palette colour gets legible text for free. */
+.c-slate  { --card:var(--pal-slate);  --ink:var(--pal-ink-slate);  --scrim:var(--pal-scrim-slate); }
+.c-red    { --card:var(--pal-red);    --ink:var(--pal-ink-red);    --scrim:var(--pal-scrim-red); }
+.c-amber  { --card:var(--pal-amber);  --ink:var(--pal-ink-amber);  --scrim:var(--pal-scrim-amber); }
+.c-green  { --card:var(--pal-green);  --ink:var(--pal-ink-green);  --scrim:var(--pal-scrim-green); }
+.c-teal   { --card:var(--pal-teal);   --ink:var(--pal-ink-teal);   --scrim:var(--pal-scrim-teal); }
+.c-blue   { --card:var(--pal-blue);   --ink:var(--pal-ink-blue);   --scrim:var(--pal-scrim-blue); }
+.c-violet { --card:var(--pal-violet); --ink:var(--pal-ink-violet); --scrim:var(--pal-scrim-violet); }
+.c-pink   { --card:var(--pal-pink);   --ink:var(--pal-ink-pink);   --scrim:var(--pal-scrim-pink); }
+.c-grey   { --card:var(--pal-grey);   --ink:var(--pal-ink-grey);   --scrim:var(--pal-scrim-grey); }
+.c-white  { --card:var(--pal-white);  --ink:var(--pal-ink-white);  --scrim:var(--pal-scrim-white); }
+.c-black  { --card:var(--pal-black);  --ink:var(--pal-ink-black);  --scrim:var(--pal-scrim-black); }
+/* "none" = no colour at all: truly transparent, not just canvas-bg-coloured (border returns when
+   selected). The one key whose ink can't be computed — there's no fill to measure, the CANVAS shows
+   through — so it's the one that follows the theme instead, and its scrim has to be flipped by hand
+   to stay on the far side of that. */
+.c-none   { --card:transparent; --ink:var(--text); --scrim:rgba(0,0,0,.5); }
+body.light .c-none { --scrim:rgba(255,255,255,.62); }
+/* A colour picked from OUTSIDE the palette (`color: "#ff8800"` in the note). Same three variables,
+   but there's no key to hang them on, so main.ts's colorVars/applyColorVars writes them inline per
+   node — an inline custom property beats any selector, so the values below are only the safety net
+   for an element that got the class without them. Everything else in this file reads the variables
+   and never the key, which is what lets a custom colour take every path a palette one does. */
+.c-custom { --card:var(--node); --ink:#ffffff; --scrim:rgba(0,0,0,.5); }
 
 * { box-sizing: border-box; }
 html, body { margin:0; height:100%; overflow:hidden;
@@ -186,25 +201,36 @@ body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag 
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #folderName:empty { display:none; }   /* icon-only until a folder is loaded */
 @media (max-width:480px){ #folderName { display:none; } }   /* icon-only on narrow screens */
-/* find / jump-to-card — a floating bar dropped below the toolbar, opened by #searchBtn */
-#searchWrap { position:fixed; top:52px; left:50%; transform:translateX(-50%); z-index:20;
+/* find / jump-to-card — opened by #searchBtn, and it TAKES THE TOOLBAR'S PLACE (same top/centring)
+   rather than dropping below it: search is a temporary mode, so the bar it replaces goes away while
+   it's up (the rule below). The toolbar can't be hidden by a sibling combinator — it comes BEFORE
+   #searchWrap in the DOM — hence `body:has()`, which also keeps `.open` the single open-state flag.
+   Because the magnifier goes with the toolbar, #searchClear stays visible unconditionally: empty, it
+   closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
+   field IS the bar (see #searchBox), not an inset box floating in one. */
+#searchWrap { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:20;
   display:none; align-items:center; width:260px; max-width:calc(100% - 20px);
-  padding:4px 6px; background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
+  background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
-#searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:14px; width:14px; height:14px;
+body:has(#searchWrap.open) #toolbar { display:none; }
+#searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
   display:block; color:var(--muted); pointer-events:none; flex:none; }
-#searchBox { width:100%; min-width:0; box-sizing:border-box; height:30px; padding:0 8px 0 30px;
-  border-radius:var(--r-full); font-size:13px; background:var(--bg); border:none; color:var(--text); }
-#searchBox:focus { outline:none; box-shadow:0 0 0 2px var(--accent); }
-#searchBox.has-value { padding-right:30px; }
-button#searchClear { display:none; position:absolute; right:10px; width:20px; height:20px; padding:0;
+/* The field FILLS the bar — transparent, no fill of its own and no focus ring, so the whole pill
+   reads as one surface (and clicking anywhere in it lands in the input). The bar being the only
+   surface is also why the height is spelled out here: --bar-btn plus what #toolbar pads with, so
+   the pill matches the toolbar it stands in for. */
+#searchBox { flex:1; min-width:0; box-sizing:border-box; height:calc(var(--bar-btn) + 8px);
+  padding:0 34px; border-radius:var(--r-full); font-size:13px;
+  background:transparent; border:none; color:var(--text); }
+#searchBox:focus { outline:none; box-shadow:none; }
+button#searchClear { display:flex; align-items:center; justify-content:center;
+  position:absolute; right:11px; width:20px; height:20px; padding:0;
   border:none; border-radius:50%; background:transparent; color:var(--muted); cursor:pointer; }
 button#searchClear:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
 #searchClear svg { width:11px; height:11px; display:block; }
-#searchBox.has-value ~ #searchClear { display:flex; align-items:center; justify-content:center; }
 /* placeholder hint reads as a faint label, not real input */
 input::placeholder { color:var(--muted); opacity:1; }
-#searchResults { position:absolute; top:42px; left:0; right:0; max-height:50vh; overflow:auto;
+#searchResults { position:absolute; top:calc(100% + 4px); left:0; right:0; max-height:50vh; overflow:auto;
   background:var(--panel); border:1px solid var(--grid); border-radius:var(--r-menu); padding:4px;
   display:none; z-index:30; }
 #searchResults.open { display:block; }
@@ -259,8 +285,11 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
    --grid-ink is declared HERE rather than at :root so its var(--grid-pat) substitutes against
    whichever theme is live on this element (see the light-theme note above); grid.ts's inline
    gradients just reference it. Deliberately faint — the grid is a hint you read past, not a layer
-   that competes with the cards. This is the MAJOR level's strength; the sub-grid scales it down
-   again by SUB_MAX in grid.ts. */
+   that competes with the cards. It's the full strength of whatever the MAJOR level draws; a sub-grid
+   that has to be told apart from it (mesh, line) scales it down again by SUB_MAX in grid.ts, while
+   the flat dot field uses it at full strength — being one level, painted once. Note it's TRANSLUCENT,
+   which is why that field is a single layer: coincident dots from both levels would composite to
+   about twice the alpha and every 4th dot would come out darker (see paintLayer). */
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
@@ -281,7 +310,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node {
   position:absolute; width:200px; min-height:64px;
   background: var(--card, var(--node)); border:none;
-  border-radius:var(--r-card); padding:10px 12px; cursor:default; color:#ffffff;
+  /* text colour = the ink this card's own fill demands (see the .c-* block up top). The literal
+     fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
+  border-radius:var(--r-card); padding:10px 12px; cursor:default; color:var(--ink, #ffffff);
   user-select:none; -webkit-touch-callout:none; touch-action:none;
   /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
      the selection ring must appear INSTANTLY, so that a frame's ring (on its box) and its title
@@ -302,16 +333,28 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* checklist item: a done checkbox next to the title, shown when this card's PARENT has its own
    `checklist` turned on (Trello-style — see showsDoneCheckbox in main.ts). A body's own task
    list carries separate per-line state instead — see .taskbox below. */
-.node .title-row { display:flex; align-items:flex-start; gap:.5em; }
+/* The checkbox's footprint in the title row, as one pair of numbers: the row's own gap and the
+   box's width (see .node .donebox further down, which reads its width from here too). The body
+   below the row repeats their sum so it lines up under the TITLE rather than under the box — px
+   and not em deliberately, since .body is 12px against the row's 16px, so one em sum would
+   resolve to two different indents. */
+.node { --donebox-w:14px; --title-gap:8px; }
+.node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
-/* margin-left offsets the padding difference (12px left vs 10px top) plus kills the UA default
-   margin, so the box sits equally far from the card's top and left edges */
+/* Direct child, same reason as .donebox below: a DOM-nested child card has its own .body, and its
+   indent belongs to ITS OWN checklist state, not to an ancestor's. */
+.node.show-done > .body { margin-left:calc(var(--donebox-w) + var(--title-gap)); }
+/* margin-top + `left` put the box equally far from the card's top and left edges (its padding is
+   10px vs 12px) and kill the UA default margin. The horizontal nudge is `left`, NOT a margin, so
+   the box's flow width stays exactly --donebox-w and the body's indent above can be that plus the
+   gap and nothing else; px, not em, because a checkbox's em is the UA's control font-size (13.3px),
+   not the card's — the em spelling this replaces was silently ~0.7px short of its own intent. */
 /* Direct-child combinators only: the donebox belongs to THIS card's own title row (main.ts
    builds .title-row > .donebox directly under .node). A descendant combinator would leak the
    show-done state onto DOM-nested descendant cards (a child card nested inside this one has its
    own .donebox further down the tree), showing a checkbox on a grandchild whose own direct parent
    has no checklist — see showsDoneCheckbox in main.ts, which is already parent-only. */
-.node > .title-row > .donebox { display:none; margin:.2em 0 0 calc(.2em - 2px); }
+.node > .title-row > .donebox { display:none; margin:3px 0 0; left:1px; }
 .node.show-done > .title-row > .donebox { display:block; }
 /* Struck-through title = THIS card is checked off. Direct-child combinators for the same reason as
    .donebox above: a child card is DOM-nested inside its parent's element (paintNode), so a
@@ -365,14 +408,19 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    relative to the interior (frameInterior), which counts the border only. */
 .node.frame { padding:0; }
 /* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
-   card padding — that's what lets full-width child cards fit inside the narrow box. */
-.node.stack { padding:5px 6px; }
+   card padding — that's what lets full-width child cards fit inside the narrow box.
+   6px on EVERY side, not 5px vertically: this padding is the same inset the layout pass spends as
+   STACK_PAD (main.ts) when it places the rows and closes the box under the last one, so anything but
+   STACK_PAD here shows up as a title sitting 1px nearer the top edge than the bottom gap below it —
+   most visible on an empty stack, where the title IS the content. Keep the two in step. */
+.node.stack { padding:6px; }
 .node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
 /* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
-   A frame's TAB is filled with --frame-stroke either way (see below), so its text keeps using
-   var(--text) here: legible on the grey --edge fill in both themes, where #fff would be too weak. */
+   Its title needs no rule of its own: .c-none's --ink is var(--text), which is legible both on the
+   canvas showing through the box and on the grey --edge fill of a colourless frame's TAB (see
+   below) — where white would be too weak. A COLOURED frame's tab is filled with --frame-stroke,
+   i.e. the pure palette hex, which is the very colour its --ink was computed against. */
 .node.frame.c-none, .node.stack.c-none { background:transparent; }
-.node.frame.c-none .title, .node.frame-folded.c-none .title, .node.stack.c-none .title { color:var(--text); }
 /* …and a coloured STACK sits one tone DOWN from that fill, so its box is always its own shape. A
    stack inherits its colour from its ancestors (effectiveColor), so a stack inside a coloured frame
    resolved to the frame's own --card — same fill, same border tint — and vanished into it completely:
@@ -472,7 +520,14 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    and its max-width already ellipsises a long title. EVERY tab squares off its bottom corners: they all
    sit ON the box, so a rounded bottom would float them off it (a folded frame, which stands alone, keeps
    its pill shape). The open one is what the box belongs to, so it alone shows at full strength. */
-.node.frame-folded.docked { opacity:.62; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+/* z-index:auto is what makes "tucked behind the front of the folder" actually true. The strip has no
+   z-index of its own precisely so tree order decides between a tab and the box (main.ts tabStripEl
+   keeps the strip right BEFORE the box) — but a tab is a .node, and `.node { z-index:2 }` was still
+   winning, lifting every inactive tab over the box's top border AND over its selection ring, which
+   then looked chopped into pieces wherever a tab crossed it. Reset to auto and the box paints after
+   them, running its border and ring across the top of the sheets behind it. The open tab lifts back
+   above with its own z-index below. */
+.node.frame-folded.docked { opacity:.62; z-index:auto; border-bottom-left-radius:0; border-bottom-right-radius:0; }
 /* A tab's selection ring stops where the tab meets the box: a line along its BOTTOM edge would cut
    straight through one continuous shape (exactly the reasoning behind a frame's own tab ring above).
    box-shadow can only ring all four sides, so a selected tab swaps it for a three-sided pseudo-element
@@ -489,21 +544,33 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
 /* …and it stands down while the tab is being renamed, like every other card's ring */
 .node.frame-folded.docked.sel:has(> .title-row > .title.editing)::before { content:none; }
-/* no +N chip on a tab: a folded frame uses it for "there's more inside", but a CLOSED TAB's contents
-   are one click away in the box, not tucked under a stub — and the bubble would sit over the next tab.
-   The "add note" pill goes for the same reason: on a label this narrow it lands on the title itself
-   (and a frame — docked or not — never shows a body anyway). */
-.node.frame-folded.docked > .hidden-count { display:none; }
+/* No corner bubble on a tab (a folded frame uses it for "there's more inside", but a CLOSED TAB's
+   contents are one click away in the box, not tucked under a stub — and it would sit over the next
+   tab): paintNode's chipFace withholds it, so there's no rule needed here. The "add note" pill goes
+   for a related reason: on a label this narrow it lands on the title itself (and a frame — docked or
+   not — never shows a body anyway). */
 .node.frame-folded.docked .addnote { display:none !important; }
 /* the open tab is the front of the folder: over the box, over #edges (1) and the cards (2) — the same
    z-index a frame's own title tab takes, and for the same reasons */
 .node.frame-folded.docked.tab-active { opacity:1; z-index:5; }
 /* A group with tabs shows NO tab of its own: it would sit in the same band, look exactly like a tab,
    and read as one — two docked frames must show two tabs, not three. So the strip starts at the box's
-   left edge and the group's own title lives in the outline, in search, and in its FOLDED state (where
-   the tab is all there is). An empty group keeps its label, or it would have no visible identity at
-   all; `has-tabs` is set by paintNode. Select a group by clicking its box, rename it from there. */
+   left edge and the group's own title lives in the outline and in search only (folded, the pill shows
+   its OPEN TAB's title instead — see .tabs-fold below). An empty group keeps its label, or it would
+   have no visible identity at all; `has-tabs` is set by paintNode. Select a group by clicking its box,
+   rename it from there. */
 .node.frame.tabs.has-tabs > .title-row { display:none; }
+/* A FOLDED tab group: the pill reads as the open tab it was showing (main.ts foldedTab) plus this
+   closed-folder glyph, which is the whole of what distinguishes it from a folded plain frame — the
+   other tabs are behind it. `.tabs-fold` is set by paintNode, and the icon is hidden everywhere else
+   (it's baked into every node's title row, like the fold chip's chevron). flex:none so it can't be
+   squeezed by a long title, and 16px square inside the 20px line box the tab's FRAME_TAB_H is built
+   from — a taller icon would stretch the pill past that constant. */
+.folder-icon { display:none; }
+.node.tabs-fold > .title-row > .folder-icon {
+  display:inline-flex; align-items:center; justify-content:center; flex:none;
+  width:16px; height:16px; opacity:.85; }
+.node.tabs-fold > .title-row > .folder-icon svg { width:100%; height:100%; }
 /* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
    normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
    uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.
@@ -529,12 +596,12 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .frame-content > .node { pointer-events:auto; }
 /* a frame never shows body content, the "n/m" progress, or the +N chip; and NEVER the "add note"
    pill (the !important beats the .solo.no-body show rule that would otherwise reveal it). */
-.node.frame > .body, .node.frame .progress, .node.frame .hidden-count { display:none; }
+.node.frame > .body, .node.frame .progress { display:none; }
 .node.frame .addnote { display:none !important; }
 /* a stack is a container too: it shows only its title header (its children are framed below it), so
    hide its own body / +N chip / add-note pill — but KEEP its "n/m" progress, since a stack is a
    natural checklist container (its direct children carry the done-boxes). */
-.node.stack > .body, .node.stack > .hidden-count { display:none; }
+.node.stack > .body { display:none; }
 .node.stack .addnote { display:none !important; }
 /* drag-into-container preview: restyle the box's OWN border to a white dash — like the other drag
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
@@ -591,7 +658,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    `border-radius:inherit` on .md-img itself, so nothing relies on the node clipping its content. */
 .node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
-.node.image-card .title-row, .node.image-card .progress, .node.image-card .hidden-count { display:none; }
+.node.image-card .title-row, .node.image-card .progress { display:none; }
 .node.image-card .addnote { display:none !important; }
 /* explicit width/height (not just inset:0) — a percentage height on the .md-img descendant only
    resolves against a containing block whose OWN height is set via the `height` property itself,
@@ -634,7 +701,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.query-card { z-index:2; min-height:0; border-radius:var(--r-card); background:transparent;
   border:4px solid var(--frame-stroke, var(--edge)); padding:8px 10px;
   display:flex; flex-direction:column; }
-.node.query-card > .body, .node.query-card .progress, .node.query-card .hidden-count { display:none; }
+.node.query-card > .body, .node.query-card .progress { display:none; }
 /* direct-child combinator — a query card is fixed-size chrome with no tag row of its own, but a
    CHILD card nested inside it (a real DOM descendant, see main.ts paintNode) still needs its own
    .tag-row/.addnote to render. */
@@ -668,8 +735,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.query-card .title-row.query-editing .query-input { display:block; flex:1 1 auto; min-width:0;
   box-sizing:border-box; height:20px; line-height:20px; margin-bottom:9px; padding:0 16px 0 22px;
   border:none; border-radius:4px; color:inherit; font:inherit; font-size:14px; font-weight:600;
-  outline:2px solid var(--accent); outline-offset:2px; background:rgba(0,0,0,.5);
-  box-shadow:0 0 0 2px rgba(0,0,0,.5); }   /* fill the outline-offset gap, same trick as .title.editing */
+  outline:2px solid var(--accent); outline-offset:2px; background:var(--scrim);
+  box-shadow:0 0 0 2px var(--scrim); }   /* fill the outline-offset gap, same trick as .title.editing */
 .node.query-card .query-input::placeholder { color:inherit; opacity:.6; }
 .query-box { display:none; }   /* hidden by default — only a query card's own paintNode branch shows it */
 .node.query-card .query-box { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
@@ -680,9 +747,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    these are search hits, not siblings to reorder. */
 .node.query-card .query-item { position:relative; display:flex; align-items:center; gap:6px;
   width:100%; box-sizing:border-box; padding:5px 7px; margin:2px 0; border-radius:8px;
-  background:var(--card, transparent); color:#fff; cursor:pointer; }
-.node.query-card .query-item.c-none { color:var(--text); }
-.node.query-card .query-item.c-white { color:#2b3645; }
+  background:var(--card, transparent); color:var(--ink); cursor:pointer; }
 .node.query-card .query-item:hover { filter:brightness(1.12); }
 .node.query-card .query-item.done .qi-title { text-decoration:line-through; opacity:.65; }
 .node.query-card .qi-title { flex:1 1 auto; min-width:0; font-size:12px; font-weight:600;
@@ -697,7 +762,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.query-card .qi-more { flex:none; width:20px; height:20px; padding:0; border:0; border-radius:6px;
   background:transparent; color:inherit; opacity:.6; font-size:15px; line-height:1; cursor:pointer;
   display:flex; align-items:center; justify-content:center; }
-.node.query-card .qi-more:hover { opacity:1; background:rgba(255,255,255,.12); }
+.node.query-card .qi-more:hover { opacity:1; background:color-mix(in srgb, var(--ink) 12%, transparent); }
 .node.query-card .query-empty { padding:5px 7px; font-size:12px; opacity:.65; }
 /* resize handles: the shared `.node > .fh-*` hit-zones above cover this card too */
 /* ---------- annotation: a title-less note pinned ON TOP of its parent ---------- */
@@ -726,13 +791,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    width — desyncing every consumer of it (edges, marquee, subtreeBox). The inline width also beats
    the editing width above, so a resized annotation keeps its size while its body is edited. */
 .node.annotation.w-set { max-width:none; }
-/* an uncoloured card sits on the page background, so its text follows the theme, not white */
-.node.c-none { color: var(--text); }
-/* white is the one palette colour too light for white text — dark grey instead, both themes */
-.node.c-white { color: #2b3645; }
-/* light theme: coloured cards get black text instead of white, except the dark-grey card
-   (still needs white text to stay readable on its dark background) */
-body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: #000000; }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 /* while editing a title/body/query in place, drop the card's selection ring so only the editor's
    own outline shows */
@@ -777,12 +835,12 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
 /* break long words / URLs and clip anything that still overflows the card horizontally */
 .node .title { font-weight:600; font-size:14px; margin-bottom:9px; padding-right:16px;
   overflow-wrap:anywhere; overflow:hidden; }
-/* inline title rename (slow-click / F2 / on-create): edit the card's title in place.
+/* inline title rename (double-click / F2 / on-create): edit the card's title in place.
    --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
    as .oc-title/.oc-note in the outliner below, which take the same variable. */
 .node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-inner);
-  cursor:text; white-space:pre-wrap; overflow:visible; background:rgba(0,0,0,.5);
-  box-shadow:0 0 0 2px rgba(0,0,0,.5); }   /* fill the outline-offset gap so the dark reaches the border */
+  cursor:text; white-space:pre-wrap; overflow:visible; background:var(--scrim);
+  box-shadow:0 0 0 2px var(--scrim); }   /* fill the outline-offset gap so the scrim reaches the border */
 /* tag pills on a card — float along the card's lower edge, OUTSIDE the border, the same way
    .addnote floats at the opposite (bottom-left) corner, so a tagged card is exactly as tall as an
    untagged one: tags never take up in-flow space. Anchored to the right and growing leftward as
@@ -818,12 +876,12 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
 .node .title.editing.invalid { outline-color:#e0564a; }
 .node .body  { font-size:12px; color:inherit; opacity:.9; line-height:1.4;
   overflow-wrap:anywhere; overflow:hidden; }
-/* in-place body editor (slow-click the body / ↓ from the title): raw markdown in a textarea */
+/* in-place body editor (double-click the body / ↓ from the title): raw markdown in a textarea */
 .node .body.editing { overflow:visible; opacity:1; }
 .node .body-edit { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-size:12px; line-height:1.4; color:inherit;
-  background:rgba(0,0,0,.5); border:none; border-radius:4px; padding:2px 4px;
-  box-shadow:0 0 0 2px rgba(0,0,0,.5);   /* fill the outline-offset gap so the dark reaches the border */
+  background:var(--scrim); border:none; border-radius:4px; padding:2px 4px;
+  box-shadow:0 0 0 2px var(--scrim);   /* fill the outline-offset gap so the scrim reaches the border */
   outline:2px solid var(--accent); outline-offset:2px; resize:none; overflow:hidden;
   white-space:pre-wrap; overflow-wrap:anywhere; }
 /* markdown elements inside a card body — tight spacing, clipped preview */
@@ -838,7 +896,7 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
 .node .body li { margin:.1em 0; }
 .node .body li.task { list-style:none; margin-left:-1.0em; display:flex; align-items:flex-start; gap:.4em; }
 .node .body li.task .taskbox,
-.node .donebox { -webkit-appearance:none; appearance:none; width:14px; height:14px; border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
+.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
 .node .body li.task .taskbox { margin:.15em 0 0; }
 .node .body li.task .taskbox:checked,
 .node .donebox:checked { background:var(--accent); }
@@ -847,22 +905,29 @@ body.light .node:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color: 
 .node .body strong { font-weight:700; }
 .node .body em { font-style:italic; }
 .node .body del { opacity:.7; }
+/* Every mark below tints with the card's own INK rather than a fixed white or black: on a card that
+   took dark ink, a white-ish code patch or a white rule was a bright hole in the middle of dark
+   text. Mixing toward --ink keeps each one a faint shade of the text it decorates, so all of them
+   follow the fill automatically — the same reason .node's `color` is var(--ink). */
 .node .body code { font-family:ui-monospace,Menlo,monospace; font-size:11px;
-  background:rgba(255,255,255,.16); padding:0 3px; border-radius:3px; }
-.node .body pre { background:rgba(0,0,0,.28); padding:6px 8px; border-radius:6px; overflow:hidden; }
+  background:color-mix(in srgb, var(--ink) 16%, transparent); padding:0 3px; border-radius:3px; }
+/* a shade weaker than an inline code span: `pre` covers whole lines, so the same 16% read as a slab */
+.node .body pre { background:color-mix(in srgb, var(--ink) 11%, transparent);
+  padding:6px 8px; border-radius:6px; overflow:hidden; }
 .node .body pre code { background:none; padding:0; }
-.node .body blockquote { border-left:2px solid rgba(255,255,255,.4); padding-left:8px;
-  margin-left:0; opacity:.85; }
-.node .body hr { border:none; border-top:1px solid rgba(255,255,255,.3); margin:.4em 0; }
+.node .body blockquote { border-left:2px solid color-mix(in srgb, var(--ink) 40%, transparent);
+  padding-left:8px; margin-left:0; opacity:.85; }
+.node .body hr { border:none; border-top:1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  margin:.4em 0; }
 .node .body .lk { color:inherit; text-decoration:underline; text-underline-offset:2px;
   cursor:pointer; font-weight:600; opacity:1; }
 .node .body .lk:hover { text-decoration-thickness:2px; }
 /* inline images: always full card width, aspect ratio kept; never intercept card drag */
 .node .body img.md-img { display:block; width:100%; height:auto; margin:.45em 0; border-radius:6px;
-  background:rgba(255,255,255,.06); pointer-events:none; -webkit-user-drag:none; user-select:none; }
+  background:color-mix(in srgb, var(--ink) 6%, transparent); pointer-events:none; -webkit-user-drag:none; user-select:none; }
 .node .body img.md-img[data-img-src] { min-height:14px; }   /* slot before it resolves */
 .node .body img.md-img-missing { min-height:0; padding:6px 8px; box-sizing:border-box;
-  border:1px dashed rgba(255,255,255,.4); border-radius:6px; }
+  border:1px dashed color-mix(in srgb, var(--ink) 40%, transparent); border-radius:6px; }
 /* a card being targeted by an image file drag, and the body editor while dragging onto it */
 .node.img-drop { outline:2px dashed #5ac978; outline-offset:3px; box-shadow:0 0 0 2px #5ac978; }
 .node .body-edit.img-drop { outline:2px dashed var(--accent); outline-offset:-2px; }
@@ -908,14 +973,83 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node:has(.body.editing)  .addnote,
 .node:has(.title.editing) .tag-add-btn,
 .node:has(.body.editing)  .tag-add-btn { display:none !important; }
-/* collapse marker at the card's upper-right corner, clear of the add-child (+) button at the
-   lower-centre. A folded branch shows its hidden-descendant COUNT; a folded leaf (no children)
-   shows the same bubble empty — a white dot of the same size/position. */
+/* collapse BUTTON at the card's upper-right corner, clear of the add-child (+) button at the
+   lower-centre. Two states, one bubble (paintNode fills it):
+     folded   — "+5": expand, and how much is tucked under there ("+" alone for a folded note).
+     expanded — a chevron, and only while the card is hovered or selected, so a resting canvas stays
+                as clean as it was when fold was double-click-only. Selected counts too because touch
+                has no hover: tap once to select, then tap the chip.
+   It's a <button> (single click folds — see nodeEl), hence the appearance/border/font reset. */
+/* A perfect 16px CIRCLE by default — the chevron and a bare "+" are single glyphs, so side padding
+   would only stretch them into a lozenge. Only a "+N" opts into `.wide` (paintNode, when there really
+   are hidden descendants to count) and grows for its digits; the 8px radius keeps its ends round at
+   this height either way. `right` pins the RIGHT edge, so growing leftwards never moves the corner. */
 .node .hidden-count { position:absolute; right:-8px; top:-8px;
-  box-sizing:border-box; min-width:16px; height:16px; padding:0 5px;
-  background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:8px;
-  line-height:1; display:none; align-items:center; justify-content:center; }
-.node.collapsed .hidden-count { display:inline-flex; }
+  box-sizing:border-box; width:16px; height:16px; padding:0;
+  -webkit-appearance:none; appearance:none; border:none; font-family:inherit;
+  background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
+  line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
+.node .hidden-count.wide { width:auto; min-width:16px; padding:0 5px; }
+.node .hidden-count svg { width:11px; height:11px; display:block; }
+/* Both faces live in the button permanently (nodeEl bakes the chevron into the template, so paintNode
+   never rewrites its innerHTML) — data-chip picks which one is visible, the same single switch that
+   decides whether the button shows at all. */
+.node[data-chip="count"] > .title-row > .hidden-count svg,
+.node[data-chip="fold"]  > .title-row > .hidden-count .cnt { display:none; }
+/* BOTH faces sit in the SAME spot in every state, so folding never moves the button: hanging off the
+   TITLE's top-right corner. That's what living inside .title-row buys (see nodeEl) — the row is the
+   containing block exactly when it's positioned, i.e. when it's a FRAME's title tab, so a frame's chip
+   rides its tab instead of sitting 43px lower on the box, and a folded frame / docked tab (whose label
+   IS the element) needs no special case at all.
+   Where the row is in FLOW (card, stack, query card) the offsets resolve against the node's own
+   padding box instead — which for a bordered box means adding its border back, hence the stack's
+   -12px (its title then sits at the same 8px from its outer corner as a card's). */
+.node.stack > .title-row > .hidden-count { right:-12px; top:-12px; }
+/* A tab-shaped label — a frame's title TAB, a folded frame's pill, a docked tab — is only FRAME_TAB_H
+   (40px) tall on a --r-card corner, and centring the chip on that corner (the -8px above, i.e. half the
+   chip) reads as having slid DOWN into the rounded corner instead of straddling it: at the chip's own x
+   the label's fill has already curved away beneath it. Lift it to a 4px overlap, which is the "sitting on
+   the edge" look the -8px gives a full-height card. Both the tab and the pill, so folding a frame still
+   never moves the button — and TAB_STRIP_PAD (main.ts) is what leaves a docked tab's strip room for it. */
+.node.frame > .title-row > .hidden-count,
+.node.frame-folded > .title-row > .hidden-count { top:-12px; }
+/* WHICH face shows is decided in ONE place — paintNode's chipFace, via data-chip — and never by a
+   per-kind rule here: a `:hover`/`.sel` selector out-specifies any plain class, so a kind that
+   wanted to hide the bubble could never win that fight. Hence no .hidden-count in the frame /
+   stack / image-card / query-card / docked-tab rules further up.
+   The folded "+N" always shows. The chevron shows on hover, or while the card is SELECTED — every
+   selected collapsible card carries one, including each card of a multi-selection (clicking it then
+   folds them all, like X). Selected counts because touch has no hover: tap the card, tap the chip.
+   :not(:has(.node:hover)) because child cards are DOM-NESTED inside their parent, so a hover on a
+   deep card would otherwise light up the chevron of every ancestor above it at once — only the
+   innermost hovered card shows one. */
+.node[data-chip="count"] > .title-row > .hidden-count { display:inline-flex; }
+.node[data-chip="fold"]:hover:not(:has(.node:hover)) > .title-row > .hidden-count,
+.node[data-chip="fold"].sel > .title-row > .hidden-count,
+/* `.sel-join` too — the pair that rings as one shape shows one button: an open TAB carries the
+   group's fold button (chipFace), so selecting the BOX must reveal it up on the tab, not leave the
+   box selected with no way to fold it. selJoin is exactly the group↔open-tab pair, nothing else. */
+.node[data-chip="fold"].sel-join > .title-row > .hidden-count { display:inline-flex; }
+/* READ-ONLY keeps the chip fully live — collapsing is allowed there, unlike .addnote above which
+   read-only hides. Mid-drag, and while the title/body is being edited in place, the chevron is just
+   noise: drop it exactly like .addnote/.tag-add-btn. A FOLDED node keeps its count while being
+   renamed (it's the only thing showing what's tucked underneath). */
+body.grabbing .node[data-chip="fold"] > .title-row > .hidden-count,
+.node[data-chip="fold"]:has(.title.editing) > .title-row > .hidden-count,
+.node[data-chip="fold"]:has(.body.editing)  > .title-row > .hidden-count { display:none; }
+/* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
+/* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
+   not any one card. Every badge that hangs off a card is a few pixels wide there: the fold chip's "+7"
+   and chevron, the lock padlock, the emoji tag pills and their "+" button, the "add note" pen. All of
+   them go, which also keeps their layout + paint out of the frame budget at exactly the zoom level that
+   has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview.
+   `!important` because these controls are revealed by `:hover`/`.sel`/`[data-chip]` selectors that
+   out-specify any plain class (see the chipFace note above): a per-state fight this rule can't win on
+   specificity, and the switch is a global mode rather than a per-kind exception. */
+body.zoom-far .node > .title-row > .hidden-count,
+body.zoom-far .node > .lock-badge,
+body.zoom-far .node > .tag-row,
+body.zoom-far .node > .addnote { display:none !important; }
 /* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
    covers both branches-with-children and leaf cards whose body is folded away. */
 .node.collapsed { min-height:0; }   /* shrink to the title, like a bodyless card */
@@ -934,12 +1068,13 @@ body.light .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#ff
   width:96px; height:48px;
   display:flex; align-items:center; justify-content:center;
   background:var(--pal-grey); border:none; border-radius:var(--r-card);
-  color:#ffffff; font-size:22px; font-weight:400;
+  color:var(--pal-ink-grey); font-size:22px; font-weight:400;
   cursor:grab; user-select:none; touch-action:none;
   transition:box-shadow .15s, opacity .15s;
 }
-/* light theme: new cards default to white (see effectiveColor's fallback in main.ts) */
-body.light #ghostCard { background:var(--pal-white); color:#2b3645; }
+/* light theme: new cards default to white (see effectiveColor's fallback in main.ts). The ghost has
+   no .c-* class to carry --ink, so it names the two fills' computed inks directly. */
+body.light #ghostCard { background:var(--pal-white); color:var(--pal-ink-white); }
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
 body.readonly #ghostCard { opacity:.35; pointer-events:none; }
 
@@ -1055,6 +1190,12 @@ body.sketching #floatBar { display:none; }   /* the sketch panel takes the edit 
 /* hides instantly the moment a drag/pan/zoom starts (features/float-bar.ts's follow loop),
    then fades back in via the base transition above once the pointer lifts */
 #floatBar.hide-interact { opacity:0; pointer-events:none; transition:none; }
+/* …and the same treatment when the bar has nothing to anchor to (float-bar.ts's positionBar): a
+   selection whose card is HIDDEN under a fold, or carried over from before a reload so its node/element
+   is gone. Both used to park the bar in the top-left corner of the screen (a zero rect clamps to the
+   viewport margin; an un-placed bar keeps its static position) with no card under it at all. The follow
+   loop re-checks every frame, so it fades back in as soon as its card is measurable again. */
+#floatBar.unanchored { opacity:0; pointer-events:none; transition:none; }
 /* a selected card's own add-emoji/add-note BUTTONS float outside its border and don't reposition
    themselves like the bar does — same follow loop (float-bar.ts) toggles this body class instead,
    hiding them right along with the bar for the duration of any pan/zoom/drag. The tag PILLS
@@ -1085,7 +1226,10 @@ body.canvas-interacting .addnote { display:none !important; }
    CLEARS its inline display, so it can't fight this). Red padlock: same cue as #roBtn.locked. */
 #floatBar.locked-sel > *:not(#fbLock) { display:none; }
 #floatBar.locked-sel #fbLock { color:#e0564f; }
-#floatBar .fb-swatch { width:24px; height:24px; margin:0 4px; }   /* .swatch already sizes to 22px */
+/* the colour trigger is the same chip as the ones in its popover, so it's the same 22px they are —
+   NOT --bar-btn (which the rule above would give it, and which read as an oversized bubble next to
+   the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
+#floatBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
 
 /* small popover anchored under/over its trigger button (colour / layout pickers) — borderless,
    same "floating island" style as #toolbar/#floatBar, no shadow either. Explicit height (MUST
@@ -1098,6 +1242,21 @@ body.canvas-interacting .addnote { display:none !important; }
   background:var(--panel); border-radius:var(--r-full);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
+/* …except the COLOUR popover, which is the one with more content than a single row: the palette on
+   top, the custom picker + recents below. So it opts out of the shared height above and sizes to its
+   own rows. Its swatch row gets
+   an explicit width, which is what makes .swatch-break's wrap land in the right place (a shrink-to-fit
+   flex container resolves a 100% basis against nothing and lays every chip out on one line instead) —
+   13 chips wide, the palette row's own length: inherit + 11 colours + none, at 22px with 6px gaps.
+   Capped to the viewport so a narrow window wraps the palette row instead of running off the edge,
+   which the old fixed height could only clip.
+   The pill radius is halved with it: --r-full clamps to half the box's SHORTER side, which is the pill
+   it's meant to be on a one-row bar but a big lozenge on this taller box. --r-panel is the roundness
+   step nearest half of that (16px against the ~17px the two-row box was painting), so this stays on
+   the shared scale rather than introducing a one-off value. The single-row type/layout popovers keep
+   .fb-pop's own --r-full. */
+#fbColorPop { height:auto; padding:6px 8px; border-radius:var(--r-panel); }
+#fbColorPop .swatches { width:min(calc(13 * 22px + 12 * 6px), calc(100vw - 40px)); row-gap:6px; }
 /* hides instantly while #floatBar itself does (see float-bar.ts's followLoop) — a stale popover
    position mid-pan/drag/zoom would otherwise float away from its (now-moved) trigger button. */
 .fb-pop.hide-interact, .fb-pop-connector.hide-interact { opacity:0; pointer-events:none; transition:none; }
@@ -1107,8 +1266,17 @@ body.canvas-interacting .addnote { display:none !important; }
   background:var(--panel); }
 .fb-pop-connector.open { display:block; }
 
-/* colour picker = a row of individual round bubbles; the selection outline sits AROUND one */
+/* colour picker = rows of individual round bubbles; the selection outline sits AROUND one.
+   TWO rows, in one flex container: the fixed palette, then the custom picker + recently-used custom
+   colours (features/color-recents.ts). One container rather than two, so every chip stays a sibling
+   and the delegated click handler / markSwatch / the float bar's `.swatch.active` lookup each keep
+   covering the whole picker. */
 .swatches { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+/* the row break: a zero-height item that eats a whole flex line, so the wrap lands exactly here
+   instead of wherever the container's width happens to run out. Needs the container to have a
+   DEFINITE width to resolve against — see #fbColorPop's .swatches below; in the outline's branch
+   sheet the row is block-width already. */
+.swatch-break { flex:0 0 100%; height:0; margin:0; }
 /* fixed size so colour chips match the sketch sidebar's colour dots (.sketch-dots .dot) exactly */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
   border:0; background:var(--sw); }
@@ -1116,6 +1284,18 @@ body.canvas-interacting .addnote { display:none !important; }
 .swatch.active { box-shadow:0 0 0 2px var(--text); }
 /* inherit (the default): striped chip = "take the parent's colour" */
 .swatch.inherit { background:repeating-linear-gradient(45deg,#1e2733,#1e2733 5px,#2a3543 5px,#2a3543 10px); }
+/* custom colour: the chip a native <input type="color"> hides inside (features/properties.ts). It's
+   a spectrum wheel until a colour has actually been picked, then it shows that colour like any other
+   chip (.picked, which just lets --sw through). The input is stretched over the whole chip at
+   opacity 0 — a <label>-wrapped input is what opens the system colour sheet from one tap on every
+   platform (iOS included), and hiding it keeps the round-bubble look its neighbours have; a
+   `display:none` input, by contrast, is unreachable on iOS. */
+.swatch.custom { position:relative; overflow:hidden; padding:0; display:block;
+  background:conic-gradient(#ff5252, #ffd147, #4ade80, #22d3ee, #3f8cff, #a855f7, #ff5252); }
+.swatch.custom.picked { background:var(--sw); }
+.swatch.custom input[type=color] { position:absolute; inset:0; width:100%; height:100%; margin:0;
+  padding:0; border:none; background:none; opacity:0; cursor:pointer;
+  -webkit-appearance:none; appearance:none; }
 /* explicit no-colour: a blank chip with a diagonal slash — does NOT inherit */
 .swatch.nofill { background:
   linear-gradient(to top right, transparent calc(50% - 1.2px), #e0564a calc(50% - 1.2px),
@@ -1209,6 +1389,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    every bar (#toolbar, #floatBar, .floating-btn, .oc-back, .layoutchip) picks that up for free. */
 @media (pointer: coarse) {
   #toolbar { gap:8px; padding:5px 10px; }
+  #searchBox { height:calc(var(--bar-btn) + 10px); }   /* follow #toolbar's taller padding — the bar replaces it */
   .node .addnote { width:28px; height:28px; right:-14px; }
   .node .addnote svg { width:16px; height:16px; }
   .node .tag-row { bottom:-14px; gap:6px; }
@@ -1347,13 +1528,13 @@ body.ol-editing .ol-cards { display:flex; flex-direction:column; gap:12px; }
 body.ol-editing .oc-back { display:inline-flex; }
 .oc-back:hover { background:color-mix(in srgb, var(--text) 8%, var(--node)); }
 .oc-back svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-/* each card looks like a canvas card: the palette tint via the shared .c-* classes, white text on
-   coloured cards (theme-dependent on none/white/grey — mirrors .node / .ol-row). */
+/* each card looks like a canvas card: the palette tint AND the ink that goes with it, both via the
+   shared .c-* classes — exactly like .node / .ol-row, and with no per-colour text rules of its own
+   (see the .c-* block up top). c-none is the one that differs: an outline card isn't on the canvas,
+   so it fills with --node instead of going transparent. Its ink already follows the theme. */
 .oc-card { display:flex; flex-direction:column; gap:6px; padding:12px 14px;
-  border-radius:var(--r-card); background:var(--card, var(--node)); color:#fff; }
-.oc-card.c-none { background:var(--node); color:var(--text); }
-.oc-card.c-white { color:#2b3645; }
-body.light .oc-card:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color:#000; }
+  border-radius:var(--r-card); background:var(--card, var(--node)); color:var(--ink); }
+.oc-card.c-none { background:var(--node); }
 /* title + note edit in place; transparent fields so the card's own tint shows through */
 .oc-title, .oc-note { width:100%; background:transparent; border:none; color:inherit;
   font-family:inherit; padding:2px 4px; border-radius:var(--r-inner); }
@@ -1361,7 +1542,7 @@ body.light .oc-card:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { colo
 /* editing a field darkens its background + shows an accent ring — the same treatment as the
    in-card title/body editors on the canvas (.node .title.editing / .body-edit). */
 .oc-title:focus, .oc-note:focus { outline:2px solid var(--accent); outline-offset:1px;
-  background:rgba(0,0,0,.5); }
+  background:var(--scrim); }
 .oc-title.invalid:focus { outline-color:#e0564a; }
 .oc-title.invalid { text-decoration:underline wavy #e0564a; }
 .oc-note { resize:none; overflow:hidden; min-height:1.4em; line-height:1.5; font-size:13px;
@@ -1439,11 +1620,8 @@ body.ol-editing .ol-heading { display:none; }
    real room in the gap between rows to read clearly, not squeeze in behind the row above/below. */
 .ol-row { display:flex; align-items:center; box-sizing:border-box; position:relative;
   padding:8px 6px 8px 12px; margin-bottom:12px; cursor:grab;
-  border-radius:var(--r-card); background:var(--card, transparent); color:#fff; }
+  border-radius:var(--r-card); background:var(--card, transparent); color:var(--ink); }
 body.readonly .ol-row { cursor:default; }   /* no drag-to-reorder in read-only */
-.ol-row.c-none { color:var(--text); }
-.ol-row.c-white { color:#2b3645; }
-body.light .ol-row:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color:#000; }
 .ol-row.done .ol-title { text-decoration:line-through; opacity:.65; }
 .ol-row.flash { animation:ol-flash 1.2s ease-out; }
 @keyframes ol-flash {
@@ -1468,7 +1646,7 @@ body.light .ol-row:not(.c-none):not(.c-white):not(.c-grey):not(.c-black) { color
 body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in read-only: view the note sheet */
 /* inline rename (⋯ menu → Rename, F2, or on-create) — same treatment as the canvas' .node .title.editing */
 .ol-title.editing { outline:2px solid var(--accent); outline-offset:0; cursor:text;
-  white-space:pre-wrap; overflow:visible; background:rgba(0,0,0,.5); }
+  white-space:pre-wrap; overflow:visible; background:var(--scrim); }
 .ol-title.editing.invalid { outline-color:#e0564a; }
 /* checklist item: the same donebox the canvas shows next to a checklist parent's children */
 .ol-done { -webkit-appearance:none; appearance:none; width:14px; height:14px; margin:0 5px 0 0;
@@ -1484,12 +1662,12 @@ body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in 
 .ol-open svg { width:15px; height:15px; display:block; }
 .ol-open:hover { opacity:1; }
 body.readonly .ol-open { display:none; }
-/* hidden-descendant count on a folded row — straddles the top-right corner, same position/size as
-   the canvas' .node .hidden-count (fold is now double-click/double-tap only, no disc button, so
-   this bubble is also the only visual "this row has hidden children" indicator). */
+/* hidden-descendant count on a folded row — straddles the top-right corner, matching the canvas
+   chip's counting face (.node .hidden-count.wide: always digits here, so always the wide variant).
+   Unlike the canvas one this is a badge, not a button: the row's own disc is what folds it. */
 .ol-count { position:absolute; right:-8px; top:-8px;
   box-sizing:border-box; min-width:16px; height:16px; padding:0 5px;
-  background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:8px;
+  background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
   line-height:1; display:inline-flex; align-items:center; justify-content:center; }
 /* locked row: the same padlock badge as the canvas card, upper-LEFT corner — mirrors .ol-count. */
 .ol-lock { position:absolute; left:-8px; top:-8px;

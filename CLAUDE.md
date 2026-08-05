@@ -64,7 +64,10 @@ selection core and wires the global keyboard/toolbar events.
   flow modes (`frameFlow`), and the stack outliner (`stackOutline`/`stackDropTarget`/`stackOf`) +
   the container predicates `isFrame`/`isStack`/`isContainer`), `edges.ts`
   (parent→child connector geometry + `paintEdges`), `theme.ts`, `icons.ts` (loads
-  `assets/icons/*.svg` via `import.meta.glob` `?raw`, fills `[data-icon]`).
+  `assets/icons/*.svg` via `import.meta.glob` `?raw`, fills `[data-icon]`; also holds `FOLDER_PATH`,
+  the ONE folder outline every frame glyph is drawn from — the kind chip, all three frame layout chips
+  (`features/float-bar.ts`) and a folded tab group's pill (`FOLDER_SVG`, `main.ts`) — since a frame IS
+  a box with a folder tab on it. It lives there because neither of those two can cycle with it).
 - `features/` — the interactive subsystems split out of `main.ts`, each owning its concern and
   sharing state via `ui`: `drag.ts` (`bindNodeDrag` + clone/detach/auto-pan + reparent-by-drop),
   `gestures.ts` (canvas pan/zoom/marquee, registers its own listeners on import), `inline-edit.ts`
@@ -114,6 +117,22 @@ measurement — hence the hover tooltip in `paintNode` instead), and the vertica
 child into its host goes through `frameInsetY` (`view/layout.ts`) rather than a bare
 `FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share it (the X axis
 has no such helper; it uses `FRAME_BORDER` directly), and `elTop` is the one place that applies the drop.
+**Anything that writes a node's `left`/`top` must go through `placeSelf` + `elTop`**, not a bare
+`place()` — that's the pair `paintNode`'s own final branch uses, and the relayout ANIMATION
+(`placeNodeEl`/`setNodeElXY`) writes left/top too, since interpolating them IS the animation. Skipping
+`elTop` parks a frame's box at its bounds top instead of one tab lower, and because the box paints after
+the tab strip (tree order — see `tabStripEl`), on a tab group that drew a big empty box straight over
+its own tabs for the length of the transition; skipping `placeSelf` re-parents a docked tab's label out
+of its group's strip for the same duration.
+**A container's two side wrappers are LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
+`hostsContent(n)` (an expanded frame box, an expanded stack, or an OPEN docked tab) and `tabStripEl` iff
+the node is an expanded tabs group — `paintNode` drops each the moment that stops holding. Being HIDDEN
+counts as holding nothing (`hostsContent` returns false for it), which is what lets the wrapper's whole
+lifecycle be ONE drop, placed ahead of `paintNode`'s `isHidden` early return rather than repeated inside
+it: folding a group hides the open tab whose own wrapper would otherwise survive. Both created lazily, so a fold/reopen round-trips through the same code; a folded container's
+children ride along detached and are re-placed by `place()` when it opens again. Skip the drop and a fold
+strands an empty `overflow:hidden` div at the box's old size (same for a frame retyped to a card, or a
+stack demoted to a row inside another stack).
 
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
 subtree as one indented, full-width column inside a box that is **width-resizable** (`n.w`,
@@ -131,6 +150,12 @@ must paint again (see `withLayoutAnimation`). A row's width itself is **derived,
 (`stackRowW`: the stack's own width, less the border/padding, less one `STACK_INDENT` per depth) —
 deliberately, so it can't collide with the authored `n.w` a card carries in from outside the stack.
 Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it comes out.
+An EMPTY stack still owes itself an `h`, and it can't be a constant: unlike a frame's single-line tab a
+stack's own title WRAPS, so the height has to be measured (`sizeEmptyStack`, which paints then measures;
+its height is the zero-row reduction of the `node.h` line that closes the stack branch — keep the two in
+step). Both empty paths (no children at all / no visible rows) call it. `layoutSubtree` returns early for a
+childless node, which is why that early return has to size a stack on the way out; without it a stack
+kept `nodeH`'s `STACK_HEADER + STACK_PAD` fallback and a two-line title spilled out of its box.
 
 **A frame with `mm_layout: tabs` is a TAB GROUP:** its child *frames* aren't content, they're TABS.
 Their title tabs flow along its own top band (`tabStripRect`/`tabSlots`, DOM wrapper `tabStripEl`) and
@@ -151,6 +176,20 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   thing a LOCK doesn't forbid (it's how you look at the box, not a change to it), so a locked tab stays
   pressable — `dragPointerDown`'s `hasLockedAncestor` bail exempts docked tabs — while moving it is still
   refused. Its lock badge hangs 8px outside the tab, which is what `TAB_STRIP_PAD` leaves room for.
+- **The strip's tabs must not carry a `z-index`.** `.tab-strip` deliberately has none so that plain tree
+  order decides between a tab and the box (`tabStripEl` keeps the strip right BEFORE the box), which is
+  what tucks an inactive tab *behind* the box like a sheet behind the front of a folder — the box's
+  border and selection ring then run unbroken across the top of it. But a tab is a `.node`, and
+  `.node { z-index:2 }` was quietly overriding that and lifting every inactive tab over the ring, which
+  read as a ring chopped into pieces. `.frame-folded.docked` resets it to `auto`; only `.tab-active`
+  takes one (5), which is what keeps the OPEN tab in front where its own three-sided ring joins the box.
+- **A group and its open tab carry ONE fold button, and it's on the tab** — the title you can see. So
+  `chipFace` gives the open tab the `'fold'` face and the chip's click handler redirects to
+  `toggleCollapse(group)`; the group itself shows nothing while open, and takes the `'count'` face once
+  folded, when it's a lone pill again and that `+N` is the only way back. A CLOSED tab shows neither (its
+  contents are one click away in the box, and a badge would collide with the next tab along the strip).
+  Since the two ring as one shape, `.sel-join` reveals the chip as well as `.sel` — selecting the BOX
+  must not leave it with no visible way to fold.
 - **A group holds no content of its own**, so anything added "to the group" goes to the open tab:
   dropped cards (`features/drag.ts`), `addChild`/`createSibling` and paste (`contentParent`). It has no
   COLOUR of its own either: `effectiveColor` starts the walk at the open tab, so the box (its border, its
@@ -163,9 +202,33 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   action on a selected group lands on the OPEN TAB via `actionTarget`: its colour + checklist (the
   float-bar properties' id provider), its rename (`startInlineEdit`, the single funnel for F2 / ⋯ / the
   outline) and its deletion (`deleteNode`/`deleteSelection`, after which `normalizeTabs` promotes the next
-  tab and `dissolveEmptyTabGroups` takes the box away with the last one). What stays on the group is what
-  the box visibly owns: moving, resizing, its kind/layout (the way out of tabs mode) and its lock — plus
-  delete-and-promote, which reads naturally as "ungroup" (the tabs survive as loose frames).
+  tab and `dissolveEmptyTabGroups` takes the box away with the last one). The float bar goes there too —
+  it centres horizontally on the LABEL, not the box (`labelRect`, `features/float-bar.ts`), since a
+  frame's box can be many times wider than its title and the bar belongs over the thing you selected;
+  for a group that label is its open tab's. An open group can't even BE the selection: `selTarget`
+  (`main.ts`) maps it to its open tab in all three entry points (`selectNode`/`setSelectionSet`/
+  `toggleSel`), so clicking the box selects the TAB — which is what makes the float bar show that tab's
+  kind/layout/colour instead of a "group" nobody put there. What the box keeps is what it visibly owns,
+  moving and resizing, and both had to stop asking `state.sel`: `dragPointerDown`'s marquee bail takes
+  `selJoin(n)` as "selected" too (else the interior could only ever rubber-band and the box would be
+  unmovable), while the resize handles are plain hit-zones that never needed a selection. `navArrow`'s
+  `←` steps out of a docked tab to the GROUP's parent for the same reason — navigating onto a group
+  would bounce straight back to the tab and read as a dead key.
+  **Tabs are therefore made and unmade by DRAGGING only** (dock a title onto a tab; drag the last tab
+  out and the empty box goes with it), and `mm_layout: tabs` is bookkeeping the user never picks:
+  `LAYOUTS_BY_TYPE.frame` has no tabs chip, and `markChips` hides the whole layout row for any
+  selection holding a tabs frame — a group has no arrangement of its own to choose, and a click there
+  would silently dissolve it. That leaves `setType` as `undockAllTabs`'s one caller.
+  A **folded** group is the one that stays selectable (a lone pill with no tab on screen, so nothing
+  else could move or unfold it) — which is also the only place its kind picker and its lock are
+  reachable, and where deleting it takes the whole group down instead of promoting the next tab.
+  **Its own title is therefore never on the canvas, folded or not** (only in the outline, in search and as
+  its filename): FOLDED, the pill shows the OPEN TAB's title (`foldedTab` in `main.ts`) with a folder icon
+  in front of it (`FOLDER_SVG`, revealed by `.tabs-fold`) — so the text doesn't change under the fold, and
+  the icon is what tells the pill from a folded plain frame — the job the minted `"<target> tabs"` title
+  used to do in words (that title lives on, as the group's bookkeeping/outline name). Two knock-ons: `startInlineEdit` on a folded group UNFOLDS it first and then
+  redirects (`actionTarget` only redirects while open, and an editor can't open on a `display:none` tab),
+  and `toggleCollapse`'s status line names the open tab both ways round.
 Dock, undock and re-slot all re-anchor the frame's contents through ONE formula (`reanchorContents`):
 where they sat before the gesture (`interiorAtHome` — the lent box if it was already a tab, else its own
 box at its pre-drag position), where they sit now, minus the drag delta its cards rode along with the
@@ -248,6 +311,71 @@ calling the same functions as the keyboard shortcuts; `updateNodeActions()` (run
 `applySelection`) enables/disables them by selection + `readOnly`, and the titles show
 the shortcut. Add child/sibling live in the right-click context menu and on `Tab`/`Enter`.
 
+**Collapse has THREE entry points, all funnelling through `toggleCollapse`/`toggleCollapseSelection`:**
+the corner chip, `X`, and the ⋯ menu. (Double-click used to be a fourth — it now OPENS a node instead,
+see the section below.) The **chip** is `.hidden-count` — one
+`<button>` at the node's top-right with two faces: folded it reads `+N` (the hidden-descendant count,
+a bare `+` when only a body is tucked away), expanded it shows a chevron, and *that* face is revealed
+only on hover or while SELECTED (the touch story: tap the card, tap the chip — and every card of a
+multi-selection carries one, whose click folds them all like `X`).
+**`paintNode`'s `chipFace` is the single thing that decides which face shows** — `styles.css` keys off
+nothing but the `data-chip` it writes (`'count'`/`'fold'`/absent), and *no per-kind rule may hide the
+bubble*. BOTH faces live in the button permanently (`nodeEl` bakes the chevron in beside a `.cnt` span)
+and `data-chip` picks which is visible, so `paintNode` never rewrites the chip's `innerHTML` — re-parsing
+that `<svg>` per foldable node per paint is real work, and `paintAll` runs once per animation FRAME for
+the length of a resize drag. Which node the button ACTS on is `chipTarget` (itself, or a docked tab's
+group), read by both `chipFace` and the click handler so the button shown and the node folded can't
+disagree. The no-per-kind-rule part is why `.hidden-count` no longer appears in the frame/stack/
+image-card/query-card/docked-tab rules. That's not tidiness: `.node[data-chip="fold"]:hover:not(:has(.node:hover))`
+out-specifies any plain class selector, so a rule like `.node.locked > .hidden-count { display:none }`
+silently loses on hover. Anything that shouldn't offer the button gets refused in `chipFace` instead —
+annotations (an annotation IS its body, so folding leaves an empty shell), image/query cards, and
+**locked** nodes (`toggleCollapse` refuses them, so the control would do nothing — their folded *count*
+still shows, being information rather than a control). A frame's/stack's own body is never rendered, so
+only children make one collapsible.
+**The chip lives INSIDE `.title-row`** (hence the `> .title-row >` in every one of its selectors), and
+that's what puts both faces in the same spot in every state — hanging 8px off the TITLE's top-right
+corner — so folding never moves the button: the row is the containing block exactly when it's
+positioned, i.e. when it's a frame's title TAB, so a frame's chip rides its tab instead of sitting
+`FRAME_TAB_DROP` lower on the box, and a folded frame / docked tab (whose label IS the element) needs
+no special case. Where the row is in flow the offsets resolve against the node's own padding box, so a
+bordered box adds its border back (`.stack` → `-12px`).
+Two more things to respect: the hover rule needs
+`:not(:has(.node:hover))` because child cards are DOM-nested (a deep hover would otherwise light up
+every ancestor's chip at once), and the chip's `pointerdown` must `stopPropagation` so `bindNodeDrag`'s
+`el`-level handler never turns the click into a select/drag — the touch double-tap counter in
+`features/drag.ts` exempts it (via `NODE_CONTROLS`) for the same reason.
+
+**Double-click / double-tap OPENS a node (`activateNode` in `main.ts`)** — folding moved to the chip,
+which freed the gesture for what a double-click means nearly everywhere else. One gesture, dispatched
+by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a `.title-row` (a card's title
+row, a frame's folder tab, a docked tab's whole label) renames via `startInlineEdit` — the single
+rename funnel, so the tab-group/annotation/query redirects and the lock refusal come for free; anything
+else on a card edits its note; a CONTAINER's interior gets a new card THERE (`addChildIn` → `addChild`,
+which routes a group to its open tab, refuses a locked parent and reveals a folded one). The same
+gesture on empty canvas creates a root card (`stage`'s `dblclick` in `features/gestures.ts`). Four
+things hold it together:
+- **`NODE_CONTROLS`** (exported from `main.ts`) is the one list of things that act on a SINGLE click —
+  chip, checkboxes, links, `.addnote`, query input, resize handles `.fh`. Both the `dblclick` handler
+  and the touch double-tap counter in `features/drag.ts` bail on it, or the second click would fire the
+  button AND open the card.
+- **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on
+  it renames — otherwise a double-click would open an editor inside a hidden `.body`.
+- **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows): there's nothing to
+  open, and browsing the help map is all expanding.
+- **A click now only ever SELECTS.** The 260ms slow-second-click rename is gone, and with it the
+  `ui.renameTimer` every fresh interaction had to `clearTimeout`, the `ui.pendingGroupFold` stash that
+  let a double-click fold a just-reduced multi-selection, and `Drag.downTarget`. Don't reintroduce a
+  timer here: it can only race the double-click it was invented to lose to.
+
+**Arrow keys walk the tree (`navArrow` in `main.ts`), by TREE semantics, not screen direction:** `→`
+goes deeper (expanding a folded branch first), `←` shallower (folding an open one first), `↑`/`↓`
+between siblings in `orderedKids` order — the same order the outline lists them in. Geometric arrows
+were rejected because a child's side is its own stored `mm_side`, so a fan branch has children on two
+sides at once and "left" stops meaning anything. The walk pans via `revealInView` (`view/camera.ts`),
+which moves the *minimum* distance to bring one node on screen and never touches `k` — `frameBox` is
+wrong here, since re-framing on every keypress makes the map jump under you.
+
 **Central mutable `state` object (line ~377)** holds `nodes` (Map of id → node),
 `view` (pan/zoom `{x,y,k}`), selection (`selId` + `sel` Set), `edgeStyle`,
 `readOnly`, etc. The render pipeline is `paintNode` / `paintEdges` / `paintAll`;
@@ -269,5 +397,89 @@ DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
   `mdInline`, `mdLinks`, `mdEmphasis`) — headings, links, emphasis, task lists.
   It's not a full Markdown parser; extend these functions rather than reaching for a
   library (the no-dependency, single-file constraint is deliberate).
+- **Below `FAR_ZOOM` (50%, `view/camera.ts`) every overlay badge is dropped** — `applyView` puts
+  `zoom-far` on `<body>` and `styles.css` hides the fold chip, the lock badge, the emoji tag row and
+  the `.addnote` pen: a few unreadable pixels each at that scale, times every card on screen. Purely a
+  CSS mode (no node geometry depends on it, so crossing the line needs no repaint), and the hides need
+  `!important` — those controls are revealed by `:hover`/`.sel`/`[data-chip]` selectors no plain class
+  can out-specify. Add any new card-corner badge to that rule.
 - **Theme** (light/dark) and **edge style** are persisted in localStorage and driven
   by CSS variables defined at the top of `<style>`.
+- **ONE card palette for both themes.** `body.light` overrides no `--pal-*` value (it used to swap in
+  a brighter pastel set), so a card is the same colour wherever the map is opened — and therefore has
+  one ink, decided by the colour itself. `refreshPalette` still re-reads on a theme toggle (a no-op
+  now, kept so a future per-theme colour would still work) and still repaints, because what *does*
+  differ per theme is `effectiveColor`'s fallback for an uncoloured card / an annotation, plus
+  `c-none`'s ink.
+- **A card's text colour is DERIVED from its fill, never authored.** The palette hexes are still
+  the `--pal-*` custom properties in `styles.css` (one source of truth, read into JS as
+  `SWATCH_BG`), but the **ink** each one demands is computed: `utils/ink.ts` measures WCAG contrast
+  and `main.ts`'s `deriveInk` injects a `--pal-ink-*` + `--pal-scrim-*` pair per key into a
+  generated `<style>` (re-run by `refreshPalette` on theme toggle, since the two themes have
+  different fills). The `.c-*` classes hand those to a card as **`--ink`** (its text colour) and
+  **`--scrim`** (what an in-place editor paints *behind* that ink). Three rules follow:
+  - **No rule anywhere may name a colour key to fix its text.** One `color: var(--ink)` per surface
+    that wears a `.c-*` class (`.node`, `.query-item`, `.oc-card`, `.ol-row`) covers every colour in
+    both themes — that replaced four hand-maintained "which keys are exceptions" lists that all had
+    to agree with each other, and it's what lets an off-palette colour work with no new CSS.
+  - **`--scrim` is paired with the ink, not fixed.** Every editor backdrop (`.title.editing`,
+    `.body-edit`, `.query-input`, `.oc-title:focus`, `.ol-title.editing`) uses it: a hardcoded dark
+    scrim under dark ink is unreadable. Same reason the body's marks (`code`, `pre`, `blockquote`,
+    `hr`, image placeholders) tint with `color-mix(… var(--ink) …)` instead of a literal white/black.
+  - **Ink is a property of the CARD, not of the theme** — which is why the ink hexes are fixed and
+    `body.light` no longer overrides text anywhere. `c-none` is the one exception, and by
+    construction: with no fill there's nothing to measure, so it takes `var(--text)` and has its
+    scrim flipped by hand. Ink is computed from a container's *own* fill; a stack's `86%`-toward-black
+    step and a row's `93%`-toward-white step are not re-measured (both stay legible — the stack's
+    darkened fill is the thinnest at ~3.2:1 on a bold title).
+  The bias is deliberate: light ink is kept unless its contrast falls below `INK_MIN` (**2.5**)
+  rather than always taking the higher contrast, and that one number serves both themes. It's pinned
+  low enough that **every palette colour keeps the ink it had before any of this existed** (the
+  lowest being the dark theme's amber at 2.85), so dark ink is reserved for fills genuinely too pale
+  for white — the off-palette case this is all for. No single threshold can also flip the light
+  theme's pale fills, which is what the old per-theme hand-written rules were buying; the light
+  theme's slate therefore takes white ink, and that's accepted rather than worked around.
+- **A colour VALUE is a palette key OR an authored `#rrggbb`.** `n.color` (and `effectiveColor`'s
+  result) is `''` (inherit), `'none'`, a key, or a custom hex from the colour popover's spectrum
+  chip — and **nothing branches on which**, because three resolvers in `main.ts` absorb it:
+  `colorFill` (the hex JS tints with — edges, `--frame-stroke`; `null` for none/inherit, which every
+  caller already falls back to `--edge` for), `colorClass` (`c-<key>`, or `c-custom` — a hex can't be
+  a class name) and `colorVars`/`applyColorVars` (that node's `--card`/`--ink`/`--scrim` written
+  inline, since the set of custom colours is open-ended and only a class can carry pre-computed
+  ones). Use them at **every** site that turns a colour into a class or a tint — the class sites are
+  `paintNode`, `queryItemHTML`, the outline row + its move-picker dot, and the branch card (×2) —
+  and never build `c-${color}` or `var(--pal-${color})` by hand again. `applyColorVars` REMOVES the
+  triple for a palette key, which is the half that's easy to miss: an inline custom property beats
+  any selector, so a card recoloured from custom back to `blue` would otherwise keep the old hexes.
+  On disk a custom colour is written **quoted** (`color: "#ff8800"`) and unquoted on read — a bare
+  `#rrggbb` is a comment to every real YAML parser, Obsidian included.
+  The picker itself is a native `<input type="color">` wrapped in its `<label class="swatch custom">`
+  (`features/properties.ts`) — the one form that opens the system colour sheet from a single tap on
+  every platform *including iOS*, where there's no `EyeDropper` and `showPicker()` isn't dependable;
+  it's `opacity:0` over the chip so the round-bubble look survives (`display:none` would make it
+  unreachable on iOS). It streams `input` while the user drags and fires `change` once on commit, so
+  the preview paints live with no history entry and the commit rewinds to the pre-drag colours before
+  calling `record` — `record` snapshots when it's called, which by then is too late. The float bar
+  exempts this chip from its close-on-swatch-click, or the row would vanish mid-pick.
+- **Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, exactly like the
+  emoji tag picker's recents: the MRU in `localStorage` (`mindmap.colorMru`, cap 8) *plus* every
+  distinct custom colour in the open map, derived fresh from `state.nodes`. The second is what saves
+  the first from being useless on a device that has never picked one (a fresh browser, the same map on
+  the iPad, a `.zip` import), and it self-prunes — recolour the last card away from a shade and it
+  stops being offered, with no cache to invalidate. They're a UI convenience, NOT vault data: no
+  frontmatter key, no map-level palette. Three things to keep right:
+  - **Remember on COMMIT only** (`setColor`, not `applyColor`) — `applyColor` also runs per `input`
+    event during a live drag, which would bury the real picks under a drag's worth of intermediates.
+    `renderRecents` is likewise called from `setColor`/`sync` but never from `markSwatch`, which the
+    live drag *does* call: the derived source reads `n.color`, so a chip would flicker per pointer move.
+  - **All chips stay siblings in ONE `.swatches` container**, with a full-width `.swatch-break` forcing
+    the row split — that's what keeps the delegated click handler, `markSwatch`'s single
+    `querySelectorAll` and the float bar's `.swatch.active` lookup covering both rows.
+  - **`#fbColorPop` opts out of `.fb-pop`'s shared height** (the pin that keeps every popover the same
+    height as the bar) and its row takes an explicit width, since `.swatch-break`'s `100%` basis needs
+    a definite width to resolve against. That width is also what finally makes a narrow window *wrap*
+    the palette row instead of running it off the screen edge.
+  - Marking: a recent chip rings when it carries the active colour, and the picker chip only ADOPTS
+    the colour when no recent chip has it (aged out of the cap, or hand-authored in a note). It can't
+    just stop adopting — `.swatch.active` is what `markColorTrigger` mirrors, so nothing ringed would
+    leave the float-bar trigger showing the inherit stripes, i.e. reading as "no colour".
