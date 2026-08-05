@@ -4,7 +4,7 @@
 // elsewhere calls scheduleSave(); a burst coalesces into one write ~400ms later.
 // `store` is the active backend (reassigned by useStore); main holds the open() flows.
 // ============================================================
-import { state, world, setStatus, isBoxType, type MindNode, type LayoutSide } from '../core/state.js';
+import { state, world, setStatus, isBoxType, GRID_STYLES, GRID_SIZES, type MindNode, type LayoutSide } from '../core/state.js';
 import { parseMd, serializeMd } from '../utils/frontmatter.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
@@ -391,7 +391,6 @@ async function flushSketch(): Promise<void> {
 
 // ---------- per-map settings (view prefs that travel with the vault, e.g. the background grid) ----------
 function settingsJSON(): string { return JSON.stringify({ version: 1, grid: state.gridStyle, gridSize: state.gridSize }); }
-const VALID_GRID_SIZES = [0, 20, 40, 80, 160, 320];
 export async function loadSettings(): Promise<void> {
   state.gridStyle = 'none';
   state.gridSize = 20;
@@ -399,8 +398,8 @@ export async function loadSettings(): Promise<void> {
     const blob = store.readBlob ? await store.readBlob(SETTINGS_FILE) : null;
     if (!blob) return;
     const data = JSON.parse(await blob.text());
-    if (data?.grid === 'dot' || data?.grid === 'line') state.gridStyle = data.grid;
-    if (VALID_GRID_SIZES.includes(data?.gridSize)) state.gridSize = data.gridSize;
+    if (GRID_STYLES.includes(data?.grid)) state.gridStyle = data.grid;
+    if (GRID_SIZES.includes(data?.gridSize)) state.gridSize = data.gridSize;
   } catch { /* missing or malformed → default to no grid */ }
 }
 let settingsTimer: number | undefined;

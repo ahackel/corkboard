@@ -259,8 +259,11 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
    --grid-ink is declared HERE rather than at :root so its var(--grid-pat) substitutes against
    whichever theme is live on this element (see the light-theme note above); grid.ts's inline
    gradients just reference it. Deliberately faint — the grid is a hint you read past, not a layer
-   that competes with the cards. This is the MAJOR level's strength; the sub-grid scales it down
-   again by SUB_MAX in grid.ts. */
+   that competes with the cards. It's the full strength of whatever the MAJOR level draws; a sub-grid
+   that has to be told apart from it (mesh, line) scales it down again by SUB_MAX in grid.ts, while
+   the flat dot field uses it at full strength — being one level, painted once. Note it's TRANSLUCENT,
+   which is why that field is a single layer: coincident dots from both levels would composite to
+   about twice the alpha and every 4th dot would come out darker (see paintLayer). */
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
