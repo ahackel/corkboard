@@ -201,25 +201,36 @@ body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag 
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #folderName:empty { display:none; }   /* icon-only until a folder is loaded */
 @media (max-width:480px){ #folderName { display:none; } }   /* icon-only on narrow screens */
-/* find / jump-to-card — a floating bar dropped below the toolbar, opened by #searchBtn */
-#searchWrap { position:fixed; top:52px; left:50%; transform:translateX(-50%); z-index:20;
+/* find / jump-to-card — opened by #searchBtn, and it TAKES THE TOOLBAR'S PLACE (same top/centring)
+   rather than dropping below it: search is a temporary mode, so the bar it replaces goes away while
+   it's up (the rule below). The toolbar can't be hidden by a sibling combinator — it comes BEFORE
+   #searchWrap in the DOM — hence `body:has()`, which also keeps `.open` the single open-state flag.
+   Because the magnifier goes with the toolbar, #searchClear stays visible unconditionally: empty, it
+   closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
+   field IS the bar (see #searchBox), not an inset box floating in one. */
+#searchWrap { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:20;
   display:none; align-items:center; width:260px; max-width:calc(100% - 20px);
-  padding:4px 6px; background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
+  background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
-#searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:14px; width:14px; height:14px;
+body:has(#searchWrap.open) #toolbar { display:none; }
+#searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
   display:block; color:var(--muted); pointer-events:none; flex:none; }
-#searchBox { width:100%; min-width:0; box-sizing:border-box; height:30px; padding:0 8px 0 30px;
-  border-radius:var(--r-full); font-size:13px; background:var(--bg); border:none; color:var(--text); }
-#searchBox:focus { outline:none; box-shadow:0 0 0 2px var(--accent); }
-#searchBox.has-value { padding-right:30px; }
-button#searchClear { display:none; position:absolute; right:10px; width:20px; height:20px; padding:0;
+/* The field FILLS the bar — transparent, no fill of its own and no focus ring, so the whole pill
+   reads as one surface (and clicking anywhere in it lands in the input). The bar being the only
+   surface is also why the height is spelled out here: --bar-btn plus what #toolbar pads with, so
+   the pill matches the toolbar it stands in for. */
+#searchBox { flex:1; min-width:0; box-sizing:border-box; height:calc(var(--bar-btn) + 8px);
+  padding:0 34px; border-radius:var(--r-full); font-size:13px;
+  background:transparent; border:none; color:var(--text); }
+#searchBox:focus { outline:none; box-shadow:none; }
+button#searchClear { display:flex; align-items:center; justify-content:center;
+  position:absolute; right:11px; width:20px; height:20px; padding:0;
   border:none; border-radius:50%; background:transparent; color:var(--muted); cursor:pointer; }
 button#searchClear:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
 #searchClear svg { width:11px; height:11px; display:block; }
-#searchBox.has-value ~ #searchClear { display:flex; align-items:center; justify-content:center; }
 /* placeholder hint reads as a faint label, not real input */
 input::placeholder { color:var(--muted); opacity:1; }
-#searchResults { position:absolute; top:42px; left:0; right:0; max-height:50vh; overflow:auto;
+#searchResults { position:absolute; top:calc(100% + 4px); left:0; right:0; max-height:50vh; overflow:auto;
   background:var(--panel); border:1px solid var(--grid); border-radius:var(--r-menu); padding:4px;
   display:none; z-index:30; }
 #searchResults.open { display:block; }
@@ -1363,6 +1374,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    every bar (#toolbar, #floatBar, .floating-btn, .oc-back, .layoutchip) picks that up for free. */
 @media (pointer: coarse) {
   #toolbar { gap:8px; padding:5px 10px; }
+  #searchBox { height:calc(var(--bar-btn) + 10px); }   /* follow #toolbar's taller padding — the bar replaces it */
   .node .addnote { width:28px; height:28px; right:-14px; }
   .node .addnote svg { width:16px; height:16px; }
   .node .tag-row { bottom:-14px; gap:6px; }

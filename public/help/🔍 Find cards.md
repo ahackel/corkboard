@@ -11,5 +11,6 @@ mm_collapsed: true
 Press `/` to open the search box and type any part of a title.
 
 - Matches jump into view as you type.
-- Clear the box with the **✕** button.
+- The search bar takes the toolbar's place while it's open.
+- Clear the box with the **✕** button — press it again on an empty box to close.
 - Press `Esc` to close it.

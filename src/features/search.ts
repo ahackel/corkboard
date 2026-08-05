@@ -17,7 +17,8 @@ const searchBtn = document.getElementById('searchBtn') as HTMLButtonElement;
 const searchResults = document.getElementById('searchResults') as HTMLElement;
 const searchClear = document.getElementById('searchClear') as HTMLButtonElement;
 let searchHits: MindNode[] = [], searchActive = -1;
-// Open the floating search bar and focus the box (also the "/" shortcut entry point).
+// Open the search bar and focus the box (also the "/" shortcut entry point). The bar sits where
+// the main toolbar does and hides it for as long as it's open (styles.css keys off `.open`).
 export function openSearch(): void {
   searchWrap.classList.add('open');
   searchBtn.classList.add('active');
@@ -94,7 +95,11 @@ searchResults.addEventListener('click', (e: MouseEvent) => {
   const item = (e.target as Element).closest('.sr-item');
   if (item) gotoHit((item as HTMLElement).dataset.id!);
 });
-searchClear.addEventListener('click', () => { searchBox.value = ''; runSearch(); searchBox.focus(); });
+// clear-or-close, exactly like Escape: with the toolbar hidden behind the bar, this is the only
+// visible way out, so an empty box makes the × dismiss the whole mode instead of doing nothing.
+searchClear.addEventListener('click', () => {
+  if (searchBox.value){ searchBox.value = ''; runSearch(); searchBox.focus(); } else closeSearch();
+});
 searchBtn.addEventListener('click', () => {   // toolbar icon toggles the floating bar
   if (searchWrap.classList.contains('open')) closeSearch(); else openSearch();
 });
