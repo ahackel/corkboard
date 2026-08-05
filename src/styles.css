@@ -333,16 +333,28 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* checklist item: a done checkbox next to the title, shown when this card's PARENT has its own
    `checklist` turned on (Trello-style — see showsDoneCheckbox in main.ts). A body's own task
    list carries separate per-line state instead — see .taskbox below. */
-.node .title-row { display:flex; align-items:flex-start; gap:.5em; }
+/* The checkbox's footprint in the title row, as one pair of numbers: the row's own gap and the
+   box's width (see .node .donebox further down, which reads its width from here too). The body
+   below the row repeats their sum so it lines up under the TITLE rather than under the box — px
+   and not em deliberately, since .body is 12px against the row's 16px, so one em sum would
+   resolve to two different indents. */
+.node { --donebox-w:14px; --title-gap:8px; }
+.node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
-/* margin-left offsets the padding difference (12px left vs 10px top) plus kills the UA default
-   margin, so the box sits equally far from the card's top and left edges */
+/* Direct child, same reason as .donebox below: a DOM-nested child card has its own .body, and its
+   indent belongs to ITS OWN checklist state, not to an ancestor's. */
+.node.show-done > .body { margin-left:calc(var(--donebox-w) + var(--title-gap)); }
+/* margin-top + `left` put the box equally far from the card's top and left edges (its padding is
+   10px vs 12px) and kill the UA default margin. The horizontal nudge is `left`, NOT a margin, so
+   the box's flow width stays exactly --donebox-w and the body's indent above can be that plus the
+   gap and nothing else; px, not em, because a checkbox's em is the UA's control font-size (13.3px),
+   not the card's — the em spelling this replaces was silently ~0.7px short of its own intent. */
 /* Direct-child combinators only: the donebox belongs to THIS card's own title row (main.ts
    builds .title-row > .donebox directly under .node). A descendant combinator would leak the
    show-done state onto DOM-nested descendant cards (a child card nested inside this one has its
    own .donebox further down the tree), showing a checkbox on a grandchild whose own direct parent
    has no checklist — see showsDoneCheckbox in main.ts, which is already parent-only. */
-.node > .title-row > .donebox { display:none; margin:.2em 0 0 calc(.2em - 2px); }
+.node > .title-row > .donebox { display:none; margin:3px 0 0; left:1px; }
 .node.show-done > .title-row > .donebox { display:block; }
 /* Struck-through title = THIS card is checked off. Direct-child combinators for the same reason as
    .donebox above: a child card is DOM-nested inside its parent's element (paintNode), so a
@@ -884,7 +896,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body li { margin:.1em 0; }
 .node .body li.task { list-style:none; margin-left:-1.0em; display:flex; align-items:flex-start; gap:.4em; }
 .node .body li.task .taskbox,
-.node .donebox { -webkit-appearance:none; appearance:none; width:14px; height:14px; border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
+.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
 .node .body li.task .taskbox { margin:.15em 0 0; }
 .node .body li.task .taskbox:checked,
 .node .donebox:checked { background:var(--accent); }
