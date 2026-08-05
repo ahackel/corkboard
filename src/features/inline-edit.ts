@@ -8,10 +8,10 @@ import { state, setStatus, isAnnotation, isQueryCard, type MindNode } from '../c
 import { ui } from '../core/ui-state.js';
 import { takenTitles, isLockedEffective } from '../utils/model.js';
 import { outlineActive, startRowTitleEdit } from './outline.js';
-import { applyLayouts, actionTarget } from '../view/layout.js';
+import { applyLayouts, actionTarget, isTabsFrame } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { paintAll, selectNode, startQueryEdit } from '../main.js';
+import { paintAll, selectNode, startQueryEdit, toggleCollapse } from '../main.js';
 import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
 import { extractToChild, deleteNode } from './crud.js';
 import { touch, commitStep } from './history.js';
@@ -36,6 +36,11 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   // A tab group has no title you can see — renaming "this frame" means renaming the OPEN TAB, which is
   // the name actually on screen. Here rather than at the call sites, so F2, the ⋯ menu and the outline
   // all follow. (A fresh node is never a group, so the isNew rename path is unaffected.)
+  // FOLDED, the group's pill shows that same tab's title (main.ts foldedTab), so the redirect has to
+  // hold there too — but the tab itself is hidden inside the fold, and an editor on a display:none
+  // element can't be typed into. So unfold first, the way focusNode reveals before it acts; a locked
+  // group refuses, stays folded, and falls through to the lock check below.
+  if (isTabsFrame(n) && n.collapsed) toggleCollapse(n.id);
   n = actionTarget(n);
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   // An annotation has no title — its double-click / F2 / add-child rename all edit the BODY instead.

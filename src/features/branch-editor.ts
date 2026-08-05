@@ -13,7 +13,7 @@ import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, effectiveColor } from '../main.js';
+import { paintAll, effectiveColor, colorClass, applyColorVars } from '../main.js';
 import { titleProblem, autosizeBody } from './inline-edit.js';
 import { addChild } from './crud.js';
 import { touch, commitStep } from './history.js';
@@ -71,8 +71,8 @@ function hideProps(): void {
 bpEl.addEventListener('click', () => {
   if (!activeId) return;
   const n = state.nodes.get(activeId); if (!n) return;
-  cardsEl.querySelector<HTMLElement>(`.oc-card[data-id="${activeId}"]`)?.setAttribute(
-    'class', `oc-card active c-${effectiveColor(n)}`);
+  const card = cardsEl.querySelector<HTMLElement>(`.oc-card[data-id="${activeId}"]`);
+  if (card) { const col = effectiveColor(n); card.setAttribute('class', `oc-card active ${colorClass(col)}`); applyColorVars(card, col); }
 });
 
 // ---- drag the handle down to dismiss the sheet ----
@@ -125,7 +125,9 @@ function endEdit(): void {
 }
 function cardFor(n: MindNode): HTMLElement {
   const card = document.createElement('div');
-  card.className = `oc-card c-${effectiveColor(n)}`;
+  const col = effectiveColor(n);
+  card.className = `oc-card ${colorClass(col)}`;
+  applyColorVars(card, col);   // a custom (non-palette) colour carries its hexes inline — see main.ts
   card.dataset.id = n.id;
 
   const locked = isLockedEffective(n);

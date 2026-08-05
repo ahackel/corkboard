@@ -14,7 +14,7 @@ import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder } from '../utils/model.js';
 import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, focusNode, effectiveColor, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG } from '../main.js';
+import { paintAll, selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
 import { titleProblem } from './inline-edit.js';
@@ -281,7 +281,9 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
   // rows carry the card's colour as their background via the shared .c-* classes (like .node).
   // Deliberately no selection ring here — clicking in the outliner never selects; rows only ever
   // show colour / fold / done state, nothing selection-shaped.
-  row.className = `ol-row c-${effectiveColor(n)}` + (showDone && n.done ? ' done' : '') + (n.locked ? ' locked' : '');
+  const col = effectiveColor(n);
+  row.className = `ol-row ${colorClass(col)}` + (showDone && n.done ? ' done' : '') + (n.locked ? ' locked' : '');
+  applyColorVars(row, col);   // a custom (non-palette) colour carries its hexes inline — see main.ts
   row.dataset.id = n.id;
   row.style.marginLeft = (depth * 14) + 'px';   // indent the whole card, not just its content
 
@@ -763,7 +765,9 @@ function renderPicker(): void {
     b.className = 'mp-item'; b.type = 'button';
     const t = document.createElement('span'); t.className = 'mp-title';
     const dot = document.createElement('span'); dot.className = 'ol-dot';
-    if (color && color !== 'none') dot.style.setProperty('--ol-c', `var(--pal-${color})`);
+    // colorFill, not `var(--pal-${color})`: a custom colour IS the hex and has no --pal-* to name.
+    const fill = color ? colorFill(color) : null;
+    if (fill) dot.style.setProperty('--ol-c', fill);
     t.append(dot, title);
     b.appendChild(t);
     if (crumb) { const c = document.createElement('span'); c.className = 'mp-crumb'; c.textContent = crumb; b.appendChild(c); }

@@ -6,7 +6,7 @@ import { state, edgesSvg, togglesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation
 import { isRoot, isHidden } from '../utils/model.js';
 import { dropLanding, sideOf, isFrame, isContainer, stackOf, hostFrame, frameInterior } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { nodeW, nodeH, effectiveColor, SWATCH_BG } from '../main.js';
+import { nodeW, nodeH, effectiveColor, colorFill, SWATCH_BG } from '../main.js';
 
 const EDGE_R = 12;   // corner radius on orthogonal elbows
 // Longer parent→child edges read as more "distant" if they're softened — full opacity up close,
@@ -23,10 +23,11 @@ function edgeOpacity(dist: number): number {
 }
 
 // The branch tint for a node's effective colour — the same --card fill used by the card itself
-// (SWATCH_BG), so an edge always reads as "the same colour as the card it connects to". Shared by
+// (colorFill: a palette key's hex, or a custom colour's own), so an edge always reads as "the same
+// colour as the card it connects to". Shared by
 // the dragged card's edges, the reparent-preview edge and the landing-ghost border; 'none' falls
 // back to --edge (see the inline `tint` lookup in paintEdges below).
-export function branchTint(n: MindNode): string { return SWATCH_BG[effectiveColor(n)] ?? SWATCH_BG.grey; }
+export function branchTint(n: MindNode): string { return colorFill(effectiveColor(n)) ?? SWATCH_BG.grey; }
 
 function nodeCenter(n: MindNode): Pt { return { x: n.x + nodeW(n)/2, y: n.y + nodeH(n)/2 }; }
 // `w` is REQUIRED, deliberately: it used to be optional with a NODE_W fallback, which silently
@@ -177,7 +178,7 @@ export function paintEdges(): void {
     // when the parent is a frame (which otherwise draws no edges). When the annotation is being
     // dragged it joins the drag opacity group; otherwise it rides the top overlay (dragEdgesSvg).
     if (isAnnotation(n)) {
-      const tint = SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)';
+      const tint = colorFill(effectiveColor(n)) ?? 'var(--edge)';
       // straight line from the annotation's CENTRE to the CLOSEST point on the parent's bounds
       // (clamp the centre into the parent rect), with the anchor dot at that closest point.
       const ax = n.x + nodeW(n)/2, ay = n.y + nodeH(n)/2;
@@ -195,7 +196,7 @@ export function paintEdges(): void {
     // drawn across the box.
     if (isContainer(parent) || stackOf(parent)) continue;
     // tint by the child's branch colour; soften by how far the child sits from its parent
-    const tint = SWATCH_BG[effectiveColor(n)];
+    const tint = colorFill(effectiveColor(n));
     const dist = Math.hypot(n.x - parent.x, n.y - parent.y);
     const style = `stroke:${tint ?? 'var(--edge)'};opacity:${edgeOpacity(dist).toFixed(2)}`;
     const side = sideOf(parent, n);

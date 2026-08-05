@@ -394,9 +394,18 @@ fbLayout.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(l
 // already closes itself in setLayout above). Runs after properties.ts's own listener has already
 // set the new .active swatch (bubble phase fires the target's listener before this ancestor one).
 colorPop.addEventListener('click', (e) => {
-  if (!(e.target as HTMLElement).closest('.swatch')) return;
+  const sw = (e.target as HTMLElement).closest('.swatch');
+  if (!sw) return;
   markColorTrigger();
+  // …except the custom chip, whose click OPENS the native colour sheet rather than picking anything:
+  // closing here would tear the swatch row down while the user is still choosing, and the trigger
+  // has nothing to mirror yet. It closes the ordinary way — a tap outside, or Esc.
+  if (sw.classList.contains('custom')) return;
   closePopovers();
+});
+// …and while that sheet is open, keep the trigger's swatch in step with the live preview.
+colorPop.addEventListener('input', (e) => {
+  if ((e.target as HTMLElement).closest('.swatch.custom')) markColorTrigger();
 });
 document.addEventListener('pointerdown', (e) => {
   const t = e.target as Node;
@@ -495,10 +504,22 @@ function labelRect(n: MindNode): DOMRect {
   const lr = labelEl(t)?.getBoundingClientRect();
   return (lr && lr.width > 4) ? lr : el.getBoundingClientRect();
 }
-function positionBar(): void {
-  if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return; }   // CSS docks it to the bottom
-  const n = anchorNode(); const el = n?.el; if (!n || !el) return;
+// Put the bar over its anchor card. Returns whether it could actually be placed — false when the
+// selection has nothing MEASURABLE behind it, which is not a theoretical case:
+//   · the anchor id resolves to no node, or to a node with no element yet — a selection carried over
+//     from before a (re)load, whose ids are all minted fresh (see loadFromDir);
+//   · the anchor is HIDDEN (an ancestor folded under it, a tab closed over it) — `display:none`, so
+//     every rect it reports is 0×0.
+// Both used to leave the bar visible in the top-left corner of the SCREEN: the first because it bailed
+// before writing left/top, so a bar that had never been placed kept its static position; the second
+// because a zero rect lands at the world origin and then gets clamped to the 4px viewport margin. The
+// caller hides it instead (`unanchored`) and keeps polling, so it comes back the moment the card does —
+// unfolding the branch, or the next real selection, puts it right back over its card.
+function positionBar(): boolean {
+  if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return true; }   // CSS docks it to the bottom
+  const n = anchorNode(); const el = n?.el; if (!n || !el) return false;
   const r = el.getBoundingClientRect();
+  if (!r.width && !r.height) return false;   // hidden (display:none) — nothing to hang off
   const lr = labelRect(n);
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   let left = lr.left + lr.width / 2 - bw / 2;
@@ -512,6 +533,7 @@ function positionBar(): void {
   bar.style.left = `${left}px`;
   bar.style.top = `${top}px`;
   if (activePopover) positionPopover(activePopover.pop, activePopover.anchor);
+  return true;
 }
 // ---------- hide during drag / pan / zoom ----------
 // The bar gets in the way while the card underneath (or the whole canvas) is moving, so it hides
@@ -533,18 +555,28 @@ stage.addEventListener('gestureend', () => { wheelBusy = false; });
 function isInteracting(): boolean {
   return !!(ui.drag || ui.pan || ui.pinch || ui.marquee || ui.inlineEdit || ui.bodyEdit) || wheelBusy;
 }
+// ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
+// here, so it can never paint a frame sitting in the screen corner with nothing behind it. Reports
+// whether it's anchored, for the popovers that hang off it (they'd float alone otherwise).
+function placeBar(): boolean {
+  const placed = positionBar();
+  bar.classList.toggle('unanchored', !placed);
+  return placed;
+}
 // Tracks the anchor card across camera pan/zoom and node drag without threading a hook through
 // drag.ts/camera.ts — cheap (one rect read + one style write per frame) and only runs while open.
+// It's also what un-hides an `unanchored` bar again: the check re-runs every frame while the bar is
+// open, so unfolding the branch that swallowed its card brings it straight back.
 let raf: number | null = null;
 function followLoop(): void {
-  positionBar();   // also repositions the active popover, if any (keeps it glued to its trigger)
+  const placed = placeBar();
   const interacting = isInteracting();
   bar.classList.toggle('hide-interact', interacting);
   // an open colour/layout popover would otherwise sit at a stale position mid-pan/drag/zoom —
   // hide it right along with the bar it hangs off, same rule, same class.
   if (activePopover){
-    activePopover.pop.classList.toggle('hide-interact', interacting);
-    popConnector.classList.toggle('hide-interact', interacting);
+    activePopover.pop.classList.toggle('hide-interact', interacting || !placed);
+    popConnector.classList.toggle('hide-interact', interacting || !placed);
   }
   // a selected card's own add-emoji/add-note buttons (main.ts's showAddTag/.addnote) float outside
   // its border and don't reposition themselves — they'd lag behind mid-pan/zoom the same way the
@@ -552,7 +584,7 @@ function followLoop(): void {
   document.body.classList.toggle('canvas-interacting', interacting);
   raf = bar.classList.contains('open') ? requestAnimationFrame(followLoop) : null;
 }
-window.addEventListener('resize', () => { closePopovers(); positionBar(); });
+window.addEventListener('resize', () => { closePopovers(); placeBar(); });
 
 // ---------- visibility ----------
 // Outline mode only hides the bar on a narrow/phone screen, where the outliner replaces the
@@ -581,7 +613,7 @@ export function syncFloatBar(): void {
   }
   if (bar.classList.contains('open')) {   // already showing — update in place, no delay needed
     syncControls();
-    positionBar();
+    placeBar();
     if (raf == null) followLoop();
     return;
   }
@@ -591,7 +623,7 @@ export function syncFloatBar(): void {
     if (!(state.sel.size > 0 && !state.readOnly && !(outlineActive() && NARROW_MQ.matches))) return;
     bar.classList.add('open');
     syncControls();
-    positionBar();
+    placeBar();
     if (raf == null) followLoop();
   }, SHOW_DELAY);
 }

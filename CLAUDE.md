@@ -205,6 +205,13 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   for a group that label is its open tab's. What stays on the group is what
   the box visibly owns: moving, resizing, its kind/layout (the way out of tabs mode) and its lock — plus
   delete-and-promote, which reads naturally as "ungroup" (the tabs survive as loose frames).
+  **Its own title is therefore never on the canvas, folded or not** (only in the outline, in search and as
+  its filename): FOLDED, the pill shows the OPEN TAB's title (`foldedTab` in `main.ts`) with a folder icon
+  in front of it (`FOLDER_SVG`, revealed by `.tabs-fold`) — so the text doesn't change under the fold, and
+  the icon is what tells the pill from a folded plain frame — the job the minted `"<target> tabs"` title
+  used to do in words (that title lives on, as the group's bookkeeping/outline name). Two knock-ons: `startInlineEdit` on a folded group UNFOLDS it first and then
+  redirects (`actionTarget` only redirects while open, and an editor can't open on a `display:none` tab),
+  and `toggleCollapse`'s status line names the open tab both ways round.
 Dock, undock and re-slot all re-anchor the frame's contents through ONE formula (`reanchorContents`):
 where they sat before the gesture (`interiorAtHome` — the lent box if it was already a tab, else its own
 box at its pre-drag position), where they sit now, minus the drag delta its cards rode along with the
@@ -373,5 +380,89 @@ DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
   `mdInline`, `mdLinks`, `mdEmphasis`) — headings, links, emphasis, task lists.
   It's not a full Markdown parser; extend these functions rather than reaching for a
   library (the no-dependency, single-file constraint is deliberate).
+- **Below `FAR_ZOOM` (50%, `view/camera.ts`) every overlay badge is dropped** — `applyView` puts
+  `zoom-far` on `<body>` and `styles.css` hides the fold chip, the lock badge, the emoji tag row and
+  the `.addnote` pen: a few unreadable pixels each at that scale, times every card on screen. Purely a
+  CSS mode (no node geometry depends on it, so crossing the line needs no repaint), and the hides need
+  `!important` — those controls are revealed by `:hover`/`.sel`/`[data-chip]` selectors no plain class
+  can out-specify. Add any new card-corner badge to that rule.
 - **Theme** (light/dark) and **edge style** are persisted in localStorage and driven
   by CSS variables defined at the top of `<style>`.
+- **ONE card palette for both themes.** `body.light` overrides no `--pal-*` value (it used to swap in
+  a brighter pastel set), so a card is the same colour wherever the map is opened — and therefore has
+  one ink, decided by the colour itself. `refreshPalette` still re-reads on a theme toggle (a no-op
+  now, kept so a future per-theme colour would still work) and still repaints, because what *does*
+  differ per theme is `effectiveColor`'s fallback for an uncoloured card / an annotation, plus
+  `c-none`'s ink.
+- **A card's text colour is DERIVED from its fill, never authored.** The palette hexes are still
+  the `--pal-*` custom properties in `styles.css` (one source of truth, read into JS as
+  `SWATCH_BG`), but the **ink** each one demands is computed: `utils/ink.ts` measures WCAG contrast
+  and `main.ts`'s `deriveInk` injects a `--pal-ink-*` + `--pal-scrim-*` pair per key into a
+  generated `<style>` (re-run by `refreshPalette` on theme toggle, since the two themes have
+  different fills). The `.c-*` classes hand those to a card as **`--ink`** (its text colour) and
+  **`--scrim`** (what an in-place editor paints *behind* that ink). Three rules follow:
+  - **No rule anywhere may name a colour key to fix its text.** One `color: var(--ink)` per surface
+    that wears a `.c-*` class (`.node`, `.query-item`, `.oc-card`, `.ol-row`) covers every colour in
+    both themes — that replaced four hand-maintained "which keys are exceptions" lists that all had
+    to agree with each other, and it's what lets an off-palette colour work with no new CSS.
+  - **`--scrim` is paired with the ink, not fixed.** Every editor backdrop (`.title.editing`,
+    `.body-edit`, `.query-input`, `.oc-title:focus`, `.ol-title.editing`) uses it: a hardcoded dark
+    scrim under dark ink is unreadable. Same reason the body's marks (`code`, `pre`, `blockquote`,
+    `hr`, image placeholders) tint with `color-mix(… var(--ink) …)` instead of a literal white/black.
+  - **Ink is a property of the CARD, not of the theme** — which is why the ink hexes are fixed and
+    `body.light` no longer overrides text anywhere. `c-none` is the one exception, and by
+    construction: with no fill there's nothing to measure, so it takes `var(--text)` and has its
+    scrim flipped by hand. Ink is computed from a container's *own* fill; a stack's `86%`-toward-black
+    step and a row's `93%`-toward-white step are not re-measured (both stay legible — the stack's
+    darkened fill is the thinnest at ~3.2:1 on a bold title).
+  The bias is deliberate: light ink is kept unless its contrast falls below `INK_MIN` (**2.5**)
+  rather than always taking the higher contrast, and that one number serves both themes. It's pinned
+  low enough that **every palette colour keeps the ink it had before any of this existed** (the
+  lowest being the dark theme's amber at 2.85), so dark ink is reserved for fills genuinely too pale
+  for white — the off-palette case this is all for. No single threshold can also flip the light
+  theme's pale fills, which is what the old per-theme hand-written rules were buying; the light
+  theme's slate therefore takes white ink, and that's accepted rather than worked around.
+- **A colour VALUE is a palette key OR an authored `#rrggbb`.** `n.color` (and `effectiveColor`'s
+  result) is `''` (inherit), `'none'`, a key, or a custom hex from the colour popover's spectrum
+  chip — and **nothing branches on which**, because three resolvers in `main.ts` absorb it:
+  `colorFill` (the hex JS tints with — edges, `--frame-stroke`; `null` for none/inherit, which every
+  caller already falls back to `--edge` for), `colorClass` (`c-<key>`, or `c-custom` — a hex can't be
+  a class name) and `colorVars`/`applyColorVars` (that node's `--card`/`--ink`/`--scrim` written
+  inline, since the set of custom colours is open-ended and only a class can carry pre-computed
+  ones). Use them at **every** site that turns a colour into a class or a tint — the class sites are
+  `paintNode`, `queryItemHTML`, the outline row + its move-picker dot, and the branch card (×2) —
+  and never build `c-${color}` or `var(--pal-${color})` by hand again. `applyColorVars` REMOVES the
+  triple for a palette key, which is the half that's easy to miss: an inline custom property beats
+  any selector, so a card recoloured from custom back to `blue` would otherwise keep the old hexes.
+  On disk a custom colour is written **quoted** (`color: "#ff8800"`) and unquoted on read — a bare
+  `#rrggbb` is a comment to every real YAML parser, Obsidian included.
+  The picker itself is a native `<input type="color">` wrapped in its `<label class="swatch custom">`
+  (`features/properties.ts`) — the one form that opens the system colour sheet from a single tap on
+  every platform *including iOS*, where there's no `EyeDropper` and `showPicker()` isn't dependable;
+  it's `opacity:0` over the chip so the round-bubble look survives (`display:none` would make it
+  unreachable on iOS). It streams `input` while the user drags and fires `change` once on commit, so
+  the preview paints live with no history entry and the commit rewinds to the pre-drag colours before
+  calling `record` — `record` snapshots when it's called, which by then is too late. The float bar
+  exempts this chip from its close-on-swatch-click, or the row would vanish mid-pick.
+- **Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, exactly like the
+  emoji tag picker's recents: the MRU in `localStorage` (`mindmap.colorMru`, cap 8) *plus* every
+  distinct custom colour in the open map, derived fresh from `state.nodes`. The second is what saves
+  the first from being useless on a device that has never picked one (a fresh browser, the same map on
+  the iPad, a `.zip` import), and it self-prunes — recolour the last card away from a shade and it
+  stops being offered, with no cache to invalidate. They're a UI convenience, NOT vault data: no
+  frontmatter key, no map-level palette. Three things to keep right:
+  - **Remember on COMMIT only** (`setColor`, not `applyColor`) — `applyColor` also runs per `input`
+    event during a live drag, which would bury the real picks under a drag's worth of intermediates.
+    `renderRecents` is likewise called from `setColor`/`sync` but never from `markSwatch`, which the
+    live drag *does* call: the derived source reads `n.color`, so a chip would flicker per pointer move.
+  - **All chips stay siblings in ONE `.swatches` container**, with a full-width `.swatch-break` forcing
+    the row split — that's what keeps the delegated click handler, `markSwatch`'s single
+    `querySelectorAll` and the float bar's `.swatch.active` lookup covering both rows.
+  - **`#fbColorPop` opts out of `.fb-pop`'s shared height** (the pin that keeps every popover the same
+    height as the bar) and its row takes an explicit width, since `.swatch-break`'s `100%` basis needs
+    a definite width to resolve against. That width is also what finally makes a narrow window *wrap*
+    the palette row instead of running it off the screen edge.
+  - Marking: a recent chip rings when it carries the active colour, and the picker chip only ADOPTS
+    the colour when no recent chip has it (aged out of the cap, or hand-authored in a note). It can't
+    just stop adopting — `.swatch.active` is what `markColorTrigger` mirrors, so nothing ringed would
+    leave the float-bar trigger showing the inherit stripes, i.e. reading as "no colour".

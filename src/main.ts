@@ -13,6 +13,7 @@
 
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, esc } from './utils/markdown.js';
+import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
 import { childrenOf, isHidden, rootsInOrder, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
@@ -88,6 +89,12 @@ const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 // runs per animation FRAME for the length of a resize drag.
 const FOLD_PLUS = '+';
 const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>`;
+// Closed-folder glyph in front of a FOLDED tab group's title (revealed by `.tabs-fold`, styles.css —
+// see foldedTab below). The pill's label is its OPEN TAB's title, so the icon is the only thing that
+// tells "a folder holding tabs" from a plain folded frame; it replaces the old, wordier way of saying
+// so — the minted group title used to be suffixed "… tabs", which the pill then read out. Baked into
+// nodeEl like the chip's chevron, for the same reason: paintNode never touches this <svg>.
+const FOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h3.4l2 2.5h7.6A1.5 1.5 0 0 1 20 9.5v8A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5Z"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
@@ -98,7 +105,7 @@ function nodeEl(n: MindNode): HTMLElement {
   // so the chip lands on the tab's own corner rather than 43px lower on the box, and a docked tab
   // (whose label IS the element) gets it in the same spot. Being out of flow, it never disturbs the
   // row's flex layout. Hence the `> .title-row >` in every .hidden-count selector in styles.css.
-  el.innerHTML = `<div class="title-row"><input type="checkbox" class="donebox" title="Mark done"><span class="query-icon" title="Search">${QUERY_ICON_SVG}</span><div class="title"></div><input type="text" class="query-input" placeholder="Search…" autocomplete="off"><span class="progress"></span><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
+  el.innerHTML = `<div class="title-row"><input type="checkbox" class="donebox" title="Mark done"><span class="query-icon" title="Search">${QUERY_ICON_SVG}</span><span class="folder-icon">${FOLDER_SVG}</span><div class="title"></div><input type="text" class="query-input" placeholder="Search…" autocomplete="off"><span class="progress"></span><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
     <div class="tag-row"></div>
     <div class="query-box">
       <div class="query-results"></div>
@@ -396,7 +403,8 @@ function renderQueryResults(n: MindNode): void {
 // siblings). The "⋮" opens a menu with the same actions the outline row's own ⋯ menu offers.
 function queryItemHTML(m: MindNode): string {
   const done = showsDoneCheckbox(m);
-  return `<div class="query-item c-${effectiveColor(m)}${done && m.done ? ' done' : ''}" data-id="${m.id}">
+  const col = effectiveColor(m);
+  return `<div class="query-item ${colorClass(col)}${done && m.done ? ' done' : ''}" style="${colorVars(col)}" data-id="${m.id}">
     ${m.locked ? `<span class="qi-lock" title="Locked">${LOCK_BADGE_SVG}</span>` : ''}
     ${done ? `<input type="checkbox" class="qi-done" ${m.done ? 'checked' : ''} title="Mark done">` : ''}
     <span class="qi-title">${esc(m.title)}</span>
@@ -470,7 +478,9 @@ export function paintNode(n: MindNode): void {
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
   const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isQueryBox(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
-  el.className = 'node c-' + effectiveColor(n)
+  const col = effectiveColor(n);
+  applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
+  el.className = 'node ' + colorClass(col)
     + (isFrameBox(n) ? ' frame' : '')
     + (isStack(n) ? ' stack' : '')
     + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
@@ -484,6 +494,8 @@ export function paintNode(n: MindNode): void {
     // a group, and whether it has tabs to show — with tabs, its own title tab is hidden (styles.css),
     // since a third tab-shaped thing in the strip reads as a third tab
     + (isTabsFrame(n) ? (tabsOf(n).length ? ' tabs has-tabs' : ' tabs') : '')
+    // …and folded, the lone pill left behind wears a folder icon in front of that tab's title
+    + (foldedTab(n) ? ' tabs-fold' : '')
     // a tab: the same bare-tab render as a folded frame, but joined to the group's box while OPEN
     + (isDockedTab(n) ? (n.collapsed ? ' docked' : ' docked tab-active') : '')
     // A group's box and its OPEN tab are one frame to the user, so they ring TOGETHER — whichever of the
@@ -573,14 +585,14 @@ export function paintNode(n: MindNode): void {
     // drop, so the box height is the bounds height less it (never re-spell the drop inline).
     el.style.height = (nodeH(n) - elTop(n, 0)) + 'px';
     // border matches this card's EDGE tint (same colour edges use), falling back to --edge
-    el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
+    el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
     ensureResizeHandles(n, FRAME_DIRS);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
   } else if (isFrameFold(n)) {
     // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
     // size, no resize zones, but it keeps --frame-stroke, which tints the tab itself.
     if (el.style.width) { el.style.width = ''; el.style.height = ''; }
-    el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
+    el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
     clearResizeHandles(el);
     // An OPEN docked tab still hosts its children — in the box its group lent it, not in this label —
     // so it keeps a clipping wrapper of its own, positioned at that lent interior (frameInterior).
@@ -588,7 +600,7 @@ export function paintNode(n: MindNode): void {
   } else if (isStack(n)) {
     el.style.width = nodeW(n) + 'px';    // authored (n.w, default STACK_W) — resizable on this axis only
     el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
-    el.style.setProperty('--frame-stroke', SWATCH_BG[effectiveColor(n)] ?? 'var(--edge)');
+    el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
     frameContentEl(n);                   // clipping content wrapper
     ensureResizeHandles(n, EW_DIRS);
   } else if (rowW != null) {
@@ -620,10 +632,12 @@ export function paintNode(n: MindNode): void {
   // "what it's searching for" rather than whatever name it happened to be created with.
   if (!(ui.inlineEdit && ui.inlineEdit.id === n.id)) {
     const titleEl = el.querySelector('.title') as HTMLElement;
-    titleEl.textContent = isQueryBox(n) ? ((n.query ?? '').trim() || n.title) : n.title;
+    // A folded tab group shows its OPEN TAB's title, not its own (foldedTab) — everything else its own.
+    const label = foldedTab(n) ?? n;
+    titleEl.textContent = isQueryBox(n) ? ((n.query ?? '').trim() || n.title) : label.title;
     // A frame's title tab is a single ellipsised line (it must stay exactly FRAME_TAB_H tall), so give
     // it a native tooltip with the full name. Every other kind wraps and needs none.
-    if (n.type === 'frame') titleEl.title = n.title; else titleEl.removeAttribute('title');
+    if (n.type === 'frame') titleEl.title = label.title; else titleEl.removeAttribute('title');
   }
   const bodyEl = el.querySelector('.body') as HTMLElement;
   // don't clobber the body while it's being edited in place (the textarea lives inside .body)
@@ -679,6 +693,17 @@ export function paintNode(n: MindNode): void {
     // button's whole job there is to fold the GROUP (see the click handler in nodeEl)
     chip.title = isDockedTab(n) ? 'Collapse tab group' : (hasKids ? 'Collapse (X)' : 'Fold note away (X)');
   }
+}
+// The tab whose title a FOLDED tab group wears — its open one — else null (any other node, and an
+// EMPTY group, which has only its own name to show). A group doesn't exist from the user's side:
+// there are tabs, one of them open. So folding one leaves a pill carrying the very label that was on
+// screen a moment ago, marked with a folder icon (FOLDER_SVG / `.tabs-fold`) to say the other tabs are
+// tucked in behind it — the text doesn't change under the fold, and the group's own title (still what
+// the outline and search list it as, and what its .md file is called) never has to be readable. Which
+// is why renaming a folded group unfolds it first and renames that tab (features/inline-edit.ts): the
+// name on the pill must be the name a rename edits.
+function foldedTab(n: MindNode): MindNode | null {
+  return isTabsFrame(n) && n.collapsed ? (activeTab(n) ?? null) : null;
 }
 // WHICH node the corner bubble acts on. Itself, except on the OPEN TAB of a group, where the button
 // folds the whole GROUP — the box the tab is the front of. A tab has no fold of its own (it opens,
@@ -970,11 +995,13 @@ function tabStripEl(g: MindNode): HTMLElement {
   return s;
 }
 // A tab is exactly FRAME_TAB_H tall and the band is too, so a strip clipped to the band would cut off
-// whatever a tab hangs outside itself: its selection ring (2px out — see styles.css `.sel-join`) and, on
-// a locked tab, the lock badge (8px out at the top-left, `.node .lock-badge`). Give the wrapper headroom
-// for the larger of the two all round — stripOrigin shifts with it, so the tabs inside still land on
-// their world positions, and the clip that keeps a long row of tabs inside the box still does its job.
-const TAB_STRIP_PAD = 10;
+// whatever a tab hangs outside itself: its selection ring (2px out — see styles.css `.sel-join`), a locked
+// tab's lock badge (8px out at the top-left, `.node .lock-badge`) and the open tab's fold chip (12px out
+// at the top-right — `.node.frame-folded > .title-row > .hidden-count`, lifted so it straddles the tab's
+// rounded corner rather than sinking into it). Give the wrapper headroom for the largest of those all
+// round — stripOrigin shifts with it, so the tabs inside still land on their world positions, and the
+// clip that keeps a long row of tabs inside the box still does its job.
+const TAB_STRIP_PAD = 14;
 // …and where that strip sits, on the paint basis — contentOrigin's counterpart for the tab band.
 function stripOrigin(g: MindNode): Pt {
   const r = tabStripRect(g), gp = paintPos(g);
@@ -1428,7 +1455,11 @@ export function toggleCollapse(id: string): void {
   // animate the reflow; withLayoutAnimation paints, measures heights, and lays out the children
   record([id], () => withLayoutAnimation(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
   scheduleSave();
-  setStatus(n.collapsed ? `Collapsed “${n.title}”` : `Expanded “${n.title}”`);
+  // Name the thing the user can SEE: for a tab group that's its open tab either way round — folded it's
+  // the label on the pill (foldedTab), open it's the tab holding the box — never the group's own
+  // bookkeeping title, which appears nowhere on the canvas.
+  const shown = isTabsFrame(n) ? (activeTab(n) ?? n) : n;
+  setStatus(n.collapsed ? `Collapsed “${shown.title}”` : `Expanded “${shown.title}”`);
 }
 // Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
 // Only foldable cards (children or a body) count; the group lands on one shared state — expand
@@ -1613,10 +1644,63 @@ export const PALETTE = ['slate','red','amber','green','teal','blue','violet','pi
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
 const SWATCH_KEYS = PALETTE;
 export const SWATCH_BG: Record<string, string> = Object.fromEntries(SWATCH_KEYS.map(c => [c, pal(c)]));
-// re-derive the palette hexes after a theme switch (light/dark have different --pal-* values)
-// and repaint everything that bakes them in as literal hex (edges, swatches).
+// ---------- ink: the text colour each palette fill demands ----------
+// Ink is COMPUTED from the fill (utils/ink.ts — WCAG contrast, biased toward the map's default
+// light ink), never authored, which is the point: the old scheme spelled out per-colour text
+// exceptions ("white is too bright for white text; in the light theme everything except grey and
+// black flips to black") and had to repeat that list on every surface that wears a .c-* class —
+// four copies to keep in step, and no answer at all for a colour outside the palette.
+// The computed values reach CSS as --pal-ink-*/--pal-scrim-* custom properties on :root, injected
+// here rather than written in styles.css because only JS can measure a colour; the .c-* rules there
+// hand them to each card as --ink/--scrim, so ONE `color: var(--ink)` per surface now covers every
+// colour in both themes. Injecting a <style> (not a per-node inline style) keeps this off the paint
+// path entirely — it's 11 rules written twice per session, not per card per frame.
+const inkStyle = document.createElement('style');
+document.head.appendChild(inkStyle);
+function deriveInk(): void {
+  inkStyle.textContent = ':root{' + SWATCH_KEYS.map(c => {
+    const bg = SWATCH_BG[c] ?? '';
+    return `--pal-ink-${c}:${inkFor(bg)};--pal-scrim-${c}:${scrimFor(bg)};`;
+  }).join('') + '}';
+}
+deriveInk();
+// ---------- a colour VALUE: a palette key, or an authored hex ----------
+// `n.color` (and so effectiveColor's result) is one of: '' (inherit), 'none', a PALETTE KEY, or a
+// custom '#rrggbb' picked from the colour popover. These three resolve any of them, and every
+// consumer goes through them so "custom" never needs a branch of its own:
+//   colorFill  — the hex it paints as, for the things JS tints itself (edges, --frame-stroke).
+//                null for 'none'/inherit/unknown, which callers already fall back to --edge for.
+//   colorClass — the CSS class to hang on the element. A hex can't be a class name (and there'd be
+//                nowhere to put its hexes), so a custom colour gets .c-custom + inline variables…
+//   colorVars  — …which are those variables: the same --card/--ink/--scrim triple a .c-* class
+//                provides, just computed per node instead of once per palette key. Everything
+//                downstream keys off the variables alone, so a custom colour behaves exactly like a
+//                palette one — including a coloured stack's step-down and the :not(.c-none) tests.
+// One inline declaration per coloured node is affordable where a generated stylesheet isn't: the set
+// of custom colours in a map is open-ended, and a node's own style attribute is already written on
+// every paint.
+export function colorFill(c: string): string | null { return SWATCH_BG[c] ?? (isHexColor(c) ? c : null); }
+export function colorClass(c: string): string { return isHexColor(c) ? 'c-custom' : 'c-' + c; }
+export function colorVars(c: string): string {
+  return isHexColor(c) ? `--card:${c};--ink:${inkFor(c)};--scrim:${scrimFor(c)}` : '';
+}
+// The element form of colorVars: SET for a custom colour, REMOVED otherwise. Removing matters —
+// recolouring a custom card back to a palette key has to drop the inline triple, or it would keep
+// overriding the .c-* class that now owns the colour (an inline custom property beats any selector).
+export function applyColorVars(el: HTMLElement, c: string): void {
+  const custom = isHexColor(c);
+  for (const [prop, val] of [['--card', c], ['--ink', custom ? inkFor(c) : ''], ['--scrim', custom ? scrimFor(c) : '']] as const) {
+    if (custom) el.style.setProperty(prop, val); else el.style.removeProperty(prop);
+  }
+}
+// After a theme switch: re-read the palette hexes, re-derive their inks, and repaint everything that
+// bakes them in as literal hex (edges, swatches). The two themes now SHARE one --pal-* set, so the
+// re-read is a no-op in practice — kept because it costs nothing and keeps this correct if a theme
+// ever overrides a colour again. The repaint is not optional either way: what still differs per theme
+// is effectiveColor's own fallback (an uncoloured card, an annotation's default) and .c-none's ink.
 export function refreshPalette(): void {
   for (const c of SWATCH_KEYS) SWATCH_BG[c] = pal(c);
+  deriveInk();
   refreshSwatches();
   paintAll();
 }

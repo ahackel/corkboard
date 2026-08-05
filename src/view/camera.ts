@@ -8,8 +8,16 @@ import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 
+// Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
+// chip, the lock badge, the emoji tag row, the "add note" pill — is a handful of unreadable pixels
+// there, and there are as many of them as there are cards. So `body.zoom-far` drops the lot
+// (styles.css), which also takes their layout and paint work out of every frame of a pinch/pan at the
+// zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's
+// own geometry depends on it, so crossing the line needs no repaint of the canvas.
+export const FAR_ZOOM = 0.5;
 export function applyView(): void {
   world.style.transform = `translate(${state.view.x}px,${state.view.y}px) scale(${state.view.k})`;
+  document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
   paintGrid();
   scheduleUrlSync();
 }
