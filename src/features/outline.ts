@@ -11,7 +11,7 @@
 // read-only behave the same as on the canvas.
 import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
-import { childrenOf, isRoot, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
+import { childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder } from '../utils/model.js';
 import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, focusNode, effectiveColor, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG } from '../main.js';
@@ -102,10 +102,10 @@ function* ancestors(n: MindNode): Generator<MindNode> {
   for (let p = n.parent ? state.nodes.get(n.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
     yield p;
 }
-// Roots in the outline's canonical top-level order (canvas y, then x; filename as a stable tie).
+// Roots in the outline's canonical top-level order (rootsInOrder — the same order the arrow-key walk
+// uses), less annotations, which the outline never lists at all.
 function sortedRoots(exclude?: string): MindNode[] {
-  return [...state.nodes.values()].filter(n => isRoot(n) && n.id !== exclude && !isAnnotation(n))
-    .sort((a, b) => a.y - b.y || a.x - b.x || (a.file ?? a.title).localeCompare(b.file ?? b.title));
+  return rootsInOrder(n => n.id !== exclude && !isAnnotation(n));
 }
 
 // ---- mode toggle (persisted like theme / edge style) ----

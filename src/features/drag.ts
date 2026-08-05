@@ -17,7 +17,7 @@ import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
          subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H } from '../main.js';
-import { startInlineEdit, startBodyEdit, endInlineEdit, endBodyEdit } from './inline-edit.js';
+import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { leaveClone, foldImageCardsIntoBody, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
@@ -294,7 +294,7 @@ export function bindNodeDrag(n: MindNode): void {
     const tgt = e.target as HTMLElement;
     // A frame's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
     // A press there is a press on the frame ITSELF: it must take the ordinary card path below —
-    // click selects, a slow second click renames, a drag moves the frame — so both frame-specific
+    // click selects, a double-click renames, a drag moves the frame — so both frame-specific
     // intercepts further down exempt it. `.node` scoping keeps it to this frame's OWN tab.
     const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
     if (tgt.classList.contains('addnote')) return;
@@ -408,7 +408,7 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   const drag = ui.drag;
   if (!drag) return;
   if (state.readOnly) return;        // no moving/reparenting in read-only (click & dbl-click still work)
-  // Pressing directly on a locked card: never treat it as a drag (click/slow-click select/rename
+  // Pressing directly on a locked card: never treat it as a drag (click/double-click select/rename
   // still resolve normally on release since drag.moved stays false) — no move, no reparent.
   if (isLockedEffective(drag.n)) return;
   drag.alt = e.altKey; drag.shift = e.shiftKey;   // Shift = clone (live — release to cancel), Alt = detach

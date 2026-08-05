@@ -1,6 +1,6 @@
 // ---------- in-place title & body editing ----------
-// Editing happens ON the card, not in the sidebar: slow-click (or F2) renames the title in a
-// contenteditable, slow-click the body (or ↓ from the title) opens a raw-markdown textarea.
+// Editing happens ON the card, not in the sidebar: double-click (or F2) renames the title in a
+// contenteditable, double-clicking the body (or ↓ from the title) opens a raw-markdown textarea.
 // An open ui.inlineEdit/bodyEdit defers the file rename / disk-reload while typing so the
 // folder isn't littered with half-typed names. nodeEl (main) binds the title handlers; the body
 // editor binds its own. Reflow uses the live DOM height, so n.title/body stay untouched mid-edit.
@@ -28,7 +28,7 @@ export function titleProblem(title: string, selfId: string): string {
 }
 
 // ---------- inline title rename (edit the title on the card itself) ----------
-// Entered via slow-click (a second click on the already-selected card), F2, or automatically
+// Entered via double-click (on the title row, or anywhere on a folded card), F2, or automatically
 // when a node is created. An open ui.inlineEdit makes the save loop defer the file rename
 // until editing ends (no M.md, Ma.md… litter).
 export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { isNew?: boolean } = {}): void {
@@ -38,13 +38,13 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   // all follow. (A fresh node is never a group, so the isNew rename path is unaffected.)
   n = actionTarget(n);
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
-  // An annotation has no title — its slow-click / F2 / add-child rename all edit the BODY instead.
+  // An annotation has no title — its double-click / F2 / add-child rename all edit the BODY instead.
   if (isAnnotation(n)) { startBodyEdit(n); return; }
-  // A query card's title isn't renamable — its slow-click / F2 / "Rename" all edit the query instead.
+  // A query card's title isn't renamable — its double-click / F2 / "Rename" all edit the query instead.
   if (isQueryCard(n)) { startQueryEdit(n); return; }
   // In outline mode (which includes every phone-width screen — outline is forced on below
   // that breakpoint) the title is renamed right on its row (features/outline.ts), mirroring the
-  // canvas' in-place rename. This is the single choke point, so F2 / slow-click / add child / add
+  // canvas' in-place rename. This is the single choke point, so F2 / double-click / add child / add
   // sibling / context menu all follow. The one exception: the single-card editor is already open
   // (e.g. "+" while viewing a card adds a child) — its row doesn't exist in the (hidden) list, so
   // the rename happens on the open card itself instead.
@@ -113,7 +113,7 @@ export function endInlineEdit({ cancel = false }: { cancel?: boolean } = {}): vo
 }
 
 // ---------- inline body edit (edit a card's note on the card itself) ----------
-// Entered via slow-click on the body, or ↓ from the title editor. Shows the RAW markdown in a
+// Entered via double-click on the body, or ↓ from the title editor. Shows the RAW markdown in a
 // textarea inside .body; Enter inserts a newline, Esc cancels (restores the original), blur commits.
 // An open `ui.bodyEdit` mirrors the title guard so the save loop / disk-reload behave the same.
 export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }

@@ -96,6 +96,16 @@ export function fit(): void {
   applyView();
 }
 
+// How much of the stage's HEIGHT the floating edit bar takes away. On a wide screen it floats
+// directly over the selected card and reserves nothing (so no width term is ever needed); on a
+// narrow one styles.css docks it along the bottom edge (same 700px breakpoint NARROW_MQ mirrors)
+// and it eats height. Every camera move that has to land a node in the VISIBLE canvas subtracts
+// this — frameBox and revealInView both — so the two can't disagree about where the bottom is.
+function bottomInset(): number {
+  const fb = document.getElementById('floatBar') as HTMLElement;
+  return (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
+}
+
 // Zoom + glide so a set of nodes fits, honouring the space the editor sidebar takes from the
 // right. Zoom is clamped so we never blow things up huge. Shared by focus-selected and fit-all.
 const FOCUS_MIN_K = 0.2, FOCUS_MAX_K = 1.0, FOCUS_PAD = 80;
@@ -110,16 +120,9 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStro
   }
   if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const bw = maxX - minX, bh = maxY - minY, cx = (minX+maxX)/2, cy = (minY+maxY)/2;
-  // available canvas = stage minus the floating edit bar (when open). On a wide screen the bar
-  // floats directly over the selected card, so it doesn't reserve any width; on a narrow one
-  // styles.css docks it to the bottom edge (same 700px breakpoint NARROW_MQ mirrors), eating
-  // height instead.
-  const r = stageSize();
-  const fb = document.getElementById('floatBar') as HTMLElement;
-  const open = fb.classList.contains('open');
-  const bottomSheet = NARROW_MQ.matches;
+  const r = stageSize();   // available canvas = stage minus the docked edit bar (bottomInset)
   const availW = r.width;
-  const availH = r.height - (open && bottomSheet ? fb.offsetHeight : 0);
+  const availH = r.height - bottomInset();
   const k = Math.max(FOCUS_MIN_K, Math.min(FOCUS_MAX_K,
     Math.min((availW - 2*FOCUS_PAD) / bw, (availH - 2*FOCUS_PAD) / bh)));
   animateViewTo(availW/2 - cx*k, availH/2 - cy*k, k);   // glide + zoom, never jump
@@ -130,24 +133,25 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStro
 // navigation (main.ts) needs and what frameBox is wrong for: walking the tree card by card must
 // not re-frame or re-zoom on every step, or the map jumps under you the whole way down a branch.
 // The pad keeps the landed card clear of the viewport edge (and of the float bar on a narrow
-// screen, which docks along the bottom — same test frameBox makes).
+// screen, which docks along the bottom — hence bottomInset, the same term frameBox subtracts).
 const REVEAL_PAD = 60;
+// One axis of it: how far to shift so [lo,hi] sits inside [0,limit] with REVEAL_PAD to spare.
+// Overshoot on BOTH edges (a card longer than the viewport on this axis) → align its `lo` end, so
+// the card's own start is what you see rather than an arbitrary middle. Written once and applied to
+// both axes, so a sign slip can't hide on the one that's harder to notice.
+function revealShift(lo: number, hi: number, limit: number): number {
+  if (lo < REVEAL_PAD) return REVEAL_PAD - lo;
+  if (hi > limit - REVEAL_PAD) return Math.max(limit - REVEAL_PAD - hi, REVEAL_PAD - lo);
+  return 0;
+}
 export function revealInView(n: MindNode | undefined): void {
   if (!n || isHidden(n)) return;
   const k = state.view.k, r = stageSize();
-  const fb = document.getElementById('floatBar') as HTMLElement;
-  const bottomInset = (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
   // the node's box in screen space
   const left = n.x*k + state.view.x, top = n.y*k + state.view.y;
   const right = left + nodeW(n)*k, bottom = top + nodeH(n)*k;
-  // Overshoot on both edges (a card taller/wider than the viewport) → align its top-left, so the
-  // card's own start is what you see rather than an arbitrary middle.
-  let dx = 0, dy = 0;
-  if (left < REVEAL_PAD) dx = REVEAL_PAD - left;
-  else if (right > r.width - REVEAL_PAD) dx = Math.max(r.width - REVEAL_PAD - right, REVEAL_PAD - left);
-  if (top < REVEAL_PAD) dy = REVEAL_PAD - top;
-  else if (bottom > r.height - bottomInset - REVEAL_PAD)
-    dy = Math.max(r.height - bottomInset - REVEAL_PAD - bottom, REVEAL_PAD - top);
+  const dx = revealShift(left, right, r.width);
+  const dy = revealShift(top, bottom, r.height - bottomInset());
   if (!dx && !dy) return;
   animateViewTo(state.view.x + dx, state.view.y + dy, k, 220);
 }

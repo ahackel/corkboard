@@ -1,7 +1,7 @@
 // ---------- outline single-card editor ----------
 // The outline's "deep edit" surface for ONE card: its title + note, styled like the canvas card —
 // NOT the sidebar form. Opened from a row (the › open button), or whenever something needs the
-// note editor while in outline mode (slow-click the row / E / ↓ from the title — see
+// note editor while in outline mode (double-click the row / E / ↓ from the title — see
 // features/inline-edit.ts's startBodyEdit). Renders into #olCards inside the outline panel and
 // toggles `body.ol-editing` (instant, no slide-in). The open card slides up a properties sheet from
 // the bottom (#branchProps): colour / tags / checklist, the same controls as the

@@ -7,8 +7,8 @@ import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
 import { ui, gPointers, type Pt, type GestureEvt } from '../core/ui-state.js';
-import { nodeW, nodeH, selectNode, setSelectionSet, NODE_W } from '../main.js';
-import { createNode } from './crud.js';
+import { nodeW, nodeH, selectNode, setSelectionSet } from '../main.js';
+import { createNode, centredAt } from './crud.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
 
@@ -77,8 +77,7 @@ stage.addEventListener('pointerdown', (e) => {
 stage.addEventListener('dblclick', (e) => {
   if ((e.target as HTMLElement).closest('.node')) return;   // nodes handle their own double-click
   if (state.readOnly || ui.sketchOn) return;
-  const p = screenToWorld(e.clientX, e.clientY);
-  createNode({ x: p.x - NODE_W / 2, y: p.y - 32 });         // centred on the point, like the canvas menu's "New card here"
+  createNode(centredAt(screenToWorld(e.clientX, e.clientY)));   // like the canvas menu's "New card here"
 });
 window.addEventListener('pointermove', (e) => {
   if (ui.sketchDraw){ if (gPointers.has(e.pointerId)) gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY }); sketchMove(e.clientX, e.clientY); return; }

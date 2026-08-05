@@ -8,7 +8,7 @@ import { childrenOf, takenTitles, isLockedEffective, subtreeHasLocked, isAncesto
 import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, FRAME_BORDER, FRAME_W, FRAME_H } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H } from '../main.js';
 import { startInlineEdit } from './inline-edit.js';
 import { touch, commitStep, record } from './history.js';
 
@@ -27,6 +27,14 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
     ...fields,
   };
 }
+// The height a FRESH card lays out at, before it has an element to measure (layoutH's own fallback is
+// the same number). Only useful as half of the centring below — a card's real height is measured.
+export const NEW_CARD_H = 64;
+// Centre a fresh card on a world point — the ONE spelling of it. Every "new card HERE" gesture (the
+// canvas double-click, the canvas ⋯ menu, Space, a dropped file, a card double-clicked into a
+// container) lands the card under the pointer rather than hanging down-right of it, so the default
+// card's size is written once instead of once per gesture.
+export function centredAt(p: Pt): Pt { return { x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }; }
 // Make a new UNCONNECTED node (parent:null) at the viewport centre (or a given spot).
 interface CreateOpts {
   x?: number; y?: number; parent?: string | null; title?: string; color?: string;
@@ -40,9 +48,9 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     const p = state.nodes.get(opts.parent);
     if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return; }
   }
-  const c = screenToWorld(window.innerWidth/2, window.innerHeight/2);
+  const c = centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
   const n = mkNode({
-    x: opts.x ?? (c.x - 100), y: opts.y ?? (c.y - 40),
+    x: opts.x ?? c.x, y: opts.y ?? c.y,
     parent: opts.parent ?? null,
     title: opts.title ?? (opts.type === 'annotation' ? uniqueTitle('Annotation') : newCardTitle()),
     color: opts.color ?? '',

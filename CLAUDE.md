@@ -123,9 +123,10 @@ its own tabs for the length of the transition; skipping `placeSelf` re-parents a
 of its group's strip for the same duration.
 **A container's two side wrappers are LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
 `hostsContent(n)` (an expanded frame box, an expanded stack, or an OPEN docked tab) and `tabStripEl` iff
-the node is an expanded tabs group — `paintNode` drops each the moment that stops holding, including in
-its `isHidden` early return, since folding a group hides the open tab whose own wrapper would otherwise
-survive. Both created lazily, so a fold/reopen round-trips through the same code; a folded container's
+the node is an expanded tabs group — `paintNode` drops each the moment that stops holding. Being HIDDEN
+counts as holding nothing (`hostsContent` returns false for it), which is what lets the wrapper's whole
+lifecycle be ONE drop, placed ahead of `paintNode`'s `isHidden` early return rather than repeated inside
+it: folding a group hides the open tab whose own wrapper would otherwise survive. Both created lazily, so a fold/reopen round-trips through the same code; a folded container's
 children ride along detached and are re-placed by `place()` when it opens again. Skip the drop and a fold
 strands an empty `overflow:hidden` div at the box's old size (same for a frame retyped to a card, or a
 stack demoted to a row inside another stack).
@@ -147,8 +148,9 @@ must paint again (see `withLayoutAnimation`). A row's width itself is **derived,
 deliberately, so it can't collide with the authored `n.w` a card carries in from outside the stack.
 Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it comes out.
 An EMPTY stack still owes itself an `h`, and it can't be a constant: unlike a frame's single-line tab a
-stack's own title WRAPS, so the height has to be measured (`stackEmptyH`, the zero-row reduction of the
-`node.h` line that closes the stack branch — keep the two in step). `layoutSubtree` returns early for a
+stack's own title WRAPS, so the height has to be measured (`sizeEmptyStack`, which paints then measures;
+its height is the zero-row reduction of the `node.h` line that closes the stack branch — keep the two in
+step). Both empty paths (no children at all / no visible rows) call it. `layoutSubtree` returns early for a
 childless node, which is why that early return has to size a stack on the way out; without it a stack
 kept `nodeH`'s `STACK_HEADER + STACK_PAD` fallback and a two-line title spilled out of its box.
 
@@ -294,8 +296,13 @@ only on hover or while SELECTED (the touch story: tap the card, tap the chip —
 multi-selection carries one, whose click folds them all like `X`).
 **`paintNode`'s `chipFace` is the single thing that decides which face shows** — `styles.css` keys off
 nothing but the `data-chip` it writes (`'count'`/`'fold'`/absent), and *no per-kind rule may hide the
-bubble*, which is why `.hidden-count` no longer appears in the frame/stack/image-card/query-card/
-docked-tab rules. That's not tidiness: `.node[data-chip="fold"]:hover:not(:has(.node:hover))`
+bubble*. BOTH faces live in the button permanently (`nodeEl` bakes the chevron in beside a `.cnt` span)
+and `data-chip` picks which is visible, so `paintNode` never rewrites the chip's `innerHTML` — re-parsing
+that `<svg>` per foldable node per paint is real work, and `paintAll` runs once per animation FRAME for
+the length of a resize drag. Which node the button ACTS on is `chipTarget` (itself, or a docked tab's
+group), read by both `chipFace` and the click handler so the button shown and the node folded can't
+disagree. The no-per-kind-rule part is why `.hidden-count` no longer appears in the frame/stack/
+image-card/query-card/docked-tab rules. That's not tidiness: `.node[data-chip="fold"]:hover:not(:has(.node:hover))`
 out-specifies any plain class selector, so a rule like `.node.locked > .hidden-count { display:none }`
 silently loses on hover. Anything that shouldn't offer the button gets refused in `chipFace` instead —
 annotations (an annotation IS its body, so folding leaves an empty shell), image/query cards, and

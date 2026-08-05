@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, toggleCollapse, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, toggleCollapse, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -486,13 +486,14 @@ function anchorNode(): MindNode | undefined {
 // many times wider than its label, and the bar belongs over the thing you selected and are about to
 // rename/recolour — centred on a wide box it drifts far from the tab it acts on. Via actionTarget, so a
 // selected tab GROUP (which shows no title of its own) uses its OPEN TAB's label, the same node its
-// colour/rename/delete already land on. A folded frame or docked tab IS its label, so the title-row
-// lookup and the element agree; an image card / annotation hides its title row, hence the width guard.
+// colour/rename/delete already land on. labelEl (main.ts) owns WHICH element that is, so the folded /
+// docked case needs no second spelling here; an image card / annotation renders its title row empty,
+// hence the width guard falling back to the whole box.
 function labelRect(n: MindNode): DOMRect {
   const t = actionTarget(n);
   const el = t.el ?? n.el!;
-  const tr = (el.querySelector(':scope > .title-row') as HTMLElement | null)?.getBoundingClientRect();
-  return (tr && tr.width > 4) ? tr : el.getBoundingClientRect();
+  const lr = labelEl(t)?.getBoundingClientRect();
+  return (lr && lr.width > 4) ? lr : el.getBoundingClientRect();
 }
 function positionBar(): void {
   if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return; }   // CSS docks it to the bottom

@@ -2,7 +2,7 @@
 // The keyboard-safe replacement for the in-card title/body editors: one sheet with a title
 // field, a raw-markdown textarea and an explicit Done. startInlineEdit/startBodyEdit route
 // here when phoneMode() or outline mode is active (see features/inline-edit.ts), so every
-// entry point (F2, E, slow-click, add child/sibling, context menu) lands in the same editor.
+// entry point (F2, E, double-click, add child/sibling, context menu) lands in the same editor.
 // Contracts mirror inline-edit: n.title/n.body stay untouched until commit, the whole session
 // is ONE undo step (touch/commitStep), and an open ui.sheetEdit defers the file rename and
 // the focus-reload (see data/persistence.ts).
