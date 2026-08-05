@@ -1226,7 +1226,10 @@ body.canvas-interacting .addnote { display:none !important; }
    CLEARS its inline display, so it can't fight this). Red padlock: same cue as #roBtn.locked. */
 #floatBar.locked-sel > *:not(#fbLock) { display:none; }
 #floatBar.locked-sel #fbLock { color:#e0564f; }
-#floatBar .fb-swatch { width:24px; height:24px; margin:0 4px; }   /* .swatch already sizes to 22px */
+/* the colour trigger is the same chip as the ones in its popover, so it's the same 22px they are —
+   NOT --bar-btn (which the rule above would give it, and which read as an oversized bubble next to
+   the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
+#floatBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
 
 /* small popover anchored under/over its trigger button (colour / layout pickers) — borderless,
    same "floating island" style as #toolbar/#floatBar, no shadow either. Explicit height (MUST

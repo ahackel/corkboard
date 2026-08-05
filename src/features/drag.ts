@@ -16,7 +16,7 @@ import { paintEdges } from '../view/edges.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
-         subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H } from '../main.js';
+         subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin } from '../main.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { leaveClone, foldImageCardsIntoBody, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -340,7 +340,10 @@ export function bindNodeDrag(n: MindNode): void {
     // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the frame's
     // own handle, so pressing it always takes the card path — a press there selects and drags the
     // frame itself, the way a card's title does, rather than rubber-banding its contents.
-    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
+    // A tab group's box is never itself selected (main.ts selTarget hands its open TAB the selection),
+    // so `selJoin` is what "selected" means for it — otherwise its interior could only ever rubber-band
+    // and the box would have no way to be moved at all.
+    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && !selJoin(n) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
       e.stopPropagation();
       beginMarqueeFromNode(e, n.id);
       return;

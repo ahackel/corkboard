@@ -64,7 +64,10 @@ selection core and wires the global keyboard/toolbar events.
   flow modes (`frameFlow`), and the stack outliner (`stackOutline`/`stackDropTarget`/`stackOf`) +
   the container predicates `isFrame`/`isStack`/`isContainer`), `edges.ts`
   (parent→child connector geometry + `paintEdges`), `theme.ts`, `icons.ts` (loads
-  `assets/icons/*.svg` via `import.meta.glob` `?raw`, fills `[data-icon]`).
+  `assets/icons/*.svg` via `import.meta.glob` `?raw`, fills `[data-icon]`; also holds `FOLDER_PATH`,
+  the ONE folder outline every frame glyph is drawn from — the kind chip, all three frame layout chips
+  (`features/float-bar.ts`) and a folded tab group's pill (`FOLDER_SVG`, `main.ts`) — since a frame IS
+  a box with a folder tab on it. It lives there because neither of those two can cycle with it).
 - `features/` — the interactive subsystems split out of `main.ts`, each owning its concern and
   sharing state via `ui`: `drag.ts` (`bindNodeDrag` + clone/detach/auto-pan + reparent-by-drop),
   `gestures.ts` (canvas pan/zoom/marquee, registers its own listeners on import), `inline-edit.ts`
@@ -202,9 +205,23 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   tab and `dissolveEmptyTabGroups` takes the box away with the last one). The float bar goes there too —
   it centres horizontally on the LABEL, not the box (`labelRect`, `features/float-bar.ts`), since a
   frame's box can be many times wider than its title and the bar belongs over the thing you selected;
-  for a group that label is its open tab's. What stays on the group is what
-  the box visibly owns: moving, resizing, its kind/layout (the way out of tabs mode) and its lock — plus
-  delete-and-promote, which reads naturally as "ungroup" (the tabs survive as loose frames).
+  for a group that label is its open tab's. An open group can't even BE the selection: `selTarget`
+  (`main.ts`) maps it to its open tab in all three entry points (`selectNode`/`setSelectionSet`/
+  `toggleSel`), so clicking the box selects the TAB — which is what makes the float bar show that tab's
+  kind/layout/colour instead of a "group" nobody put there. What the box keeps is what it visibly owns,
+  moving and resizing, and both had to stop asking `state.sel`: `dragPointerDown`'s marquee bail takes
+  `selJoin(n)` as "selected" too (else the interior could only ever rubber-band and the box would be
+  unmovable), while the resize handles are plain hit-zones that never needed a selection. `navArrow`'s
+  `←` steps out of a docked tab to the GROUP's parent for the same reason — navigating onto a group
+  would bounce straight back to the tab and read as a dead key.
+  **Tabs are therefore made and unmade by DRAGGING only** (dock a title onto a tab; drag the last tab
+  out and the empty box goes with it), and `mm_layout: tabs` is bookkeeping the user never picks:
+  `LAYOUTS_BY_TYPE.frame` has no tabs chip, and `markChips` hides the whole layout row for any
+  selection holding a tabs frame — a group has no arrangement of its own to choose, and a click there
+  would silently dissolve it. That leaves `setType` as `undockAllTabs`'s one caller.
+  A **folded** group is the one that stays selectable (a lone pill with no tab on screen, so nothing
+  else could move or unfold it) — which is also the only place its kind picker and its lock are
+  reachable, and where deleting it takes the whole group down instead of promoting the next tab.
   **Its own title is therefore never on the canvas, folded or not** (only in the outline, in search and as
   its filename): FOLDED, the pill shows the OPEN TAB's title (`foldedTab` in `main.ts`) with a folder icon
   in front of it (`FOLDER_SVG`, revealed by `.tabs-fold`) — so the text doesn't change under the fold, and

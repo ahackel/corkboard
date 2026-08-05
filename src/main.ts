@@ -18,12 +18,12 @@ import { childrenOf, isHidden, rootsInOrder, descendantCount, hasLockedAncestor,
 import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
-import { mountIcons } from './view/icons.js';
+import { mountIcons, FOLDER_PATH } from './view/icons.js';
 import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, revealInView, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, orderedKids } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, orderedKids, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -94,7 +94,8 @@ const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 // tells "a folder holding tabs" from a plain folded frame; it replaces the old, wordier way of saying
 // so — the minted group title used to be suffixed "… tabs", which the pill then read out. Baked into
 // nodeEl like the chip's chevron, for the same reason: paintNode never touches this <svg>.
-const FOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A1.5 1.5 0 0 1 5.5 5h3.4l2 2.5h7.6A1.5 1.5 0 0 1 20 9.5v8A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5Z"/></svg>`;
+// Same shape as the frame kind/layout chips, from the one path they share (FOLDER_PATH).
+const FOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FOLDER_PATH}</svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
@@ -815,7 +816,10 @@ function hostsContent(n: MindNode): boolean {
 // Is `n` the OTHER half of a selected tab frame — the open tab of a selected group, or the box of a group
 // whose open tab is selected? Either way the two are one frame on screen and must show one continuous
 // ring, so the half that isn't selected borrows the ring too (styles.css `.sel-join`).
-function selJoin(n: MindNode): boolean {
+// Exported because it also answers "is this box selected, as far as the user can tell": a group is
+// never itself in the selection (selTarget), so features/drag.ts asks this before deciding whether a
+// press inside a frame moves it or rubber-bands its contents.
+export function selJoin(n: MindNode): boolean {
   if (isDockedTab(n)) return !n.collapsed && !!n.parent && state.sel.has(n.parent);
   if (isTabsFrame(n) && !n.collapsed) { const t = activeTab(n); return !!t && state.sel.has(t.id); }
   return false;
@@ -1466,10 +1470,14 @@ export function toggleCollapse(id: string): void {
 // if they're all collapsed already, otherwise collapse them all.
 export function toggleCollapseSelection(ids: Iterable<string>): void {
   const cards = [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n)
-    .filter(n => !isLockedEffective(n))
-    // a docked tab has no fold of its own (it opens, closing its siblings — see activateTab), and a
-    // group fold that closed every tab at once would just be repaired by normalizeTabs anyway
+    // A docked tab has no fold of its own (it opens, closing its siblings — see activateTab), and a
+    // group fold that closed every tab at once would just be repaired by normalizeTabs anyway. But an
+    // OPEN tab stands for its GROUP, exactly as its corner chip does (chipTarget) — and since the box
+    // now hands its selection to that tab (selTarget), this is X's ONLY route to folding a group. A
+    // CLOSED tab drops out: its contents are one click away in the box, so it has nothing to fold.
+    .map(n => (isDockedTab(n) && !n.collapsed ? tabGroupOf(n) ?? n : n))
     .filter(n => !isDockedTab(n))
+    .filter(n => !isLockedEffective(n))
     .filter(n => childrenOf(n.id).length > 0 || !!(n.body && n.body.trim()));
   if (!cards.length) return;
   const target = !cards.every(n => n.collapsed);   // all collapsed → expand; otherwise collapse all
@@ -1521,7 +1529,11 @@ function navArrow(key: string): void {
   if (key === 'ArrowLeft') {
     // open branch → fold it; leaf or already folded → step out to the parent
     if (kids.length && !n.collapsed && !isDockedTab(n)) { toggleCollapse(n.id); return; }
-    navTo(n.parent ? state.nodes.get(n.parent) : undefined);
+    // Stepping out of a docked TAB skips its group: the group can't hold the selection (selTarget
+    // hands it straight back to this very tab), so the node one level out is whatever the GROUP hangs
+    // under — otherwise the key would look dead.
+    const outId = isDockedTab(n) ? (tabGroupOf(n)?.parent ?? null) : n.parent;
+    navTo(outId ? state.nodes.get(outId) : undefined);
     return;
   }
   const sibs = navSiblings(n);
@@ -1713,16 +1725,31 @@ export function applySelection(): void { paintAll(); syncFloatBar(); syncUrl(); 
 function isSelectable(id: string): boolean {
   const n = state.nodes.get(id); return !n || !hasLockedAncestor(n);
 }
+// A tab GROUP is not something the user selects — from their side there are just tabs, one of them
+// open. So every selection entry point below maps an open group to its OPEN TAB (the same redirect
+// actionTarget already spells for colour/rename/delete): clicking the box selects the tab whose
+// contents fill it, so the float bar shows that TAB's kind/layout/colour rather than a "group"
+// nobody asked for — which is also why the layout picker no longer needs a `tabs` chip (tabs are
+// made and unmade by dragging; see features/float-bar.ts). Nothing the box visibly owns is lost:
+// the two ring as one shape (selJoin) and both the interior drag (features/drag.ts) and the resize
+// handles key off that, so the box still moves and resizes with its open tab selected.
+// A FOLDED group is left alone — it's a lone pill with no tab on screen, and selecting it is the
+// only way to move it.
+function selTarget(id: string): string {
+  const n = state.nodes.get(id);
+  return n ? actionTarget(n).id : id;
+}
 // Replace the whole selection with `ids` (a Set or array), recomputing the primary.
 export function setSelectionSet(ids: Iterable<string>): void {
-  state.sel = new Set([...ids].filter(isSelectable));
+  state.sel = new Set([...ids].map(selTarget).filter(isSelectable));
   if (state.sel.size === 0) state.selId = null;
   else if (state.sel.size === 1) state.selId = [...state.sel][0];
   else if (!state.selId || !state.sel.has(state.selId)) state.selId = [...state.sel].pop() ?? null;
   applySelection();
 }
 // ⌘/Ctrl-click: add or remove one card from the selection.
-export function toggleSel(id: string): void {
+export function toggleSel(rawId: string): void {
+  const id = selTarget(rawId);
   if (state.sel.has(id)){
     state.sel.delete(id);
     if (state.selId === id) state.selId = state.sel.size ? ([...state.sel].pop() ?? null) : null;
@@ -1773,9 +1800,13 @@ async function setReadOnly(on: boolean): Promise<void> {
 roBtn.onclick = () => setReadOnly(!state.readOnly);
 
 // Select exactly one node (or clear with null), replacing any multi-selection.
-export function selectNode(id: string | null): void {
-  if (id == null){ state.sel.clear(); state.selId = null; }
-  else { if (!isSelectable(id)) return; state.sel = new Set([id]); state.selId = id; }
+export function selectNode(rawId: string | null): void {
+  if (rawId == null){ state.sel.clear(); state.selId = null; }
+  else {
+    const id = selTarget(rawId);
+    if (!isSelectable(id)) return;
+    state.sel = new Set([id]); state.selId = id;
+  }
   applySelection();
 }
 // Colour / checklist / group-background / layout all apply live via the floating bar

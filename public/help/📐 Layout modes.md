@@ -25,12 +25,15 @@ Set how a card arranges its children (side panel chips):
   - **Double-click inside a frame** to drop a new card right there.
 - **Frame (horizontal)** — a frame whose children auto-flow left→right, wrapping to the next row; reflows as you resize. Drag a card to reorder — a line shows where it will land.
 - **Frame (vertical)** — a frame whose children auto-flow top→bottom, wrapping to the next column.
-- **Frame (tabs)** — several frames share **one box**, as tabs.
-  - **Drag a frame onto another frame's tab** to dock it there. The two names become two tabs on the same box, and the frame you dropped is the one showing.
-  - **A plain card works too** — dropped on a tab it becomes a frame and joins the row, bringing its children along. (A frame shows no note text, so a card's note waits out of sight until you turn it back into a card.) Images, annotations and stacks can't be tabs; drop one on a tab and it simply goes into the box.
-  - **Click a tab** to show that frame's contents — the others are put away, not deleted. Double-click it to rename it, like any frame tab.
-  - **Drag a tab sideways** along the row to reorder it; a line shows the gap it will drop into.
-  - **Drag a tab off the box** to give it its own frame back, at the size and with the contents it had. Take the last one out and the empty box goes with it.
-  - Whatever you drop, add or paste into the box belongs to the **tab that's open**, so each tab keeps its own contents.
-  - The box takes the **colour of the open tab**, so switching tabs re-tints it.
-  - Colouring, renaming or deleting the box acts on the **tab that's open** — there's no separate "group" to look after. Delete tabs one by one and the last one takes the empty box with it.
+
+**Tabs are not a layout you pick** — several frames can share **one box** as tabs, and you make that
+by dragging:
+
+- **Drag a frame onto another frame's tab** to dock it there. The two names become two tabs on the same box, and the frame you dropped is the one showing.
+- **A plain card works too** — dropped on a tab it becomes a frame and joins the row, bringing its children along. (A frame shows no note text, so a card's note waits out of sight until you turn it back into a card.) Images, annotations and stacks can't be tabs; drop one on a tab and it simply goes into the box.
+- **Click a tab** to show that frame's contents — the others are put away, not deleted. Double-click it to rename it, like any frame tab.
+- **Drag a tab sideways** along the row to reorder it; a line shows the gap it will drop into.
+- **Drag a tab off the box** to give it its own frame back, at the size and with the contents it had. Take the last one out and the empty box goes with it — that's how you undo tabs.
+- Whatever you drop, add or paste into the box belongs to the **tab that's open**, so each tab keeps its own contents.
+- The box takes the **colour of the open tab**, so switching tabs re-tints it.
+- **Clicking the box selects the open tab** — there's no separate "group" to look after, so colouring, renaming and deleting all act on the tab you can see. The box still moves and resizes with it.
