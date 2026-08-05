@@ -7,7 +7,8 @@ import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
 import { ui, gPointers, type Pt, type GestureEvt } from '../core/ui-state.js';
-import { nodeW, nodeH, selectNode, setSelectionSet } from '../main.js';
+import { nodeW, nodeH, selectNode, setSelectionSet, NODE_W } from '../main.js';
+import { createNode } from './crud.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
 
@@ -68,6 +69,16 @@ stage.addEventListener('pointerdown', (e) => {
   ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey, base:new Set(state.sel), moved:false };
   drawMarquee(e.clientX, e.clientY);
   marqueeEl.style.display = 'block';
+});
+// Double-click the empty canvas = a NEW CARD there, straight into its rename — the same "double-click
+// to open/create" the nodes themselves use (main.ts activateNode), where there's nothing to open yet.
+// Mouse/trackpad only: a stray double-TAP while panning would strew cards across the map, and touch
+// already has the ⋯ canvas menu (features/context-menu.ts) for this. Sketch mode owns its own clicks.
+stage.addEventListener('dblclick', (e) => {
+  if ((e.target as HTMLElement).closest('.node')) return;   // nodes handle their own double-click
+  if (state.readOnly || ui.sketchOn) return;
+  const p = screenToWorld(e.clientX, e.clientY);
+  createNode({ x: p.x - NODE_W / 2, y: p.y - 32 });         // centred on the point, like the canvas menu's "New card here"
 });
 window.addEventListener('pointermove', (e) => {
   if (ui.sketchDraw){ if (gPointers.has(e.pointerId)) gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY }); sketchMove(e.clientX, e.clientY); return; }

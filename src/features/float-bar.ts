@@ -21,7 +21,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, foldNodeOrGroup, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, toggleCollapse, setLockedSelection, anyLocked, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -450,7 +450,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   // copy/collapse/fit/export never mutate → allowed in read-only mode too
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
   if (!multi)
-    entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => foldNodeOrGroup(n),
+    entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id),
       disabled: locked || (!childrenOf(n.id).length && !(n.body && n.body.trim())) });
   entries.push({ label:'Fit view', shortcut:'F', run: () => frameBox(targetIds.map(id => state.nodes.get(id))) });
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: !n.file });
@@ -482,12 +482,25 @@ function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;
 }
+// What the bar centres itself over HORIZONTALLY: the node's TITLE, not its box. A frame's box can be
+// many times wider than its label, and the bar belongs over the thing you selected and are about to
+// rename/recolour — centred on a wide box it drifts far from the tab it acts on. Via actionTarget, so a
+// selected tab GROUP (which shows no title of its own) uses its OPEN TAB's label, the same node its
+// colour/rename/delete already land on. A folded frame or docked tab IS its label, so the title-row
+// lookup and the element agree; an image card / annotation hides its title row, hence the width guard.
+function labelRect(n: MindNode): DOMRect {
+  const t = actionTarget(n);
+  const el = t.el ?? n.el!;
+  const tr = (el.querySelector(':scope > .title-row') as HTMLElement | null)?.getBoundingClientRect();
+  return (tr && tr.width > 4) ? tr : el.getBoundingClientRect();
+}
 function positionBar(): void {
   if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return; }   // CSS docks it to the bottom
   const n = anchorNode(); const el = n?.el; if (!n || !el) return;
   const r = el.getBoundingClientRect();
+  const lr = labelRect(n);
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
-  let left = r.left + r.width / 2 - bw / 2;
+  let left = lr.left + lr.width / 2 - bw / 2;
   // Anchor on the node's BOUNDS top, not its element's: a frame box's element starts FRAME_TAB_DROP
   // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
   // would hang the bar over the tab and shift it when a frame is converted to a card or back.

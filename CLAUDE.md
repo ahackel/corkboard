@@ -114,6 +114,21 @@ measurement — hence the hover tooltip in `paintNode` instead), and the vertica
 child into its host goes through `frameInsetY` (`view/layout.ts`) rather than a bare
 `FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share it (the X axis
 has no such helper; it uses `FRAME_BORDER` directly), and `elTop` is the one place that applies the drop.
+**Anything that writes a node's `left`/`top` must go through `placeSelf` + `elTop`**, not a bare
+`place()` — that's the pair `paintNode`'s own final branch uses, and the relayout ANIMATION
+(`placeNodeEl`/`setNodeElXY`) writes left/top too, since interpolating them IS the animation. Skipping
+`elTop` parks a frame's box at its bounds top instead of one tab lower, and because the box paints after
+the tab strip (tree order — see `tabStripEl`), on a tab group that drew a big empty box straight over
+its own tabs for the length of the transition; skipping `placeSelf` re-parents a docked tab's label out
+of its group's strip for the same duration.
+**A container's two side wrappers are LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
+`hostsContent(n)` (an expanded frame box, an expanded stack, or an OPEN docked tab) and `tabStripEl` iff
+the node is an expanded tabs group — `paintNode` drops each the moment that stops holding, including in
+its `isHidden` early return, since folding a group hides the open tab whose own wrapper would otherwise
+survive. Both created lazily, so a fold/reopen round-trips through the same code; a folded container's
+children ride along detached and are re-placed by `place()` when it opens again. Skip the drop and a fold
+strands an empty `overflow:hidden` div at the box's old size (same for a frame retyped to a card, or a
+stack demoted to a row inside another stack).
 
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole
 subtree as one indented, full-width column inside a box that is **width-resizable** (`n.w`,
@@ -131,6 +146,11 @@ must paint again (see `withLayoutAnimation`). A row's width itself is **derived,
 (`stackRowW`: the stack's own width, less the border/padding, less one `STACK_INDENT` per depth) —
 deliberately, so it can't collide with the authored `n.w` a card carries in from outside the stack.
 Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it comes out.
+An EMPTY stack still owes itself an `h`, and it can't be a constant: unlike a frame's single-line tab a
+stack's own title WRAPS, so the height has to be measured (`stackEmptyH`, the zero-row reduction of the
+`node.h` line that closes the stack branch — keep the two in step). `layoutSubtree` returns early for a
+childless node, which is why that early return has to size a stack on the way out; without it a stack
+kept `nodeH`'s `STACK_HEADER + STACK_PAD` fallback and a two-line title spilled out of its box.
 
 **A frame with `mm_layout: tabs` is a TAB GROUP:** its child *frames* aren't content, they're TABS.
 Their title tabs flow along its own top band (`tabStripRect`/`tabSlots`, DOM wrapper `tabStripEl`) and
@@ -151,6 +171,20 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   thing a LOCK doesn't forbid (it's how you look at the box, not a change to it), so a locked tab stays
   pressable — `dragPointerDown`'s `hasLockedAncestor` bail exempts docked tabs — while moving it is still
   refused. Its lock badge hangs 8px outside the tab, which is what `TAB_STRIP_PAD` leaves room for.
+- **The strip's tabs must not carry a `z-index`.** `.tab-strip` deliberately has none so that plain tree
+  order decides between a tab and the box (`tabStripEl` keeps the strip right BEFORE the box), which is
+  what tucks an inactive tab *behind* the box like a sheet behind the front of a folder — the box's
+  border and selection ring then run unbroken across the top of it. But a tab is a `.node`, and
+  `.node { z-index:2 }` was quietly overriding that and lifting every inactive tab over the ring, which
+  read as a ring chopped into pieces. `.frame-folded.docked` resets it to `auto`; only `.tab-active`
+  takes one (5), which is what keeps the OPEN tab in front where its own three-sided ring joins the box.
+- **A group and its open tab carry ONE fold button, and it's on the tab** — the title you can see. So
+  `chipFace` gives the open tab the `'fold'` face and the chip's click handler redirects to
+  `toggleCollapse(group)`; the group itself shows nothing while open, and takes the `'count'` face once
+  folded, when it's a lone pill again and that `+N` is the only way back. A CLOSED tab shows neither (its
+  contents are one click away in the box, and a badge would collide with the next tab along the strip).
+  Since the two ring as one shape, `.sel-join` reveals the chip as well as `.sel` — selecting the BOX
+  must not leave it with no visible way to fold.
 - **A group holds no content of its own**, so anything added "to the group" goes to the open tab:
   dropped cards (`features/drag.ts`), `addChild`/`createSibling` and paste (`contentParent`). It has no
   COLOUR of its own either: `effectiveColor` starts the walk at the open tab, so the box (its border, its
@@ -163,7 +197,10 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   action on a selected group lands on the OPEN TAB via `actionTarget`: its colour + checklist (the
   float-bar properties' id provider), its rename (`startInlineEdit`, the single funnel for F2 / ⋯ / the
   outline) and its deletion (`deleteNode`/`deleteSelection`, after which `normalizeTabs` promotes the next
-  tab and `dissolveEmptyTabGroups` takes the box away with the last one). What stays on the group is what
+  tab and `dissolveEmptyTabGroups` takes the box away with the last one). The float bar goes there too —
+  it centres horizontally on the LABEL, not the box (`labelRect`, `features/float-bar.ts`), since a
+  frame's box can be many times wider than its title and the bar belongs over the thing you selected;
+  for a group that label is its open tab's. What stays on the group is what
   the box visibly owns: moving, resizing, its kind/layout (the way out of tabs mode) and its lock — plus
   delete-and-promote, which reads naturally as "ungroup" (the tabs survive as loose frames).
 Dock, undock and re-slot all re-anchor the frame's contents through ONE formula (`reanchorContents`):
@@ -247,6 +284,66 @@ The edit panel has an **Actions row** (`#edRename`/`edDuplicate`/`edDragOut`/`ed
 calling the same functions as the keyboard shortcuts; `updateNodeActions()` (run from
 `applySelection`) enables/disables them by selection + `readOnly`, and the titles show
 the shortcut. Add child/sibling live in the right-click context menu and on `Tab`/`Enter`.
+
+**Collapse has THREE entry points, all funnelling through `toggleCollapse`/`toggleCollapseSelection`:**
+the corner chip, `X`, and the ⋯ menu. (Double-click used to be a fourth — it now OPENS a node instead,
+see the section below.) The **chip** is `.hidden-count` — one
+`<button>` at the node's top-right with two faces: folded it reads `+N` (the hidden-descendant count,
+a bare `+` when only a body is tucked away), expanded it shows a chevron, and *that* face is revealed
+only on hover or while SELECTED (the touch story: tap the card, tap the chip — and every card of a
+multi-selection carries one, whose click folds them all like `X`).
+**`paintNode`'s `chipFace` is the single thing that decides which face shows** — `styles.css` keys off
+nothing but the `data-chip` it writes (`'count'`/`'fold'`/absent), and *no per-kind rule may hide the
+bubble*, which is why `.hidden-count` no longer appears in the frame/stack/image-card/query-card/
+docked-tab rules. That's not tidiness: `.node[data-chip="fold"]:hover:not(:has(.node:hover))`
+out-specifies any plain class selector, so a rule like `.node.locked > .hidden-count { display:none }`
+silently loses on hover. Anything that shouldn't offer the button gets refused in `chipFace` instead —
+annotations (an annotation IS its body, so folding leaves an empty shell), image/query cards, and
+**locked** nodes (`toggleCollapse` refuses them, so the control would do nothing — their folded *count*
+still shows, being information rather than a control). A frame's/stack's own body is never rendered, so
+only children make one collapsible.
+**The chip lives INSIDE `.title-row`** (hence the `> .title-row >` in every one of its selectors), and
+that's what puts both faces in the same spot in every state — hanging 8px off the TITLE's top-right
+corner — so folding never moves the button: the row is the containing block exactly when it's
+positioned, i.e. when it's a frame's title TAB, so a frame's chip rides its tab instead of sitting
+`FRAME_TAB_DROP` lower on the box, and a folded frame / docked tab (whose label IS the element) needs
+no special case. Where the row is in flow the offsets resolve against the node's own padding box, so a
+bordered box adds its border back (`.stack` → `-12px`).
+Two more things to respect: the hover rule needs
+`:not(:has(.node:hover))` because child cards are DOM-nested (a deep hover would otherwise light up
+every ancestor's chip at once), and the chip's `pointerdown` must `stopPropagation` so `bindNodeDrag`'s
+`el`-level handler never turns the click into a select/drag — the touch double-tap counter in
+`features/drag.ts` exempts it (via `NODE_CONTROLS`) for the same reason.
+
+**Double-click / double-tap OPENS a node (`activateNode` in `main.ts`)** — folding moved to the chip,
+which freed the gesture for what a double-click means nearly everywhere else. One gesture, dispatched
+by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a `.title-row` (a card's title
+row, a frame's folder tab, a docked tab's whole label) renames via `startInlineEdit` — the single
+rename funnel, so the tab-group/annotation/query redirects and the lock refusal come for free; anything
+else on a card edits its note; a CONTAINER's interior gets a new card THERE (`addChildIn` → `addChild`,
+which routes a group to its open tab, refuses a locked parent and reveals a folded one). The same
+gesture on empty canvas creates a root card (`stage`'s `dblclick` in `features/gestures.ts`). Four
+things hold it together:
+- **`NODE_CONTROLS`** (exported from `main.ts`) is the one list of things that act on a SINGLE click —
+  chip, checkboxes, links, `.addnote`, query input, resize handles `.fh`. Both the `dblclick` handler
+  and the touch double-tap counter in `features/drag.ts` bail on it, or the second click would fire the
+  button AND open the card.
+- **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on
+  it renames — otherwise a double-click would open an editor inside a hidden `.body`.
+- **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows): there's nothing to
+  open, and browsing the help map is all expanding.
+- **A click now only ever SELECTS.** The 260ms slow-second-click rename is gone, and with it the
+  `ui.renameTimer` every fresh interaction had to `clearTimeout`, the `ui.pendingGroupFold` stash that
+  let a double-click fold a just-reduced multi-selection, and `Drag.downTarget`. Don't reintroduce a
+  timer here: it can only race the double-click it was invented to lose to.
+
+**Arrow keys walk the tree (`navArrow` in `main.ts`), by TREE semantics, not screen direction:** `→`
+goes deeper (expanding a folded branch first), `←` shallower (folding an open one first), `↑`/`↓`
+between siblings in `orderedKids` order — the same order the outline lists them in. Geometric arrows
+were rejected because a child's side is its own stored `mm_side`, so a fan branch has children on two
+sides at once and "left" stops meaning anything. The walk pans via `revealInView` (`view/camera.ts`),
+which moves the *minimum* distance to bring one node on screen and never touches `k` — `frameBox` is
+wrong here, since re-framing on every keypress makes the map jump under you.
 
 **Central mutable `state` object (line ~377)** holds `nodes` (Map of id → node),
 `view` (pan/zoom `{x,y,k}`), selection (`selId` + `sel` Set), `edgeStyle`,

@@ -27,6 +27,11 @@ mm_collapsed: true
 - `E` — edit note
 - `X` — collapse / expand
 
+## Move around
+- `→` — open the branch, then step into it
+- `←` — fold the branch, then step out to the parent
+- `↑` `↓` — walk between siblings
+
 ## View
 - `F` — fit / focus
 - `/` — find

@@ -164,7 +164,10 @@ export function leaveClone(s: MindNode, pos: Pt): MindNode {
 export function contentParent(n: MindNode): MindNode {
   return isTabsFrame(n) ? (activeTab(n) ?? n) : n;
 }
-export function addChild(parentId: string): void {
+// `at` (world coords) seeds the new child's position instead of the staggered offset below — the
+// double-click-inside-a-container gesture (main.ts activateNode) knows where the user pointed. A
+// managed layout (line/fan/flow/stack) re-places it either way, so it only sticks in a free parent.
+export function addChild(parentId: string, at?: Pt): void {
   if (state.readOnly) return;
   const parent0 = state.nodes.get(parentId); if (!parent0) return;
   const parent = contentParent(parent0); parentId = parent.id;
@@ -174,8 +177,8 @@ export function addChild(parentId: string): void {
   if (parent.collapsed){ parent.collapsed = false; } // reveal so the new child is visible
   const sibs = childrenOf(parentId);
   const n = mkNode({
-    x: parent.x + 40 + sibs.length * 30,
-    y: parent.y + 150 + sibs.length * 10,
+    x: at ? at.x : parent.x + 40 + sibs.length * 30,
+    y: at ? at.y : parent.y + 150 + sibs.length * 10,
     parent: parentId,
     title: newCardTitle(),
   });

@@ -124,3 +124,30 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStro
     Math.min((availW - 2*FOCUS_PAD) / bw, (availH - 2*FOCUS_PAD) / bh)));
   animateViewTo(availW/2 - cx*k, availH/2 - cy*k, k);   // glide + zoom, never jump
 }
+
+// Pan the minimum distance that brings ONE node fully on screen — and nothing more: no zoom
+// change, no re-centring, no move at all when it's already visible. That's what arrow-key
+// navigation (main.ts) needs and what frameBox is wrong for: walking the tree card by card must
+// not re-frame or re-zoom on every step, or the map jumps under you the whole way down a branch.
+// The pad keeps the landed card clear of the viewport edge (and of the float bar on a narrow
+// screen, which docks along the bottom — same test frameBox makes).
+const REVEAL_PAD = 60;
+export function revealInView(n: MindNode | undefined): void {
+  if (!n || isHidden(n)) return;
+  const k = state.view.k, r = stageSize();
+  const fb = document.getElementById('floatBar') as HTMLElement;
+  const bottomInset = (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
+  // the node's box in screen space
+  const left = n.x*k + state.view.x, top = n.y*k + state.view.y;
+  const right = left + nodeW(n)*k, bottom = top + nodeH(n)*k;
+  // Overshoot on both edges (a card taller/wider than the viewport) → align its top-left, so the
+  // card's own start is what you see rather than an arbitrary middle.
+  let dx = 0, dy = 0;
+  if (left < REVEAL_PAD) dx = REVEAL_PAD - left;
+  else if (right > r.width - REVEAL_PAD) dx = Math.max(r.width - REVEAL_PAD - right, REVEAL_PAD - left);
+  if (top < REVEAL_PAD) dy = REVEAL_PAD - top;
+  else if (bottom > r.height - bottomInset - REVEAL_PAD)
+    dy = Math.max(r.height - bottomInset - REVEAL_PAD - bottom, REVEAL_PAD - top);
+  if (!dx && !dy) return;
+  animateViewTo(state.view.x + dx, state.view.y + dy, k, 220);
+}

@@ -355,6 +355,16 @@ function stackHeaderH(stack: MindNode): number {
   const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
   return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
 }
+// The height an EMPTY stack comes to: its own title row, inset equally all round. This is the
+// zero-row reduction of the `node.h = …` line that closes the stack branch in layoutSubtree (with no
+// rows, cy is just ay + stackHeaderH) — the two must stay in step, so the branch calls this too.
+// It can't be a constant: a stack's title WRAPS (unlike a frame's single-line tab), so a two-line
+// title needs the measurement. That's exactly what went wrong before — a childless stack never
+// reached the branch at all (layoutSubtree returns early with no children), so it kept nodeH's
+// STACK_HEADER + STACK_PAD fallback and a wrapped title overflowed its box by the extra lines.
+function stackEmptyH(stack: MindNode): number {
+  return stackHeaderH(stack) - STACK_GAP + STACK_PAD + FRAME_BORDER;
+}
 // NOTE — the two loops below call paintNode(k) BEFORE measuring the row, and must keep doing so: a
 // stack is the one place where a card's height depends on layout output, in two ways.
 //   · WIDTH — a row is stretched to the width its depth allows (stackRowW, which paintNode applies),
@@ -850,7 +860,10 @@ function layoutSubtree(node: MindNode): void {
   // annotations opt out of layout: never ordered, spaced, or flowed — they stay where dragged and
   // float on top (they still ride shiftSubtree when an ancestor moves, so they track their parent).
   const kids = childrenOf(node.id).filter(k => !isHidden(k) && !isAnnotation(k));
-  if (!kids.length) return;
+  // An empty STACK still owes itself a height — its box auto-fits its outline, and with no rows that
+  // outline is just its own (possibly wrapped) title. Paint first, then measure: same rule as the row
+  // loop below, since the title wraps at whatever width the box was authored to.
+  if (!kids.length) { if (isStack(node)) { paintNode(node); node.h = stackEmptyH(node); } return; }
   // lay out each child's own subtree first, so subtreeBox() reflects the grandchildren
   for (const k of kids) layoutSubtree(k);
 
@@ -892,10 +905,13 @@ function layoutSubtree(node: MindNode): void {
   // width intact while it sits in the outline, ready for when it's dragged back out.
   if (type === 'stack') {
     const innerLeft = ax + FRAME_BORDER + STACK_PAD;
+    const rows = stackOutline(node);
+    // no visible rows (every child hidden or an annotation) — same case as a childless stack above
+    if (!rows.length) { paintNode(node); node.h = stackEmptyH(node); return; }
     let cy = ay + stackHeaderH(node);
     // Walk the SHARED outline (stackOutline) rather than a private DFS, so the drop resolver
     // (stackDropTarget) and this layout pass can never disagree about a row's order or depth.
-    for (const { node: k, depth } of stackOutline(node)) {
+    for (const { node: k, depth } of rows) {
       const x = innerLeft + depth * STACK_INDENT;
       if (isContainer(k) || k.collapsed) {
         // one opaque row: its own box/fold owns its contents, so move the whole subtree with it

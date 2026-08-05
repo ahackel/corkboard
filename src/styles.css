@@ -365,8 +365,12 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    relative to the interior (frameInterior), which counts the border only. */
 .node.frame { padding:0; }
 /* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
-   card padding — that's what lets full-width child cards fit inside the narrow box. */
-.node.stack { padding:5px 6px; }
+   card padding — that's what lets full-width child cards fit inside the narrow box.
+   6px on EVERY side, not 5px vertically: this padding is the same inset the layout pass spends as
+   STACK_PAD (main.ts) when it places the rows and closes the box under the last one, so anything but
+   STACK_PAD here shows up as a title sitting 1px nearer the top edge than the bottom gap below it —
+   most visible on an empty stack, where the title IS the content. Keep the two in step. */
+.node.stack { padding:6px; }
 .node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
 /* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
    A frame's TAB is filled with --frame-stroke either way (see below), so its text keeps using
@@ -472,7 +476,14 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    and its max-width already ellipsises a long title. EVERY tab squares off its bottom corners: they all
    sit ON the box, so a rounded bottom would float them off it (a folded frame, which stands alone, keeps
    its pill shape). The open one is what the box belongs to, so it alone shows at full strength. */
-.node.frame-folded.docked { opacity:.62; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+/* z-index:auto is what makes "tucked behind the front of the folder" actually true. The strip has no
+   z-index of its own precisely so tree order decides between a tab and the box (main.ts tabStripEl
+   keeps the strip right BEFORE the box) — but a tab is a .node, and `.node { z-index:2 }` was still
+   winning, lifting every inactive tab over the box's top border AND over its selection ring, which
+   then looked chopped into pieces wherever a tab crossed it. Reset to auto and the box paints after
+   them, running its border and ring across the top of the sheets behind it. The open tab lifts back
+   above with its own z-index below. */
+.node.frame-folded.docked { opacity:.62; z-index:auto; border-bottom-left-radius:0; border-bottom-right-radius:0; }
 /* A tab's selection ring stops where the tab meets the box: a line along its BOTTOM edge would cut
    straight through one continuous shape (exactly the reasoning behind a frame's own tab ring above).
    box-shadow can only ring all four sides, so a selected tab swaps it for a three-sided pseudo-element
@@ -489,11 +500,11 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
 /* …and it stands down while the tab is being renamed, like every other card's ring */
 .node.frame-folded.docked.sel:has(> .title-row > .title.editing)::before { content:none; }
-/* no +N chip on a tab: a folded frame uses it for "there's more inside", but a CLOSED TAB's contents
-   are one click away in the box, not tucked under a stub — and the bubble would sit over the next tab.
-   The "add note" pill goes for the same reason: on a label this narrow it lands on the title itself
-   (and a frame — docked or not — never shows a body anyway). */
-.node.frame-folded.docked > .hidden-count { display:none; }
+/* No corner bubble on a tab (a folded frame uses it for "there's more inside", but a CLOSED TAB's
+   contents are one click away in the box, not tucked under a stub — and it would sit over the next
+   tab): paintNode's chipFace withholds it, so there's no rule needed here. The "add note" pill goes
+   for a related reason: on a label this narrow it lands on the title itself (and a frame — docked or
+   not — never shows a body anyway). */
 .node.frame-folded.docked .addnote { display:none !important; }
 /* the open tab is the front of the folder: over the box, over #edges (1) and the cards (2) — the same
    z-index a frame's own title tab takes, and for the same reasons */
@@ -529,12 +540,12 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .frame-content > .node { pointer-events:auto; }
 /* a frame never shows body content, the "n/m" progress, or the +N chip; and NEVER the "add note"
    pill (the !important beats the .solo.no-body show rule that would otherwise reveal it). */
-.node.frame > .body, .node.frame .progress, .node.frame .hidden-count { display:none; }
+.node.frame > .body, .node.frame .progress { display:none; }
 .node.frame .addnote { display:none !important; }
 /* a stack is a container too: it shows only its title header (its children are framed below it), so
    hide its own body / +N chip / add-note pill — but KEEP its "n/m" progress, since a stack is a
    natural checklist container (its direct children carry the done-boxes). */
-.node.stack > .body, .node.stack > .hidden-count { display:none; }
+.node.stack > .body { display:none; }
 .node.stack .addnote { display:none !important; }
 /* drag-into-container preview: restyle the box's OWN border to a white dash — like the other drag
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
@@ -591,7 +602,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    `border-radius:inherit` on .md-img itself, so nothing relies on the node clipping its content. */
 .node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
-.node.image-card .title-row, .node.image-card .progress, .node.image-card .hidden-count { display:none; }
+.node.image-card .title-row, .node.image-card .progress { display:none; }
 .node.image-card .addnote { display:none !important; }
 /* explicit width/height (not just inset:0) — a percentage height on the .md-img descendant only
    resolves against a containing block whose OWN height is set via the `height` property itself,
@@ -634,7 +645,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.query-card { z-index:2; min-height:0; border-radius:var(--r-card); background:transparent;
   border:4px solid var(--frame-stroke, var(--edge)); padding:8px 10px;
   display:flex; flex-direction:column; }
-.node.query-card > .body, .node.query-card .progress, .node.query-card .hidden-count { display:none; }
+.node.query-card > .body, .node.query-card .progress { display:none; }
 /* direct-child combinator — a query card is fixed-size chrome with no tag row of its own, but a
    CHILD card nested inside it (a real DOM descendant, see main.ts paintNode) still needs its own
    .tag-row/.addnote to render. */
@@ -908,14 +919,57 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node:has(.body.editing)  .addnote,
 .node:has(.title.editing) .tag-add-btn,
 .node:has(.body.editing)  .tag-add-btn { display:none !important; }
-/* collapse marker at the card's upper-right corner, clear of the add-child (+) button at the
-   lower-centre. A folded branch shows its hidden-descendant COUNT; a folded leaf (no children)
-   shows the same bubble empty — a white dot of the same size/position. */
+/* collapse BUTTON at the card's upper-right corner, clear of the add-child (+) button at the
+   lower-centre. Two states, one bubble (paintNode fills it):
+     folded   — "+5": expand, and how much is tucked under there ("+" alone for a folded note).
+     expanded — a chevron, and only while the card is hovered or selected, so a resting canvas stays
+                as clean as it was when fold was double-click-only. Selected counts too because touch
+                has no hover: tap once to select, then tap the chip.
+   It's a <button> (single click folds — see nodeEl), hence the appearance/border/font reset. */
+/* A perfect 16px CIRCLE by default — the chevron and a bare "+" are single glyphs, so side padding
+   would only stretch them into a lozenge. Only a "+N" opts into `.wide` (paintNode, when there really
+   are hidden descendants to count) and grows for its digits; the 8px radius keeps its ends round at
+   this height either way. `right` pins the RIGHT edge, so growing leftwards never moves the corner. */
 .node .hidden-count { position:absolute; right:-8px; top:-8px;
-  box-sizing:border-box; min-width:16px; height:16px; padding:0 5px;
+  box-sizing:border-box; width:16px; height:16px; padding:0;
+  -webkit-appearance:none; appearance:none; border:none; font-family:inherit;
   background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:8px;
-  line-height:1; display:none; align-items:center; justify-content:center; }
-.node.collapsed .hidden-count { display:inline-flex; }
+  line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
+.node .hidden-count.wide { width:auto; min-width:16px; padding:0 5px; }
+.node .hidden-count svg { width:11px; height:11px; display:block; }
+/* BOTH faces sit in the SAME spot in every state, so folding never moves the button: hanging off the
+   TITLE's top-right corner. That's what living inside .title-row buys (see nodeEl) — the row is the
+   containing block exactly when it's positioned, i.e. when it's a FRAME's title tab, so a frame's chip
+   rides its tab instead of sitting 43px lower on the box, and a folded frame / docked tab (whose label
+   IS the element) needs no special case at all.
+   Where the row is in FLOW (card, stack, query card) the offsets resolve against the node's own
+   padding box instead — which for a bordered box means adding its border back, hence the stack's
+   -12px (its title then sits at the same 8px from its outer corner as a card's). */
+.node.stack > .title-row > .hidden-count { right:-12px; top:-12px; }
+/* WHICH face shows is decided in ONE place — paintNode's chipFace, via data-chip — and never by a
+   per-kind rule here: a `:hover`/`.sel` selector out-specifies any plain class, so a kind that
+   wanted to hide the bubble could never win that fight. Hence no .hidden-count in the frame /
+   stack / image-card / query-card / docked-tab rules further up.
+   The folded "+N" always shows. The chevron shows on hover, or while the card is SELECTED — every
+   selected collapsible card carries one, including each card of a multi-selection (clicking it then
+   folds them all, like X). Selected counts because touch has no hover: tap the card, tap the chip.
+   :not(:has(.node:hover)) because child cards are DOM-NESTED inside their parent, so a hover on a
+   deep card would otherwise light up the chevron of every ancestor above it at once — only the
+   innermost hovered card shows one. */
+.node[data-chip="count"] > .title-row > .hidden-count { display:inline-flex; }
+.node[data-chip="fold"]:hover:not(:has(.node:hover)) > .title-row > .hidden-count,
+.node[data-chip="fold"].sel > .title-row > .hidden-count,
+/* `.sel-join` too — the pair that rings as one shape shows one button: an open TAB carries the
+   group's fold button (chipFace), so selecting the BOX must reveal it up on the tab, not leave the
+   box selected with no way to fold it. selJoin is exactly the group↔open-tab pair, nothing else. */
+.node[data-chip="fold"].sel-join > .title-row > .hidden-count { display:inline-flex; }
+/* READ-ONLY keeps the chip fully live — collapsing is allowed there, unlike .addnote above which
+   read-only hides. Mid-drag, and while the title/body is being edited in place, the chevron is just
+   noise: drop it exactly like .addnote/.tag-add-btn. A FOLDED node keeps its count while being
+   renamed (it's the only thing showing what's tucked underneath). */
+body.grabbing .node[data-chip="fold"] > .title-row > .hidden-count,
+.node[data-chip="fold"]:has(.title.editing) > .title-row > .hidden-count,
+.node[data-chip="fold"]:has(.body.editing)  > .title-row > .hidden-count { display:none; }
 /* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
    covers both branches-with-children and leaf cards whose body is folded away. */
 .node.collapsed { min-height:0; }   /* shrink to the title, like a bodyless card */
