@@ -272,6 +272,10 @@ input::placeholder { color:var(--muted); opacity:1; }
 #stage.panning { cursor:grabbing; }
 /* the hand only appears while actually dragging a card; default everywhere else */
 body.grabbing, body.grabbing * { cursor:grabbing !important; }
+/* will-change:transform keeps a pan/pinch compositor-only. It also pins the layer's raster scale,
+   which would leave the cards blurry after a zoom — view/camera.ts's refreshRaster releases the
+   hint for two frames once the zoom settles, so this declaration is the RESTING value it comes
+   back to (camera.ts clears the inline override rather than re-asserting the keyword here). */
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
 svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
@@ -908,12 +912,24 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body p { margin:.3em 0 .75em; }   /* a little breathing room after each paragraph */
 .node .body h1,.node .body h2,.node .body h3,
 .node .body h4,.node .body h5,.node .body h6 { margin:.3em 0; font-size:12px; font-weight:700; }
-.node .body ul,.node .body ol { padding-left:1.1em; }
+/* An OUTSIDE list marker is painted to the LEFT of the li's content box, in the ul's own padding —
+   and .body clips at its content edge (overflow:hidden above), so the padding has to be wide enough
+   to hold the whole marker or the browser draws it half off the card. At this 12px body font Chrome
+   needs 14px for a disc and 16.75px for a two-digit ordered marker, so 1.1em (13.2px) was shaving
+   the left edge off every bullet — they read as tiny arrowheads. 1.5em (18px) clears both.
+   li.task's negative margin cancels that indent (its checkbox stands in for the marker, hence
+   list-style:none) and has to move with it, or task rows step right when the padding grows. */
+.node .body ul,.node .body ol { padding-left:1.5em; }
 .node .body li { margin:.1em 0; }
-.node .body li.task { list-style:none; margin-left:-1.0em; display:flex; align-items:flex-start; gap:.4em; }
+.node .body li.task { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:.4em; }
 .node .body li.task .taskbox,
 .node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
-.node .body li.task .taskbox { margin:.15em 0 0; }
+/* Sits 1px below the line box's top, which centres the 14px box on the first line's CAP BAND — the
+   band the eye reads as "the text". flex-start (not center) is what keeps it on line ONE when the
+   item wraps. px, not em, for exactly the reason .donebox spells out above: a checkbox's em is the
+   UA's control font (13.333px Arial), NOT the card's 12px body, so the .15em here was resolving to
+   2px and dropping the box a pixel and a half below the text it labels. */
+.node .body li.task .taskbox { margin:1px 0 0; }
 .node .body li.task .taskbox:checked,
 .node .donebox:checked { background:var(--accent); }
 .node .body li.task .taskbox:checked::after,
@@ -1007,6 +1023,22 @@ body.grabbing .node .tag-add-btn { display:none !important; }
   line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
 .node .hidden-count.wide { width:auto; min-width:16px; padding:0 5px; }
 .node .hidden-count svg { width:11px; height:11px; display:block; }
+/* ── NUMERIC BADGES: centre the DIGITS, not the font's line box ────────────────────────────────
+   Every white pill that holds a number — this chip's "+N", the outline's .ol-count, the grid-size
+   button — was centring its text with `align-items:center`, which centres the text's LINE BOX. That
+   box reserves the font's full DESCENT under a "12" that has none, so the digits sat ~1px low in a
+   16px pill and the badge read as sagging. Line-height is not the lever it looks like: grow the box
+   and the baseline moves down by exactly the same half, so it cancels out of the centring entirely
+   — the offset is the pure font-metric constant (ascent - descent)/2 - capHeight/2. `text-box` is,
+   because it trims the box down to cap-height→baseline, i.e. to the ink the badge actually shows;
+   centring THAT centres the digits. It has to sit on the box that holds the text, which on a flex
+   badge is the child element (.cnt) — a bare text node is an anonymous item and can't take it, hence
+   the block form for the other two (align-content centres a block's own line box, and neither of
+   them holds an icon, so neither needed to be flex). .tag-pill is deliberately left out: an emoji
+   has no cap height to trim to. Where text-box is unsupported a badge just keeps the old 1px sag. */
+.node .hidden-count .cnt { text-box:trim-both cap alphabetic; }
+.ol-count, #gridSizeBtn { display:inline-block; text-align:center; align-content:center;
+  text-box:trim-both cap alphabetic; }
 /* Both faces live in the button permanently (nodeEl bakes the chevron into the template, so paintNode
    never rewrites its innerHTML) — data-chip picks which one is visible, the same single switch that
    decides whether the button shows at all. */
@@ -1109,7 +1141,9 @@ body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
 #helpBtn { right:12px; bottom:12px; overflow:visible; }
 /* grid toggle — its own floating button, sitting immediately to the left of help */
 #gridBtn { right:calc(12px + var(--bar-btn) + 8px); bottom:12px; }
-/* grid size picker — one slot further left again, showing the current cell size as a number */
+/* grid size picker — one slot further left again, showing the current cell size as a number. The one
+   .floating-btn whose content is TEXT, so it drops the shared flex centring for the numeric-badge
+   rule next to .hidden-count (which centres digits rather than their line box). */
 #gridSizeBtn { right:calc(12px + 2 * (var(--bar-btn) + 8px)); bottom:12px; font-size:11px; font-weight:600; }
 /* help hint lives INSIDE the help button, so it tracks it with no JS — sits ABOVE the
    bottom-right button and points down at it */
@@ -1680,11 +1714,12 @@ body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in 
 body.readonly .ol-open { display:none; }
 /* hidden-descendant count on a folded row — straddles the top-right corner, matching the canvas
    chip's counting face (.node .hidden-count.wide: always digits here, so always the wide variant).
-   Unlike the canvas one this is a badge, not a button: the row's own disc is what folds it. */
+   Unlike the canvas one this is a badge, not a button: the row's own disc is what folds it.
+   Its display + centring come from the numeric-badge rule next to .hidden-count above. */
 .ol-count { position:absolute; right:-8px; top:-8px;
   box-sizing:border-box; min-width:16px; height:16px; padding:0 5px;
   background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
-  line-height:1; display:inline-flex; align-items:center; justify-content:center; }
+  line-height:1; }
 /* locked row: the same padlock badge as the canvas card, upper-LEFT corner — mirrors .ol-count. */
 .ol-lock { position:absolute; left:-8px; top:-8px;
   box-sizing:border-box; width:16px; height:16px;
