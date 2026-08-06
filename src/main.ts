@@ -23,7 +23,7 @@ import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, revealInView, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, orderedKids, actionTarget } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack, isFrame, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, orderedKids, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -494,6 +494,7 @@ export function paintNode(n: MindNode): void {
     + (isFrameBox(n) ? ' frame' : '')
     + (isStack(n) ? ' stack' : '')
     + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
+    + (inFrame(n) ? ' frame-child' : '')   // …and a card inside a frame's box, by the same step
     + (isImageBox(n) ? ' image-card' : '')
     + (isQueryBox(n) ? ' query-card' : '')
     + (isAnnotation(n) ? ' annotation' : '')
@@ -867,6 +868,20 @@ function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(
 function inStack(n: MindNode): boolean {
   const h = hostFrame(n);
   return !!h && isStack(h);
+}
+// …and the mirror for a FRAME's box: a card sitting in one is tinted a touch brighter (.frame-child),
+// exactly as a stack's rows are, and for the same reason — a card INHERITS its colour from its
+// ancestors (effectiveColor), so one dropped into a coloured frame resolves to the frame's own fill
+// and vanishes into it. Nearest container only, so a card in a stack in a frame stays a stack row.
+// Plain cards only: every other kind is a shape with its own fill rules — a nested stack already
+// steps DOWN inside a frame, a nested frame's fill is tied to the --frame-stroke its border and title
+// tab share, an image/query card is deliberately image-only / outline-only, and an annotation never
+// inherits a colour in the first place (it takes the theme's contrast colour, which the tint would
+// wash out).
+function inFrame(n: MindNode): boolean {
+  if (isContainer(n) || isImageBox(n) || isQueryBox(n) || isAnnotation(n)) return false;
+  const h = hostFrame(n);
+  return !!h && isFrame(h);
 }
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : isQueryBox(n) ? QUERY_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQueryBox(n) ? QUERY_H : FRAME_H; }

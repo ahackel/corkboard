@@ -439,8 +439,21 @@ DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
     `body.light` no longer overrides text anywhere. `c-none` is the one exception, and by
     construction: with no fill there's nothing to measure, so it takes `var(--text)` and has its
     scrim flipped by hand. Ink is computed from a container's *own* fill; a stack's `86%`-toward-black
-    step and a row's `93%`-toward-white step are not re-measured (both stay legible — the stack's
-    darkened fill is the thinnest at ~3.2:1 on a bold title).
+    step and the `93%`-toward-`--ink` step its rows and a frame's child cards take are not
+    re-measured (all stay legible — the stack's darkened fill is the thinnest at ~3.2:1 on a bold
+    title).
+  - **A card inside a container steps one notch off its host's fill** — `.stack-child` for a stack's
+    rows, `.frame-child` for the cards in a frame's box (`inStack`/`inFrame` in `main.ts`, nearest
+    container ancestor). Both exist for the same reason: a card INHERITS its colour from its
+    ancestors, so one dropped into a coloured container resolves to the container's own fill and
+    vanishes into it. The step is `93%` toward that card's own **`--ink`**, not toward a literal
+    `#fff`: `--ink` is by construction the direction that HAS contrast against this fill, so it
+    always lands where there's room. White has none on a pale fill — the light theme's default card
+    is `#f2f4f7`, whose row came out ~1 unit off it, i.e. flat. Nothing that used to step visibly
+    changed, and that's structural rather than lucky: `INK_MIN` hands out dark ink only *below* its
+    contrast floor, i.e. on exactly the fills too pale for a white step to show, so the two switch
+    over together. Only plain cards take the tint (`inFrame` refuses the rest) — a nested container
+    or box already owns its own tone, and an annotation never inherits a colour to begin with.
   The bias is deliberate: light ink is kept unless its contrast falls below `INK_MIN` (**2.5**)
   rather than always taking the higher contrast, and that one number serves both themes. It's pinned
   low enough that **every palette colour keeps the ink it had before any of this existed** (the

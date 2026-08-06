@@ -571,13 +571,29 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   display:inline-flex; align-items:center; justify-content:center; flex:none;
   width:16px; height:16px; opacity:.85; }
 .node.tabs-fold > .title-row > .folder-icon svg { width:100%; height:100%; }
-/* a card inside a stack's outliner (main.ts .stack-child) is rendered just a touch brighter than a
-   normal card, so it still reads as a distinct row even when it shares the stack's own colour; and
-   uses HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.
+/* a card inside a stack's outliner (main.ts .stack-child) is rendered one step off its container's
+   fill, so it still reads as a distinct row even when it shares the stack's own colour; and uses
+   HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.
    Its corners take --r-inner (one step inside the box's border) — a row on the full card radius
-   bulged against the stack's corners instead of sitting inside them. */
-.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, #fff); padding:5px 6px;
-  border-radius:var(--r-inner); }
+   bulged against the stack's corners instead of sitting inside them.
+   The step is toward the fill's OWN --ink, not a literal #fff, and that's what makes it work on
+   every colour: --ink is by construction the direction that HAS contrast against this fill (the .c-*
+   block up top derives it that way), so the step lands where there's room. #fff has none on a pale
+   fill — the light theme's default card is #f2f4f7, whose row came out ~1 unit off it, i.e. flat.
+   The two switch over together, which is why nothing that used to step visibly changes: deriveInk
+   only hands out dark ink BELOW its contrast floor, i.e. exactly on the fills that were too pale for
+   a white step to show. Everything else still has white ink, and so still brightens by the same 7%. */
+.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, var(--ink, #fff));
+  padding:5px 6px; border-radius:var(--r-inner); }
+/* …and a card inside a FRAME's box takes the SAME step, for the same reason (main.ts .frame-child):
+   a card inherits its colour from its ancestors (effectiveColor), so one dropped into a coloured
+   frame resolved to the frame's own --card and vanished into it. Only the fill steps — a frame's
+   children are ordinary cards, so unlike a stack's rows they keep normal padding and the full card
+   radius. Which kinds get the class is decided in inFrame (a nested container/box has its own tone),
+   which is what keeps this selector a plain one.
+   :not(.c-none) like the frame/stack rules above: --card is `transparent` there, and mixing THAT
+   toward the ink is a faint wash, not the "no fill, show what's behind" that colour asks for. */
+.node.frame-child:not(.c-none) { background: color-mix(in srgb, var(--card, var(--node)) 93%, var(--ink, #fff)); }
 /* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
    sized to the frame's INTERIOR (inside its 4px border — see FRAME_BORDER), holding every card (and
    nested frame) it hosts as flat DOM children — same "everyone flat under one container" model the
