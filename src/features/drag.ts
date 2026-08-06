@@ -268,6 +268,11 @@ export function bindNodeDrag(n: MindNode): void {
   // double-tap zoom). Folding is the corner chip's job on both — tap the card, tap the chip.
   let lastTouchTap = 0;
   el.addEventListener('touchstart', (e) => {
+    // The innermost card owns the tap, exactly as it owns the dblclick (main.ts nodeEl): child cards
+    // are DOM-nested, so without this every ancestor's own counter sees the same two taps and a
+    // double-tap on a child fired activateNode all the way up the chain — renaming the child, then
+    // opening its parent's note editor on top of it.
+    e.stopPropagation();
     // While editing this card, let the browser handle double-tap normally (word selection)
     if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) { lastTouchTap = 0; return; }
     // The card's own controls act on a single tap (main.ts isNodeControlAt): a tap there must not also

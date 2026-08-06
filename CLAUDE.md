@@ -353,8 +353,17 @@ row, a frame's folder tab, a docked tab's whole label) renames via `startInlineE
 rename funnel, so the tab-group/annotation/query redirects and the lock refusal come for free; anything
 else on a card edits its note; a CONTAINER's interior gets a new card THERE (`addChildIn` → `addChild`,
 which routes a group to its open tab, refuses a locked parent and reveals a folded one). The same
-gesture on empty canvas creates a root card (`stage`'s `dblclick` in `features/gestures.ts`). Four
+gesture on empty canvas creates a root card (`stage`'s `dblclick` in `features/gestures.ts`). Five
 things hold it together:
+- **The INNERMOST node owns the gesture, including the ones it declines.** Child cards are DOM-nested,
+  so both handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/drag.ts`) `stopPropagation`
+  BEFORE their bails, not after — otherwise a gesture this card refuses bubbles to its host card, which
+  reads it as a double-click on itself. That's what broke renaming: double-clicking a word inside an
+  open title editor (the ordinary way to fix one word of a name) reached the host and opened the HOST's
+  note editor, which closed the rename and sent the rest of the typing into the parent's body. On touch
+  it's worse, since each ancestor keeps its OWN tap counter and so sees the same two taps. A container's
+  children are exempt by construction — they live in its sibling `.frame-content` / `.tab-strip` wrapper,
+  not inside its element.
 - **`NODE_CONTROLS`** (exported from `main.ts`) is the one list of things that act on a SINGLE click —
   chip, checkboxes, links, `.addnote`, query input, resize handles `.fh`. Both the `dblclick` handler
   and the touch double-tap counter in `features/drag.ts` bail on it, or the second click would fire the

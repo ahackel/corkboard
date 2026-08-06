@@ -213,10 +213,19 @@ function nodeEl(n: MindNode): HTMLElement {
   // Double-click OPENS the node — rename / edit its note / add a card inside it, dispatched by what
   // was hit (activateNode). Folding lives on the corner chip above.
   el.addEventListener('dblclick', (e)=>{
+    // The INNERMOST card owns the gesture, whether or not it acts on it — child cards are DOM-nested,
+    // so anything this handler DECLINES still bubbles to its host card, which reads it as a
+    // double-click on itself. Hence the stopPropagation ahead of the two bails rather than after
+    // them: double-clicking a word inside an open title editor (the ordinary way to fix one word of
+    // a name) reached the host and opened the HOST's note editor, which closed the rename and sent
+    // the rest of the typing into the parent's body. Same for a word inside an open body editor, and
+    // for a double-click on a nested card's own controls. A container's children are NOT nested (they
+    // live in its sibling .frame-content / .tab-strip wrapper), so this is about plain cards.
+    e.stopPropagation();
     // while editing this card's title or body, a double-click selects a word — don't take it over
     if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) return;
     if (isNodeControlAt(e.clientX, e.clientY)) return;   // the card's own buttons keep their click
-    e.stopPropagation(); e.preventDefault();
+    e.preventDefault();
     activateNode(n, e.clientX, e.clientY);
   });
   return el;
