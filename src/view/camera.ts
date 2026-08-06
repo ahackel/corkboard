@@ -15,9 +15,34 @@ import { paintGrid } from './grid.js';
 // zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's
 // own geometry depends on it, so crossing the line needs no repaint of the canvas.
 export const FAR_ZOOM = 0.5;
+
+// #world carries `will-change:transform` (styles.css) so a pan/pinch is a compositor-only move and
+// never repaints the cards. The cost is that Chrome then PINS that layer's raster scale: it keeps
+// re-using the texture it already rasterized and simply magnifies it, so zooming in leaves every
+// card soft and pixellated at exactly the moment you wanted more detail. (Intermittently — Chrome
+// re-rasters on its own often enough that the blur comes and goes, which is what makes it look like
+// a fluke.) So once the zoom SETTLES we hand the hint back for two frames: dropping it forces the
+// layer to be re-painted at the scale we actually landed on, and restoring it puts the fast path
+// back for the next gesture. Only the SCALE needs this — a pan doesn't change the raster scale, so
+// panning never gives the hint up and pays nothing. The two rAFs are load-bearing: set and unset
+// within one frame and the style change coalesces to a no-op, and no re-raster happens.
+const RASTER_SETTLE = 180;
+let rasterK = -1, rasterTimer: number | null = null;
+function refreshRaster(): void {
+  if (state.view.k === rasterK) return;
+  rasterK = state.view.k;
+  if (rasterTimer) clearTimeout(rasterTimer);
+  rasterTimer = window.setTimeout(() => {
+    rasterTimer = null;
+    world.style.willChange = 'auto';
+    requestAnimationFrame(() => requestAnimationFrame(() => { world.style.willChange = ''; }));
+  }, RASTER_SETTLE);
+}
+
 export function applyView(): void {
   world.style.transform = `translate(${state.view.x}px,${state.view.y}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
+  refreshRaster();
   paintGrid();
   scheduleUrlSync();
 }
