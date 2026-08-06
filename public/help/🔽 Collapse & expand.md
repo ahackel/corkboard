@@ -20,5 +20,6 @@ mm_collapsed: true
   (Double-click no longer folds — it opens a card for editing instead. See "Edit text".)
 - With a card selected, `←` folds its branch and `→` opens it — see the shortcuts page for walking
   the tree with the arrow keys.
+- The **outline view** works the same way: tap a row to select it, then tap the button on its corner.
 - A card with a note but no children can fold too: it tucks the note away and shows just the title.
 - Collapsing keeps big maps readable — open only the branch you're working in.

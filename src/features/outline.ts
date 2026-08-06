@@ -2,9 +2,11 @@
 // An alternative VIEW over the same nodes (body.outline hides the canvas, rows render into
 // #outline), aimed at phones — reading, quick capture and light editing without the 2D canvas.
 // Toggled by the toolbar button / the O key; the choice persists per device (VIEW_KEY).
-// Sibling order is exactly the canvas order (orderedKids). Expand/collapse via the row's disc
-// is a REAL toggle — it calls the same toggleCollapse() the canvas uses, so it mirrors mm_collapsed
-// on disk and what the canvas shows. Ancestor-reveal while just BROWSING (search jump, "scroll to
+// Sibling order is exactly the canvas order (orderedKids). Expand/collapse works exactly as it does
+// on a canvas card: the row carries the SAME corner bubble (.ol-chip mirrors .node .hidden-count —
+// "+N" while folded, a chevron while open, revealed on hover or while the row is SELECTED) and a
+// single click on it calls the same toggleCollapse(), so it mirrors mm_collapsed on disk and what
+// the canvas shows. Ancestor-reveal while just BROWSING (search jump, "scroll to
 // this card after a reparent") stays VIEW-LOCAL instead (outlineFold below) — it never rewrites
 // mm_collapsed, so jumping around the tree doesn't silently expand/save a pile of ancestors. All
 // edits reuse the existing kernels (crud / drag reparent / history), so undo, autosave and
@@ -14,11 +16,11 @@ import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder } from '../utils/model.js';
 import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG } from '../main.js';
+import { paintAll, selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
 import { titleProblem } from './inline-edit.js';
-import { createNode, deleteNode, duplicateSelection } from './crud.js';
+import { createNode, addChild, deleteNode, duplicateSelection } from './crud.js';
 import { reparentOnly } from './drag.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { openMenu } from './context-menu.js';
@@ -52,11 +54,13 @@ function findRowTitle(id: string): HTMLElement | null {
 }
 export function startRowTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}): void {
   if (state.readOnly || isLockedEffective(n)) return;
-  const titleEl = findRowTitle(n.id); if (!titleEl) return;
   if (rowEditId && rowEditId !== n.id) endRowTitleEdit();
+  // Ring the row being renamed — BEFORE looking its title up, since selecting re-renders the list
+  // (applySelection → paintAll → renderOutline) and would otherwise replace the element under us.
+  // Safe to do here and not once rowEditId is set: that's exactly what renderOutline bails on.
+  selectNode(n.id);
+  const titleEl = findRowTitle(n.id); if (!titleEl) return;
   touch(n.id);   // the whole edit session becomes ONE undo step (incl. a fresh card's creation)
-  // Deliberately no selectNode() here — clicking a row in the outliner never touches canvas
-  // selection (no sel ring here, and nothing to carry back when switching to the canvas view).
   rowEditId = n.id; rowEditIsNew = isNew;
   titleEl.setAttribute('contenteditable', 'plaintext-only');
   titleEl.classList.add('editing'); titleEl.classList.remove('invalid');
@@ -246,6 +250,7 @@ export function renderOutline(): void {
   // #olRows is display:none while the single-card editor is open (styles.css), and every keystroke
   // in its card/props sheet already calls paintAll() — skip the wasted full rebuild while it's hidden.
   if (branchEditorOpen()) return;
+  updateAddBtnMode();   // the + names the selected row it will add under, so it tracks selection
   const scroll = outlineScrollEl.scrollTop;
   rowsEl.textContent = '';
   const q = outlineQuery.trim().toLowerCase();
@@ -271,24 +276,39 @@ function showsDoneCheckbox(n: MindNode): boolean {
   const p = n.parent ? state.nodes.get(n.parent) : undefined;
   return !!(p && p.checklist);
 }
-// Elements inside a row with their own click behaviour — a pointerdown/dblclick/touchstart on
-// one of these must NOT also be read as "press the card" (drag-start / fold-on-double-tap).
-const ROW_CONTROLS = '.ol-done, .ol-open, .ol-more';
+// Elements inside a row with their own click behaviour — a pointerdown/click on one of these must
+// NOT also be read as "press the card" (drag-start / select-the-row).
+const ROW_CONTROLS = '.ol-done, .ol-open, .ol-more, .ol-chip';
+// Which face the row's corner bubble wears — the outliner's counterpart of paintNode's chipFace, and
+// deliberately its own (simpler) predicate: a row lists a TITLE, never a body, so only children make
+// one foldable, and none of the canvas' kind cases (annotation / image / query / tab group) survive
+// into a flat list. Same two faces and the same lock rule, though:
+//   'count' — folded: the "+N" that's tucked underneath. Shown even on a locked row: information.
+//   'fold'  — open and collapsible: the chevron, revealed on hover or while SELECTED (styles.css).
+//             Withheld when toggleCollapse would refuse it, so the button can never do nothing.
+// While SEARCHING every match is force-unfolded regardless of mm_collapsed (see outlineSearchVisible),
+// so there's no honest state for the bubble to show or toggle — it stays away until the query clears.
+function rowChipFace(n: MindNode, kids: MindNode[], folded: boolean, searching: boolean): '' | 'count' | 'fold' {
+  if (searching || !kids.length) return '';
+  if (folded) return 'count';
+  return isLockedEffective(n) ? '' : 'fold';
+}
 function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false): HTMLElement {
   const folded = searching ? false : isFolded(n);   // search results force-unfold, see outlineSearchVisible
   const showDone = showsDoneCheckbox(n);
   const row = document.createElement('div');
-  // rows carry the card's colour as their background via the shared .c-* classes (like .node).
-  // Deliberately no selection ring here — clicking in the outliner never selects; rows only ever
-  // show colour / fold / done state, nothing selection-shaped.
+  // rows carry the card's colour as their background via the shared .c-* classes (like .node), and
+  // the same selection ring — a row IS selectable now (a plain click, see the click handler below),
+  // which is what reveals its fold chevron on a touch screen that has no hover to offer.
   const col = effectiveColor(n);
-  row.className = `ol-row ${colorClass(col)}` + (showDone && n.done ? ' done' : '') + (n.locked ? ' locked' : '');
+  row.className = `ol-row ${colorClass(col)}` + (showDone && n.done ? ' done' : '') + (n.locked ? ' locked' : '')
+    + (state.sel.has(n.id) ? ' sel' : '');
   applyColorVars(row, col);   // a custom (non-palette) colour carries its hexes inline — see main.ts
   row.dataset.id = n.id;
   row.style.marginLeft = (depth * 14) + 'px';   // indent the whole card, not just its content
 
   // locked card: same corner padlock badge the canvas shows (main.ts) — upper-LEFT, mirroring
-  // .ol-count's upper-right fold bubble so the two never collide on a locked+folded row.
+  // .ol-chip's upper-right fold bubble so the two never collide on a locked+folded row.
   if (n.locked) {
     const lock = document.createElement('span');
     lock.className = 'ol-lock'; lock.title = 'Locked'; lock.innerHTML = LOCK_BADGE_SVG;
@@ -325,14 +345,32 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
     progress.textContent = `${kids.filter(k => k.done).length}/${kids.length}`;
     row.appendChild(progress);
   }
-  if (folded && kids.length) {
-    // straddles the row's top-right corner, same spot/size as the canvas' own hidden-count bubble
-    // (main.ts paintNode) — the only "this is folded, double-click/-tap to expand" indicator now
-    // that there's no disc button.
-    const count = document.createElement('span');
-    count.className = 'ol-count'; count.textContent = String(descendantCount(n.id));
-    count.title = `${descendantCount(n.id)} hidden — double-click to expand`;
-    row.appendChild(count);
+  // The fold bubble: the same control, in the same corner, as a canvas card's (.node .hidden-count) —
+  // a real single-click button, not a badge. Only the face that's actually showing is built, since a
+  // row is recreated from scratch on every render anyway (the canvas bakes both into the element to
+  // keep paintNode off its innerHTML — a per-frame path this one isn't).
+  const face = rowChipFace(n, kids, folded, searching);
+  if (face) {
+    row.dataset.chip = face;   // styles.css keys the reveal off this, exactly like .node[data-chip]
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'ol-chip' + (face === 'count' ? ' wide' : '');
+    if (face === 'count') {
+      const cnt = descendantCount(n.id);
+      chip.innerHTML = `<span class="cnt">+${cnt}</span>`;
+      chip.title = `Expand — ${cnt} hidden`;
+    } else {
+      chip.innerHTML = FOLD_CHIP_SVG;
+      chip.title = 'Collapse';
+    }
+    chip.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} “${n.title}”`);
+    chip.addEventListener('pointerdown', (e) => e.stopPropagation());   // never starts a row drag
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();                                              // …and never selects, either
+      outlineFold.delete(foldKey(n));   // an explicit toggle drops any browsing-only reveal
+      toggleCollapse(n.id);
+    });
+    row.appendChild(chip);
   }
   if (!state.readOnly) {
     const open = document.createElement('button');
@@ -355,42 +393,56 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
       startRowDrag(e, n, row);
     });
   }
-  // double-click / double-tap anywhere on the card folds it (like the disc's single-click toggle,
-  // just a bigger target for the same action) — collapsing is allowed in read-only, so this isn't
-  // gated behind it the way the drag-start above is.
-  row.addEventListener('dblclick', (e) => {
-    if ((e.target as HTMLElement).closest(ROW_CONTROLS) || rowEditId === n.id) return;
-    e.preventDefault();
-    outlineFold.delete(foldKey(n)); toggleCollapse(n.id);
+  // A plain click SELECTS the row — the same single selection the canvas keeps (selectNode, so the
+  // two views agree on what's selected and switching back lands on it). That's the whole reveal
+  // mechanism for the fold chevron on a touch screen: tap the row, tap the bubble. Not gated behind
+  // read-only — selecting isn't an edit, and collapsing is allowed there.
+  // Deliberately NOT a fold gesture any more: folding is the bubble's job alone, which is what a
+  // double-click used to compete with. (In read-only the title's own click still opens the note
+  // sheet; this one rings the row underneath it.)
+  row.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest(ROW_CONTROLS)) return;
+    if (rowEditId === n.id) return;   // placing the caret while renaming, not a selection
+    if (rowClickSuppressed) return;   // the click that ends a drag-reorder — see finish()
+    selectNode(n.id);
   });
-  let lastTap = 0;
-  row.addEventListener('touchstart', (e) => {
-    if ((e.target as HTMLElement).closest(ROW_CONTROLS) || rowEditId === n.id) { lastTap = 0; return; }
-    const now = performance.now();
-    if (e.touches.length === 1 && now - lastTap < 300) {
-      e.preventDefault();   // stop double-tap zoom / a synthetic dblclick firing too
-      outlineFold.delete(foldKey(n)); toggleCollapse(n.id);
-      lastTap = 0;
-      return;
-    }
-    lastTap = now;
-  }, { passive: false });
   return row;
 }
 
+// Clicking the empty space beside/below the rows clears the selection, the same way the canvas
+// background does — without it a row, once tapped, could never be un-ringed.
+outlineScrollEl.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('.ol-row')) return;
+  if (state.selId || state.sel.size) selectNode(null);
+});
+
 // New-card button (floating +): while the single-card editor is open it adds a child of the open
-// card (see addToBranch); in the row list — which carries no selection to be contextual about —
-// it's always a fresh root card. The routed startInlineEdit opens the new card for editing.
+// card (see addToBranch); in the row list it adds a child of the SELECTED row (the same thing Tab
+// does), falling back to a fresh root card when nothing is selected. The routed startInlineEdit
+// opens the new card for editing either way.
 // While search is active (focused or has a query) it doubles as a × that clears/cancels the
 // search instead — the same swap iOS search fields make between their trailing action and Cancel.
 const olAddBtn = document.getElementById('olAddBtn') as HTMLButtonElement;
 const olAddPlus = olAddBtn.querySelector('.ol-add-plus') as HTMLElement;
 function searchIsActive(): boolean { return document.activeElement === olSearchInput || !!outlineQuery; }
+// The card a new one goes UNDER, or null for "make it a root". A LEAF kind can never hold children,
+// so it counts as no target rather than making the button do nothing (only reachable when the
+// selection was made on the canvas — the outliner lists no annotations, and images/queries are
+// leaves too). A LOCKED card deliberately stays the target: addChild refuses it with a status, which
+// is the honest answer — quietly dropping a root card somewhere else instead would not be.
+function addTarget(): MindNode | null {
+  const n = state.selId ? state.nodes.get(state.selId) : null;
+  return n && !isLeafType(n) ? n : null;
+}
 function updateAddBtnMode(): void {
   const active = searchIsActive();
   olAddBtn.classList.toggle('ol-clear-mode', active);
-  olAddBtn.title = active ? 'Clear search' : 'New card — child of the selected card (Tab)';
-  olAddBtn.setAttribute('aria-label', active ? 'Clear search' : 'New card');
+  // The label names the target, since the button's meaning now depends on the selection — and it's
+  // the only place that says so (a phone has no status bar in view).
+  const parent = addTarget();
+  const label = parent ? `New card in “${parent.title}”` : 'New root card';
+  olAddBtn.title = active ? 'Clear search' : label + (parent ? ' (Tab)' : '');
+  olAddBtn.setAttribute('aria-label', active ? 'Clear search' : label);
   olAddPlus.textContent = active ? '×' : '+';
 }
 // A plain tap on this button while #olSearch is focused would otherwise blur the input FIRST
@@ -407,7 +459,10 @@ olAddBtn.onclick = () => {
   if (olAddBtn.classList.contains('ol-clear-mode')) { clearOutlineSearch(); olSearchInput.blur(); return; }
   if (state.readOnly) return;
   if (branchEditorOpen()) { addToBranch(); return; }
-  createNode();
+  const parent = addTarget();
+  if (!parent) { createNode(); return; }
+  unfold(parent);        // the new row has to be visible, whatever the parent's browsing-only fold said
+  addChild(parent.id);   // reveals a collapsed parent, refuses a locked one, then renames in place
 };
 
 // Unfold the hit's ancestors, select it and scroll it into view — the outline counterpart of
@@ -515,6 +570,10 @@ export function reorderSibling(id: string, dir: -1 | 1): void {
 // outrun it, and any repaint would replace the row and break the capture) — same rationale as
 // the ghost-card drag in main.ts. renderOutline is paused while actually dragging.
 let rowDragActive = false;
+// A drag that ends over the row it started on still delivers a click — which would otherwise read as
+// "select this row" the moment you finish reordering. Set at the end of an ENGAGED gesture and
+// cleared on the next tick, i.e. after that click has been dispatched.
+let rowClickSuppressed = false;
 const ROW_DRAG_PX = 4;         // mouse: pixels of movement before a press becomes a drag
 const ROW_LONGPRESS_MS = 350;  // touch: hold time before a press becomes a drag
 const ROW_LONGPRESS_SLOP = 10; // touch: movement past this before the hold fires = a scroll, not a drag
@@ -639,7 +698,9 @@ function startRowDrag(e: PointerEvent, n: MindNode, row: HTMLElement): void {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
     window.removeEventListener('pointercancel', cancel);
-    if (!engaged) return;   // a plain tap/click — nothing was touched, nothing to repaint
+    if (!engaged) return;   // a plain tap/click — nothing was touched, nothing to repaint (it selects)
+    rowClickSuppressed = true;
+    setTimeout(() => { rowClickSuppressed = false; });
     if (scrollRAF) cancelAnimationFrame(scrollRAF);
     rowDragActive = false;
     line.remove();

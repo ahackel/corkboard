@@ -88,7 +88,9 @@ const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 // innerHTML: re-parsing this <svg> for every foldable node on every paint is real work, and paintAll
 // runs per animation FRAME for the length of a resize drag.
 const FOLD_PLUS = '+';
-const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>`;
+// exported: the outliner's rows carry the very same bubble (features/outline.ts), so the chevron is
+// drawn from one glyph rather than two that could drift apart.
+export const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>`;
 // Closed-folder glyph in front of a FOLDED tab group's title (revealed by `.tabs-fold`, styles.css —
 // see foldedTab below). The pill's label is its OPEN TAB's title, so the icon is the only thing that
 // tells "a folder holding tabs" from a plain folded frame; it replaces the old, wordier way of saying

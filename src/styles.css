@@ -1024,7 +1024,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node .hidden-count.wide { width:auto; min-width:16px; padding:0 5px; }
 .node .hidden-count svg { width:11px; height:11px; display:block; }
 /* ── NUMERIC BADGES: centre the DIGITS, not the font's line box ────────────────────────────────
-   Every white pill that holds a number — this chip's "+N", the outline's .ol-count, the grid-size
+   Every white pill that holds a number — this chip's "+N", the outline row's own .ol-chip, the grid-size
    button — was centring its text with `align-items:center`, which centres the text's LINE BOX. That
    box reserves the font's full DESCENT under a "12" that has none, so the digits sat ~1px low in a
    16px pill and the badge read as sagging. Line-height is not the lever it looks like: grow the box
@@ -1036,8 +1036,8 @@ body.grabbing .node .tag-add-btn { display:none !important; }
    the block form for the other two (align-content centres a block's own line box, and neither of
    them holds an icon, so neither needed to be flex). .tag-pill is deliberately left out: an emoji
    has no cap height to trim to. Where text-box is unsupported a badge just keeps the old 1px sag. */
-.node .hidden-count .cnt { text-box:trim-both cap alphabetic; }
-.ol-count, #gridSizeBtn { display:inline-block; text-align:center; align-content:center;
+.node .hidden-count .cnt, .ol-chip .cnt { text-box:trim-both cap alphabetic; }
+#gridSizeBtn { display:inline-block; text-align:center; align-content:center;
   text-box:trim-both cap alphabetic; }
 /* Both faces live in the button permanently (nodeEl bakes the chevron into the template, so paintNode
    never rewrites its innerHTML) — data-chip picks which one is visible, the same single switch that
@@ -1658,20 +1658,30 @@ body.branch-props-open #olCards { padding-bottom:42vh; }
 @media (max-width: 700px)  { .ol-heading { padding-top:calc(24px + env(safe-area-inset-top)); } }
 @media (min-width: 701px)  { .ol-heading { padding-top:16px; } }   /* centres on a 32px #olCloseBtn (fine-pointer --bar-btn) */
 body.ol-editing .ol-heading { display:none; }
-.ol-rows { max-width:640px; margin:0 auto; }
+/* padding-top is the FIRST row's clearance for its corner bubble (.ol-chip hangs 8px above the row):
+   the reserved band above the list was sized for the row itself, and #canvasMenuBtn — the one
+   floating button that stays above the outliner at every width, top-right, i.e. exactly where the
+   bubble sits — was covering it, leaving the top row's fold button unclickable. Rows still scroll UP
+   under the floating buttons (iOS-style); this only clears the resting position. */
+.ol-rows { max-width:640px; margin:0 auto; padding-top:24px; }
 .ol-none { padding:10px 6px; font-size:13px; color:var(--muted); text-align:center; }
 /* Rows read like the canvas cards: same --card palette background (via the shared .c-* classes),
    white text on coloured cards, theme-dependent text on none/white/grey — mirrors .node. */
 /* Content-hugging (no forced min-height) — a list row, not a full-size card. Vertical padding
    sets the row's height (160% of the original compact pass); horizontal padding stays tight so
    the title keeps most of the width. */
-/* position:relative so .ol-count can straddle the top-right corner, like .node .hidden-count on
+/* position:relative so .ol-chip can straddle the top-right corner, like .node .hidden-count on
    the canvas. margin-bottom is deliberately generous — the reorder insert line (.ol-insert) needs
    real room in the gap between rows to read clearly, not squeeze in behind the row above/below. */
 .ol-row { display:flex; align-items:center; box-sizing:border-box; position:relative;
   padding:8px 6px 8px 12px; margin-bottom:12px; cursor:grab;
   border-radius:var(--r-card); background:var(--card, transparent); color:var(--ink); }
 body.readonly .ol-row { cursor:default; }   /* no drag-to-reorder in read-only */
+/* the same ring the canvas card wears (.node.sel) — a row is selectable now, and that selection IS
+   what reveals its fold chevron where there's no hover (see .ol-chip below). Kept off a row being
+   renamed, whose own outline says the same thing louder. */
+.ol-row.sel { box-shadow:0 0 0 2px var(--node-sel); }
+.ol-row.sel:has(.ol-title.editing) { box-shadow:none; }
 .ol-row.done .ol-title { text-decoration:line-through; opacity:.65; }
 .ol-row.flash { animation:ol-flash 1.2s ease-out; }
 @keyframes ol-flash {
@@ -1712,15 +1722,36 @@ body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in 
 .ol-open svg { width:15px; height:15px; display:block; }
 .ol-open:hover { opacity:1; }
 body.readonly .ol-open { display:none; }
-/* hidden-descendant count on a folded row — straddles the top-right corner, matching the canvas
-   chip's counting face (.node .hidden-count.wide: always digits here, so always the wide variant).
-   Unlike the canvas one this is a badge, not a button: the row's own disc is what folds it.
-   Its display + centring come from the numeric-badge rule next to .hidden-count above. */
-.ol-count { position:absolute; right:-8px; top:-8px;
-  box-sizing:border-box; min-width:16px; height:16px; padding:0 5px;
+/* The fold bubble — the canvas card's own corner control (.node .hidden-count), on a row: same spot,
+   same size, same two faces, same single-click behaviour. A perfect 16px circle for the chevron;
+   only the counting face opts into `.wide` and grows for its digits (`right` pins the right edge, so
+   growing leftwards never moves the corner). Digit centring comes from the numeric-badge rule up
+   next to .hidden-count. */
+.ol-chip { position:absolute; right:-8px; top:-8px;
+  box-sizing:border-box; width:16px; height:16px; padding:0;
+  -webkit-appearance:none; appearance:none; border:none; font-family:inherit;
   background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
-  line-height:1; }
-/* locked row: the same padlock badge as the canvas card, upper-LEFT corner — mirrors .ol-count. */
+  line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
+.ol-chip.wide { width:auto; min-width:16px; padding:0 5px; }
+.ol-chip svg { width:11px; height:11px; display:block; }
+/* WHICH face exists is decided in ONE place (features/outline.ts's rowChipFace, via data-chip),
+   exactly like the canvas'. The folded "+N" always shows; the chevron shows on hover, or while the
+   row is SELECTED — that second half is the whole touch story, since a phone has no hover: tap the
+   row, tap the bubble. No `:has(.node:hover)` guard needed here — rows are siblings, never nested. */
+.ol-row[data-chip="count"] > .ol-chip,
+.ol-row[data-chip="fold"]:hover > .ol-chip,
+.ol-row[data-chip="fold"].sel > .ol-chip { display:inline-flex; }
+/* READ-ONLY shows the chevron unconditionally — collapsing is the one thing the mode allows (browsing
+   the help map is nothing else), and tapping a row there opens the note sheet over the list rather
+   than just selecting it, so "select, then press the bubble" isn't a route you can take. Nothing
+   competes for the space either: no drag, no rename, no ⋮/chevron buttons in this mode. */
+body.readonly .ol-row[data-chip="fold"] > .ol-chip { display:inline-flex; }
+/* mid-drag, and while the title is being renamed in place, the chevron is just noise (mirrors the
+   canvas' body.grabbing / .title.editing rules) — a folded row keeps its count, the only thing
+   showing what's tucked underneath. */
+.ol-row.ol-dragging[data-chip="fold"] > .ol-chip,
+.ol-row[data-chip="fold"]:has(.ol-title.editing) > .ol-chip { display:none; }
+/* locked row: the same padlock badge as the canvas card, upper-LEFT corner — mirrors .ol-chip. */
 .ol-lock { position:absolute; left:-8px; top:-8px;
   box-sizing:border-box; width:16px; height:16px;
   color:inherit;
