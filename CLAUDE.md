@@ -115,9 +115,50 @@ tab less its 1px overlap into the border) lower, and its inline height is `n.h` 
 So the tab is at a fixed offset from `n.y` in **both** collapse states — a folded frame is nothing
 but that tab (`.frame-folded`, `isFrameFold`, rounded all round, `nodeH` = `FRAME_TAB_H`, width
 measured), which is why folding no longer moves the title. `FRAME_TAB_H` is **40px** — a normal card's
-padding and title metric, so the tab reads like a collapsed card — and it must equal what the CSS
+padding and title metric, so the tab sits on a collapsed card's metric — and it must equal what the CSS
 actually renders, so the tab's `padding`/`font-size`/`line-height` are pinned in `styles.css` rather
-than inherited from `.node .title`. Two consequences to respect: the tab must
+than inherited from `.node .title`. **A frame is an outline and a label; the ONE filled thing is the
+OPEN TAB.** `.frame-folded.docked.tab-active` paints `--frame-stroke` because that's the sheet at the
+front of the folder, holding the box below — the one place the solid folder-tab shape tells the truth.
+Everything else is a 2px outline in `--frame-stroke` over nothing: an expanded frame's tab (so a lone
+frame reads as a labelled box, not a one-tab group), a folded frame, a folded group's pill — and an
+INACTIVE tab, which is deliberately the same object in the same state as a collapsed frame. The fill is
+what says "open", so there is no faded middle ground (the `.62` opacity inactive tabs used to carry is
+gone: it said "open, but less so", which is not a state a tab has). Four knock-ons:
+- **Both tab states keep ONE box, and `FRAME_TAB_H` is spent two ways.** The active tab fills *behind*
+  its border rather than dropping it (both `--frame-stroke`, so it rasterizes as one solid shape) —
+  widths are MEASURED off the element (`nodeW`), so any padding difference between the states would
+  slide every tab along the strip on each click. `box-sizing` is `border-box` and nothing sets a height,
+  so `padding` + `border` + the 20px line must total 40: `8px/2px` for a pill, and a docked tab drops
+  the bottom border (that edge meets the box) and pays it back as `padding-bottom:10px`. Change one and
+  change the other. (2px, not the box's 4px: at this size a 4px rim eats most of the label.)
+- **A title with no fill under it is inked against what's BEHIND the frame** (`--tab-ink` ← `behindFill`
+  in `main.ts`, set by `paintNode` on every frame), not against the frame's own colour: `var(--ink)`
+  answers "what reads on this fill", which is the wrong question once the fill is gone. `behindFill`
+  walks out through the containers that actually paint one (authorship-tested like `canvasFill`, since
+  `.c-none` is transparent), stops at the open frame, and falls back to the canvas → the map colour →
+  `THEME_BG`. A docked tab starts that walk ABOVE its group — the strip band is not on the group's box —
+  so an inactive tab is inked for the group's own surroundings. The ACTIVE one is the exception that
+  proves it: it has a fill again, so it goes back to `var(--ink)`. The frame's LOCK BADGE takes
+  `--tab-ink` too — it hangs off the tab, on the same surface as the title.
+- **`isFrame` means an EXPANDED frame** (`view/layout.ts` — it tests `!collapsed`), and so, through
+  `isContainer`, does every question built on it. Both of the "outline" rules above have to reach the
+  FOLDED half too, which is why `paintNode` writes `--tab-ink` off the raw `n.type === 'frame'` and
+  `inFrame` bails on `isFrameFold(n)` beside `isContainer(n)`. Get the second one wrong and a folded
+  frame or an inactive docked tab falls through to the plain-card branch and takes the `.frame-child`
+  tint — whose `(0,3,0)` selector out-specifies `.node.frame-folded`'s own `background:none`, so the
+  very tabs meant to read as bare outlines are the ones wearing a washed-out fill.
+- **A folded group's outline is its OPEN TAB's colour**, which is why `effectiveColor` redirects a tabs
+  frame to `activeTab` unconditionally rather than only while expanded: the pill already wears that
+  tab's title (`foldedTab`), so anything else would have one pill showing two tabs' identities. The
+  knock-on is deliberate — the colour picker on a folded group still writes the GROUP (`actionTarget`
+  doesn't redirect while folded), which now shows only when the open tab inherits, exactly as it does
+  on an expanded one.
+- **Only a TAB GROUP squares its top-left corner** (`.node.frame.tabs.has-tabs`, mirrored onto the
+  content wrapper by `frameContentEl`). That square existed so a tab's straight left side met the box
+  flush; an untabbed frame has no shape up there any more, so it's rounded all round like every other box.
+
+Two more consequences to respect: the tab must
 stay a single ellipsised line (a wrapping one would make the box's position depend on a live
 measurement — hence the hover tooltip in `paintNode` instead), and the vertical projection of a hosted
 child into its host goes through `frameInsetY` (`view/layout.ts`) rather than a bare
@@ -205,9 +246,10 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   dropped cards (`features/drag.ts`), `addChild`/`createSibling` and paste (`contentParent`). It has no
   COLOUR of its own either: `effectiveColor` starts the walk at the open tab, so the box (its border, its
   incoming edge, its outline swatch) is tinted by whichever tab is showing — which is also why
-  `dockFrames` doesn't copy the target's colour onto the group. Unconditionally, and a colour authored on
-  the group is *not* an override: the walk continues from the tab THROUGH the group, so it just stands in
-  for any tab that inherits. The two also ring as one shape when either is selected — `selJoin` hands the
+  `dockFrames` doesn't copy the target's colour onto the group. Unconditionally — FOLDED as well, where
+  the pill's outline is the open tab's colour to match the open tab's title it's already showing — and a
+  colour authored on the group is *not* an override: the walk continues from the tab THROUGH the group,
+  so it just stands in for any tab that inherits. The two also ring as one shape when either is selected — `selJoin` hands the
   other half the ring (`.sel-join`), the tab's being three-sided like a plain frame's own tab.
 - **A group doesn't exist from the user's side** — there are just tabs, one of them open. So a user-facing
   action on a selected group lands on the OPEN TAB via `actionTarget`: its colour + checklist (the

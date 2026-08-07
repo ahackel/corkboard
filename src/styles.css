@@ -446,8 +446,11 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    the badge moves 4px left and 43px up from the box corner (that 39 + the tab's own 4px offset from
    the padding box). z-index matches the tab's: a frame is not a stacking context,
    so without it the badge would be occluded by the edges layer and the cards the frame holds.
-   A FOLDED frame IS the tab and sits at the bounds top already — it keeps the offsets above. */
-.node.frame > .lock-badge { left:-12px; top:-51px; z-index:5; }
+   A FOLDED frame IS the tab and sits at the bounds top already — it keeps the offsets above.
+   …and its ink follows the TITLE's rather than the box's (--tab-ink, see the tab rule below): it hangs
+   off the tab, outside the box, so it's on the same surface the title is and its "colour inherited from
+   the card so it always matches the title text" promise above only holds if it's measured there too. */
+.node.frame > .lock-badge { left:-12px; top:-51px; z-index:5; color:var(--tab-ink, var(--ink)); }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
 /* z-index:auto paints it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
    (z-index:2) — a positioned `auto` element paints in the same step as z-index:0, in tree order.
@@ -462,9 +465,12 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node.frame, .node.stack { z-index:auto; min-height:0; border-radius:var(--r-card);
   border:4px solid var(--frame-stroke, var(--edge)); }
 /* (Both are on --r-card like every other box kind; their rows/contents step down to --r-inner.) */
-/* …except a frame's TOP-LEFT corner, which is square so the title tab sitting on it lines up flush
-   with the box's left edge (a rounded corner left the tab's straight left side floating off it). */
-.node.frame { border-top-left-radius:0; }
+/* …except a TAB GROUP's top-left corner, which is square so the first docked tab sitting on it lines
+   up flush with the box's left edge (a rounded corner left the tab's straight left side floating off
+   it). Only a group: an untabbed frame's own title paints no shape any more (see the tab rule below),
+   so there's nothing up there for the corner to meet, and squaring one corner of an otherwise rounded
+   box just read as a chip out of it. `has-tabs` is set by paintNode. */
+.node.frame.tabs.has-tabs { border-top-left-radius:0; }
 /* no padding: a frame shows nothing but its (absolutely positioned) title tab — the padding only
    ever positioned the title back when it sat INSIDE the box. Children are placed by main.ts place()
    relative to the interior (frameInterior), which counts the border only. */
@@ -478,10 +484,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node.stack { padding:6px; }
 .node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
 /* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
-   Its title needs no rule of its own: .c-none's --ink is var(--text), which is legible both on the
-   canvas showing through the box and on the grey --edge fill of a colourless frame's TAB (see
-   below) — where white would be too weak. A COLOURED frame's tab is filled with --frame-stroke,
-   i.e. the pure palette hex, which is the very colour its --ink was computed against. */
+   Its title needs no rule of its own either way: an untabbed frame's tab has no fill at all (see
+   below), so its title sits on whatever the tab hangs over, and .c-none's --ink is var(--text) —
+   legible on the canvas in both themes. */
 .node.frame.c-none, .node.stack.c-none { background:transparent; }
 /* …and a coloured STACK sits one tone DOWN from that fill, so its box is always its own shape. A
    stack inherits its colour from its ancestors (effectiveColor), so a stack inside a coloured frame
@@ -515,20 +520,29 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    weight as a collapsed card. The line-height is written out rather than inherited from .node .title
    on purpose: it must be pinned HERE, or a later tweak to the card title would silently desync
    FRAME_TAB_H from what actually renders. */
+/* An UNTABBED frame's title carries no fill: it's a LABEL on the box, not a tab. The filled folder-tab
+   shape is what says "this is one sheet of several", so it belongs to the two places that really are
+   tabs — a DOCKED tab and a folded frame's pill (both .frame-folded, further down) — and a lone frame
+   showing the same shape read as a one-tab group that wasn't one.
+   The ink can't stay var(--ink): that's computed against the frame's own FILL (white on a blue card),
+   and with the tab's fill gone the title hangs over whatever is BEHIND the frame instead. So it takes
+   --tab-ink — white or dark, measured against that surface by paintNode (see behindFill in main.ts),
+   the same two inks and the same contrast rule every card's text goes through.
+   The geometry below is unchanged from when the tab was filled — the tab still occupies exactly
+   FRAME_TAB_H, which the whole frame is measured from, and the lock badge and selection ring hang off
+   the same offsets. */
 .node.frame > .title-row {
-  /* +3px, not +4px (FRAME_BORDER): the tab's bottom row overlaps the box's top border by 1px. Butted
-     exactly edge-to-edge, the two shapes rasterize on a fractionally-scaled layer (any non-integer
-     canvas zoom) with a hairline of canvas showing between them. The overlap is invisible — the tab
-     fill and the border are both var(--frame-stroke) — and the tab still needs only 39px of room
-     above the box, inside FRAME_TAB_H. */
+  /* +3px, not +4px (FRAME_BORDER): the tab's bottom row overlaps the box's top border by 1px, which is
+     what kept a hairline of canvas from showing between the two fills on a fractionally-scaled layer
+     (any non-integer canvas zoom). Nothing overlaps anything now, but this is also the 39px that leaves
+     the tab inside FRAME_TAB_H — so it stays, and the title doesn't move. */
   position:absolute; left:-4px; bottom:calc(100% + 3px);
   z-index:5;                    /* over #edges (1), cards (2), #dragEdges (4); under .dragging (6) */
   max-width:calc(100% + 8px); align-items:center;
-  /* --r-card, not a literal: the tab is modelled on a collapsed card (its padding and title metric
-     are the card's too), so its corners must track the card radius rather than drift from it. Only
-     the TOP corners are rounded — the bottom pair is where the tab joins the box. */
-  padding:10px 12px; border-radius:var(--r-card) var(--r-card) 0 0;
-  background:var(--frame-stroke, var(--edge)); }
+  /* padding is a normal card's own (see FRAME_TAB_H above) — it's what makes the label's text metric
+     line up with a collapsed card's, and half of the 40px. No border-radius: with no fill there's no
+     shape to round, and the selection ring carries its own (::before below). */
+  padding:10px 12px; color:var(--tab-ink, var(--ink)); }
 .node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
   margin-bottom:0; padding-right:0; font-size:14px; line-height:20px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -539,7 +553,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    only on three sides: the tab's BOTTOM edge is where it joins the box, so a ring there would cut a
    line straight through the middle of one continuous shape. Hence a pseudo-element with
    border-bottom:none rather than a box-shadow ring (which can only go all the way round); it sits
-   2px outside the tab, so its radius is the tab's own (--r-card) plus those 2px. */
+   2px outside the tab, so its radius is --r-card plus those 2px. (The tab paints no shape of its own
+   any more, so this ring is the only place the folder outline is drawn — it still tracks the card
+   radius, since that's what the box below it is rounded to.) */
 /* (.frame and .frame-folded are mutually exclusive — a folded frame IS the tab, so it just takes the
    ordinary four-sided .node.sel ring.) */
 .node.frame.sel > .title-row::before {
@@ -554,14 +570,27 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* Folding hides the box, not the title: the element IS the tab now (no .frame class, so none of the
    box rules above apply), which is why it sits at the bounds top — exactly where the expanded frame's
    tab hangs — and the title doesn't move a pixel when you fold or unfold. The element carries the
-   tab's own fill/padding/radius and shrink-wraps its (single-line) title, so its .title-row goes back
-   in flow; main.ts nodeW measures that width and nodeH reports the FRAME_TAB_H constant. The bottom
-   corners are rounded here (the expanded tab squares them off where it joins the box). */
+   padding/radius and shrink-wraps its (single-line) title, so its .title-row goes back in flow;
+   main.ts nodeW measures that width and nodeH reports the FRAME_TAB_H constant.
+   OUTLINED, not filled — the same rule the expanded frame's label follows: a frame that's showing on
+   its own is an outline and a label, never a solid folder-tab shape. What's left of a folded frame is
+   that outline, in its own colour, so it still reads as the box it stands for rather than as a card.
+   Its ink comes from behindFill like the expanded label's, since the canvas shows straight through it.
+   This is also EVERY docked tab's resting state (below): the one surface that fills is the tab that's
+   OPEN, and it fills behind this same border rather than replacing it.
+   The border is what makes the 40px arithmetic delicate: box-sizing is border-box and nothing sets a
+   height here (nodeH just asserts FRAME_TAB_H), so the rendered height is 20px of line + padding +
+   border and the three MUST still total FRAME_TAB_H — 8 + 20 + 8, plus 2 top and bottom. (A docked tab
+   drops the bottom border and pays it back as padding; same 40.) 2px, not the box's 4px: at this size a
+   4px rim eats most of the label.
+   Rounded all round, since a folded frame stands alone (a DOCKED tab squares off the bottom pair
+   below, where it sits on its group's box). */
 .node.frame-folded {
-  border:none; min-height:0; padding:10px 12px; border-radius:var(--r-card);
+  border:2px solid var(--frame-stroke, var(--edge)); min-height:0; padding:8px 10px;
+  border-radius:var(--r-card);
   width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling, at
                                            exactly the same 176px text column as a collapsed card */
-  background:var(--frame-stroke, var(--edge)); }
+  background:none; color:var(--tab-ink, var(--ink)); }
 .node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
 /* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
 .node.frame-folded > .body, .node.frame-folded .progress { display:none; }
@@ -581,7 +610,20 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* A docked tab reuses the folded-frame look above — the element IS the tab, at exactly FRAME_TAB_H,
    and its max-width already ellipsises a long title. EVERY tab squares off its bottom corners: they all
    sit ON the box, so a rounded bottom would float them off it (a folded frame, which stands alone, keeps
-   its pill shape). The open one is what the box belongs to, so it alone shows at full strength. */
+   its pill shape).
+   THE FILL IS WHAT SAYS "OPEN". Only the active tab paints one (see .tab-active below) — it's the sheet
+   at the front of the folder, and it's the one the box below belongs to. Every other tab is the plain
+   OUTLINE every frame showing on its own wears: not a faded fill, an absent one, so an inactive tab and
+   a collapsed frame are the same object in the same state. That's also what retired the .62 opacity
+   this rule used to carry — fading a fill said "open, but less so", which is not a state a tab has.
+   BOTH STATES KEEP ONE BOX, which is what stops the strip re-flowing when you switch tabs: the active
+   tab doesn't drop the border, it fills behind it (border and fill are both --frame-stroke, so it
+   rasterizes as one solid shape). Widths come from measuring the element (nodeW), so any padding
+   difference between the two states would slide every tab along the strip on each click.
+   The BOTTOM border goes, in both states, for the reason the selection ring below also drops its bottom
+   edge: that edge is where the tab meets the box, and a line across it closes the tab into a rectangle
+   sitting ON the box rather than an outline continuous with it. The 2px is paid back as padding, or the
+   tab renders 38px and no longer fills the strip band FRAME_TAB_H sizes. */
 /* z-index:auto is what makes "tucked behind the front of the folder" actually true. The strip has no
    z-index of its own precisely so tree order decides between a tab and the box (main.ts tabStripEl
    keeps the strip right BEFORE the box) — but a tab is a .node, and `.node { z-index:2 }` was still
@@ -589,19 +631,28 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    then looked chopped into pieces wherever a tab crossed it. Reset to auto and the box paints after
    them, running its border and ring across the top of the sheets behind it. The open tab lifts back
    above with its own z-index below. */
-.node.frame-folded.docked { opacity:.62; z-index:auto; border-bottom-left-radius:0; border-bottom-right-radius:0; }
+.node.frame-folded.docked { z-index:auto;
+  border-bottom:none; padding-bottom:10px;
+  border-bottom-left-radius:0; border-bottom-right-radius:0; }
 /* A tab's selection ring stops where the tab meets the box: a line along its BOTTOM edge would cut
    straight through one continuous shape (exactly the reasoning behind a frame's own tab ring above).
    box-shadow can only ring all four sides, so a selected tab swaps it for a three-sided pseudo-element
    — 2px outside the tab, hence its radius is the tab's own plus those 2px, and 1px up at the bottom so
-   the verticals stop at the box's outer top edge instead of poking into its border. */
+   the verticals stop at the box's outer top edge instead of poking into its border.
+   -4px, not -2px, and that difference is the tab's own BORDER: an absolutely positioned child resolves
+   its offsets against the PADDING box, which on a 2px-bordered tab is 2px inside the shape being rung.
+   At -2px the ring landed exactly ON that border — 2px inside where the box's own box-shadow ring sits,
+   so the body's outline read as shifted outwards from the tab's — and its radius, --r-card + 2, was
+   then 2px too round for the corner it was drawn on. -4px puts it back 2px OUTSIDE the border box,
+   where both the radius and the box's ring already expect it. (`bottom` needs no such correction: a
+   docked tab has no bottom border, so its padding box ends where its border box does.) */
 /* `sel-join`: the box and its open tab are one frame, so selecting either rings BOTH — the tab gets the
    three-sided ring below, the box its ordinary one, and since the tab paints over the box's top edge the
    two meet as one folder outline (exactly how a plain frame's box + tab already ring together). */
 .node.frame.tabs.sel-join { box-shadow:0 0 0 2px var(--node-sel); }
 .node.frame-folded.docked.sel, .node.frame-folded.docked.sel-join { box-shadow:none; }
 .node.frame-folded.docked.sel::before, .node.frame-folded.docked.sel-join::before {
-  content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
+  content:''; position:absolute; inset:-4px -4px 1px -4px; pointer-events:none;
   border:2px solid var(--node-sel); border-bottom:none;
   border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
 /* …and it stands down while the tab is being renamed, like every other card's ring */
@@ -612,9 +663,16 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    for a related reason: on a label this narrow it lands on the title itself (and a frame — docked or
    not — never shows a body anyway). */
 .node.frame-folded.docked .addnote { display:none !important; }
-/* the open tab is the front of the folder: over the box, over #edges (1) and the cards (2) — the same
-   z-index a frame's own title tab takes, and for the same reasons */
-.node.frame-folded.docked.tab-active { opacity:1; z-index:5; }
+/* The open tab is the front of the folder, and the ONE frame surface that's filled: the solid
+   folder-tab shape tells the truth here and nowhere else — several sheets in one folder, this one in
+   front, holding the box below. Filled BEHIND its border rather than instead of it (see above), both in
+   --frame-stroke, so the two rasterize as one shape and the tab keeps the same box as its neighbours.
+   Its ink goes back to var(--ink) with the fill: --tab-ink measures against what's behind the FRAME,
+   which is the right question only while nothing is painted in between.
+   z-index over the box, over #edges (1) and the cards (2) — the same z-index a frame's own title tab
+   takes, and for the same reasons. */
+.node.frame-folded.docked.tab-active { z-index:5;
+  background:var(--frame-stroke, var(--edge)); color:var(--ink); }
 /* A group with tabs shows NO tab of its own: it would sit in the same band, look exactly like a tab,
    and read as one — two docked frames must show two tabs, not three. So the strip starts at the box's
    left edge and the group's own title lives in the outline and in search only (folded, the pill shows
@@ -666,8 +724,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    the frame's own element underneath instead of this invisible wrapper. */
 /* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
 .frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
-/* follow the box's square top-left corner (above) so the clip edge doesn't curve away from it */
-.frame-content:not(.stack-content) { border-top-left-radius:0; }
+/* follow the box's square top-left corner (above) so the clip edge doesn't curve away from it — which
+   is now a TAB GROUP's corner only, so the wrapper mirrors the node's own `has-tabs` (frameContentEl) */
+.frame-content.has-tabs { border-top-left-radius:0; }
 /* a stack's wrapper auto-fits its outline, so it never needs to clip — and mustn't, or it would cut
    off its rows' overhanging corner affordances (+N count / lock badges). See frameContentEl. */
 .frame-content.stack-content { overflow:visible; }

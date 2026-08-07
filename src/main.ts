@@ -326,7 +326,13 @@ export function effectiveColor(n: MindNode): string {
   // here). Unconditionally, since from the user's side there IS no group to have a colour of its own; a
   // colour authored on the group still shows through, because the walk continues from the tab THROUGH
   // the group, so it stands in for any tab that inherits.
-  if (isTabsFrame(n) && !n.collapsed) n = activeTab(n) ?? n;
+  // FOLDED too, which is where "unconditionally" earns its keep: the pill left behind already wears the
+  // open tab's TITLE (foldedTab), so its outline has to be that tab's colour or the one thing on screen
+  // would be showing two different tabs' identities at once. The knock-on is deliberate — the colour
+  // picker on a folded group still writes the GROUP (actionTarget doesn't redirect while folded), which
+  // now shows only when the open tab inherits. That's the same rule the expanded group follows, where a
+  // tab's own colour likewise beats the group's.
+  if (isTabsFrame(n)) n = activeTab(n) ?? n;
   const drag = ui.drag;
   let previewId: string | null = null;
   let previewParent: MindNode | null | undefined;
@@ -514,6 +520,15 @@ export function paintNode(n: MindNode): void {
   const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isQueryBox(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
+  // A frame's title paints on no fill of its own (styles.css: neither the tab nor the folded pill has
+  // a background), so its ink can't be the --ink its own colour demands — it's measured against
+  // whatever shows through behind the frame. Frames only; nothing else has a tab. Removed again on the
+  // other side, exactly as --frame-stroke is, so a retyped frame doesn't keep a stale one.
+  // The raw type, NOT isFrame: that one means "an EXPANDED frame" (it tests !collapsed), so it misses
+  // precisely the half that needs this most — every folded frame and every inactive docked tab, which
+  // then fell back to var(--ink) and inked a bare outline for a fill that isn't painted.
+  if (n.type === 'frame') el.style.setProperty('--tab-ink', inkFor(behindFill(n)));
+  else el.style.removeProperty('--tab-ink');
   el.className = 'node ' + colorClass(col)
     + (isFrameBox(n) ? ' frame' : '')
     + (isStack(n) ? ' stack' : '')
@@ -907,8 +922,15 @@ function inStack(n: MindNode): boolean {
 // containerHost again, and here it MATTERS rather than merely reading better: an OPEN frame hosts no
 // elements, so hostFrame would drop the tint from exactly the cards that need it most — the ones on a
 // canvas now painted the frame’s own fill (syncCanvasBackground), which they’d otherwise vanish into.
+// isFrameFold sits beside isContainer because isContainer routes through isFrame, and isFrame means an
+// EXPANDED frame (it tests !collapsed). So a FOLDED frame — and every INACTIVE DOCKED TAB, which is a
+// collapsed frame — fell through to the plain-card branch and took the .frame-child tint. That's not a
+// near miss: .node.frame-child's (0,3,0) background out-specifies .node.frame-folded's own
+// `background:none`, so exactly the tabs that are meant to read as bare outlines were the ones wearing
+// a washed-out fill (the active tab, being expanded, was fine — which is what made it look like an
+// inactive-tab opacity bug). Together the two tests mean "a frame in any state".
 function inFrame(n: MindNode): boolean {
-  if (isContainer(n) || isImageBox(n) || isQueryBox(n) || isAnnotation(n)) return false;
+  if (isContainer(n) || isFrameFold(n) || isImageBox(n) || isQueryBox(n) || isAnnotation(n)) return false;
   const h = containerHost(n);
   return !!h && isFrame(h);
 }
@@ -1119,6 +1141,10 @@ function frameContentEl(f: MindNode): HTMLElement {
   // its rows' corner affordances (the +N count / lock badges that overhang the card edge). Mark its
   // wrapper so CSS lets those overhang (overflow:visible); a resizable frame keeps overflow:hidden.
   w.classList.toggle('stack-content', isStack(f));
+  // …and mirror the node's own `has-tabs`: a TAB GROUP's box squares its top-left corner off under the
+  // first tab (styles.css), so its clip has to stop curving there too. Only a group — an untabbed
+  // frame is rounded all round now.
+  w.classList.toggle('has-tabs', isTabsFrame(f) && tabsOf(f).length > 0);
   const box = frameInterior(f);
   // Position from paintPos, not box.x/box.y: mid-drag the wrapper's left/top must stay frozen at the
   // frame's origin, since applyDragTransform mirrors the box's own transform onto it. Its SIZE comes
@@ -1918,6 +1944,32 @@ export function canvasFill(): string | null {
   if (!owner) return colorFill(state.canvasColor);
   return hasAuthoredColor(owner) ? colorFill(effectiveColor(owner)) : null;
 }
+// The fill a frame's TITLE is really sitting on — the one input its ink is measured against. A frame
+// paints no background behind its title any more (styles.css: the tab is a bare label, the folded pill
+// an outline), so var(--ink) is the wrong answer twice over: it's computed against the frame's OWN
+// fill, which isn't there, and the surface that IS there belongs to something else entirely.
+// The nearest CONTAINER that actually paints a fill, else the canvas — an open frame's colour, the
+// map's, or the theme's own background. A walk rather than one step because only an AUTHORED colour
+// paints at all (the same test canvasFill makes: effectiveColor falls back to the theme's neutral card
+// fill for a frame nobody coloured, but .c-none renders transparent, so what's behind an uncoloured
+// container is whatever is behind IT).
+// A stack's own fill is a shade darker than what's read here (styles.css steps it 86% toward black);
+// left un-stepped deliberately, since darkening only moves a fill further from the light ink and so
+// can never change which of the two inks wins.
+export function behindFill(n: MindNode): string {
+  // A DOCKED TAB's label sits in the strip band ABOVE its group's box, never on it, so the group's own
+  // fill is not what shows through behind it — start the walk at whatever hosts the GROUP.
+  let h = containerHost(n);
+  if (h && isDockedTab(n)) h = containerHost(h);
+  for (; h; h = containerHost(h)) {
+    const fill = hasAuthoredColor(h) ? colorFill(effectiveColor(h)) : null;
+    if (fill) return fill;
+    // Stop at the OPEN frame: nothing outside it is painted, so an ancestor's fill would be a surface
+    // that isn't on screen. Its own colour is on the canvas below anyway (syncCanvasBackground).
+    if (isScopeRoot(h)) break;
+  }
+  return canvasFill() ?? THEME_BG;
+}
 // The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
 // leaves it either invisible or harsh. So re-derive --grid-pat from the fill that's really behind it,
 // by the theme's own 55/45 recipe with the fill standing in for --grid and, for --text, the direction
@@ -1969,6 +2021,13 @@ export const PALETTE = ['slate','red','amber','green','teal','blue','violet','pi
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
 const SWATCH_KEYS = PALETTE;
 export const SWATCH_BG: Record<string, string> = Object.fromEntries(SWATCH_KEYS.map(c => [c, pal(c)]));
+// The canvas's own THEME fill, read and cached exactly like the palette above (and re-read by
+// refreshPalette on a theme toggle — this one really does differ per theme). It's behindFill's last
+// resort: what a frame's title sits on when neither a container nor the map has a colour of its own.
+// Cached rather than read live because behindFill runs per frame per paint, and paintAll runs once an
+// animation frame for the length of a resize drag.
+const themeBg = (): string => getComputedStyle(document.body).getPropertyValue('--bg').trim();
+let THEME_BG = themeBg();
 // ---------- ink: the text colour each palette fill demands ----------
 // Ink is COMPUTED from the fill (utils/ink.ts — WCAG contrast, biased toward the map's default
 // light ink), never authored, which is the point: the old scheme spelled out per-colour text
@@ -2025,6 +2084,7 @@ export function applyColorVars(el: HTMLElement, c: string): void {
 // is effectiveColor's own fallback (an uncoloured card, an annotation's default) and .c-none's ink.
 export function refreshPalette(): void {
   for (const c of SWATCH_KEYS) SWATCH_BG[c] = pal(c);
+  THEME_BG = themeBg();   // …and this one is genuinely per-theme — behindFill's fallback surface
   deriveInk();
   refreshSwatches();
   paintAll();
