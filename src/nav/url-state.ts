@@ -6,7 +6,11 @@
 // is checked against the currently open map's name; opening a DIFFERENT map from a link
 // isn't wired up yet (that needs boot.ts's map-switching flow) — a later slice.
 //
-// Shape: #/<map-slug>/<node-file-path>?mode=outline&x=&y=&k=&q=&ro=1
+// Shape: #/<map-slug>/<node-file-path>?mode=outline&open=&x=&y=&k=&q=&ro=1
+//
+// `open` is the frame you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
+// navigable VIEW state like mode=outline rather than identity. Only the INNERMOST level is carried;
+// the crumb path above it is rebuilt from the tree (openPathTo), so there's nothing to keep in sync.
 // The path carries IDENTITY (which map, which node); the query string carries VIEW STATE
 // (mode/camera/search/read-only) — all of it ephemeral: none of these fields are ever
 // written back to a note's frontmatter, they only ever flow FROM state INTO the URL.
@@ -18,7 +22,8 @@
 // ============================================================
 import { state } from '../core/state.js';
 import { store } from '../data/persistence.js';
-import { selectNode, applyReadOnly } from '../main.js';
+import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
+import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
 import { outlineActive, setOutline } from '../features/outline.js';
 import { searchBox, openSearch, runSearch } from '../features/search.js';
@@ -50,6 +55,8 @@ function buildHash(): string {
   if (node?.file) parts.push(encodeFilePath(node.file));
   const params = new URLSearchParams();
   if (outlineActive()) params.set('mode', 'outline');
+  const open = scopeRootFile();
+  if (open) params.set('open', encodeFilePath(open));
   params.set('x', Math.round(state.view.x).toString());
   params.set('y', Math.round(state.view.y).toString());
   params.set('k', state.view.k.toFixed(2));
@@ -102,12 +109,18 @@ export function applyUrlFromHash(): void {
 
   applying = true;
   try {
+    const params = new URLSearchParams(queryPart);
+    // The SCOPE goes first, ahead of both the selection and the camera. Ahead of the selection
+    // because isSelectable refuses an out-of-scope id, so the node has to be validated against the
+    // scope it's in; ahead of the camera because restoring the scope would otherwise fit over the
+    // pan/zoom the URL explicitly asked for (hence restoreScopeFromFile's own no-camera contract).
+    const open = params.get('open');
+    restoreScopeFromFile(open ? decodeFilePath(open) : null);
     if (pathSegs.length) {
       const file = decodeFilePath(pathSegs.join('/'));
       const target = [...state.nodes.values()].find(n => n.file === file);
       if (target) selectNode(target.id);
     }
-    const params = new URLSearchParams(queryPart);
     if (params.get('mode') === 'outline' && !outlineActive()) setOutline(true, false);
     const x = Number(params.get('x')), y = Number(params.get('y')), k = Number(params.get('k'));
     if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(k) && k > 0) {

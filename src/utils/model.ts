@@ -2,6 +2,7 @@
 // The tree is DERIVED from each node's `parent` (no stored edge list). These queries
 // walk that live structure in state.nodes.
 import { state, type MindNode } from '../core/state.js';
+import { scope } from '../nav/scope.js';
 
 export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
@@ -16,16 +17,31 @@ export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
   return [...state.nodes.values()].filter(n => isRoot(n) && (!keep || keep(n)))
     .sort((a, b) => a.y - b.y || a.x - b.x || (a.file ?? a.title).localeCompare(b.file ?? b.title));
 }
-// A node's `collapsed` flag means "this branch is folded": the node ITSELF and all
-// `collapsed` on a node hides its CHILDREN but keeps the node itself visible (outliner
-// model). So a node is hidden only if one of its ANCESTORS is collapsed.
+// THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both.
+//
+//  1. FOLD (persisted, mm_collapsed): `collapsed` on a node hides its CHILDREN but keeps the node
+//     itself visible (outliner model), so a node is hidden iff one of its ANCESTORS is collapsed.
+//  2. SCOPE (ephemeral, nav/scope.ts): while a frame is OPEN, only what's inside it is on the
+//     canvas. Reaching the open frame on the way up means we're inside it; running out of
+//     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS
+//     the open frame, which is precisely what stops its box, border, tab and fill from being
+//     painted. No per-kind CSS, no second predicate.
+//
+// Nothing writes through this function. That matters: term 1 is backed by a saved flag while term 2
+// must never touch disk, and the only mover keyed on isHidden is layoutSubtree — which applyLayouts
+// confines to the current scope, so opening a frame can't dirty a file outside it.
+// The open frame is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
+// own collapsed flag nor anything above it can hide what's inside — which is also what lets a frame
+// buried in a folded branch be opened from a URL and still show its contents.
 export function isHidden(n: MindNode): boolean {
+  const scopeId = scope.rootId;            // null in the overwhelmingly common case
   let p = n.parent ? state.nodes.get(n.parent) : undefined;
   while (p){
+    if (p.id === scopeId) return false;
     if (p.collapsed) return true;
     p = p.parent ? state.nodes.get(p.parent) : undefined;
   }
-  return false;
+  return scopeId !== null;
 }
 // The visible card standing in for n: n itself when it's shown, otherwise its nearest
 // ancestor that is still visible. Search uses this to highlight the first visible parent
@@ -37,7 +53,10 @@ export function firstVisible(n: MindNode): MindNode {
     if (!isHidden(p)) return p;
     p = p.parent ? state.nodes.get(p.parent) : undefined;
   }
-  return n; // unreachable: the root is always visible
+  // A root is always visible, so the walk resolves — EXCEPT for a node outside the open frame,
+  // whose ancestors are hidden all the way up. Search filters those out before it ever asks
+  // (features/search.ts), so the fallback is only a backstop, not a case anyone relies on.
+  return n;
 }
 export function descendantCount(id: string): number {
   let c = 0; for (const ch of childrenOf(id)) c += 1 + descendantCount(ch.id); return c;

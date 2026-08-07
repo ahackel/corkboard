@@ -7,6 +7,7 @@ import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, takenTitles, isLockedEffective, subtreeHasLocked, isAncestor } from '../utils/model.js';
 import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
+import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H } from '../main.js';
 import { startInlineEdit } from './inline-edit.js';
@@ -44,14 +45,19 @@ interface CreateOpts {
 }
 export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   if (state.readOnly) return;
-  if (opts.parent) {
-    const p = state.nodes.get(opts.parent);
+  // No parent asked for means "the top level", and while a frame is OPEN its interior IS the top
+  // level (detachParentId, nav/scope.ts) — a genuine root would land outside the scope and simply
+  // vanish. That's what makes this ONE line cover every create path: the canvas double-click, Space,
+  // both "New card here" menus, an annotation with nothing selected, a paste, a dropped image.
+  const parentId = opts.parent ?? detachParentId();
+  if (parentId) {
+    const p = state.nodes.get(parentId);
     if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return; }
   }
   const c = centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
   const n = mkNode({
     x: opts.x ?? c.x, y: opts.y ?? c.y,
-    parent: opts.parent ?? null,
+    parent: parentId,
     title: opts.title ?? (opts.type === 'annotation' ? uniqueTitle('Annotation') : newCardTitle()),
     color: opts.color ?? '',
     tags: opts.tags ? [...opts.tags] : [], body: opts.body ?? '',
@@ -80,7 +86,9 @@ export function createAnnotationHere(x: number, y: number): MindNode | undefined
 // deletes it on cancel). Kept save-free so an abandoned drag never writes a file.
 export function createDetachedNode(x: number, y: number): MindNode | undefined {
   if (state.readOnly) return;
-  const n = mkNode({ x, y, parent:null, title: newCardTitle() });
+  // …parented to the open frame while there is one, so the ghost card rides the ordinary frame-child
+  // machinery instead of being dragged onto a canvas that can't show it.
+  const n = mkNode({ x, y, parent: detachParentId(), title: newCardTitle() });
   state.nodes.set(n.id, n);
   paintAll();   // give the card a DOM element so it can be dragged
   return n;

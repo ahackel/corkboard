@@ -14,16 +14,16 @@
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, esc } from './utils/markdown.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
-import { childrenOf, isHidden, rootsInOrder, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked } from './utils/model.js';
+import { childrenOf, isHidden, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
-import { mountIcons, FOLDER_PATH } from './view/icons.js';
+import { mountIcons, FOLDER_PATH, FOLDER_SVG } from './view/icons.js';
 import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
-import { zoomAt, frameBox, revealInView, screenToWorld } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, frameFlow, isStack, isFrame, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, orderedKids, actionTarget } from './view/layout.js';
+import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim } from './view/camera.js';
+import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -34,7 +34,7 @@ import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from
 import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
 import { refreshSwatches } from './features/properties.js';
-import { syncFloatBar, autoSizeSelection, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
+import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
 import { toggleSketchMode } from './features/sketch.js';   // also registers the sketch toolbar wiring
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
@@ -44,6 +44,8 @@ import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode, EdgeStyle } from './core/state.js';
 import { ui, isTypingInField, type Pt, type Drag } from './core/ui-state.js';
 
@@ -96,8 +98,8 @@ export const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="curre
 // tells "a folder holding tabs" from a plain folded frame; it replaces the old, wordier way of saying
 // so — the minted group title used to be suffixed "… tabs", which the pill then read out. Baked into
 // nodeEl like the chip's chevron, for the same reason: paintNode never touches this <svg>.
-// Same shape as the frame kind/layout chips, from the one path they share (FOLDER_PATH).
-const FOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FOLDER_PATH}</svg>`;
+// Same shape as the frame kind/layout chips and the open-frame crumbs, from the one glyph they all
+// share (FOLDER_SVG, view/icons.ts).
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
@@ -194,7 +196,9 @@ function nodeEl(n: MindNode): HTMLElement {
     const more = target.closest('.qi-more') as HTMLElement | null;
     if (more) { const r = more.getBoundingClientRect(); openQueryItemMenu(m, r.left, r.bottom + 4); return; }
     if (target.closest('.qi-done')) return;   // handled by the change listener below
-    selectNode(m.id); focusNode(m, true);
+    // A query card searches the WHOLE map, deliberately, so a hit can be outside the frame you're
+    // standing in — come out far enough to show it before selecting (popScopeFor).
+    popScopeFor(m); selectNode(m.id); focusNode(m, true);
   });
   queryResultsEl.addEventListener('change', (e) => {
     const cb = (e.target as HTMLElement).closest('.qi-done') as HTMLInputElement | null; if (!cb) return;
@@ -248,9 +252,12 @@ export const isNodeControlAt = (cx: number, cy: number): boolean => !!hitAt(cx, 
 // decided by WHAT WAS HIT, so one gesture covers every kind:
 //   · the title (a card's title row, a frame's folder tab)  → rename in place
 //   · anywhere else on a card                               → edit its note
-//   · a container's empty interior                          → put a new card THERE
-// A container has no body of its own to edit, so its interior falls to the third case — the same
-// "double-click empty space to make a card" as on the canvas (features/gestures.ts), one level in.
+//   · a FRAME's interior                                    → OPEN it (nav/scope.ts)
+//   · any other container's interior (a stack)              → put a new card THERE
+// A container has no body of its own to edit, so its interior falls to one of the last two cases: a
+// frame is a folder you can stand in, so the gesture goes in; a stack is an outliner with nowhere to
+// stand, so it keeps the "double-click empty space to make a card" reading the canvas has
+// (features/gestures.ts), one level in.
 // A FOLDED node is nothing but its title (its body is display:none), so every hit on it renames —
 // otherwise a double-click would open an editor inside a hidden .body.
 // Shared by nodeEl's dblclick and the touch double-tap in features/drag.ts.
@@ -265,6 +272,11 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   // startInlineEdit is the single rename funnel: it redirects a tab group to its open tab, an
   // annotation to its body and a query card to its query, and refuses a locked node.
   if (onTitle || n.collapsed) { startInlineEdit(n); return; }
+  // A frame's interior OPENS it (nav/scope.ts) — the folder metaphor's own gesture, and the only one
+  // that reads as "go in". Putting a card inside it kept Tab, the ⋯ menu and the canvas right-click.
+  // A STACK is a container that can't be opened (it's an outliner, not a box you stand in), so it
+  // falls through to the branch below and still appends a row.
+  if (canOpen(actionTarget(n))) { openFrame(n); return; }
   if (isContainer(n)) { addChildIn(n, cx, cy); return; }
   if (isImageCard(n) || isQueryCard(n)) return;   // no note to edit; only their title is editable
   startBodyEdit(n);
@@ -473,6 +485,9 @@ export function paintNode(n: MindNode): void {
   // div left at the box's old size, sitting over the canvas below the tab; same for a frame converted
   // to a card, or a stack demoted to a row inside another stack. Its (hidden) children ride along
   // detached and are re-placed by place() the moment it holds again.
+  // The OPEN frame (nav/scope.ts) rides this same drop, which is how it stops hosting: it's isHidden
+  // by the scope term, so hostsContent goes false and the wrapper goes with it — and hostFrame then
+  // hands its children #world instead, unclipped. No new lifecycle, no per-kind rule.
   if (n.frameContentEl && !hostsContent(n)) { n.frameContentEl.remove(); n.frameContentEl = null; }
   if (isHidden(n)) { el.style.display = 'none'; return; }   // an ancestor is folded: nothing to paint
   el.style.display = '';
@@ -867,8 +882,10 @@ function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(
 // stack (a frame in between governs instead) — covers the stack's direct children AND deeper rows.
 // Used for the .stack-child tint. For "is this actually an outline ROW" (which drives the row width
 // and excludes annotations) use stackRowW instead — see the sizing branch above.
+// containerHost, not hostFrame: this is the TONE question (whose fill am I sitting on), which an
+// OPEN frame still governs even though it hosts no elements — see containerHost in view/layout.ts.
 function inStack(n: MindNode): boolean {
-  const h = hostFrame(n);
+  const h = containerHost(n);
   return !!h && isStack(h);
 }
 // …and the mirror for a FRAME's box: a card sitting in one is tinted a touch brighter (.frame-child),
@@ -880,9 +897,12 @@ function inStack(n: MindNode): boolean {
 // tab share, an image/query card is deliberately image-only / outline-only, and an annotation never
 // inherits a colour in the first place (it takes the theme's contrast colour, which the tint would
 // wash out).
+// containerHost again, and here it MATTERS rather than merely reading better: an OPEN frame hosts no
+// elements, so hostFrame would drop the tint from exactly the cards that need it most — the ones on a
+// canvas now painted the frame's own fill (syncScopeBackground), which they'd otherwise vanish into.
 function inFrame(n: MindNode): boolean {
   if (isContainer(n) || isImageBox(n) || isQueryBox(n) || isAnnotation(n)) return false;
-  const h = hostFrame(n);
+  const h = containerHost(n);
   return !!h && isFrame(h);
 }
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : isQueryBox(n) ? QUERY_W : FRAME_W; }
@@ -1316,12 +1336,16 @@ export function paintAll(): void {
   paintEdges();
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
+  syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
 }
 
 // First-run hints ("Drag to create a card" / "Click for help") show only on an empty canvas.
 // The help hint tracks the (centred, variable-x) help button; the ghost hint is CSS-anchored.
+// "Empty" means empty OF WHAT'S ON SCREEN, so an open frame with nothing in it gets the hints too —
+// opening an empty folder to start filling it is the whole point of being able to open one.
 export function updateEmptyHints(): void {
-  document.body.classList.toggle('empty-canvas', state.nodes.size === 0);
+  const empty = scopeActive() ? ![...state.nodes.values()].some(n => !isHidden(n)) : state.nodes.size === 0;
+  document.body.classList.toggle('empty-canvas', empty);
 }
 
 // ---------- animated relayout (expand / collapse) ----------
@@ -1494,8 +1518,10 @@ export function toggleCollapse(id: string): void {
 // Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
 // Only foldable cards (children or a body) count; the group lands on one shared state — expand
 // if they're all collapsed already, otherwise collapse them all.
-export function toggleCollapseSelection(ids: Iterable<string>): void {
-  const cards = [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n)
+// Which of `ids` can actually be folded — the one filter both the toggling and the directional paths
+// below share, so the chip, X and ←/→ can't disagree about what counts.
+function foldableSelection(ids: Iterable<string>): MindNode[] {
+  return [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n)
     // A docked tab has no fold of its own (it opens, closing its siblings — see activateTab), and a
     // group fold that closed every tab at once would just be repaired by normalizeTabs anyway. But an
     // OPEN tab stands for its GROUP, exactly as its corner chip does (chipTarget) — and since the box
@@ -1505,67 +1531,60 @@ export function toggleCollapseSelection(ids: Iterable<string>): void {
     .filter(n => !isDockedTab(n))
     .filter(n => !isLockedEffective(n))
     .filter(n => childrenOf(n.id).length > 0 || !!(n.body && n.body.trim()));
-  if (!cards.length) return;
-  const target = !cards.every(n => n.collapsed);   // all collapsed → expand; otherwise collapse all
+}
+// Apply one shared fold state to a whole set, as ONE undo step and one animated reflow.
+function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   record(cards.map(n => n.id),
-    () => withLayoutAnimation(() => { for (const n of cards){ n.collapsed = target; n.dirtyLayout = true; } }));
+    () => withLayoutAnimation(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   scheduleSave();
-  setStatus(`${target ? 'Collapsed' : 'Expanded'} ${cards.length} card${cards.length > 1 ? 's' : ''}`);
+  const what = cards.length > 1 ? `${cards.length} cards` : `“${cards[0]!.title}”`;
+  setStatus(`${collapsed ? 'Collapsed' : 'Expanded'} ${what}`);
 }
-// ---------- arrow-key navigation (walk + fold the tree from the keyboard) ----------
-// TREE semantics, deliberately not geometric: → always goes DEEPER (expanding first if the branch
-// is folded), ← always goes SHALLOWER (collapsing first if it's open), ↑/↓ walk siblings. Screen
-// direction would be ambiguous the moment a node has children on two sides at once — which a fan
-// layout does by default, since each child's side is its own stored mm_side — whereas "deeper /
-// shallower" is never ambiguous. Same direction as X and the outline view.
-//
-// Siblings come from orderedKids (view/layout.ts), so ↑/↓ walk them in exactly the order the
-// outline lists them and the layout stacks them, not in state.nodes insertion order.
-function navSiblings(n: MindNode): MindNode[] {
-  const p = n.parent ? state.nodes.get(n.parent) : null;
-  // roots have no parent to hold a kidOrder — rootsInOrder is what stands in for orderedKids there,
-  // and it's the same list the outline's top level reads, so the two walks can't drift apart.
-  return p ? orderedKids(p, childrenOf(p.id).filter(k => !isHidden(k))) : rootsInOrder();
+export function toggleCollapseSelection(ids: Iterable<string>): void {
+  const cards = foldableSelection(ids);
+  if (!cards.length) return;
+  applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
 }
-// Select `to` and pan just far enough to bring it on screen — never reframing or re-zooming the way
-// focusNode does, so walking a long branch doesn't make the map jump at every step.
-function navTo(to: MindNode | undefined): void {
-  if (!to || !isSelectable(to.id)) return;
-  selectNode(to.id);
-  revealInView(to);
+// The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
+// leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
+// selection lands on one state in a single press instead of needing two.
+export function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean): void {
+  const cards = foldableSelection(ids).filter(n => !!n.collapsed !== collapsed);
+  if (!cards.length) return;
+  applyCollapsed(cards, collapsed);
 }
-// One arrow keypress against the current primary selection. A multi-selection collapses to its
-// anchor (state.selId) and the walk continues from there, like a caret in a text editor.
+// ---------- arrow keys: go IN and OUT of frames, fold and unfold branches ----------
+//   ↑  open the selected frame (nav/scope.ts)        ↓  leave the open one
+//   →  unfold                                        ←  fold
+// The four keys are about DEPTH, in the two senses this map has: which folder you're standing in,
+// and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
+// that, deliberately — opening a frame is now the primary way to navigate a big map, and clicking
+// (or the outline, which is a real tree widget) covers moving between siblings.
+// They were never geometric and still aren't: a child's side is its own stored mm_side, so a fan
+// branch has children on two sides at once and "left" would stop meaning anything.
+// ←/→ are DIRECTIONAL, unlike the chip / X / the ⋯ menu, which all toggle: pressing → twice can't
+// fold what it just unfolded. They act on the WHOLE selection (setCollapsedSelection), like the chip
+// and X do — a fold is something you do to cards, and there's no reason a keyboard fold should reach
+// fewer of them than a click does.
 function navArrow(key: string): void {
+  // ↓ reads the SCOPE, not the selection, so it still works right after clicking empty space to
+  // deselect — which is exactly when you want to go back up. Inert at the top level, silently: a
+  // status line there would nag on every repeat press.
+  if (key === 'ArrowDown') { exitScope(); return; }
   const n = state.selId ? state.nodes.get(state.selId) : null;
-  // nothing selected → the first root is the way in (↑/← pick the last one, so the key's direction
-  // still reads sensibly when the walk starts)
-  if (!n) {
-    const roots = rootsInOrder(m => isSelectable(m.id));
-    navTo(roots[(key === 'ArrowUp' || key === 'ArrowLeft') ? roots.length - 1 : 0]);   // navTo ignores undefined
+  if (key === 'ArrowUp') {
+    // ↑ stays single: you can only stand in one frame, so it acts on the anchor.
+    if (!n) { setStatus('Select a frame to open it'); return; }
+    openFrame(n);          // reports "Only a frame can be opened" itself
     return;
   }
-  const kids = childrenOf(n.id);
-  if (key === 'ArrowRight') {
-    // folded (or a closed tab, which toggleCollapse OPENS) → reveal; already open → step into it
-    if (kids.length && n.collapsed) { toggleCollapse(n.id); return; }
-    if (kids.length) navTo(orderedKids(n, kids.filter(k => !isHidden(k)))[0]);
-    return;
-  }
-  if (key === 'ArrowLeft') {
-    // open branch → fold it; leaf or already folded → step out to the parent
-    if (kids.length && !n.collapsed && !isDockedTab(n)) { toggleCollapse(n.id); return; }
-    // Stepping out of a docked TAB skips its group: the group can't hold the selection (selTarget
-    // hands it straight back to this very tab), so the node one level out is whatever the GROUP hangs
-    // under — otherwise the key would look dead.
-    const outId = isDockedTab(n) ? (tabGroupOf(n)?.parent ?? null) : n.parent;
-    navTo(outId ? state.nodes.get(outId) : undefined);
-    return;
-  }
-  const sibs = navSiblings(n);
-  const i = sibs.findIndex(s => s.id === n.id);
-  if (i < 0) return;
-  navTo(sibs[i + (key === 'ArrowDown' ? 1 : -1)]);
+  if (!n) return;          // ←/→ have nothing to fold
+  // A CLOSED docked tab has no fold of its own, so → OPENS it (toggleCollapse routes to activateTab).
+  // Handled on the anchor before delegating, since foldableSelection drops closed tabs entirely.
+  if (key === 'ArrowRight' && isDockedTab(n) && n.collapsed) { toggleCollapse(n.id); return; }
+  // → unfolds, ← folds — every selected card that isn't already there. An OPEN docked tab in the set
+  // folds its GROUP, exactly as its corner chip does (foldableSelection maps it).
+  setCollapsedSelection(selectedIds(), key === 'ArrowLeft');
 }
 // Flip a checklist item's done mark (mm_done) and persist. Independent of any body task list.
 // Also repaints the parent so its "n/m" checklist progress readout stays in sync.
@@ -1655,19 +1674,253 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
   frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
   if (revealed && store.isOpen) scheduleSave();
 }
-// Follow a [[wikilink]]: find the node by title (case-insensitive) and focus it.
+// Follow a [[wikilink]]: find the node by title (case-insensitive) and focus it. Map-wide, on
+// purpose — a link that only worked inside the frame you happened to be in would be a broken link —
+// so it comes out of as many scope levels as it takes to show the target (popScopeFor).
 function focusByTitle(title: string): void {
   const t = title.trim().toLowerCase();
   const target = [...state.nodes.values()].find(n => n.title.trim().toLowerCase() === t);
   if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
+  popScopeFor(target);
   focusNode(target);
 }
 // The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
-// frame the whole map when nothing is selected — both glide with the same easing.
+// frame the whole map when nothing is selected — both glide with the same easing. While a frame is
+// OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free
+// and only the strokes have to be dropped by hand (see fit/frameBox in view/camera.ts).
 function focusOrFit(): void {
   if (state.selId && state.nodes.has(state.selId)) focusNode(state.nodes.get(state.selId));
-  else frameBox([...state.nodes.values()], true);   // frame the whole map — strokes included
+  else focusScope();
 }
+// Re-frame whatever is ON the canvas right now: the open frame's contents while scoped (isHidden
+// does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
+// this", shared by F-with-nothing-selected, every open/exit and the current crumb.
+export function focusScope(): void { frameBox([...state.nodes.values()], !scopeActive()); }
+
+// ---------- OPENING a frame: the scoped canvas ----------
+// The ACTIONS; nav/scope.ts holds the model and the reasoning. They sit beside focusNode because
+// that's their template (reveal → select → glide), but this is a separate feature: focusNode frames
+// a card WITHIN the map, opening replaces what the map is for as long as you're inside.
+
+// The viewport rect the open frame lays its contents out in — read back through containerBox /
+// frameInterior. A SNAPSHOT, taken here and refreshed only on a window resize:
+//  · not LIVE, or every pan frame would re-wrap a flow frame's children, shiftSubtree them and — via
+//    commitRel — dirty every one of their files. A pan would autosave the folder.
+//  · sized at k = 1 (the app's canonical 1 world px = 1 screen px), not at the current zoom: the
+//    camera is about to change, since opening fits the contents, so reading the live k is circular.
+//    frameBox clamps k ≤ 1.0 anyway, so the fitted result lands near 1 and the contents do fill it.
+//  · bottomInset() is deliberately NOT subtracted. It's nonzero only while the float bar is docked
+//    AND open, i.e. it tracks the SELECTION — folding it in would reflow the frame on every click.
+//    It belongs to the camera moves (frameBox/revealInView) and stays there. Same for the crumb bar,
+//    which is floating chrome over the canvas like #toolbar.
+//  · anchored at the frame's own content origin, so opening a FREE frame moves nothing at all (and
+//    so dirties nothing), and a flow frame's children move the shortest distance — which is what
+//    makes the glide read as contents spreading out rather than teleporting.
+function scopeRectFor(t: MindNode): { x: number; y: number; w: number; h: number } {
+  const home = containerBox(t);   // read before the level is pushed, so it's the frame's real bounds
+  const s = stageSize();
+  return { x: home.x, y: home.y, w: s.width, h: s.height };
+}
+// Re-measure the open level after a window resize; the anchor is kept, since the open frame can't
+// move (it isn't selectable and nothing lays it out). Returns whether anything actually changed.
+function refreshScopeRect(): boolean {
+  const top = scope.stack[scope.stack.length - 1];
+  if (!top) return false;
+  const s = stageSize();
+  if (Math.round(top.rect.w) === Math.round(s.width) && Math.round(top.rect.h) === Math.round(s.height)) return false;
+  top.rect = { x: top.rect.x, y: top.rect.y, w: s.width, h: s.height };
+  return true;
+}
+function currentBack(): ScopeBack { return { view: { ...state.view }, sel: [...state.sel], selId: state.selId }; }
+
+// Rebuild the stack so its last level is `target` (null = the whole map). The stack IS the crumb
+// path — the openable ancestor chain, not just what the user happened to click through — so opening
+// a deep frame from the ⋯ menu still reads `Map › A › B › C`. Levels that survive the rebuild keep
+// their remembered camera and rect, which is what makes `open A → open B → leave` glide back to the
+// camera A really had; levels nobody stepped through get no `back` and are re-fitted instead.
+function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
+  if (!target) { scope.stack = []; scope.rootId = null; return; }
+  const keep = new Map(scope.stack.map(l => [l.rootId, l]));
+  const next: ScopeLevel[] = [];
+  for (const n of [...openPathTo(target), target])
+    next.push(keep.get(n.id) ?? { rootId: n.id, file: n.file ?? null, rect: scopeRectFor(n), back: null });
+  const top = next[next.length - 1]!;
+  if (!keep.has(top.rootId)) top.back = back;   // only a level you're newly entering records a way back
+  scope.stack = next;
+  scope.rootId = target.id;
+}
+
+// A FREE frame you were INSIDE had the whole viewport to arrange things in, so a card can easily end
+// up outside the box it goes back to being on the way out — where its wrapper's overflow:hidden would
+// clip it clean away. So grow the box to hold what's in it as you leave: the same fit ⇧A performs
+// (fitFrameToContent), and only when something really does stick out, so a visit that moved nothing
+// still writes nothing.
+// FREE only, and that's load-bearing rather than an optimisation. A flow frame RE-WRAPS into its own
+// box as soon as the viewport override goes — but that happens in the applyLayouts that follows this,
+// so measuring here would see the children still spread across the viewport and widen the box to fit
+// a row that was about to fold itself back up. The box would creep wider on every visit. A locked
+// frame is out for the ordinary reason: it refuses to be resized at all.
+function growToFitContents(f: MindNode): void {
+  if (state.readOnly || f.type !== 'frame' || isLockedEffective(f)) return;
+  if (frameFlow(f) || isTabsFrame(f)) return;
+  const box = containerBox(f);
+  const out = childrenOf(f.id).filter(k => !isHidden(k) && !isAnnotation(k)).some(k => {
+    const b = subtreeBox(k);
+    return isFinite(b.x0) && (b.x0 < box.x || b.y0 < box.y || b.x1 > box.x + box.w || b.y1 > box.y + box.h);
+  });
+  if (!out) return;
+  fitFrameToContent(f);
+  f.dirty = true; f.dirtyLayout = true;
+}
+
+interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiting?: boolean; camera?: boolean; }
+function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
+  // A scope change re-parents elements (a child moves between #world and a wrapper), which would
+  // drop a captured pointer or blur an open editor — the same precaution setOutline takes.
+  endInlineEdit(); endBodyEdit();
+  cancelViewAnim();
+  const before = scope.rootId;
+  const left = before ? state.nodes.get(before) : undefined;
+  withLayoutAnimation(() => {
+    setScopeStack(target, opts.back ?? null);
+    // settledHost caches which wrapper each element sits in (hostFrameId), and the scope just
+    // changed which wrapper that IS. Drop the cache or the children keep being placed into a
+    // wrapper paintNode is about to remove.
+    for (const n of state.nodes.values()) n.hostFrameId = undefined;
+    refreshScopeRect();
+    // Now that the stack is settled, containerBox reports the frame we just left at its real size
+    // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
+    // step: ⌘Z undoes the resize without teleporting you between scopes.
+    if (left && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
+  });
+  if (opts.exiting) {
+    // Leaving: select the frame you came out of — that's what makes a crumb read as a back button —
+    // and glide to the camera you left. A level nobody stepped through has none, so it re-fits.
+    const came = before ? state.nodes.get(before) : undefined;
+    const ids = came && !outOfScope(came) ? [came.id]
+      : (opts.restore?.sel ?? []).filter(id => { const n = state.nodes.get(id); return !!n && !outOfScope(n); });
+    setSelectionSet(ids);
+    if (opts.restore) animateViewTo(opts.restore.view.x, opts.restore.view.y, opts.restore.view.k);
+    else if (opts.camera !== false) focusScope();
+  } else {
+    selectNode(null);            // the frame itself is off the canvas now, so nothing is selected
+    if (opts.camera !== false) focusScope();
+  }
+  syncUrl();                     // a discrete navigation step, like selecting a node → a history entry
+  if (before !== scope.rootId) scheduleSave();
+}
+
+// Open a frame. Routed through actionTarget, so opening a tab GROUP opens its OPEN TAB — from the
+// user's side the group doesn't exist. Allowed in read-only and on a LOCKED frame, the same
+// exemption activateTab takes: looking inside the box isn't changing it.
+export function openFrame(target: MindNode | undefined): void {
+  let t = target && actionTarget(target);
+  if (!t || !canOpen(t)) { setStatus('Only a frame can be opened'); return; }
+  const back = currentBack();
+  // Unfolding on the way in is the ONE node mutation opening performs, so it alone is recorded:
+  // ⌘Z re-folds the frame instead of teleporting you between scopes. Opening itself is navigation,
+  // in the same class as revealInView, and writes no node field to undo.
+  const t0 = t;
+  if (t0.collapsed) record([t0.id], () => { t0.collapsed = false; t0.dirtyLayout = true; });
+  // A FOLDED tab group is a lone pill, so actionTarget left it alone above — but once it's open it's a
+  // group again, and what the user means is the tab that's showing. Re-resolve now (normalizing first,
+  // since a group that was folded may have no open tab yet), or the scope root would be a GROUP: a
+  // node that owns a tab strip and no content of its own.
+  if (isTabsFrame(t) && !t.collapsed) { normalizeTabs(t); t = actionTarget(t); }
+  if (isScopeRoot(t)) return;                  // already standing in it
+  applyScope(t, { back });
+  setStatus(`Opened “${t.title}”`);
+}
+// Leave the innermost level.
+export function exitScope(): void { goToScopeDepth(scope.stack.length - 1); }
+// Leave the level AT `depth`, landing in the one above it — so depth 0 is "back to the whole map".
+// A crumb click is exactly this, which is why the crumbs need no logic of their own.
+export function goToScopeDepth(depth: number): void {
+  if (depth < 0 || depth >= scope.stack.length) return;   // ↓ at the top level: silently inert
+  const leaving = scope.stack[depth]!;
+  const upId = depth > 0 ? scope.stack[depth - 1]!.rootId : null;
+  applyScope(upId ? state.nodes.get(upId) ?? null : null, { restore: leaving.back, exiting: true });
+}
+// Restore the scope a URL hash asked for (nav/url-state.ts). No fit: the hash carries its own camera
+// and must win. The hash is AUTHORITATIVE, so a path that's absent, gone, or no longer a frame all
+// mean the same thing — the whole map — rather than quietly leaving you wherever you were: that
+// distinction only shows up on a back/forward step, where honouring the URL is the entire point.
+// No error either way; a shared link to a since-deleted frame should just open the map.
+export function restoreScopeFromFile(file: string | null): void {
+  const t = file ? [...state.nodes.values()].find(n => n.file === file) : undefined;
+  const want = t && canOpen(t) ? t : null;
+  if (!want) { if (scopeActive()) { withoutScopeFade(); applyScope(null, { exiting: true, camera: false }); } return; }
+  if (isScopeRoot(want)) return;
+  withoutScopeFade();
+  if (want.collapsed) { want.collapsed = false; want.dirtyLayout = true; }
+  applyScope(want, { camera: false });
+}
+// The canvas colour must LAND, not fade in, whenever the scope comes from the URL rather than from
+// something the user just did. On a reload there is nothing to transition FROM — the map has only just
+// appeared — so the fade reads as the app flashing the wrong background before settling on the right
+// one; on a back/forward step the camera and selection jump too, so a sliding background would be the
+// only thing still catching up. Suppressed for two frames (long enough for the paint that sets
+// --scope-bg to land), after which every real open/leave fades again.
+function withoutScopeFade(): void {
+  document.body.classList.add('scope-instant');
+  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('scope-instant')));
+}
+// Bring `t` into reach from ANYWHERE: leave as many levels as it takes for it to be inside the scope
+// we land in. The deliberately UNSCOPED jumps (a [[wikilink]], a query card's result, an undo that
+// resurrects a node elsewhere) all go through here, so none of them can select a card that isn't on
+// the canvas — isSelectable refuses an out-of-scope id.
+export function popScopeFor(t: MindNode): void {
+  for (let guard = 0; scopeActive() && outOfScope(t) && guard < 64; guard++) exitScope();
+}
+// Keep the crumb bar in step, and recover from the open frame having been deleted / undone away /
+// removed on disk. pruneScope (view/layout.ts's applyLayouts) already truncated the stack; the
+// camera half has to live here, and without it you'd be staring at the parent scope through the
+// departed child's camera. Driven from paintAll, the same argument renderOutline makes.
+// While a frame is OPEN the canvas IS its interior, so the canvas takes the frame's own fill — the
+// very colour its box was wearing a moment before, through the same resolver its box used
+// (effectiveColor → colorFill), so the two can't drift. An uncoloured frame resolves to null and the
+// canvas keeps the theme's background. Written on #stage, not <body>, so the theme's own --bg is left
+// completely alone; #stage sits under #grid, so the grid still draws over it.
+// This is also what makes `inFrame` route through containerHost rather than hostFrame: the cards in
+// here now sit ON that fill, so they need the .frame-child step more than they did inside the box.
+// …and only when that colour is AUTHORED somewhere up the chain. effectiveColor deliberately falls
+// back to the theme's neutral card fill for a frame nobody has coloured, and painting the whole canvas
+// THAT would be both a lie (there's no colour to show) and a real problem in the light theme, where
+// the near-white fill swallows the floating chrome sitting on the canvas — the ghost-card pill, the
+// status line. The test is authorship, not the hex, so a frame explicitly coloured white still tints.
+function hasAuthoredColor(n: MindNode): boolean {
+  let guard = 0;   // same caution as effectiveColor's: a cycle must degrade, not hang
+  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = c.parent ? state.nodes.get(c.parent) : null)
+    if (c.color) return true;
+  return false;
+}
+function syncScopeBackground(): void {
+  const open = scopeRootNode();
+  const tint = open && hasAuthoredColor(actionTarget(open));   // a group's colour is its open tab's
+  const fill = tint ? colorFill(effectiveColor(open)) : null;
+  if (fill) stage.style.setProperty('--scope-bg', fill);
+  else stage.style.removeProperty('--scope-bg');
+}
+function syncScopeChrome(): void {
+  renderCrumbs();
+  syncScopeBackground();
+  if (!scope.pruned) return;
+  scope.pruned = false;
+  if (state.sel.size || state.selId) setSelectionSet([]);
+  focusScope();
+  const open = scopeRootNode();
+  setStatus(open ? `That frame is gone — back to “${open.title}”` : 'That frame is gone — back to the whole map');
+}
+// Keep the rect honest across a window resize. Nothing to re-lay-out — an open frame's contents are
+// FREE (frameFlow), so no layout reads the rect to place anything; what still reads it is where a
+// DROP lands (dropLanding clamps into containerBox), which a stale rect would confine to the old
+// window. Debounced, and a no-op when the size didn't really change.
+let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
+window.addEventListener('resize', () => {
+  if (!scopeActive()) return;
+  clearTimeout(scopeResizeTimer);
+  scopeResizeTimer = setTimeout(refreshScopeRect, 200);
+});
 
 // ---------- selection + editor ----------
 // Selection and the edit panel are decoupled: a node can stay selected while the
@@ -1742,14 +1995,25 @@ export function refreshPalette(): void {
   refreshSwatches();
   paintAll();
 }
+// Select everything ON THE CANVAS — which, inside an open frame, is that frame's contents and nothing
+// else. It needs no scope test of its own: isHidden already means "on the canvas right now", covering
+// both the open frame and folded branches, and setSelectionSet drops whatever isn't selectable (a
+// locked card's descendants). Shared by ⌘A and the canvas context menu, so the two can't diverge.
+export function selectAll(): void {
+  setSelectionSet([...state.nodes.values()].filter(n => !isHidden(n)).map(n => n.id));
+  setStatus(state.sel.size ? `Selected ${state.sel.size} card${state.sel.size > 1 ? 's' : ''}` : 'Nothing to select');
+}
 // the ids currently being edited (one or many) — colour/layout/checklist/bg apply to all of them
 export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
 // reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
 export function applySelection(): void { paintAll(); syncFloatBar(); syncUrl(); updateDocumentTitle(); }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
-// (see utils/model.ts hasLockedAncestor). Shared by every selection entry point below.
+// (see utils/model.ts hasLockedAncestor). Nor can anything outside the frame you're standing in:
+// it isn't on the canvas, so a selection ring would be invisible and every action on it would look
+// dead. The deliberately unscoped jumps (wikilinks, query results, undo) come out of their scope
+// first — see popScopeFor. Shared by every selection entry point below.
 function isSelectable(id: string): boolean {
-  const n = state.nodes.get(id); return !n || !hasLockedAncestor(n);
+  const n = state.nodes.get(id); return !n || (!hasLockedAncestor(n) && !outOfScope(n));
 }
 // A tab GROUP is not something the user selects — from their side there are just tabs, one of them
 // open. So every selection entry point below maps an open group to its OPEN TAB (the same redirect
@@ -2010,12 +2274,14 @@ byId('helpBtn').onclick = openHelpTab;  // same as F1 — opens the help mindmap
 // (rename/duplicate/export/delete on-screen actions now live in the floating bar's kebab menu —
 // features/float-bar.ts)
 
-// keyboard shortcuts: ⌘S force-save, ⌘Z/⇧⌘Z/⌘Y undo-redo  (duplicate = D, new node = Space)
+// keyboard shortcuts: ⌘S force-save, ⌘A select-all, ⌘Z/⇧⌘Z/⌘Y undo-redo  (duplicate = D, new node = Space)
 window.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (!mod) return;
   const k = e.key.toLowerCase();
   if (k === 's') { e.preventDefault(); flushSave(); return; }
+  // While typing, ⌘A belongs to the field.
+  if (k === 'a' && !isTypingInField()) { e.preventDefault(); selectAll(); return; }
   // While typing in a field, leave ⌘Z to the browser's native undo inside that editor.
   if (k === 'z' && !isTypingInField()) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
   if (k === 'y' && !isTypingInField()) { e.preventDefault(); redo(); }

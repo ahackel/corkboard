@@ -1,5 +1,5 @@
 ---
-date: 2026-08-04
+date: 2026-08-07
 tags: []
 mm_parent: 🧭 Move around.md
 mm_side: right
@@ -8,16 +8,18 @@ mm_y: 272
 mm_collapsed: true
 ---
 
-Select a card, then walk the map without touching the mouse:
+Four keys, all about **depth** — which frame you're standing in, and whether a branch is showing:
 
-- `→` — open this branch. Already open? Step into its first child.
-- `←` — fold this branch. Already folded (or a card with no children)? Step out to the parent.
-- `↑` `↓` — move between siblings, in the same order the outline view lists them.
+- `↑` — **open** the selected frame. The canvas becomes its inside.
+- `↓` — **leave** the frame you're in, back to where you came from.
+- `→` — **unfold** the selected branch.
+- `←` — **fold** it away.
 
-The arrows follow the **tree**, not the screen: `→` always means *deeper*, `←` always *shallower* —
-even for a branch that fans out to the left of its parent.
+`↑` and `↓` are how you move through a map built out of frames — see "Open a frame". `↓` doesn't need
+anything selected, so you can click empty space to deselect and still go back up.
 
-The view follows along, panning just far enough to bring the next card into sight. It never zooms
-or re-centres, so the map stays put while you walk it. Press `F` when you do want it re-framed.
+`←` and `→` only ever fold and unfold: pressing `→` twice can't undo itself. They act on **every
+selected card**, so you can fold a whole group in one press — select some cards (or press `⌘A` for all
+of them) and hit `←`.
 
-Nothing selected? Any arrow key selects a card to start from.
+To walk between cards, click them, or use the outline view — a proper tree you can arrow through.

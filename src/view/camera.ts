@@ -3,6 +3,7 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
+import { scopeActive } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -50,7 +51,7 @@ export function applyView(): void {
 // (cancelViewAnim) so the animation never fights the user's own input.
 let viewAnim: number | null = null;
 export function cancelViewAnim(): void { if (viewAnim){ cancelAnimationFrame(viewAnim); viewAnim = null; } }
-function animateViewTo(tx: number, ty: number, tk: number = state.view.k, dur = 420): void {
+export function animateViewTo(tx: number, ty: number, tk: number = state.view.k, dur = 420): void {
   cancelViewAnim();
   const sx = state.view.x, sy = state.view.y, sk = state.view.k;
   if (Math.abs(tx-sx) < 1 && Math.abs(ty-sy) < 1 && Math.abs(tk-sk) < .001){
@@ -106,14 +107,17 @@ export function strokesBounds(): { minX: number; minY: number; maxX: number; max
 // its rect is 0×0 — a fit()/frameBox() run then (e.g. loadFromDir on a boot that restores
 // outline mode) would compute k=0 and scale every card away. The stage is position:fixed
 // inset:0, so the window size is exactly what its rect would be.
-function stageSize(): { width: number; height: number } {
+export function stageSize(): { width: number; height: number } {
   const r = stage.getBoundingClientRect();
   return { width: r.width || window.innerWidth, height: r.height || window.innerHeight };
 }
 
 export function fit(): void {
   const ns = [...state.nodes.values()].filter(n => !isHidden(n));
-  const sb = strokesBounds();
+  // Ink is map-level data with no parent, so there's no per-stroke scope test to make — while a
+  // frame is OPEN it's simply left out of the framing, or fitting the frame's contents would zoom
+  // right back out to take in a stroke on the far side of the map. It stays visible; see nav/scope.ts.
+  const sb = scopeActive() ? null : strokesBounds();
   if (!ns.length && !sb) return;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of ns) {

@@ -21,8 +21,9 @@ import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelec
 import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
+import { canOpen } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, toggleCollapse, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { paintAll, selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
 
 function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
@@ -146,7 +147,7 @@ const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: '
 // FRAME_TAB_DROP at module scope throws "cannot access before initialization".
 const FRAME_FIT_PAD = 16;
 function frameFitTop(): number { return FRAME_TAB_DROP + FRAME_FIT_PAD; }
-function fitFrameToContent(n: MindNode, orDefault = false): void {
+export function fitFrameToContent(n: MindNode, orDefault = false): void {
   const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));   // annotations don't size the frame
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
@@ -489,6 +490,11 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   if (!multi)
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id),
       disabled: locked || (!childrenOf(n.id).length && !(n.body && n.body.trim())) });
+  // Opening a frame mutates nothing, so it belongs in this read-only-safe block — and it's the one
+  // way IN while read-only, since a double-click there still folds instead (activateNode). Routed
+  // through actionTarget, so right-clicking a tab GROUP's box opens the tab that's showing.
+  if (!multi && canOpen(actionTarget(n)))
+    entries.push({ label:'Open frame', shortcut:'↑', run: () => openFrame(n) });
   entries.push({ label:'Fit view', shortcut:'F', run: () => frameBox(targetIds.map(id => state.nodes.get(id))) });
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: !n.file });
   if (anyFrame && !state.readOnly)

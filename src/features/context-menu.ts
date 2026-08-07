@@ -14,7 +14,8 @@ import { typedImageBlob } from './images.js';
 import { esc } from '../utils/markdown.js';
 import { scheduleSave } from '../data/persistence.js';
 import { applyLayouts } from '../view/layout.js';
-import { paintAll } from '../main.js';
+import { scope, scopeRootNode } from '../nav/scope.js';
+import { paintAll, exitScope, goToScopeDepth, selectAll } from '../main.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
 // — this creates a deliberate two-way import cycle with float-bar.ts (which imports openMenu /
 // copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
@@ -158,6 +159,15 @@ function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
 
 function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   const entries: MenuEntry[] = [];
+  // While a frame is OPEN the whole visible canvas is its interior, so this menu — and the top-right
+  // kebab that shares it — is where a touch user finds the way out. Ahead of the read-only gate:
+  // leaving isn't a mutation.
+  const open = scopeRootNode();
+  if (open){
+    entries.push({ label:`Leave “${open.title}”`, shortcut:'↓', run: () => exitScope() });
+    if (scope.stack.length > 1) entries.push({ label:'Back to the whole map', run: () => goToScopeDepth(0) });
+    entries.push('sep');
+  }
   if (!state.readOnly){
     const p = screenToWorld(sx, sy);
     entries.push({ label:'New card here', shortcut:'Space', run: () => createNode(centredAt(p)) });
@@ -166,6 +176,10 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
     entries.push({ label:'Insert image…', run: () => pickImagesAt(sx, sy, null) });
     entries.push('sep');
   }
+  // Selecting mutates nothing, so it sits with Fit view in the read-only-safe group. Here as well as
+  // on ⌘A because a touch user has no ⌘ — and this menu is the only place they'd find it.
+  entries.push({ label:'Select all cards', shortcut:'⌘A', run: () => selectAll(),
+    disabled: !state.nodes.size });
   entries.push({ label:'Fit view', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
   return entries;
 }

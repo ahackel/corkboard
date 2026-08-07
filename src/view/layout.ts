@@ -10,6 +10,7 @@
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot } from '../utils/model.js';
+import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
@@ -277,6 +278,11 @@ export function normalizeTabs(g: MindNode): void {
 // flow layout, the drop landing and the in-frame/out-of-frame rip test, so none of them has to know
 // whether the frame it's given is docked.
 export function containerBox(f: MindNode): { x: number; y: number; w: number; h: number } {
+  // …or whether it's the OPEN one (nav/scope.ts), whose box is the VIEWPORT — that's what gives its
+  // contents the whole window instead of a rectangle on the canvas. A DERIVED override: f.w/f.h are
+  // neither read nor written here, which is what lets the frame come back out at its authored size.
+  // Checked before the docked branch, or an open TAB would keep the interior its group lent it.
+  if (isScopeRoot(f)) return scopeRect();
   const g = tabGroupOf(f);
   if (g) return frameInterior(g);
   return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
@@ -458,6 +464,20 @@ function insideFrame(node: MindNode): boolean {
 // a collapsed frame has no box/wrapper, so it can't host anything. Shared with edges.ts so an edge
 // between two cards inside the same frame clips to it too, not just the cards themselves.
 export function hostFrame(node: MindNode): MindNode | null {
+  const h = containerHost(node);
+  // The OPEN frame hosts NOTHING: its children are the top level now, so they go straight under
+  // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode. That's what
+  // makes "the frame's box isn't there any more" true of the DOM and not just of the paint — and
+  // edges.ts shares this walk, so their connectors stop clipping to it in step.
+  return h && isScopeRoot(h) ? null : h;
+}
+// …and the same walk WITHOUT that exception: the nearest container ancestor by TREE, wherever the
+// node's element actually ended up. The two questions were one until a frame could be OPENED, and
+// then they came apart: `hostFrame` answers "whose wrapper is my element inside" (a DOM fact, and the
+// open frame has no wrapper), while this answers "whose fill do I sit on and step off" (a TONE fact,
+// which the open frame still governs — more than ever, since the canvas now wears its colour). Used
+// by main.ts's inStack/inFrame for exactly that.
+export function containerHost(node: MindNode): MindNode | null {
   if (isAnnotation(node)) return null;   // annotations render on top, under #world — never hosted/clipped by a frame
   for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
     if (isContainer(p)) return p;   // a frame OR a stack hosts/clips its children's elements + edges
@@ -477,6 +497,10 @@ export function ancestorDepth(node: MindNode): number {
 // which can't be DOM-reparented into that wrapper) so the two containment mechanisms stay
 // pixel-identical by construction instead of by two hand-synced copies of the same arithmetic.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
+  // The OPEN frame's interior IS the viewport, with no border and no tab to inset from. Spelled here
+  // as well as in containerBox because a non-docked frame doesn't route through it — this function is
+  // the one every hosted child, wrapper and edge clip-path reads.
+  if (isScopeRoot(f)) return scopeRect();
   // A DOCKED TAB draws no box of its own — its group lends it the whole interior, which is the point
   // of docking (one box, several tabs). It reserves room at the top only when it is ITSELF a group:
   // a top-level group's strip hangs in the band above its box, but a docked one has nothing above it,
@@ -507,10 +531,14 @@ export function frameInsetY(f: MindNode): number {
 // inside ITS bounds (see frameInsetY), so this frame reserves no room for it. Shared by the flow layout
 // and its insertion bar so the two can't disagree.
 // (A docked tab's lent box already starts below its group's border, and has no tab band of its own
-// above it, so the FRAME_PAD comes straight off it — hence containerBox rather than frame.y here.)
+// above it, so the FRAME_PAD comes straight off it — hence containerBox rather than frame.y here.
+// The OPEN frame is the same case for the same reason: its box is the viewport and it draws no tab.
+// Fixed here rather than by making isFrameBox false for it, deliberately: isFrameBox feeds isBoxNode
+// and nodeH, and nodeH would then fall through to offsetHeight on a display:none element and
+// silently report a 64px frame. elTop is the one place that needs the exception.)
 function frameContentTop(frame: MindNode): number {
   const box = containerBox(frame);
-  return (isDockedTab(frame) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
+  return ((isDockedTab(frame) || isScopeRoot(frame)) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
 }
 // Is `child`'s centre inside `frame`'s OUTER box? The single source of truth for "a frame child is
 // still in its frame" — the trigger drag.ts uses in BOTH the rip PREVIEW (updateRip) and the detach
@@ -520,6 +548,9 @@ function frameContentTop(frame: MindNode): number {
 // containerBox, not the frame's own bounds: a DOCKED TAB's child is "in" the box its group lent it,
 // not in the tab's label up in the strip.
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {
+  // The OPEN frame's interior is the whole canvas, so its children can never be ripped out of it —
+  // there is nowhere visible to rip them TO. One guard, so the preview and the commit still agree.
+  if (isScopeRoot(frame)) return true;
   const cx = child.x + nodeW(child)/2, cy = child.y + nodeH(child)/2;
   const b = containerBox(frame);
   return cx >= b.x && cx <= b.x + b.w
@@ -571,6 +602,12 @@ export function effectiveLayout(node: MindNode): { type: string } {
 // (which flow frames opt out of, ordering by 2D position rather than a single side axis).
 export function frameFlow(node: MindNode): 'flow-h' | 'flow-v' | null {
   if (!isFrame(node)) return null;
+  // The OPEN frame lays nothing out: while you're standing inside it, its contents are FREE, like the
+  // top level of the map (effectiveLayout already resolves a frame to `free`, so this is the only
+  // branch that had to be told). Being inside a frame should feel like being on a canvas — a flow
+  // repacking your cards into rows as you arrange them wouldn't. It also means opening and leaving
+  // move nothing at all and so write nothing, whatever layout the frame carries.
+  if (isScopeRoot(node)) return null;
   return node.layout === 'horizontal' ? 'flow-h' : node.layout === 'vertical' ? 'flow-v' : null;
 }
 // Whether a node's effective layout actively MANAGES its children's positions — line/fan (side-based)
@@ -1020,6 +1057,22 @@ export function applyLayouts(): void {
   // reads `collapsed` all over, so the invariant has to hold before any of it runs — and doing it
   // here covers every caller at once (~20 relayout sites) instead of per gesture.
   for (const n of state.nodes.values()) if (isTabsFrame(n)) normalizeTabs(n);
+  // The open frame may have just been deleted / undone away / vanished on disk. Repaired here for
+  // the same reason normalizeTabs is: this runs after every structural change, so one call covers
+  // every path instead of each remembering.
+  pruneScope();
+  const open = scopeRootNode();
+  if (open) {
+    // …and while a frame is open it is never FOLDED — an invariant, kept beside normalizeTabs
+    // because a reload or an undo can re-collapse it and layoutSubtree bails on a collapsed node,
+    // which would leave the canvas blank.
+    if (open.collapsed) { open.collapsed = false; open.dirty = true; open.dirtyLayout = true; }
+    // Confined to the open frame, and that's what keeps the feature honest about disk: no
+    // out-of-scope node's x/y is touched, so commitRel finds no changed offset and dirties no file
+    // outside the scope. (It's also strictly less work than the forest walk below.)
+    layoutSubtree(open);
+    return;
+  }
   for (const n of state.nodes.values()) if (isRoot(n)) layoutSubtree(n);
 }
 

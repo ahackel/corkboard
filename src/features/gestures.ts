@@ -7,7 +7,8 @@ import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
 import { ui, gPointers, type Pt, type GestureEvt } from '../core/ui-state.js';
-import { nodeW, nodeH, selectNode, setSelectionSet } from '../main.js';
+import { nodeW, nodeH, selectNode, setSelectionSet, exitScope } from '../main.js';
+import { scopeActive } from '../nav/scope.js';
 import { createNode, centredAt } from './crud.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
@@ -70,13 +71,22 @@ stage.addEventListener('pointerdown', (e) => {
   drawMarquee(e.clientX, e.clientY);
   marqueeEl.style.display = 'block';
 });
-// Double-click the empty canvas = a NEW CARD there, straight into its rename — the same "double-click
-// to open/create" the nodes themselves use (main.ts activateNode), where there's nothing to open yet.
+// Double-click the empty canvas — one gesture, read against what the canvas currently IS:
+//   · inside an open frame, the canvas is that frame's interior, so double-clicking it LEAVES —
+//     the exact inverse of the double-click on a frame's interior that took you in (activateNode).
+//     Going in and coming out being the same gesture is what makes the whole thing feel like a folder.
+//   · at the top level there's nowhere to leave to, so it keeps its original meaning: a NEW CARD
+//     there, straight into its rename.
+// Making a card INSIDE an open frame therefore moved to Space, Tab and the canvas right-click, all of
+// which land it in that frame (detachParentId, nav/scope.ts).
 // Mouse/trackpad only: a stray double-TAP while panning would strew cards across the map, and touch
 // already has the ⋯ canvas menu (features/context-menu.ts) for this. Sketch mode owns its own clicks.
 stage.addEventListener('dblclick', (e) => {
   if ((e.target as HTMLElement).closest('.node')) return;   // nodes handle their own double-click
-  if (state.readOnly || ui.sketchOn) return;
+  if (ui.sketchOn) return;
+  // Leaving isn't a mutation, so it works in read-only too — unlike the create below.
+  if (scopeActive()) { exitScope(); return; }
+  if (state.readOnly) return;
   createNode(centredAt(screenToWorld(e.clientX, e.clientY)));   // like the canvas menu's "New card here"
 });
 window.addEventListener('pointermove', (e) => {

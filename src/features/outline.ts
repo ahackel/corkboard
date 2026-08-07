@@ -13,7 +13,8 @@
 // read-only behave the same as on the canvas.
 import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
-import { childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder } from '../utils/model.js';
+import { childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden } from '../utils/model.js';
+import { detachParentId, scopeRootNode } from '../nav/scope.js';
 import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG } from '../main.js';
@@ -106,10 +107,16 @@ function* ancestors(n: MindNode): Generator<MindNode> {
   for (let p = n.parent ? state.nodes.get(n.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
     yield p;
 }
-// Roots in the outline's canonical top-level order (rootsInOrder — the same order the arrow-key walk
-// uses), less annotations, which the outline never lists at all.
+// The outline's TOP LEVEL, in its canonical order, less annotations (which the outline never lists).
+// Normally that's the map's roots (rootsInOrder). While a frame is OPEN, it's that frame's own
+// children instead — the outline shows what the canvas shows, so the two agree about where you are,
+// and dropping a row beside a top row means "put it here" rather than "throw it out of the frame"
+// (makeRoot reads the same rule via detachParentId).
 function sortedRoots(exclude?: string): MindNode[] {
-  return rootsInOrder(n => n.id !== exclude && !isAnnotation(n));
+  const keep = (n: MindNode): boolean => n.id !== exclude && !isAnnotation(n);
+  const open = scopeRootNode();
+  if (!open) return rootsInOrder(keep);
+  return orderedKids(open, childrenOf(open.id).filter(n => !isHidden(n) && keep(n)));
 }
 
 // ---- mode toggle (persisted like theme / edge style) ----
@@ -732,9 +739,12 @@ function seedUnderParent(child: MindNode, parent: MindNode, reveal = true): bool
 }
 // Detach `n` to the top level, shifting its whole subtree by `dy` (keeping its formation), then
 // persist as one undo step. Shared by the picker's "Make root" and a drop beside a root row.
+// "The top level" is whatever the outline is currently SHOWING as its top level — the open frame's
+// children while one is open (detachParentId, nav/scope.ts), so dropping a row beside a top row puts
+// it where the outline says it went.
 function makeRoot(n: MindNode, dy = 0): void {
   touch(n.id, n.parent);
-  n.parent = null; n.side = undefined; n.dirtyLayout = true;
+  n.parent = detachParentId(); n.side = undefined; n.dirtyLayout = true;
   shiftWhole(n, 0, dy);
   applyLayouts(); paintAll(); scheduleSave(); commitStep();
 }

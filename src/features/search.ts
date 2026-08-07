@@ -7,6 +7,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
 import { firstVisible } from '../utils/model.js';
+import { outOfScope } from '../nav/scope.js';
 import { paintAll, focusNode } from '../main.js';
 import { outlineActive, revealInOutline } from './outline.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -34,9 +35,11 @@ export function runSearch(): void {
   const q = searchBox.value.trim().toLowerCase();
   searchBox.classList.toggle('has-value', !!searchBox.value);
   if (!q){ clearSearch(); return; }
-  // match on title OR body content
+  // match on title OR body content — within the frame you're standing in, if any (nav/scope.ts):
+  // search finds what's on the canvas, so a hit is always something you can be shown and select.
+  // The way back OUT of a frame is the breadcrumbs, not a search result that teleports you.
   const matches = [...state.nodes.values()].filter(n =>
-    n.title.toLowerCase().includes(q) || (n.body && n.body.toLowerCase().includes(q)));
+    !outOfScope(n) && (n.title.toLowerCase().includes(q) || (n.body && n.body.toLowerCase().includes(q))));
   // highlight every match — surfacing a hidden match through its first visible parent
   state.searchMatch = new Set(matches.map(n => firstVisible(n).id));
   // dropdown: title matches first, then body-only matches, alphabetical within each

@@ -18,6 +18,7 @@
 import { state, setStatus, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
 import { serializeMd, parseMd, type ParsedNote } from '../utils/frontmatter.js';
 import { isAncestor } from '../utils/model.js';
+import { detachParentId } from '../nav/scope.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
 import { mkNode, uniqueTitle, deleteSelection, contentParent } from './crud.js';
 import { touch, record } from './history.js';
@@ -145,7 +146,10 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
     // resolve payload-internal parent links (by original names, before any title renaming)
     for (const c of cards){
       const n = state.nodes.get(newIds.get(c.name)!) as MindNode;
-      n.parent = isPayloadRoot(c) ? (parentNode?.id ?? null) : newIds.get(c.p.mm.parent)!;
+      // …and a payload root with no paste target lands at the CURRENT top level — the open frame's
+      // interior while one is open (detachParentId, nav/scope.ts). This path mints via mkNode, so it
+      // doesn't inherit createNode's own default.
+      n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : newIds.get(c.p.mm.parent)!;
     }
     // paint first so the new cards have real DOM heights, then lay out, then commit
     paintAll(); applyLayouts(); paintAll();

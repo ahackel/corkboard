@@ -16,6 +16,11 @@ mm_collapsed: true
 - `D` — duplicate
 - `Delete` — remove
 
+## Select
+- `⌘/Ctrl A` — select every card on the canvas (inside an open frame: just its contents)
+- `⌘/Ctrl` + click — add a card to the selection
+- drag on empty canvas — rubber-band select
+
 ## Clipboard
 - `⌘/Ctrl C` — copy card + subtree
 - `⌘/Ctrl X` — cut
@@ -28,9 +33,10 @@ mm_collapsed: true
 - `X` — collapse / expand
 
 ## Move around
-- `→` — open the branch, then step into it
-- `←` — fold the branch, then step out to the parent
-- `↑` `↓` — walk between siblings
+- `↑` — open the selected frame
+- `↓` — leave the frame you're in
+- `→` — unfold the branch
+- `←` — fold it away
 
 ## View
 - `F` — fit / focus

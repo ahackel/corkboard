@@ -10,7 +10,7 @@ import { state, stage, setStatus, type MindNode, type Stroke } from '../core/sta
 import { applyLayouts } from '../view/layout.js';
 import { frameBox } from '../view/camera.js';
 import { scheduleSave, scheduleSaveSketch } from '../data/persistence.js';
-import { paintAll, setSelectionSet, nodeW, nodeH } from '../main.js';
+import { paintAll, setSelectionSet, popScopeFor, nodeW, nodeH } from '../main.js';
 import { paintStrokes } from './sketch.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 
@@ -145,6 +145,11 @@ function applyStep(images: Images, strokes: Stroke[] | undefined, label: string)
   // paint first so resurrected cards have real DOM heights, then lay out, then commit
   paintAll(); applyLayouts(); paintAll();
   const ids = [...images.keys()].filter(id => state.nodes.has(id));
+  // An undo can resurrect (or move) a node that lives outside the frame you're standing in — come out
+  // of as many levels as it takes to show it, or setSelectionSet would silently drop it (isSelectable
+  // refuses an out-of-scope id) and the step would look like it did nothing. See popScopeFor.
+  const first = ids.map(id => state.nodes.get(id)).find((n): n is MindNode => !!n);
+  if (first) popScopeFor(first);
   setSelectionSet(ids);
   frameIfOffscreen(ids);
   scheduleSave();

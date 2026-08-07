@@ -18,8 +18,9 @@ mm_collapsed: true
   Click it to open the branch again.
 - Pressing `X` does the same thing, and folds every selected card at once.
   (Double-click no longer folds — it opens a card for editing instead. See "Edit text".)
-- With a card selected, `←` folds its branch and `→` opens it — see the shortcuts page for walking
-  the tree with the arrow keys.
+- `←` folds and `→` unfolds — every selected card at once, so `⌘A` then `←` folds the whole map.
+  Unlike the button and `X`, they always fold one way: `→` twice won't fold what it just opened.
+  See "Arrow keys".
 - The **outline view** works the same way: tap a row to select it, then tap the button on its corner.
 - A card with a note but no children can fold too: it tucks the note away and shows just the title.
 - Collapsing keeps big maps readable — open only the branch you're working in.

@@ -74,7 +74,13 @@ selection core and wires the global keyboard/toolbar events.
   (in-place title/body editing: `startInlineEdit`/`startBodyEdit`/`end…`), `crud.ts` (node
   lifecycle: `createNode`/`addChild`/`createSibling`/`duplicateSelection`/`delete…`/`extractToChild`),
   `attachments.ts` (image paste/drop, registers document listeners), `search.ts` (find box,
-  exports `searchBox`), `images.ts` (inline image resolution).
+  exports `searchBox`), `images.ts` (inline image resolution), `breadcrumbs.ts` (`#scopeBar`: the
+  open-frame path, the one way back out of an open frame — see the OPENING section below).
+- `nav/` — where you ARE, as opposed to what the map is: `url-state.ts` (the hash — which map, which
+  node, mode/camera/search/read-only, plus `open=`, the frame you're standing inside; the module
+  header spells the shape) and `scope.ts` (the open-frame scope MODEL: the ephemeral holder, `canOpen`
+  /`outOfScope`/`isScopeRoot`/`openPathTo`/`scopeRect`/`detachParentId`/`pruneScope`. It imports
+  almost nothing, which is what lets `utils/model.ts` read it from inside `isHidden`).
 - `boot.ts` — `boot()` (local-first open of the last map) + the home/storage screen + help store.
 - `main.ts` — entry (`<script type="module" src="/src/main.ts">`). ~600 lines: the render core
   (`nodeEl`/`paintNode`/`paintAll`/`effectiveColor`/relayout animation), selection + edit-panel
@@ -117,6 +123,9 @@ measurement — hence the hover tooltip in `paintNode` instead), and the vertica
 child into its host goes through `frameInsetY` (`view/layout.ts`) rather than a bare
 `FRAME_BORDER` — `frameInterior`, `place`, `frameContentEl` and `followEdges` all share it (the X axis
 has no such helper; it uses `FRAME_BORDER` directly), and `elTop` is the one place that applies the drop.
+The one frame that has none of this is the **OPEN** one (see the OPENING section below): no tab, no box,
+no fill, its bounds are the viewport, and `frameContentTop` skips the tab drop for it exactly as it does
+for a docked tab. Its wrapper is dropped by the same single lifecycle drop a fold uses.
 **Anything that writes a node's `left`/`top` must go through `placeSelf` + `elTop`**, not a bare
 `place()` — that's the pair `paintNode`'s own final branch uses, and the relayout ANIMATION
 (`placeNodeEl`/`setNodeElXY`) writes left/top too, since interpolating them IS the animation. Skipping
@@ -168,7 +177,9 @@ plain `mm_parent`, strip order is `mm_position_x` (`kidsByPosition` sorts tabs b
   `mm_collapsed` (which already hides its contents via `isHidden`) plus a CSS class.
 - **Its contents live in the box its group lent it**, which is what `containerBox` spells — the single
   indirection, shared by `frameInterior`, `centreInFrame`, `frameContentTop`, the flow layout and
-  `dropLanding`, so none of them has to know whether the frame it was handed is docked. A group with
+  `dropLanding`, so none of them has to know whether the frame it was handed is docked, **or OPEN**
+  (whose box is the viewport — the scope branch comes FIRST there, or an open tab would keep the
+  interior its group lent it). A group with
   tabs shows no tab of its own (`.tabs.has-tabs`): two docked frames must read as two tabs, not three.
 - **At most one tab is open.** `normalizeTabs` (a pre-pass in `applyLayouts`) repairs it, `activateTab`
   /`openTabFlags` perform it, and every collapse-family path funnels through them — `toggleCollapse` on
@@ -239,6 +250,129 @@ What may become a tab is `canBeTab`: a frame, or a plain CARD, which `dockFrames
 the way in (`asFrame`) — so dragging a card onto a frame's tab docks it. The other kinds stay out and fall
 through to the ordinary drop (they land in the box as content): an annotation holds nothing, and a
 stack/image/query is a box whose own shape IS the point.
+
+**A frame can be OPENED, and then the canvas IS its interior** (`nav/scope.ts` for the model,
+`openFrame`/`exitScope`/`goToScopeDepth` in `main.ts` for the actions, `features/breadcrumbs.ts` for
+the path). A frame is "a box with a folder tab on it", and this is the other half of that metaphor:
+you can go in. While one is open, nothing but its contents is on the canvas, its own box/border/tab
+are not drawn at all, its interior is the whole viewport, and the crumb bar is how you come back out.
+Nesting is allowed. Distinct from `focusNode`, which is untouched: that frames a card WITHIN the map,
+this replaces what the map is for as long as you're inside. What holds it together:
+- **The scope is a second TERM in `isHidden`, not a second predicate** — one ancestor walk answers
+  both "is a parent folded" and "is this outside the frame I'm in". That's what scopes the paint, the
+  camera (`fit`/`frameBox` already filter it), the edges, the marquee, drag's every hit-test, the
+  layout pass and the float bar in ONE edit across ~38 call sites. The scope root itself counts as
+  outside its own scope, and *that* is why its chrome isn't painted: no per-kind rule, no CSS.
+- **Nothing writes through that gate, and `applyLayouts` confines itself to the open frame.** The two
+  terms differ in kind — a fold is persisted `mm_collapsed`, a scope is ephemeral — so the scope must
+  never reach disk. The only mover keyed on `isHidden` is `layoutSubtree`, and while a frame is open
+  `applyLayouts` runs it on the scope root ALONE. That single line is what stops opening a frame from
+  dirtying a file outside it (and it's less work than the forest walk).
+- **An open frame's children are FREE, whatever layout it carries.** `frameFlow` returns null for the
+  scope root (and `effectiveLayout` already resolves a frame to `free`, so that's the only branch that
+  had to be told), so a `horizontal`/`vertical` frame stops packing its contents into rows for as long
+  as you're inside it: being in a frame should feel like being on the canvas, and a flow re-packing
+  cards as you arrange them wouldn't. Leaving hands the flow back, which re-packs them into the box —
+  so an arrangement made inside a flow frame isn't kept, exactly as a flow frame's positions are never
+  the user's to keep anyway. The happy consequence: opening and leaving now move NOTHING, so a visit
+  writes nothing to disk whatever layout the frame has.
+- **The box becomes the VIEWPORT through `containerBox`/`frameInterior`**, as a DERIVED override.
+  Hard invariant: the frame's own `n.w`/`n.h` are neither read there nor ever written, which is what
+  lets it come back out at its authored size. `frameInterior` needs the guard too — a non-docked frame
+  doesn't route through `containerBox` — and `frameContentTop` needs it because an open frame draws no
+  tab to drop below (fixed there and NOT by making `isFrameBox` false for it: that feeds `nodeH`,
+  which would then measure a `display:none` element and report a 64px frame).
+  What still READS that rect, now the contents are free, is where a DROP lands: `dropLanding` clamps
+  into `containerBox`, so without the override a card dragged across the open canvas would snap back
+  into the frame's small authored box.
+- **That rect is a SNAPSHOT at k = 1, refreshed only on a window resize** (`scopeRectFor`/
+  `refreshScopeRect`). Sized at k = 1 — the app's canonical 1 world px = 1 screen px — rather than the
+  live zoom, because opening then fits the camera, which would make a live reading circular; and a
+  snapshot rather than a live rect so it can't change under a pan. `bottomInset()` is deliberately
+  excluded: it tracks the SELECTION (the docked float bar), so folding it in would move the rect on
+  every click. So is the crumb bar, which is floating chrome like `#toolbar`. It's anchored at the
+  frame's own content origin, so the coordinates its contents already have stay meaningful.
+- **Double-click is the way IN and the way OUT.** A frame's interior opens it; the empty canvas —
+  which, once you're inside, is that same interior — leaves it (`features/gestures.ts`). At the top
+  level there's nowhere to leave to, so the canvas keeps its original "new card here". The crumb path
+  and `↓` are the other ways out.
+- **The path is ONE pill, and the map name is its first segment** (`features/breadcrumbs.ts` +
+  `#homeBar`). That's `#toolbar`'s pattern — one `--panel` capsule holding borderless items that
+  highlight on hover — so going into a frame ADDS segments rather than swapping loose text for chrome.
+  Segments carry no folder glyph (the `›` separators already say it's a path, and every segment but the
+  map is a frame, so an icon on each says nothing), and the CURRENT one is inert: you're already there.
+  A deep path folds its middle into one `…` that opens a menu of the levels it swallowed — which is the
+  only thing that actually keeps it clear of the CENTRED `#toolbar`, since capping the pill's width
+  can't: the separators are `flex:none` and simply overflow it.
+- **The CANVAS wears the open frame's fill** (`syncScopeBackground` → `--scope-bg` on `#stage`, which
+  sits under `#grid`; `<body>`'s `--bg` is left alone so the theme is untouched). Same resolver its box
+  used — `effectiveColor` → `colorFill` — so the canvas can't disagree with the colour the box was just
+  showing, and it's transitioned over `animateReflow`'s 320ms so going in reads as the canvas taking
+  the colour rather than a cut — **except when the scope came from the URL**, where it must simply BE
+  there (`withoutScopeFade` → `body.scope-instant`, which kills the transition for two frames). On a
+  reload there's nothing to transition FROM, so the fade reads as the app flashing the wrong background
+  before settling; on a back/forward step the camera and selection jump too, so a sliding background
+  would be the only thing left catching up. Only when the colour is **authored** somewhere up the chain
+  (`hasAuthoredColor`): `effectiveColor` falls back to the theme's neutral card fill for a frame nobody
+  coloured, and painting the whole canvas *that* is both a lie and a real problem in the light theme,
+  where the near-white swallows the chrome floating on the canvas. Authorship, not the hex — a frame
+  explicitly coloured white still tints, an inherited colour still counts.
+- **`hostFrame` and `containerHost` are two different questions**, and the split exists because of the
+  bullet above. `hostFrame` is a DOM fact — whose wrapper is my element inside — and it stops at the
+  scope root, which hosts nothing. `containerHost` is a TONE fact — whose fill am I sitting on — and
+  the open frame governs that more than ever now the canvas is painted its colour. `inStack`/`inFrame`
+  (the `.stack-child`/`.frame-child` steps) must use `containerHost`, or the cards in an open frame
+  lose their step and vanish into a canvas painted the very colour they inherit.
+- **`hostFrame` stops at the scope root**, so its children are placed straight under `#world`,
+  unclipped — that's what makes "the box isn't there" true of the DOM and not only of the paint. Its
+  `.frame-content` wrapper is dropped by the existing ONE drop in `paintNode` (it's `isHidden`, so
+  `hostsContent` goes false), and `edges.ts` shares the walk, so the connectors unclip in step. The
+  `hostFrameId` cache must be cleared on every scope change or elements keep being placed into a
+  wrapper that's about to go.
+- **Leaving GROWS a free frame to hold what you put in it** (`growToFitContents` → the same
+  `fitFrameToContent` that ⇧A runs), and only when something really sticks out. Inside, the whole
+  viewport was fair game, so a card can easily end up outside the box it goes back to being — where
+  `overflow:hidden` would clip it into invisibility. FREE frames only, and that's load-bearing: a flow
+  frame re-wraps into its own box in the `applyLayouts` that FOLLOWS this, so measuring here would see
+  a row that's about to fold itself up and widen the box to fit it, creeping wider on every visit.
+- **The stack IS the crumb path** (`openPathTo`), not just what you clicked through — so opening a
+  deep frame from the ⋯ menu still reads `Map › A › B › C`. Levels you really stepped through remember
+  their camera and selection, so leaving one glides back to it; levels rebuilt from a URL don't
+  (their ids are gone), so leaving those re-fits instead. The stack is session-only; the hash carries
+  only the innermost level.
+- **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no
+  node field. The two things around it that DO are recorded separately: unfolding a collapsed frame on
+  the way in, and the grow-to-fit on the way out. So ⌘Z re-folds or un-grows without teleporting you
+  between scopes. Allowed in read-only and on a LOCKED frame (`activateTab`'s exemption: looking
+  inside the box isn't changing it) — though the double-click route still folds in read-only, since
+  `activateNode` short-circuits there, leaving `↑` and the ⋯ menu as the ways in.
+- **"No parent" means the OPEN FRAME** (`detachParentId`) — for `createNode`, `createDetachedNode`,
+  a paste's payload roots, the outline's `makeRoot`, and a card ripped out of a NESTED frame. A real
+  root would land outside the scope and simply vanish. One helper, read at all five.
+- **You can't drag a card out of the frame you're in**: `centreInFrame` returns true for the scope
+  root (its interior is the whole canvas, so there's nowhere visible to rip to), and one guard keeps
+  the rip preview and the commit agreeing as the file insists. The way out is to leave first, or the
+  outline's "Move to…" picker — which stays map-wide precisely for this. The asymmetry is deliberate:
+  moving a card out is a thing you asked for, dragging into nowhere isn't.
+- **Search and the outline are scoped; query cards, wikilinks and undo are not.** Search finds what's
+  on the canvas, so every hit can be shown and selected, and `sortedRoots` makes the outline's top
+  level the open frame's children (which is also what makes dropping a row beside a top row mean "put
+  it here"). The map-wide jumps come OUT of as many levels as it takes first (`popScopeFor`), because
+  `isSelectable` refuses an out-of-scope id and the step would otherwise look dead.
+- **The open frame is never folded, and never missing.** `applyLayouts` repairs the first beside
+  `normalizeTabs` (a reload or an undo can re-collapse it, and `layoutSubtree` bails on collapsed —
+  a blank canvas being the worst failure here, `isHidden` checks scope-root identity BEFORE the fold
+  as a third layer). `pruneScope` handles the second in the same pass, truncating the stack to what
+  survives; the camera half of that recovery lives in `syncScopeChrome`, which needs the camera.
+  A reload re-mints every id, so `resolveScopeAfterLoad` re-points the stack by FILE before the first
+  layout — deliberately not cleared like the undo history, since a background refocus reload must not
+  kick you out of the frame you're working in.
+- **Only frames, for now, but the mechanism is kind-agnostic:** `canOpen` is the one kind test —
+  widen it there, never at a call site. A stack is a container that stays out (it's an outliner, not a
+  box you stand in), which is why `activateNode` keeps `addChildIn` for it. Opening a tab GROUP opens
+  its OPEN TAB (`actionTarget`) and the crumbs skip the group, since from the user's side it doesn't
+  exist. Ink stays visible but is left out of the framing, or opening a frame would zoom back out to
+  take in a stroke on the far side of the map.
 
 **Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`, `mm_position_y`
 (relative to the parent; world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`,
@@ -311,13 +445,15 @@ calling the same functions as the keyboard shortcuts; `updateNodeActions()` (run
 `applySelection`) enables/disables them by selection + `readOnly`, and the titles show
 the shortcut. Add child/sibling live in the right-click context menu and on `Tab`/`Enter`.
 
-**Collapse has THREE entry points, all funnelling through `toggleCollapse`/`toggleCollapseSelection`:**
-the corner chip, `X`, and the ⋯ menu. (Double-click used to be a fourth — it now OPENS a node instead,
-see the section below.) The **chip** is `.hidden-count` — one
+**Collapse has FOUR entry points, all funnelling through `toggleCollapse`/`toggleCollapseSelection`:**
+the corner chip, `X`, the ⋯ menu, and the `←`/`→` arrow keys — which unlike the other three are
+DIRECTIONAL rather than toggles (see the arrow-keys section below). (Double-click used to be one too —
+it now OPENS a node instead, see that section.) The **chip** is `.hidden-count` — one
 `<button>` at the node's top-right with two faces: folded it reads `+N` (the hidden-descendant count,
 a bare `+` when only a body is tucked away), expanded it shows a chevron, and *that* face is revealed
 only on hover or while SELECTED (the touch story: tap the card, tap the chip — and every card of a
-multi-selection carries one, whose click folds them all like `X`).
+multi-selection carries one, whose click folds them all like `X` and `←`/`→`, without reducing the
+selection first).
 **`paintNode`'s `chipFace` is the single thing that decides which face shows** — `styles.css` keys off
 nothing but the `data-chip` it writes (`'count'`/`'fold'`/absent), and *no per-kind rule may hide the
 bubble*. BOTH faces live in the button permanently (`nodeEl` bakes the chevron in beside a `.cnt` span)
@@ -351,10 +487,17 @@ which freed the gesture for what a double-click means nearly everywhere else. On
 by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a `.title-row` (a card's title
 row, a frame's folder tab, a docked tab's whole label) renames via `startInlineEdit` — the single
 rename funnel, so the tab-group/annotation/query redirects and the lock refusal come for free; anything
-else on a card edits its note; a CONTAINER's interior gets a new card THERE (`addChildIn` → `addChild`,
-which routes a group to its open tab, refuses a locked parent and reveals a folded one). The same
-gesture on empty canvas creates a root card (`stage`'s `dblclick` in `features/gestures.ts`). Five
-things hold it together:
+else on a card edits its note; a FRAME's interior OPENS it (`openFrame` — see the OPENING section
+above: the folder metaphor's own gesture, and the only one that reads as "go in"); any OTHER
+container's interior — i.e. a stack, which `canOpen` refuses because an outliner is not a box you can
+stand in — gets a new card THERE (`addChildIn` → `addChild`, which routes a group to its open tab,
+refuses a locked parent and reveals a folded one). Adding a card inside a FRAME kept `Tab`, the ⋯ menu
+and the canvas right-click. The same gesture on empty canvas creates a root card (`stage`'s `dblclick`
+in `features/gestures.ts`) — **or, while a frame is open, LEAVES it**, since the canvas then IS that
+frame's interior and this is the inverse of the double-click that took you in. Going in and coming out
+being one gesture is most of what makes a frame feel like a folder; making a card inside an open frame
+moved to `Space`, `Tab` and the canvas right-click, which all land it in that frame
+(`detachParentId`). Five things hold it together:
 - **The INNERMOST node owns the gesture, including the ones it declines.** Child cards are DOM-nested,
   so both handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/drag.ts`) `stopPropagation`
   BEFORE their bails, not after — otherwise a gesture this card refuses bubbles to its host card, which
@@ -371,24 +514,48 @@ things hold it together:
 - **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on
   it renames — otherwise a double-click would open an editor inside a hidden `.body`.
 - **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows): there's nothing to
-  open, and browsing the help map is all expanding.
+  open, and browsing the help map is all expanding. Note this short-circuit sits ahead of everything,
+  so a read-only double-click on a frame FOLDS it rather than opening it — `↑` and the ⋯ menu are the
+  routes in there (opening itself is allowed in read-only; it mutates nothing).
 - **A click now only ever SELECTS.** The 260ms slow-second-click rename is gone, and with it the
   `ui.renameTimer` every fresh interaction had to `clearTimeout`, the `ui.pendingGroupFold` stash that
   let a double-click fold a just-reduced multi-selection, and `Drag.downTarget`. Don't reintroduce a
   timer here: it can only race the double-click it was invented to lose to.
 
-**Arrow keys walk the tree (`navArrow` in `main.ts`), by TREE semantics, not screen direction:** `→`
-goes deeper (expanding a folded branch first), `←` shallower (folding an open one first), `↑`/`↓`
-between siblings in `orderedKids` order — the same order the outline lists them in. Geometric arrows
-were rejected because a child's side is its own stored `mm_side`, so a fan branch has children on two
-sides at once and "left" stops meaning anything. The walk pans via `revealInView` (`view/camera.ts`),
-which moves the *minimum* distance to bring one node on screen and never touches `k` — `frameBox` is
-wrong here, since re-framing on every keypress makes the map jump under you.
+**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `main.ts`):** `↑` opens the selected
+frame, `↓` leaves the open one, `→` unfolds, `←` folds. All four are about DEPTH, in the two senses
+this map has — which folder you're standing in, and whether a branch is showing. **Walking siblings
+and stepping onto a child lost their keys to that**, deliberately: opening a frame is now the primary
+way to move around a big map, and clicking (or the outline, a real tree widget) covers siblings. So
+`navSiblings`/`navTo` are gone, and the keys no longer pan — `↑` re-frames via `frameBox`, `↓` glides
+back to a remembered camera, `→`/`←` don't move the camera at all (`revealInView` survives for its
+other callers). They were never geometric and still aren't: a child's side is its own stored
+`mm_side`, so a fan branch has children on two sides at once and "left" would stop meaning anything.
+Two details: `←`/`→` are DIRECTIONAL rather than toggles (pressing `→` twice can't fold what it just
+unfolded, and a MIXED selection lands on one state in a single press instead of needing two), and `←`
+on an OPEN docked tab folds its GROUP, exactly as its corner chip does (`chipTarget`). They act on the
+WHOLE selection via `setCollapsedSelection` — the directional sibling of `toggleCollapseSelection`,
+both filtering through one shared `foldableSelection` so the chip, `X` and the arrows can't disagree
+about what counts. A keyboard fold has no business reaching fewer cards than a click does; `↑` is the
+one that stays single, since you can only stand in one frame. Because the directional form skips cards
+already in the target state, its undo step covers exactly what it changed — undoing a `←` doesn't
+spring open a card that was folded before you pressed it. `↓` reads the SCOPE, not the selection, so it still works right after clicking empty
+space to deselect — which is exactly when you want to go up; it's silently inert at the top level,
+since a status line there would nag on every repeat press.
+
+**`⌘A` selects everything ON THE CANVAS** — which, inside an open frame, is that frame's contents and
+nothing else. It needs no scope test of its own: `isHidden` already means "on the canvas right now"
+(covering both the open frame and folded branches), and `setSelectionSet` drops whatever isn't
+selectable. Guarded by `isTypingInField`, since in a field `⌘A` belongs to the field.
 
 **Central mutable `state` object (line ~377)** holds `nodes` (Map of id → node),
 `view` (pan/zoom `{x,y,k}`), selection (`selId` + `sel` Set), `edgeStyle`,
 `readOnly`, etc. The render pipeline is `paintNode` / `paintEdges` / `paintAll`;
 DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
+The open-frame scope is deliberately **not** in here (it lives in `nav/scope.ts`): `state` is the MAP —
+every field is either the notes themselves or something mirrored to disk/localStorage and restored on
+load — whereas a scope is where you're STANDING. It never reaches frontmatter, it's mirrored only into
+the hash, and its camera stack is session-only.
 
 ## Conventions that matter
 
@@ -396,8 +563,14 @@ DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
   coalesces a burst of edits into one disk write (`flushSave` → `saveAll`).
 - **`store.isOpen === false` means demo mode** — no folder open, saves are no-ops,
   in-memory layout changes are intentionally discarded.
-- **`state.readOnly` disables all writes and edits** (collapse/expand still allowed);
-  `scheduleSave` early-returns in this mode.
+- **`state.readOnly` disables all writes and edits** (collapse/expand still allowed, and so is OPENING
+  a frame — it mutates nothing); `scheduleSave` early-returns in this mode.
+- **Visibility has ONE gate, `isHidden`, with TWO terms:** a collapsed ancestor (persisted as
+  `mm_collapsed`) and the open frame's scope (ephemeral, `nav/scope.ts`). Nothing writes through it.
+  The only *mover* keyed on it is `layoutSubtree`, and `applyLayouts` confines that to the current
+  scope — which is exactly what stops opening a frame from dirtying a single file outside it. Add any
+  new visibility term IN there, never beside it: ~38 call sites already mean "is this on the canvas
+  right now", and a second predicate would have to be kept in agreement with all of them.
 - **External-change reload:** `store.watch` fires `reloadFromDisk` on window
   focus / tab-visible (FSA can't truly watch files). It re-reads from disk but
   guards against clobbering in-progress typing/renaming and against re-reading the
@@ -411,7 +584,10 @@ DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
   the `.addnote` pen: a few unreadable pixels each at that scale, times every card on screen. Purely a
   CSS mode (no node geometry depends on it, so crossing the line needs no repaint), and the hides need
   `!important` — those controls are revealed by `:hover`/`.sel`/`[data-chip]` selectors no plain class
-  can out-specify. Add any new card-corner badge to that rule.
+  can out-specify. Add any new card-corner badge to that rule. Page CHROME is not in scope for it and
+  must not be added: `#scopeBar`'s crumbs stay legible at every zoom, since being zoomed out is exactly
+  when you most need to know which frame you're standing in — the rule is about per-CARD badges, of
+  which there is one per card on screen.
 - **Theme** (light/dark) and **edge style** are persisted in localStorage and driven
   by CSS variables defined at the top of `<style>`.
 - **ONE card palette for both themes.** `body.light` overrides no `--pal-*` value (it used to swap in
@@ -444,7 +620,9 @@ DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG.
     title).
   - **A card inside a container steps one notch off its host's fill** — `.stack-child` for a stack's
     rows, `.frame-child` for the cards in a frame's box (`inStack`/`inFrame` in `main.ts`, nearest
-    container ancestor). Both exist for the same reason: a card INHERITS its colour from its
+    container ancestor by **`containerHost`** — the TONE walk, deliberately not `hostFrame`, so an
+    OPEN frame still steps its cards even though it hosts no elements; see the OPENING section).
+    Both exist for the same reason: a card INHERITS its colour from its
     ancestors, so one dropped into a coloured container resolves to the container's own fill and
     vanishes into it. The step is `93%` toward that card's own **`--ink`**, not toward a literal
     `#fff`: `--ink` is by construction the direction that HAS contrast against this fill, so it

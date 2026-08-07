@@ -8,6 +8,7 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
 import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
+import { detachParentId } from '../nav/scope.js';
 import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, frameInterior, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -607,7 +608,10 @@ function dragPointerUp(): void {
               // the old parent's kidOrder, BEFORE the link is cut — else undo restores the child but
               // not its slot, and it comes back appended at the end of its siblings
               touch(rp?.id);
-              r.parent = null; r.side = undefined;   // a root has no side / frame host
+              // …and "root" means the CURRENT top level: while a frame is open, ripping a card out of
+              // a nested frame lands it at the open frame's top level, not on a canvas that can't
+              // show it (detachParentId, nav/scope.ts). Either way there's no side and no frame host.
+              r.parent = detachParentId(); r.side = undefined;
               if (wasTab) {
                 if (r.collapsed) { r.collapsed = false; r.dirty = true; }
                 reanchorContents(r, lent!, drag.start.get(r.id) ?? r);

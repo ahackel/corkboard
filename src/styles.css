@@ -195,12 +195,59 @@ body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag 
    the outline drawer is meant to cover, see #outline's comment), the home button must stay
    reachable/visible even while outline rows scroll past underneath it. Still below true modals
    (#ctxMenu/#startScreen/#editorSheet/#movePicker: z:40+). */
-#homeBar { position:fixed; top:12px; left:12px; z-index:30; display:flex; align-items:center; gap:8px; max-width:calc(100% - 24px); touch-action:pan-x pan-y; }
-#homeBar #homeBtn { position:static; flex:none; }   /* .floating-btn styles the box; the bar owns positioning */
-#folderName { font-size:13px; font-weight:600; color:var(--text);
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#folderName:empty { display:none; }   /* icon-only until a folder is loaded */
-@media (max-width:480px){ #folderName { display:none; } }   /* icon-only on narrow screens */
+/* ONE PILL, like #toolbar: a single --panel capsule holding the home button and every path segment,
+   all of them borderless and transparent until hovered. Not a capsule per segment — nothing else in
+   the app looks like that, and a path is one thing. The pill also does real work now the canvas can be
+   any colour (syncScopeBackground): text drawn straight onto a teal canvas has no dependable contrast. */
+#homeBar { position:fixed; top:12px; left:12px; z-index:30; display:flex; align-items:center; gap:2px;
+  max-width:calc(100% - 24px); padding:4px 6px;
+  background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
+/* .floating-btn styles the box and the bar owns positioning — but inside the pill the button drops its
+   own background, so it reads as one item in a bar rather than a capsule inside a capsule. */
+#homeBar #homeBtn { position:static; flex:none; background:transparent; }
+#homeBar #homeBtn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
+#folderName:empty { display:none; }   /* icon-only until a map is loaded */
+/* ---------- the open-frame path (features/breadcrumbs.ts) ----------
+   Segments match #toolbar's buttons: no border, no fill, hover-highlight only, muted until they're the
+   level you're actually in. The map name is the first of them (#folderName), so going into a frame ADDS
+   segments rather than swapping loose text for pills.
+   NOT touched by `zoom-far`: that rule drops PER-CARD badges, of which there is one per card on screen.
+   This is a single piece of app chrome, and being zoomed out is exactly when you most need to know
+   which frame you're standing in. Nor does it hide under 480px the way the map name may — on a phone
+   the map name is expendable, a one-way door is not. */
+#scopeBar { display:none; align-items:center; gap:2px; min-width:0; }
+body.scoped #scopeBar { display:flex; }
+.sc-sep { flex:none; color:var(--muted); font-size:13px; opacity:.65; }
+.sc-crumb { display:inline-flex; align-items:center; gap:5px; min-width:0; max-width:190px;
+  padding:4px 8px; border:none; border-radius:var(--r-full);
+  background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:600;
+  cursor:pointer; }
+.sc-crumb:hover { background:color-mix(in srgb, var(--text) 8%, transparent); color:var(--text); }
+/* The level you're IN is a label, not a control: you're already there, so a click has nothing to do
+   and a hover highlight would promise one. pointer-events kills both at once, and it covers the map
+   segment unscoped for the same reason (nothing sits above the whole map). */
+.sc-crumb.sc-cur { color:var(--text); pointer-events:none; }
+.sc-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
+/* The pill still stops short of the CENTRED #toolbar (~290px wide, hence half of it plus a gap). With
+   the middle folded into `…` the segment count is bounded, so this cap now actually holds instead of
+   being overflowed by icons and separators that can't shrink. */
+@media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }
+/* NARROW: no room beside the toolbar at all, so the whole pill drops to its own line underneath it —
+   still one pill, just on the next row. */
+@media (max-width:700px){ body.scoped #homeBar { top:58px; max-width:calc(100% - 24px); } }
+/* Narrower still: drop the map name (the expendable segment) and let the rest ellipsise. Nothing
+   collapses to an icon-only segment — the segments carry no icon, so that would leave empty buttons;
+   the `…` fold is what keeps a deep path short. */
+@media (max-width:480px){
+  #folderName { display:none; }
+  /* …and with the map name gone, the path's leading separator has nothing to separate FROM — it would
+     hang off the home button. Every other separator still earns its place. */
+  #scopeBar > .sc-sep:first-child { display:none; }
+  .sc-crumb { max-width:130px; }
+}
+/* …and follow #homeBar's own retreat while an outline row is being edited. */
+@media (max-width:700px){ body.ol-editing #scopeBar { display:none; } }
 /* find / jump-to-card — opened by #searchBtn, and it TAKES THE TOOLBAR'S PLACE (same top/centring)
    rather than dropping below it: search is a temporary mode, so the bar it replaces goes away while
    it's up (the rule below). The toolbar can't be hidden by a sibling combinator — it comes BEFORE
@@ -268,7 +315,17 @@ input::placeholder { color:var(--muted); opacity:1; }
 #ctxMenu .cm-sep { height:1px; margin:4px -5px; background:var(--node-border); }
 
 /* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
-#stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none; }
+#stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
+  /* While a frame is OPEN the canvas IS its interior, so it wears that frame's own fill — --scope-bg,
+     written inline by main.ts's syncScopeBackground from the same effectiveColor its box used. On
+     #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child of this) so
+     the grid still draws over it. Transitioned so going in and out reads as the canvas taking the
+     frame's colour rather than a hard cut; 320ms is animateReflow's card glide, so the two land
+     together. Unset → transparent, and the theme's background shows through as before. */
+  background-color: var(--scope-bg, transparent); transition: background-color 320ms ease; }
+/* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
+   simply BE there (withoutScopeFade in main.ts). See its comment for why. */
+body.scope-instant #stage { transition: none; }
 #stage.panning { cursor:grabbing; }
 /* the hand only appears while actually dragging a card; default everywhere else */
 body.grabbing, body.grabbing * { cursor:grabbing !important; }

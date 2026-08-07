@@ -16,6 +16,7 @@ import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import { paintAll, selectNode, NODE_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
+import { resolveScopeAfterLoad } from '../nav/scope.js';
 import { paintStrokes } from '../features/sketch.js';
 import { refreshGrid } from '../view/grid.js';
 import { ui, isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
@@ -240,6 +241,10 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   if (!keepView && firstEver && state.nodes.size > 40)
     collapseAtDepth(1);   // applyLayouts() below resolves positions
   if (!keepView) markFolderSeen(seenKey);
+  // Re-point the open-frame scope at the freshly minted ids BEFORE the first layout/paint, so a
+  // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
+  // whole map (nav/scope.ts).
+  resolveScopeAfterLoad();
   // Resolve layouts in three steps: paint once so every card has a real measured height, run
   // the line/fan layout against those true heights, then paint the resolved positions.
   paintAll();

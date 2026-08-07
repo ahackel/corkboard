@@ -15,7 +15,8 @@ mm_collapsed: true
 
 - **Edit the note:** double-click a card's body, or press `E`, to type the note right on the card. Press `↓` while renaming to drop into the body.
 
-- **Double-click empty space to make a card:** on the canvas you get a new card right there, ready to
-  name; inside a frame you get one *in* that frame. A stack takes a new row at the end.
+- **Double-click empty space** on the canvas to make a new card right there, ready to name. A stack
+  takes a new row at the end. On a **frame** the gesture means "go in" instead — and once you're
+  inside one, double-clicking the canvas comes back out. See "Open a frame".
 
 - `Enter` adds a line · `Esc` cancels · click away to keep. **It autosaves.**
