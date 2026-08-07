@@ -9,7 +9,7 @@
 // all do with a path. #homeBar IS that pill (styles.css); the home button and every segment sit
 // inside it, so the map name reads as the first segment of the path rather than as loose text beside
 // it, and going into a frame just adds segments instead of swapping one kind of chrome for another.
-// The pill matters rather than being decoration: the canvas can now be any colour (syncScopeBackground),
+// The pill matters rather than being decoration: the canvas can now be any colour (syncCanvasBackground),
 // so a path drawn straight onto it would have no dependable contrast.
 //
 // A DEEP path folds its middle into one `…` that opens a menu of the levels it swallowed. That bounds

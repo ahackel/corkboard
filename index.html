@@ -202,6 +202,16 @@
   <!-- grid size picker: one slot further left of the grid style toggle (view/grid.ts) -->
   <button id="gridSizeBtn" class="floating-btn" title="Grid size — click to choose" aria-label="Grid size"></button>
 
+  <!-- canvas colour: one slot further left again. Edits the colour of the canvas you're standing on —
+       the MAP at the top level, the OPEN FRAME once you're inside one (features/canvas-color.ts). Its
+       face is a .swatch rather than an icon, so it shows the colour it would overwrite. The popover
+       holds properties.ts's own swatch row, built on first open. -->
+  <button id="canvasColorBtn" class="floating-btn" title="Canvas colour" aria-label="Canvas colour">
+    <span class="swatch inherit"></span></button>
+  <div id="canvasColorPop" class="fb-pop">
+    <div id="canvasColors" class="swatches"></div>
+  </div>
+
   <!-- help toggle: floating bottom-right, outside the toolbar -->
   <button id="helpBtn" class="floating-btn" title="Open help (F1)" aria-label="Open help">
     <span class="ic" data-icon="help"></span>

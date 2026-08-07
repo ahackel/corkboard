@@ -140,6 +140,10 @@ export interface AppState {
   edgeStyle: EdgeStyle;            // restored from localStorage
   gridStyle: GridStyle;            // restored per-map from settings.json — see data/persistence.ts
   gridSize: GridSize;               // pattern cell size in world px — restored per-map from settings.json
+  // The MAP's own canvas colour — a colour VALUE like a node's (a palette key or an authored hex,
+  // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
+  // open frame the canvas wears that frame's fill instead. See main.ts's canvasFill, the one resolver.
+  canvasColor: string;
   strokes: Stroke[];               // freehand sketch layer (loaded from / saved to sketch.json)
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
@@ -158,6 +162,7 @@ export const state: AppState = {
   edgeStyle: 'orthogonal',
   gridStyle: 'none',
   gridSize: 20,
+  canvasColor: '',
   strokes: [],
   searchMatch: null,
   searchActiveId: null,

@@ -14,7 +14,7 @@ import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
-import { paintAll, selectNode, NODE_W } from '../main.js';
+import { paintAll, selectNode, colorFill, NODE_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad } from '../nav/scope.js';
 import { paintStrokes } from '../features/sketch.js';
@@ -395,16 +395,22 @@ async function flushSketch(): Promise<void> {
 }
 
 // ---------- per-map settings (view prefs that travel with the vault, e.g. the background grid) ----------
-function settingsJSON(): string { return JSON.stringify({ version: 1, grid: state.gridStyle, gridSize: state.gridSize }); }
+function settingsJSON(): string {
+  return JSON.stringify({ version: 1, grid: state.gridStyle, gridSize: state.gridSize, canvasColor: state.canvasColor });
+}
 export async function loadSettings(): Promise<void> {
   state.gridStyle = 'none';
   state.gridSize = 20;
+  state.canvasColor = '';
   try {
     const blob = store.readBlob ? await store.readBlob(SETTINGS_FILE) : null;
     if (!blob) return;
     const data = JSON.parse(await blob.text());
     if (GRID_STYLES.includes(data?.grid)) state.gridStyle = data.grid;
     if (GRID_SIZES.includes(data?.gridSize)) state.gridSize = data.gridSize;
+    // Validated the same way a node's own colour is (colorFill resolves a palette key OR a hex, and
+    // nothing else), so a hand-edited settings.json can't paint the canvas an arbitrary CSS value.
+    if (typeof data?.canvasColor === 'string' && colorFill(data.canvasColor)) state.canvasColor = data.canvasColor;
   } catch { /* missing or malformed → default to no grid */ }
 }
 let settingsTimer: number | undefined;

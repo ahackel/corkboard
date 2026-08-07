@@ -34,6 +34,74 @@ const panels: PropertyControls[] = [];
 // a light/dark switch (the --pal-* values differ per theme).
 export function refreshSwatches(): void { for (const p of panels) p.rebuildSwatches(); }
 
+// ---------- the swatch row itself: markup + marking ----------
+// Split out of createProperties so the CANVAS colour popover (features/canvas-color.ts) is the same
+// row rather than a copy of it — the palette, the custom picker, the recents and the ring logic all
+// have exactly one implementation, so none of them can drift between the two surfaces. What the
+// canvas popover can't reuse is createProperties itself: that whole factory is defined over NODE ids
+// (state.nodes, isLockedEffective, record-per-id), and at the top level the target isn't a node.
+//
+// `first` is the one difference in the markup. A card's default is to INHERIT its parent's colour,
+// so it gets the striped chip plus a separate explicit `none`. The MAP's canvas has no parent to
+// inherit from — its fallback is the theme's own background — so it gets ONE reset chip and no
+// `none`, which there would mean the identical thing twice.
+export type FirstChip = 'inherit' | 'default';
+export function swatchRowHTML(first: FirstChip): string {
+  let html = first === 'inherit'
+    ? `<div class="swatch inherit" data-color="" title="inherit colour from parent (default)"></div>`
+    : `<div class="swatch inherit" data-color="" title="theme default — no canvas colour"></div>`;
+  for (const c of PALETTE)
+    html += `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`;
+  if (first === 'inherit')
+    html += `<div class="swatch nofill" data-color="none" title="no colour — don’t inherit"></div>`;
+  // Two rows in ONE flex container rather than two containers: a full-width break element makes
+  // the wrap happen exactly here (see .swatch-break), which keeps every chip a sibling — so a
+  // single delegated click handler, markSwatchRow's one querySelectorAll and the float bar's
+  // `.swatch.active` lookup all keep working over the whole picker, on both rows.
+  html += `<span class="swatch-break"></span>`;
+  // Any colour at all — the card's ink follows automatically (utils/ink.ts), which is what makes an
+  // off-palette colour safe to offer. A <label> WRAPPING the input, rather than a div that forwards
+  // a click: that's the one form every platform opens natively from a single tap, including iOS,
+  // where the input is the only way to reach the system colour sheet (there's no EyeDropper API and
+  // showPicker() isn't dependable). The input itself is invisible and covers the chip (styles.css),
+  // so the chip keeps the same round-bubble look as its neighbours.
+  html += `<label class="swatch custom" title="custom colour — any colour you like">`
+    + `<input type="color" value="${CUSTOM_FALLBACK}" aria-label="Custom colour"></label>`;
+  return html;
+}
+// The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered
+// after the custom chip so the row reads "pick a new one → the ones you already picked".
+export function renderRecentChips(colors: HTMLElement): void {
+  colors.querySelectorAll('.swatch.recent').forEach(el => el.remove());
+  for (const c of recentColors())
+    colors.insertAdjacentHTML('beforeend',
+      `<div class="swatch recent" data-color="${c}" title="${c}" style="--sw:${c}"></div>`);
+}
+// Ring the chip carrying `active` ('' → the first chip). A custom colour is usually carried by one of
+// the RECENT chips, and that's the one that should ring. The custom chip only ADOPTS the colour when
+// no recent chip has it — a colour that's been pushed out of the cap, or one authored/imported into a
+// note by hand. It can't simply stop adopting: `.swatch.active` is also what the float bar's trigger
+// mirrors (markColorTrigger), so with nothing ringed the trigger would fall back to the inherit
+// stripes and read as "no colour".
+export function markSwatchRow(colors: HTMLElement, active: string): void {
+  const custom = colors.querySelector<HTMLElement>('.swatch.custom');
+  if (custom) {
+    const onRecent = isHexColor(active) && !!colors.querySelector(`.swatch.recent[data-color="${active}"]`);
+    const adopt = isHexColor(active) && !onRecent;
+    // DELETED rather than set to '' when the chip isn't adopting: '' is the *first* chip's own
+    // value, so an empty data-color here would light up two chips at once on a fresh card.
+    if (adopt) custom.dataset.color = active; else delete custom.dataset.color;
+    custom.style.setProperty('--sw', adopt ? active : CUSTOM_FALLBACK);
+    custom.classList.toggle('picked', adopt);   // .picked shows the colour; otherwise a spectrum chip
+    const input = custom.querySelector<HTMLInputElement>('input');
+    // The sheet should open on whatever colour is showing, recent chip or not — that's the one
+    // you'd want to nudge — falling back to the neutral start only when there's no custom colour.
+    if (input) input.value = isHexColor(active) ? active : CUSTOM_FALLBACK;
+  }
+  colors.querySelectorAll<HTMLElement>('.swatch').forEach(sw =>
+    sw.classList.toggle('active', sw.dataset.color === active));
+}
+
 // getIds returns the card ids the controls act on: the whole selection in the sidebar, the single
 // active card in the branch sheet. Empty → the controls no-op (nothing selected).
 export function createProperties(els: PropEls, getIds: () => string[]): PropertyControls {
@@ -43,24 +111,7 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
   // features/color-recents.ts), so it's rebuilt on every sync — a colour picked from the sheet has to
   // appear as a chip straight away, and one recoloured away from has to stop being offered.
   function rebuildSwatches(): void {
-    let html = `<div class="swatch inherit" data-color="" title="inherit colour from parent (default)"></div>`;
-    for (const c of PALETTE)
-      html += `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`;
-    html += `<div class="swatch nofill" data-color="none" title="no colour — don’t inherit"></div>`;
-    // Two rows in ONE flex container rather than two containers: a full-width break element makes
-    // the wrap happen exactly here (see .swatch-break), which keeps every chip a sibling — so the
-    // single delegated click handler below, markSwatch's one querySelectorAll and the float bar's
-    // `.swatch.active` lookup all keep working over the whole picker, on both rows.
-    html += `<span class="swatch-break"></span>`;
-    // Any colour at all — the card's ink follows automatically (utils/ink.ts), which is what makes an
-    // off-palette colour safe to offer. A <label> WRAPPING the input, rather than a div that forwards
-    // a click: that's the one form every platform opens natively from a single tap, including iOS,
-    // where the input is the only way to reach the system colour sheet (there's no EyeDropper API and
-    // showPicker() isn't dependable). The input itself is invisible and covers the chip (styles.css),
-    // so the chip keeps the same round-bubble look as its neighbours.
-    html += `<label class="swatch custom" title="custom colour — any colour you like">`
-      + `<input type="color" value="${CUSTOM_FALLBACK}" aria-label="Custom colour"></label>`;
-    els.colors.innerHTML = html;
+    els.colors.innerHTML = swatchRowHTML('inherit');
     renderRecents();
     // Delegated, so the recents row can be re-rendered freely without re-binding anything. The
     // custom chip is excluded: its click OPENS the native sheet (the <label>'s job) and picks nothing.
@@ -71,14 +122,7 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
     });
     bindCustom(els.colors.querySelector<HTMLInputElement>('.swatch.custom input')!);
   }
-  // The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered
-  // after the custom chip so the row reads "pick a new one → the ones you already picked".
-  function renderRecents(): void {
-    els.colors.querySelectorAll('.swatch.recent').forEach(el => el.remove());
-    for (const c of recentColors())
-      els.colors.insertAdjacentHTML('beforeend',
-        `<div class="swatch recent" data-color="${c}" title="${c}" style="--sw:${c}"></div>`);
-  }
+  function renderRecents(): void { renderRecentChips(els.colors); }
   function setColor(color: string): void {
     const ids = editableIds(); if (!ids.length) return;
     record(ids, () => { for (const id of ids) applyColor(id, color); });
@@ -117,30 +161,9 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
     });
   }
   // active swatch = the value shared by every target; mixed (or nothing) → the inherit swatch.
-  // A custom colour is usually carried by one of the RECENT chips, and that's the one that should
-  // ring. The custom chip only ADOPTS the colour when no recent chip has it — a colour that's been
-  // pushed out of the cap, or one authored/imported into a note by hand. It can't simply stop
-  // adopting: `.swatch.active` is also what the float bar's trigger mirrors (markColorTrigger), so
-  // with nothing ringed the trigger would fall back to the inherit stripes and read as "no colour".
   function markSwatch(): void {
     const colors = new Set(getIds().map(id => state.nodes.get(id)?.color || ''));
-    const active = colors.size === 1 ? ([...colors][0] || '') : '';
-    const custom = els.colors.querySelector<HTMLElement>('.swatch.custom');
-    if (custom) {
-      const onRecent = isHexColor(active) && !!els.colors.querySelector(`.swatch.recent[data-color="${active}"]`);
-      const adopt = isHexColor(active) && !onRecent;
-      // DELETED rather than set to '' when the chip isn't adopting: '' is the *inherit* chip's own
-      // value, so an empty data-color here would light up two chips at once on a fresh card.
-      if (adopt) custom.dataset.color = active; else delete custom.dataset.color;
-      custom.style.setProperty('--sw', adopt ? active : CUSTOM_FALLBACK);
-      custom.classList.toggle('picked', adopt);   // .picked shows the colour; otherwise a spectrum chip
-      const input = custom.querySelector<HTMLInputElement>('input');
-      // The sheet should open on whatever colour is showing, recent chip or not — that's the one
-      // you'd want to nudge — falling back to the neutral start only when there's no custom colour.
-      if (input) input.value = isHexColor(active) ? active : CUSTOM_FALLBACK;
-    }
-    els.colors.querySelectorAll<HTMLElement>('.swatch').forEach(sw =>
-      sw.classList.toggle('active', sw.dataset.color === active));
+    markSwatchRow(els.colors, colors.size === 1 ? ([...colors][0] || '') : '');
   }
 
   // ---- checklist toggle (set on every target; mixed → indeterminate) ----

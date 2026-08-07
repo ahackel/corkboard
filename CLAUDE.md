@@ -304,7 +304,7 @@ this replaces what the map is for as long as you're inside. What holds it togeth
   A deep path folds its middle into one `…` that opens a menu of the levels it swallowed — which is the
   only thing that actually keeps it clear of the CENTRED `#toolbar`, since capping the pill's width
   can't: the separators are `flex:none` and simply overflow it.
-- **The CANVAS wears the open frame's fill** (`syncScopeBackground` → `--scope-bg` on `#stage`, which
+- **The CANVAS wears the open frame's fill** (`syncCanvasBackground` → `--canvas-bg` on `#stage`, which
   sits under `#grid`; `<body>`'s `--bg` is left alone so the theme is untouched). Same resolver its box
   used — `effectiveColor` → `colorFill` — so the canvas can't disagree with the colour the box was just
   showing, and it's transitioned over `animateReflow`'s 320ms so going in reads as the canvas taking
@@ -317,6 +317,36 @@ this replaces what the map is for as long as you're inside. What holds it togeth
   coloured, and painting the whole canvas *that* is both a lie and a real problem in the light theme,
   where the near-white swallows the chrome floating on the canvas. Authorship, not the hex — a frame
   explicitly coloured white still tints, an inherited colour still counts.
+  **At the TOP level that same variable carries the MAP's own colour** — `state.canvasColor`, per-map
+  in `settings.json` beside the grid, so it travels with the vault rather than the browser. One
+  resolver answers both, `canvasFill` (`main.ts`), off `canvasOwner`: the open frame's `actionTarget`,
+  or `null` for "the map". The `hasAuthoredColor` test applies only to the frame half — `canvasColor`
+  is authored by definition, and `''` means the theme's background.
+- **The canvas-colour BUTTON edits whichever of those two you're standing on** (`#canvasColorBtn`,
+  one slot left of `#gridSizeBtn`; `features/canvas-color.ts`). At the top level it writes
+  `state.canvasColor`; inside an open frame it writes that FRAME's `n.color` — the same field the
+  float bar would write if the frame were selected, so nothing new exists for the case and the paint
+  just follows. It reads `canvasOwner` too, which is what keeps the chip on its face showing the value
+  it would overwrite. Four things to respect:
+  - **The chips are `properties.ts`'s row, not a copy** — `swatchRowHTML`/`markSwatchRow`/
+    `renderRecentChips` were split out of `createProperties` for exactly this, so the palette, the
+    custom picker and the recents MRU have one implementation. What *can't* be shared is
+    `createProperties` itself: that factory is defined over node ids, and at the top level the target
+    isn't a node.
+  - **The first chip differs, and that's the only difference** (`FirstChip`). A card INHERITS from its
+    parent, so it gets the striped chip plus a separate explicit `none`. The map's canvas has no parent
+    — its fallback is the theme — so it gets ONE "theme default" chip and no `none`, which there would
+    mean the same thing twice.
+  - **Both halves are undoable, in the one timeline.** A frame is an ordinary `record`; the map's
+    colour isn't a node at all, so it goes through `touchCanvas`/`commitStep` — the shape the sketch
+    layer already uses for `state.strokes`, and `Step` now carries a third optional `canvas` field.
+    ⌘Z after a pick has to put the colour back wherever you were standing; a button whose undo depends
+    on which scope you were in would read as a bug.
+  - **The GRID INK is re-derived from whatever fill is behind it** (`syncCanvasBackground` writes
+    `--grid-pat` on `#stage`, which `#grid` declares `--grid-ink` from). The theme's own recipe with
+    the canvas fill standing in for `--grid` and, for `--text`, `inkFor(fill)` — the same call a card's
+    ink goes through, so an arbitrary picked colour needs no special case. Without it a strong canvas
+    colour either swallows the grid or turns it harsh.
 - **`hostFrame` and `containerHost` are two different questions**, and the split exists because of the
   bullet above. `hostFrame` is a DOM fact — whose wrapper is my element inside — and it stops at the
   scope root, which hosts nothing. `containerHost` is a TONE fact — whose fill am I sitting on — and

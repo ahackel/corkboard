@@ -9,10 +9,11 @@
 import { state, stage, setStatus, type MindNode, type Stroke } from '../core/state.js';
 import { applyLayouts } from '../view/layout.js';
 import { frameBox } from '../view/camera.js';
-import { scheduleSave, scheduleSaveSketch } from '../data/persistence.js';
+import { scheduleSave, scheduleSaveSketch, scheduleSaveSettings } from '../data/persistence.js';
 import { paintAll, setSelectionSet, popScopeFor, nodeW, nodeH } from '../main.js';
 import { paintStrokes } from './sketch.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
+import { isScopeRoot } from '../nav/scope.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
@@ -24,15 +25,23 @@ import { endInlineEdit, endBodyEdit } from './inline-edit.js';
 // re-runs applyLayouts(), which recomputes it.
 type NodeSnap = Omit<MindNode, 'id' | 'el' | 'frameContentEl' | 'tabStripEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
 type Images = Map<string, NodeSnap | null>;      // null = the node does not exist
-// A step captures node before/after images and, when a sketch gesture changed the ink layer,
-// the whole strokes array before/after — one unified timeline covers both (see touchStrokes).
-interface Step { before: Images; after: Images; strokes?: { before: Stroke[]; after: Stroke[] }; }
+// A step captures node before/after images and, where an op changed something that isn't a node:
+// the whole strokes array (a sketch gesture, see touchStrokes) and the map's canvas colour (see
+// touchCanvas). One unified timeline covers all three — ⌘Z after recolouring the canvas has to put
+// the colour back wherever you were standing, and inside an open frame that same gesture edits a
+// NODE, so the two halves of one button must land in the same history.
+interface Step {
+  before: Images; after: Images;
+  strokes?: { before: Stroke[]; after: Stroke[] };
+  canvas?: { before: string; after: string };
+}
 
 const MAX_STEPS = 100;
 const undoStack: Step[] = [];
 const redoStack: Step[] = [];
 let pending: Images | null = null;
 let pendingStrokes: Stroke[] | null = null;      // strokes before-image for the open step, if a sketch op touched it
+let pendingCanvas: string | null = null;         // canvas-colour before-image for the open step, if one was picked
 
 const cloneStrokes = (s: Stroke[]): Stroke[] => structuredClone(s);
 const sameStrokes = (a: Stroke[], b: Stroke[]): boolean => JSON.stringify(a) === JSON.stringify(b);
@@ -72,10 +81,17 @@ export function touchStrokes(): void {
   if (state.readOnly) return;
   if (!pendingStrokes) pendingStrokes = cloneStrokes(state.strokes);
 }
+// Remember the map's canvas colour before changing it. Idempotent per step, and `=== null` rather
+// than a falsy test: '' (the theme default) is a real value and the commonest before-image there is.
+export function touchCanvas(): void {
+  if (state.readOnly) return;
+  if (pendingCanvas === null) pendingCanvas = state.canvasColor;
+}
 // Close the pending step: capture after-images, drop untouched-in-practice nodes, and push.
 export function commitStep(): void {
   const before = pending; pending = null;
   const strokesBefore = pendingStrokes; pendingStrokes = null;
+  const canvasBefore = pendingCanvas; pendingCanvas = null;
   const step: Step = { before: new Map(), after: new Map() };
   if (before) for (const [id, b] of before) {
     const n = state.nodes.get(id);
@@ -85,7 +101,9 @@ export function commitStep(): void {
   }
   if (strokesBefore && !sameStrokes(strokesBefore, state.strokes))
     step.strokes = { before: strokesBefore, after: cloneStrokes(state.strokes) };
-  if (!step.before.size && !step.strokes) return;    // nothing actually changed
+  if (canvasBefore !== null && canvasBefore !== state.canvasColor)
+    step.canvas = { before: canvasBefore, after: state.canvasColor };
+  if (!step.before.size && !step.strokes && !step.canvas) return;    // nothing actually changed
   undoStack.push(step);
   if (undoStack.length > MAX_STEPS) undoStack.shift();
   redoStack.length = 0;
@@ -100,7 +118,7 @@ export function record(ids: Iterable<string | null | undefined>, fn: () => void)
   if (owner) commitStep();
 }
 export function clearHistory(): void {
-  undoStack.length = 0; redoStack.length = 0; pending = null; pendingStrokes = null;
+  undoStack.length = 0; redoStack.length = 0; pending = null; pendingStrokes = null; pendingCanvas = null;
   updateUndoButtons();
 }
 
@@ -139,16 +157,24 @@ function frameIfOffscreen(ids: string[]): void {
   }
   if (maxX < 0 || minX > r.width || maxY < 0 || minY > r.height) frameBox(nodes);
 }
-function applyStep(images: Images, strokes: Stroke[] | undefined, label: string): void {
+function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string | undefined, label: string): void {
   applyImages(images);
   if (strokes) { state.strokes = cloneStrokes(strokes); paintStrokes(); scheduleSaveSketch(); }
+  // Restored BEFORE the paint below: syncCanvasBackground runs off paintAll, so the canvas repaints
+  // in the same pass everything else does rather than needing a second one.
+  if (canvas !== undefined) { state.canvasColor = canvas; scheduleSaveSettings(); }
   // paint first so resurrected cards have real DOM heights, then lay out, then commit
   paintAll(); applyLayouts(); paintAll();
   const ids = [...images.keys()].filter(id => state.nodes.has(id));
   // An undo can resurrect (or move) a node that lives outside the frame you're standing in — come out
   // of as many levels as it takes to show it, or setSelectionSet would silently drop it (isSelectable
   // refuses an out-of-scope id) and the step would look like it did nothing. See popScopeFor.
-  const first = ids.map(id => state.nodes.get(id)).find((n): n is MindNode => !!n);
+  // The one node that must NOT pop is the scope root itself. outOfScope deliberately reports it as
+  // outside its own scope (that's what stops its box and tab being painted while you're inside it),
+  // but it's the one node whose change you can always already see — the canvas IS it. Recolouring the
+  // open frame from the canvas-colour button records a step on exactly that node, so without this
+  // skip every ⌘Z would throw you out of the frame you were working in.
+  const first = ids.map(id => state.nodes.get(id)).find((n): n is MindNode => !!n && !isScopeRoot(n));
   if (first) popScopeFor(first);
   setSelectionSet(ids);
   frameIfOffscreen(ids);
@@ -162,7 +188,7 @@ export function undo(): void {
   const step = undoStack.pop();
   if (!step) { setStatus('Nothing to undo'); return; }
   redoStack.push(step);
-  applyStep(step.before, step.strokes?.before, 'Undo');
+  applyStep(step.before, step.strokes?.before, step.canvas?.before, 'Undo');
   updateUndoButtons();
 }
 export function redo(): void {
@@ -172,7 +198,7 @@ export function redo(): void {
   const step = redoStack.pop();
   if (!step) { setStatus('Nothing to redo'); return; }
   undoStack.push(step);
-  applyStep(step.after, step.strokes?.after, 'Redo');
+  applyStep(step.after, step.strokes?.after, step.canvas?.after, 'Redo');
   updateUndoButtons();
 }
 

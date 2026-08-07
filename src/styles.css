@@ -198,7 +198,7 @@ body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag 
 /* ONE PILL, like #toolbar: a single --panel capsule holding the home button and every path segment,
    all of them borderless and transparent until hovered. Not a capsule per segment — nothing else in
    the app looks like that, and a path is one thing. The pill also does real work now the canvas can be
-   any colour (syncScopeBackground): text drawn straight onto a teal canvas has no dependable contrast. */
+   any colour (syncCanvasBackground): text drawn straight onto a teal canvas has no dependable contrast. */
 #homeBar { position:fixed; top:12px; left:12px; z-index:30; display:flex; align-items:center; gap:2px;
   max-width:calc(100% - 24px); padding:4px 6px;
   background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
@@ -316,13 +316,14 @@ input::placeholder { color:var(--muted); opacity:1; }
 
 /* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
 #stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
-  /* While a frame is OPEN the canvas IS its interior, so it wears that frame's own fill — --scope-bg,
-     written inline by main.ts's syncScopeBackground from the same effectiveColor its box used. On
-     #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child of this) so
-     the grid still draws over it. Transitioned so going in and out reads as the canvas taking the
-     frame's colour rather than a hard cut; 320ms is animateReflow's card glide, so the two land
-     together. Unset → transparent, and the theme's background shows through as before. */
-  background-color: var(--scope-bg, transparent); transition: background-color 320ms ease; }
+  /* The canvas's own fill — --canvas-bg, written inline by main.ts's syncCanvasBackground from
+     canvasFill, the ONE resolver: the MAP's own colour at the top level, and while a frame is OPEN
+     that frame's fill instead (the canvas IS its interior then), through the same effectiveColor its
+     box used. On #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child
+     of this) so the grid still draws over it. Transitioned so going in and out reads as the canvas
+     taking the frame's colour rather than a hard cut; 320ms is animateReflow's card glide, so the two
+     land together. Unset → transparent, and the theme's background shows through as before. */
+  background-color: var(--canvas-bg, transparent); transition: background-color 320ms ease; }
 /* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
    simply BE there (withoutScopeFade in main.ts). See its comment for why. */
 body.scope-instant #stage { transition: none; }
@@ -1202,6 +1203,14 @@ body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
    .floating-btn whose content is TEXT, so it drops the shared flex centring for the numeric-badge
    rule next to .hidden-count (which centres digits rather than their line box). */
 #gridSizeBtn { right:calc(12px + 2 * (var(--bar-btn) + 8px)); bottom:12px; font-size:11px; font-weight:600; }
+/* canvas colour — one slot further left again (features/canvas-color.ts). The one .floating-btn whose
+   face is a COLOUR: it wears the same .swatch chip its popover offers, so it shows the value it would
+   overwrite (the stripes when that's "theme default"/inherit). pointer-events off the chip so every
+   click lands on the button itself, whichever pixel was hit. */
+#canvasColorBtn { right:calc(12px + 3 * (var(--bar-btn) + 8px)); bottom:12px; }
+#canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; }
+/* Nothing to pick in read-only — setColor refuses there, so the button would be a dead control. */
+body.readonly #canvasColorBtn { display:none; }
 /* help hint lives INSIDE the help button, so it tracks it with no JS — sits ABOVE the
    bottom-right button and points down at it */
 #helpHint {
@@ -1361,9 +1370,11 @@ body.canvas-interacting .addnote { display:none !important; }
    it's meant to be on a one-row bar but a big lozenge on this taller box. --r-panel is the roundness
    step nearest half of that (16px against the ~17px the two-row box was painting), so this stays on
    the shared scale rather than introducing a one-off value. The single-row type/layout popovers keep
-   .fb-pop's own --r-full. */
-#fbColorPop { height:auto; padding:6px 8px; border-radius:var(--r-panel); }
-#fbColorPop .swatches { width:min(calc(13 * 22px + 12 * 6px), calc(100vw - 40px)); row-gap:6px; }
+   .fb-pop's own --r-full.
+   The canvas colour picker (#canvasColorPop, features/canvas-color.ts) is the same row of chips in
+   the same box, so it shares both rules rather than restating them. */
+#fbColorPop, #canvasColorPop { height:auto; padding:6px 8px; border-radius:var(--r-panel); }
+#fbColorPop .swatches, #canvasColorPop .swatches { width:min(calc(13 * 22px + 12 * 6px), calc(100vw - 40px)); row-gap:6px; }
 /* hides instantly while #floatBar itself does (see float-bar.ts's followLoop) — a stale popover
    position mid-pan/drag/zoom would otherwise float away from its (now-moved) trigger button. */
 .fb-pop.hide-interact, .fb-pop-connector.hide-interact { opacity:0; pointer-events:none; transition:none; }
@@ -1572,7 +1583,8 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    too since it would float over the drawer. #outlineBtn joins them here: once open, #olCloseBtn
    (the drawer's top-LEFT, sharing #ocBack's spot) is the way to close it. #canvasMenuBtn is the
    deliberate exception (see its own z-index rule) — it must stay reachable from the outliner too. */
-body.outline #sketchBtn, body.outline #helpBtn, body.outline #gridBtn, body.outline #gridSizeBtn, body.outline #outlineBtn,
+body.outline #sketchBtn, body.outline #helpBtn, body.outline #gridBtn, body.outline #gridSizeBtn,
+body.outline #canvasColorBtn, body.outline #outlineBtn,
 body.outline #floatBar { display:none !important; }
 
 /* Below the 700px breakpoint (MUST match NARROW_MQ), outline goes full-screen instead of a

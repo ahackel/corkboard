@@ -36,6 +36,7 @@ import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
 import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
+import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
 import { toggleSketchMode } from './features/sketch.js';   // also registers the sketch toolbar wiring
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
@@ -62,6 +63,11 @@ window.__dbg = { get state(){ return state; }, get drag(){ return ui.drag; } }; 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupTheme();
 setupGrid();
+// Wiring only — it must not READ anything back out of main. Everything down here runs while main's
+// own body is still evaluating, so main's top-level consts below (SWATCH_BG, PALETTE, …) are still in
+// their temporal dead zone; touching one from a feature's setup is a TDZ crash that takes the whole
+// boot with it, blank canvas and all. Same reason float-bar defers createProperties to first use.
+setupCanvasColor();
 
 
 
@@ -900,7 +906,7 @@ function inStack(n: MindNode): boolean {
 // wash out).
 // containerHost again, and here it MATTERS rather than merely reading better: an OPEN frame hosts no
 // elements, so hostFrame would drop the tint from exactly the cards that need it most — the ones on a
-// canvas now painted the frame's own fill (syncScopeBackground), which they'd otherwise vanish into.
+// canvas now painted the frame’s own fill (syncCanvasBackground), which they’d otherwise vanish into.
 function inFrame(n: MindNode): boolean {
   if (isContainer(n) || isImageBox(n) || isQueryBox(n) || isAnnotation(n)) return false;
   const h = containerHost(n);
@@ -1861,7 +1867,7 @@ export function restoreScopeFromFile(file: string | null): void {
 // appeared — so the fade reads as the app flashing the wrong background before settling on the right
 // one; on a back/forward step the camera and selection jump too, so a sliding background would be the
 // only thing still catching up. Suppressed for two frames (long enough for the paint that sets
-// --scope-bg to land), after which every real open/leave fades again.
+// --canvas-bg to land), after which every real open/leave fades again.
 function withoutScopeFade(): void {
   document.body.classList.add('scope-instant');
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('scope-instant')));
@@ -1879,32 +1885,59 @@ export function popScopeFor(t: MindNode): void {
 // departed child's camera. Driven from paintAll, the same argument renderOutline makes.
 // While a frame is OPEN the canvas IS its interior, so the canvas takes the frame's own fill — the
 // very colour its box was wearing a moment before, through the same resolver its box used
-// (effectiveColor → colorFill), so the two can't drift. An uncoloured frame resolves to null and the
-// canvas keeps the theme's background. Written on #stage, not <body>, so the theme's own --bg is left
-// completely alone; #stage sits under #grid, so the grid still draws over it.
+// (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no frame and the
+// canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
+// #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
+// the grid still draws over it.
 // This is also what makes `inFrame` route through containerHost rather than hostFrame: the cards in
 // here now sit ON that fill, so they need the .frame-child step more than they did inside the box.
-// …and only when that colour is AUTHORED somewhere up the chain. effectiveColor deliberately falls
-// back to the theme's neutral card fill for a frame nobody has coloured, and painting the whole canvas
-// THAT would be both a lie (there's no colour to show) and a real problem in the light theme, where
-// the near-white fill swallows the floating chrome sitting on the canvas — the ghost-card pill, the
-// status line. The test is authorship, not the hex, so a frame explicitly coloured white still tints.
+// …and, for a frame, only when that colour is AUTHORED somewhere up the chain. effectiveColor
+// deliberately falls back to the theme's neutral card fill for a frame nobody has coloured, and
+// painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
+// the light theme, where the near-white fill swallows the floating chrome sitting on the canvas — the
+// ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
+// coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
 function hasAuthoredColor(n: MindNode): boolean {
   let guard = 0;   // same caution as effectiveColor's: a cycle must degrade, not hang
   for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = c.parent ? state.nodes.get(c.parent) : null)
     if (c.color) return true;
   return false;
 }
-function syncScopeBackground(): void {
+// WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
+// standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
+// and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
+// writes can't become two different things.
+export function canvasOwner(): MindNode | null {
   const open = scopeRootNode();
-  const tint = open && hasAuthoredColor(actionTarget(open));   // a group's colour is its open tab's
-  const fill = tint ? colorFill(effectiveColor(open)) : null;
-  if (fill) stage.style.setProperty('--scope-bg', fill);
-  else stage.style.removeProperty('--scope-bg');
+  return open ? actionTarget(open) : null;   // a tab group's colour is its open tab's
+}
+// The fill actually behind the cards right now — the one input both the background and the grid ink
+// are derived from. null = none, and the theme's own background shows through as before.
+export function canvasFill(): string | null {
+  const owner = canvasOwner();
+  if (!owner) return colorFill(state.canvasColor);
+  return hasAuthoredColor(owner) ? colorFill(effectiveColor(owner)) : null;
+}
+// The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
+// leaves it either invisible or harsh. So re-derive --grid-pat from the fill that's really behind it,
+// by the theme's own 55/45 recipe with the fill standing in for --grid and, for --text, the direction
+// that HAS contrast against that fill — inkFor, the same call a card's own ink goes through, so an
+// arbitrary picked colour needs no special case. Written on #stage, which is where the fill is set;
+// #grid is its child and declares --grid-ink from it, so one write covers both grid levels.
+export function syncCanvasBackground(): void {
+  const fill = canvasFill();
+  if (fill) {
+    stage.style.setProperty('--canvas-bg', fill);
+    stage.style.setProperty('--grid-pat', `color-mix(in srgb, ${fill} 55%, ${inkFor(fill)} 45%)`);
+  } else {
+    stage.style.removeProperty('--canvas-bg');
+    stage.style.removeProperty('--grid-pat');
+  }
+  markCanvasColorBtn();   // the button's own chip mirrors whatever it would edit
 }
 function syncScopeChrome(): void {
   renderCrumbs();
-  syncScopeBackground();
+  syncCanvasBackground();
   if (!scope.pruned) return;
   scope.pruned = false;
   if (state.sel.size || state.selId) setSelectionSet([]);
