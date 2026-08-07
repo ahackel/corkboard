@@ -48,7 +48,7 @@ export interface FmEntry {
   lines: string[];
 }
 
-// A mindmap node. One .md file per node; the filename is its identity on disk. In-memory
+// A board node. One .md file per node; the filename is its identity on disk. In-memory
 // `id`s are ephemeral (minted per load). Edges are DERIVED from `parent` — no edge list.
 export interface MindNode {
   id: string;

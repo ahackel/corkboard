@@ -1,7 +1,7 @@
 {
-  "name": "Markdown Mindmap",
-  "short_name": "Mindmap",
-  "description": "Local-first mindmap editor for a folder of Markdown notes",
+  "name": "Corkboard",
+  "short_name": "Corkboard",
+  "description": "Local-first visual editor for a folder of Markdown notes",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

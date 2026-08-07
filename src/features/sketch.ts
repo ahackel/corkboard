@@ -15,7 +15,7 @@ import { selectNode } from '../main.js';
 const SVGNS = 'http://www.w3.org/2000/svg';
 
 // ---- persisted pen settings ----
-const TOOL_KEY = 'mindmap.sketchTool', COLOR_KEY = 'mindmap.sketchColor', WIDTH_KEY = 'mindmap.sketchWidth';
+const TOOL_KEY = 'corkboard.sketchTool', COLOR_KEY = 'corkboard.sketchColor', WIDTH_KEY = 'corkboard.sketchWidth';
 const COLORS = ['#e0564a', '#f0a020', '#3bb273', '#357eea', '#9b5de5', '#8a99ad', '#f4f4f5', '#11151c'];
 const WIDTHS = [2, 4, 8];
 let tool: 'pen' | 'eraser' = 'pen';

@@ -17,8 +17,8 @@ export interface MapRef {
 }
 export type MapKind = MapRef['kind'];
 
-const MAPS_KEY = 'mindmap.maps';        // MapRef[] — the registry
-const LAST_MAP_KEY = 'mindmap.lastMap'; // {kind, id} — what boot() reopens
+const MAPS_KEY = 'corkboard.maps';        // MapRef[] — the registry
+const LAST_MAP_KEY = 'corkboard.lastMap'; // {kind, id} — what boot() reopens
 
 export function readMaps(): MapRef[] { return readJSON<MapRef[]>(MAPS_KEY, []); }
 function writeMaps(list: MapRef[]): void {
@@ -85,9 +85,11 @@ export async function renameDeviceMap(s: DeviceStore, id: string, name: string):
 // whatever on-device maps the adapter can enumerate (incl. the legacy vault/ dir, which
 // simply BECOMES the first map — no files are moved). Also derives the last-map ref from
 // the legacy last-store key so the first boot after the update reopens the same map.
-const LEGACY_RECENTS_KEY = 'mindmap.recentFolders';
-const LEGACY_LAST_STORE_KEY = 'mindmap.lastStore';
-const SEEN_KEY = 'mindmap.seenFolders';
+// These carry the CURRENT prefix even though they're pre-registry keys: utils/legacy-keys.ts
+// renames every `mindmap.*` key to `corkboard.*` before anything here reads one.
+const LEGACY_RECENTS_KEY = 'corkboard.recentFolders';
+const LEGACY_LAST_STORE_KEY = 'corkboard.lastStore';
+const SEEN_KEY = 'corkboard.seenFolders';
 
 export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
   if (readMaps().length) return;

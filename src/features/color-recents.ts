@@ -15,7 +15,7 @@
 import { state } from '../core/state.js';
 import { isHexColor } from '../utils/ink.js';
 
-const MRU_KEY = 'mindmap.colorMru';
+const MRU_KEY = 'corkboard.colorMru';
 const MRU_MAX = 8;    // what's remembered
 const SHOWN_MAX = 6;  // what fits on the row (see .swatches in styles.css)
 

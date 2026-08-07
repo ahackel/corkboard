@@ -23,7 +23,7 @@ export async function forgetRecent(key: string): Promise<void> {
 
 // Maps we've already auto-arranged once (keyed by store.seenKey). Used so the
 // one-time auto-collapse never fires again — every later open restores the saved state verbatim.
-const SEEN_KEY = 'mindmap.seenFolders';
+const SEEN_KEY = 'corkboard.seenFolders';
 export function seenFolders(): string[] { return readJSON<string[]>(SEEN_KEY, []); }
 export function markFolderSeen(name: string): void {
   const s = seenFolders();

@@ -3,7 +3,7 @@
 // (serializeMd), concatenated. Since a card's title is its FILENAME (not stored inside the
 // file), every card is preceded by a marker line carrying it:
 //
-//   <!-- mindmap-card: My Title.md -->
+//   <!-- corkboard-card: My Title.md -->
 //   ---
 //   …frontmatter…
 //   ---
@@ -30,8 +30,11 @@ import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, setSelectionSet, selectedIds, subtreeIds } from '../main.js';
 
-const MARK = '<!-- mindmap-card: ';
-const MARK_RE = /^<!-- mindmap-card: (.+?) -->$/gm;
+const MARK = '<!-- corkboard-card: ';
+// Read side accepts the app's former name too, so a payload copied from an older build (or
+// from an older tab still open beside this one) still pastes as cards rather than as text.
+const MARK_RE = /^<!-- (?:corkboard|mindmap)-card: (.+?) -->$/gm;
+const STARTS_MARK = /^<!-- (?:corkboard|mindmap)-card: /;
 
 // Rewrite the frontmatter's mm_parent to a payload-local name (or drop it for payload roots).
 // serializeMd emits the parent's on-disk path, which is meaningless outside this map.
@@ -96,7 +99,7 @@ export async function cutSelection(): Promise<void> {
 // keeping the copied cards' relative offsets plus a small nudge so a paste over the source
 // never lands exactly on top.
 export function tryPasteCards(text: string, at: { sx: number | null; sy: number | null; parent: string | null }): boolean {
-  if (!text.startsWith(MARK)) return false;
+  if (!STARTS_MARK.test(text)) return false;
   if (state.readOnly){ setStatus('Read-only — can’t paste'); return true; }
   // split on the marker lines; each chunk is one card's .md content named by its marker
   const cards: { name: string; p: ParsedNote }[] = [];
@@ -243,7 +246,7 @@ export const canShareFiles = location.protocol !== 'file:' && !noOsShareSurface
 
 // Share the selected cards (with their subtrees) via the OS share sheet — same payload as
 // exportSelection (single card → .md, multi → .zip), handed to another app/device instead of
-// downloaded. The receiving side just needs to accept a .md/.zip file (e.g. another Mindmap
+// downloaded. The receiving side just needs to accept a .md/.zip file (e.g. another Corkboard
 // tab/device via its "Open .md/.zip" import, AirDrop, Files, a chat app, …).
 export async function shareSelection(): Promise<void> {
   const files = selectionFiles();

@@ -114,7 +114,7 @@ export function parseMd(text: string, fileName: string): ParsedNote {
     keepStatus: fmValue(entries, 'status'),
     tags: fmTags(entries),
     body: body.trim(),
-    // mindmap layout — note identity is its filename; parent stored as the PARENT note's path.
+    // layout keys — note identity is its filename; parent stored as the PARENT note's path.
     mm: {
       parent: fmValue(entries, 'mm_parent'),
       // Position RELATIVE to the parent (world origin for roots). `px`/`py` are the current

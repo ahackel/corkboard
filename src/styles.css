@@ -39,7 +39,7 @@
   --pal-black: #000000;
 
   /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 10px;   /* mindmap cards + the ghost/template card, and every box kind (frame/stack/image/query) */
+  --r-card: 10px;   /* board cards + the ghost/template card, and every box kind (frame/stack/image/query) */
   /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 4px is
      FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
      against the corners it's supposed to sit inside. */

@@ -120,7 +120,7 @@ function sortedRoots(exclude?: string): MindNode[] {
 }
 
 // ---- mode toggle (persisted like theme / edge style) ----
-const VIEW_KEY = 'mindmap.viewMode';   // 'canvas' | 'outline'
+const VIEW_KEY = 'corkboard.viewMode';   // 'canvas' | 'outline'
 export function outlineActive(): boolean { return document.body.classList.contains('outline'); }
 // On a PHONE the mode is dictated by orientation and can't be toggled — portrait is outline
 // (reading/quick capture, no room for the 2D canvas), landscape is canvas (the extra width makes

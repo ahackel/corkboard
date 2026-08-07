@@ -5,7 +5,7 @@ import moonIcon from '../assets/icons/moon.svg?raw';
 import sunIcon from '../assets/icons/sun.svg?raw';
 import { refreshPalette } from '../main.js';
 
-const THEME_KEY = 'mindmap.theme';
+const THEME_KEY = 'corkboard.theme';
 let themeBtn: HTMLElement | null = null;   // cached at setupTheme; applyTheme only runs after that
 // iOS Safari colours the status-bar / URL-bar area from <meta name="theme-color">, not from any
 // CSS — without this it stays whatever was in index.html regardless of theme, a visible mismatch

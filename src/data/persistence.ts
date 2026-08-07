@@ -127,7 +127,7 @@ export async function exportZip(): Promise<void> {
   const attached = images.filter(Boolean).length;
   for (const img of images) if (img) files.push(img);
   if (state.strokes.length) files.push({ name: SKETCH_FILE, data: sketchJSON() });
-  const zipName = safeName(store.name || 'mindmap') + '.zip';   // the map's name, not a generic one
+  const zipName = safeName(store.name || 'corkboard') + '.zip';   // the map's name, not a generic one
   downloadBlob(zipBlob(files), zipName);
   setStatus(`Exported ${nodes.length} notes${attached ? ` + ${attached} image${attached === 1 ? '' : 's'}` : ''} → ${zipName}`);
 }

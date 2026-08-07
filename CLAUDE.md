@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A local-first mindmap editor for a local folder of Markdown notes. Source lives in
+**Corkboard** — a local-first visual editor for a local folder of Markdown notes. Source lives in
 `index.html` (the `<style>` + HTML shell) plus ES modules under `src/` (entry
 `src/main.js`). A Vite build (`vite-plugin-singlefile`) bundles **everything back into
 one self-contained `dist/index.html`** — JS and CSS inlined — so the *deployed* artifact
@@ -25,7 +25,7 @@ dependencies; the only deps are the dev-time bundler. No tests.
   (Vite/TS `bundler` resolution maps them to `.ts`).
 - **Help content lives in `public/help/*.md`** and is **embedded into the bundle at
   build time** (`import.meta.glob(..., '?raw', eager)` in `src/boot.ts`) — NOT fetched at
-  runtime, so the help mindmap works even when `dist/index.html` is opened from a `file://`
+  runtime, so the help map works even when `dist/index.html` is opened from a `file://`
   path (browsers block `fetch()` under `file://`). Edit help content there; dev HMR picks it
   up. There is no `manifest.json` — the tree is derived from each note's `mm_parent`.
 - **Works in any modern browser** (incl. iPad Safari) thanks to the OPFS default. The
@@ -428,9 +428,9 @@ Retargeting to an Obsidian vault or Tauri build means replacing only the `store`
 don't scatter backend calls elsewhere. The focus/visibility reload is a shared listener
 (`installWatch`) re-pointed at the active store (OPFS's `watch` is a no-op).
 
-**Help mindmap:** `F1` opens `?help` in a new tab (`openHelpTab`). On boot with `?help`,
+**Help map:** `F1` opens `?help` in a new tab (`openHelpTab`). On boot with `?help`,
 `openHelp()` switches to a read-only `helpStore` that serves the bundle-embedded `help/*.md`
-notes (see the storage bullet above) — a real mindmap isolated in its own tab so the user's
+notes (see the storage bullet above) — a real map isolated in its own tab so the user's
 vault is never touched. Titles carry a leading emoji (the filename is the title); the map goes
 general→specific from a root welcome card, with each branch collapsed so users expand to go
 deeper. Edit help content by editing those `.md` files; use backtick code spans, not raw HTML,
@@ -559,6 +559,19 @@ the hash, and its camera stack is session-only.
 
 ## Conventions that matter
 
+- **The app is called Corkboard; it used to be called "mindmap", and that name survives in exactly
+  three places on purpose.** Everything the app persists outside the vault is now prefixed
+  `corkboard.` (localStorage) or named `corkboard`/`corkboard-vault` (IndexedDB), and neither kind
+  of name can be renamed in place — so both are carried over ONCE: `utils/legacy-keys.ts` sweeps the
+  `mindmap.*` keys on import (imported FIRST in `main.ts`, since `initEdgeStyle`/`setupTheme` read
+  settings while `main.ts`'s own body evaluates), and `openRenamed` (`utils/idb.ts`) copies a legacy
+  database into the new one on its first open, guarded on the new store being EMPTY so it can run
+  only once and can't overwrite fresher data. What must NOT be renamed: the notes' **`mm_*`
+  frontmatter keys** — that's the file format, not the product, and a vault has to keep opening in
+  Obsidian and in older builds. The clipboard marker splits the difference: it WRITES
+  `<!-- corkboard-card: … -->` and READS both spellings (`features/clipboard.ts`), so a payload
+  copied from an older tab still pastes as cards. Use the word "map"/"board" for the document
+  (`store.name`, the registry, `mm_*`) and "Corkboard" only for the product.
 - **Every mutation must call `scheduleSave()`** to persist. It debounces ~400ms and
   coalesces a burst of edits into one disk write (`flushSave` → `saveAll`).
 - **`store.isOpen === false` means demo mode** — no folder open, saves are no-ops,
@@ -662,7 +675,7 @@ the hash, and its camera stack is session-only.
   calling `record` — `record` snapshots when it's called, which by then is too late. The float bar
   exempts this chip from its close-on-swatch-click, or the row would vanish mid-pick.
 - **Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, exactly like the
-  emoji tag picker's recents: the MRU in `localStorage` (`mindmap.colorMru`, cap 8) *plus* every
+  emoji tag picker's recents: the MRU in `localStorage` (`corkboard.colorMru`, cap 8) *plus* every
   distinct custom colour in the open map, derived fresh from `state.nodes`. The second is what saves
   the first from being useless on a device that has never picked one (a fresh browser, the same map on
   the iPad, a `.zip` import), and it self-prunes — recolour the last card away from a shade and it

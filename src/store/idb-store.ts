@@ -4,14 +4,15 @@
 // the legacy pre-multi-map notes live unprefixed and simply ARE the map with id 'vault'
 // (mirroring the OPFS adapter's legacy vault/ dir). `<id>::map.json` carries the display name.
 import type { DeviceStore, PickResult, NoteFile } from './types.js';
-import { openDB, dbPut, dbGet, dbDel } from '../utils/idb.js';
+import { openRenamed, dbPut, dbGet, dbDel } from '../utils/idb.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 
 export const idbStore = (() => {
   let _db: IDBDatabase | null = null, _opened = false;
   let _mapId = 'vault', _mapName = 'On-device storage';
   async function db(): Promise<IDBDatabase> {
-    return _db ??= await openDB('mindmap-vault', 'files');
+    // openRenamed carries the vault over from the pre-rename database name (utils/idb.ts).
+    return _db ??= await openRenamed('corkboard-vault', 'mindmap-vault', 'files');
   }
   const prefixOf = (id: string): string => id === 'vault' ? '' : id + '::';
   // does this raw key belong to the map `id`? (vault owns every unprefixed key)

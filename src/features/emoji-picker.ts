@@ -15,7 +15,7 @@
 import { state, isAnnotation } from '../core/state.js';
 import { setTagOnNodes, tagPillHTML } from './tags.js';
 
-const MRU_KEY = 'mindmap.tagMru';
+const MRU_KEY = 'corkboard.tagMru';
 const MRU_MAX = 16;
 const GRID_MAX = 56;
 

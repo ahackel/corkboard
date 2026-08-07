@@ -42,7 +42,7 @@ function decodeFilePath(encoded: string): string {
 
 export function currentDocumentTitle(): string {
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
-  return node ? `${node.title} — ${store.name}` : `Mindmap - ${store.name}`;
+  return node ? `${node.title} — ${store.name}` : `Corkboard — ${store.name}`;
 }
 export function updateDocumentTitle(): void {
   document.title = currentDocumentTitle();

@@ -4,13 +4,14 @@
 // and the global keyboard/toolbar wiring. It exports the render kernels the feature modules call
 // back into. Fully strict-typed and covered by `npm run typecheck`.
 /* ============================================================
-   Markdown Mindmap — PoC v2: hierarchy + collapse + add-child
+   Corkboard — hierarchy + collapse + add-child
    Storage: one .md per node. Layout lives in each note's frontmatter as mm_* keys
    (mm_parent = parent note's path, mm_x/mm_y, mm_collapsed) — no sidecar, no ids on disk.
    The filename IS the node's identity; in-memory ids are ephemeral, minted per load.
    Edges are DERIVED from parent — no separate edge list.
    ============================================================ */
 
+import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, esc } from './utils/markdown.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
@@ -1441,7 +1442,7 @@ function animateReflow(before: Map<string, Pt>): void {
 }
 
 // ---------- edge style (straight / orthogonal / bezier), persisted ----------
-const EDGE_KEY = 'mindmap.edgeStyle';
+const EDGE_KEY = 'corkboard.edgeStyle';
 const EDGE_STYLES: EdgeStyle[] = ['orthogonal', 'bezier', 'straight'];
 const EDGE_ICONS: Record<EdgeStyle, string> = { straight: edgeStraightIcon, orthogonal: edgeOrthogonalIcon, bezier: edgeBezierIcon };
 // The toolbar button shows the ACTIVE style's icon (not a generic one); clicking cycles.
@@ -2120,7 +2121,7 @@ export function selectNode(rawId: string | null): void {
 // A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
 // so these card shortcuts stay out of the way while you're naming something.
 window.addEventListener('keydown', (e) => {
-  // F1 opens the bundled help mindmap (read-only) in a new tab — works even while typing.
+  // F1 opens the bundled help map (read-only) in a new tab — works even while typing.
   if (e.key === 'F1'){ e.preventDefault(); openHelpTab(); return; }
 
   // Intercept browser zoom shortcuts (Cmd/Ctrl +/-/0) so they drive the canvas, not the viewport.
@@ -2269,7 +2270,7 @@ window.addEventListener('keyup', (e) => {
 byId('fitBtn').onclick = focusOrFit;
 byId('edgeBtn').onclick = cycleEdgeStyle;
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
-byId('helpBtn').onclick = openHelpTab;  // same as F1 — opens the help mindmap in a new tab
+byId('helpBtn').onclick = openHelpTab;  // same as F1 — opens the help map in a new tab
 
 // (rename/duplicate/export/delete on-screen actions now live in the floating bar's kebab menu —
 // features/float-bar.ts)

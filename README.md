@@ -1,11 +1,11 @@
-# Markdown Mindmap
+# Corkboard
 
-A single-file, zero-build mindmap editor for a **local folder of Markdown notes**.
+A single-file, zero-build visual editor for a **local folder of Markdown notes**.
 Every `.md` file becomes a card on an infinite canvas; edits are saved straight back to
 disk as plain Markdown.
 
-**[▶ Open the app](https://andreashackel.de/mindmap/)** — usage is documented in the
-built-in help mindmap (press **F1**).
+**[▶ Open the app](https://andreashackel.de/corkboard/)** — usage is documented in the
+built-in help map (press **F1**).
 
 ## How it works
 
@@ -50,7 +50,7 @@ layout on desktop.
 - Freehand sketch layer (world-space ink that pans/zooms with the map)
 - Undo / redo, image paste & drop
 - Autosave back to the source files
-- Built-in help mindmap (**F1**)
+- Built-in help map (**F1**)
 
 ## Architecture
 

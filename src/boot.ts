@@ -206,7 +206,7 @@ startScreen.addEventListener('click', e => { if (e.target === startScreen) hideS
 setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
 document.getElementById('appVersion')!.textContent = `v${__APP_VERSION__}`;
 
-// ---------- help mindmap (help/*.md, opened with F1) ----------
+// ---------- help map (help/*.md, opened with F1) ----------
 // Read-only store serving the help notes; lives in its own tab (?help), so the user's own map
 // and vault are never touched. The notes are embedded in the bundle at build time (via glob)
 // rather than fetched: `fetch()` is blocked under the file:// protocol, so a fetch-based help
