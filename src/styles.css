@@ -521,9 +521,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    on purpose: it must be pinned HERE, or a later tweak to the card title would silently desync
    FRAME_TAB_H from what actually renders. */
 /* An UNTABBED frame's title carries no fill: it's a LABEL on the box, not a tab. The filled folder-tab
-   shape is what says "this is one sheet of several", so it belongs to the two places that really are
-   tabs — a DOCKED tab and a folded frame's pill (both .frame-folded, further down) — and a lone frame
-   showing the same shape read as a one-tab group that wasn't one.
+   shape is what says "this is one sheet of several", so it belongs to the place that really is one — a
+   DOCKED tab (.frame-folded.docked, further down) — and a lone frame showing the same shape read as a
+   one-tab group that wasn't one.
    The ink can't stay var(--ink): that's computed against the frame's own FILL (white on a blue card),
    and with the tab's fill gone the title hangs over whatever is BEHIND the frame instead. So it takes
    --tab-ink — white or dark, measured against that surface by paintNode (see behindFill in main.ts),
@@ -576,13 +576,14 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    its own is an outline and a label, never a solid folder-tab shape. What's left of a folded frame is
    that outline, in its own colour, so it still reads as the box it stands for rather than as a card.
    Its ink comes from behindFill like the expanded label's, since the canvas shows straight through it.
-   This is also EVERY docked tab's resting state (below): the one surface that fills is the tab that's
-   OPEN, and it fills behind this same border rather than replacing it.
+   This is also every DOCKED tab's base (below), where a tab is a sheet of a folder and so FILLS: the OPEN
+   one behind this same border, an inactive one at 62% and with the border dropped altogether. Either way
+   it takes its ink from that fill again.
    The border is what makes the 40px arithmetic delicate: box-sizing is border-box and nothing sets a
    height here (nodeH just asserts FRAME_TAB_H), so the rendered height is 20px of line + padding +
    border and the three MUST still total FRAME_TAB_H — 8 + 20 + 8, plus 2 top and bottom. (A docked tab
-   drops the bottom border and pays it back as padding; same 40.) 2px, not the box's 4px: at this size a
-   4px rim eats most of the label.
+   drops the bottom border, or all four, and pays every dropped pixel back as padding; same 40, and the
+   same measured width.) 2px, not the box's 4px: at this size a 4px rim eats most of the label.
    Rounded all round, since a folded frame stands alone (a DOCKED tab squares off the bottom pair
    below, where it sits on its group's box). */
 .node.frame-folded {
@@ -611,16 +612,20 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    and its max-width already ellipsises a long title. EVERY tab squares off its bottom corners: they all
    sit ON the box, so a rounded bottom would float them off it (a folded frame, which stands alone, keeps
    its pill shape).
-   THE FILL IS WHAT SAYS "OPEN". Only the active tab paints one (see .tab-active below) — it's the sheet
-   at the front of the folder, and it's the one the box below belongs to. Every other tab is the plain
-   OUTLINE every frame showing on its own wears: not a faded fill, an absent one, so an inactive tab and
-   a collapsed frame are the same object in the same state. That's also what retired the .62 opacity
-   this rule used to carry — fading a fill said "open, but less so", which is not a state a tab has.
-   BOTH STATES KEEP ONE BOX, which is what stops the strip re-flowing when you switch tabs: the active
+   THE OUTLINE AND THE FILL TRADE PLACES BETWEEN THE TWO STATES. Every tab is filled — they're all sheets
+   in one folder, and a row of bare outlines beside one solid shape read as one tab plus some empty boxes.
+   But only the OPEN one is also outlined: it's the front of the folder, so the folder's shape runs box →
+   tab as one continuous outlined thing (see .tab-active). An INACTIVE one is fill alone, 62% of the same
+   colour and no border at all — a sheet tucked behind that front, which is literally where it paints (see
+   the z-index note below) — so the canvas shows through it and it adds no second shape up there.
+   Semitransparency, not `opacity`, which the whole element used to carry: that also faded the folder
+   outline and the title, and the outline is the one line holding the group's shape together.
+   EVERY STATE KEEPS ONE BOX, which is what stops the strip re-flowing when you switch tabs: the active
    tab doesn't drop the border, it fills behind it (border and fill are both --frame-stroke, so it
-   rasterizes as one solid shape). Widths come from measuring the element (nodeW), so any padding
-   difference between the two states would slide every tab along the strip on each click.
-   The BOTTOM border goes, in both states, for the reason the selection ring below also drops its bottom
+   rasterizes as one solid shape), and the inactive one, which DOES drop it, pays all 2px back as padding
+   on both axes. Widths come from measuring the element (nodeW), so any difference between the states
+   would slide every tab along the strip on each click.
+   The BOTTOM border goes in every state, for the reason the selection ring below also drops its bottom
    edge: that edge is where the tab meets the box, and a line across it closes the tab into a rectangle
    sitting ON the box rather than an outline continuous with it. The 2px is paid back as padding, or the
    tab renders 38px and no longer fills the strip band FRAME_TAB_H sizes. */
@@ -634,6 +639,21 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 .node.frame-folded.docked { z-index:auto;
   border-bottom:none; padding-bottom:10px;
   border-bottom-left-radius:0; border-bottom-right-radius:0; }
+/* The sheets behind the front one: FILL ONLY, the folder's own colour at 62% and no outline at all. The
+   outline is what draws the folder's shape, and the shape belongs to the box plus the tab that's open —
+   a rim around each sheet behind it drew three shapes where there's one folder. So an inactive tab is a
+   soft 62% patch of the frame's colour and the open tab is the only outlined thing up there.
+   The fill governs the ink, so it goes back to var(--ink) like the active tab's — --tab-ink measures
+   against what's behind the FRAME, which is the right question only where nothing is painted in between.
+   (The LOCK BADGE keeps --tab-ink: it hangs outside the tab, on the surface behind the group.)
+   The 2px border is PAID BACK AS PADDING on both axes, and that's not cosmetic: nodeH asserts
+   FRAME_TAB_H (10 + 20 + 10 = 40, matching the bordered tab's 2 + 8 + 20 + 10) and nodeW MEASURES the
+   element, so dropping 4px of horizontal border without paying it back would slide every tab along the
+   strip each time you switched which one was open. */
+.node.frame-folded.docked:not(.tab-active) {
+  border:none; padding:10px 12px;
+  background:color-mix(in srgb, var(--frame-stroke, var(--edge)) 62%, transparent);
+  color:var(--ink); }
 /* A tab's selection ring stops where the tab meets the box: a line along its BOTTOM edge would cut
    straight through one continuous shape (exactly the reasoning behind a frame's own tab ring above).
    box-shadow can only ring all four sides, so a selected tab swaps it for a three-sided pseudo-element
@@ -645,7 +665,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    so the body's outline read as shifted outwards from the tab's — and its radius, --r-card + 2, was
    then 2px too round for the corner it was drawn on. -4px puts it back 2px OUTSIDE the border box,
    where both the radius and the box's ring already expect it. (`bottom` needs no such correction: a
-   docked tab has no bottom border, so its padding box ends where its border box does.) */
+   docked tab has no bottom border, so its padding box ends where its border box does.)
+   Which is exactly why an INACTIVE tab takes -2px instead: it has no border on any side (fill only, see
+   above), so its padding box IS its border box and -4px would hang the ring 4px out into the canvas. */
 /* `sel-join`: the box and its open tab are one frame, so selecting either rings BOTH — the tab gets the
    three-sided ring below, the box its ordinary one, and since the tab paints over the box's top edge the
    two meet as one folder outline (exactly how a plain frame's box + tab already ring together). */
@@ -656,6 +678,8 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   border:2px solid var(--node-sel); border-bottom:none;
   border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
 /* …and it stands down while the tab is being renamed, like every other card's ring */
+.node.frame-folded.docked:not(.tab-active).sel::before,
+.node.frame-folded.docked:not(.tab-active).sel-join::before { inset:-2px -2px 1px -2px; }
 .node.frame-folded.docked.sel:has(> .title-row > .title.editing)::before { content:none; }
 /* No corner bubble on a tab (a folded frame uses it for "there's more inside", but a CLOSED TAB's
    contents are one click away in the box, not tucked under a stub — and it would sit over the next
@@ -663,12 +687,10 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    for a related reason: on a label this narrow it lands on the title itself (and a frame — docked or
    not — never shows a body anyway). */
 .node.frame-folded.docked .addnote { display:none !important; }
-/* The open tab is the front of the folder, and the ONE frame surface that's filled: the solid
-   folder-tab shape tells the truth here and nowhere else — several sheets in one folder, this one in
-   front, holding the box below. Filled BEHIND its border rather than instead of it (see above), both in
-   --frame-stroke, so the two rasterize as one shape and the tab keeps the same box as its neighbours.
-   Its ink goes back to var(--ink) with the fill: --tab-ink measures against what's behind the FRAME,
-   which is the right question only while nothing is painted in between.
+/* The open tab is the front of the folder, and the one surface filled at FULL strength: several sheets in
+   one folder, this one in front, holding the box below. Filled BEHIND its border rather than instead of
+   it (see above), both in --frame-stroke, so the two rasterize as one shape and the tab keeps the same
+   box as its neighbours. Its ink is var(--ink), like the 62% sheets behind it.
    z-index over the box, over #edges (1) and the cards (2) — the same z-index a frame's own title tab
    takes, and for the same reasons. */
 .node.frame-folded.docked.tab-active { z-index:5;

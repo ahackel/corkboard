@@ -170,7 +170,12 @@ const FLOW_BAND_TOL = 30;
 // row is ever squeezed to (so a deep outline never collapses to zero width).
 const STACK_INDENT = 18;
 const STACK_MIN_ROW_W = 90;
-// Gap between two tabs in a group's strip (and between the group's own label and the first tab).
+// Gap between two tabs in a group's strip. It was zero back when every tab carried a border and the two
+// 2px rims met as the divider between them; an inactive tab is now fill-only (see the frame section in
+// CLAUDE.md), so flush tabs would run their soft patches into one continuous band. A thin gap is what
+// divides them instead — small enough that they still read as sheets in one folder rather than separate
+// pills. A term in three places (tabSlots, tabDropTarget, the dock ghost); the insertion bar lands in the
+// middle of the gap (`+ TAB_GAP / 2`).
 export const TAB_GAP = 4;
 
 // Bounding box over a node + its VISIBLE descendants (what the layout actually placed).
