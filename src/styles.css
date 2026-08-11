@@ -1062,7 +1062,12 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body li { margin:.1em 0; }
 .node .body li.task { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:.4em; }
 .node .body li.task .taskbox,
-.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
+/* Both states are TRANSLUCENT, so a checkbox reads as a dent in the card rather than a chip
+   sitting on it — the card's own fill shows through both, and the difference between them is
+   light-vs-dark rather than one colour vs another: 25% white when empty, 50% BLACK when ticked
+   (see :checked below), i.e. ticking DARKENS the card instead of stamping var(--accent) on it.
+   That's also what keeps the white tick legible: it's drawn on the darker of the two states. */
+.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:3px; background:color-mix(in srgb, #fff 25%, transparent); cursor:pointer; flex:none; position:relative; }
 /* Sits 1px below the line box's top, which centres the 14px box on the first line's CAP BAND — the
    band the eye reads as "the text". flex-start (not center) is what keeps it on line ONE when the
    item wraps. px, not em, for exactly the reason .donebox spells out above: a checkbox's em is the
@@ -1070,7 +1075,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    2px and dropping the box a pixel and a half below the text it labels. */
 .node .body li.task .taskbox { margin:1px 0 0; }
 .node .body li.task .taskbox:checked,
-.node .donebox:checked { background:var(--accent); }
+.node .donebox:checked { background:color-mix(in srgb, #000 50%, transparent); }
 .node .body li.task .taskbox:checked::after,
 .node .donebox:checked::after { content:""; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
 .node .body strong { font-weight:700; }
@@ -1090,6 +1095,29 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
   padding-left:8px; margin-left:0; opacity:.85; }
 .node .body hr { border:none; border-top:1px solid color-mix(in srgb, var(--ink) 30%, transparent);
   margin:.4em 0; }
+/* pipe tables: ONE rule, under the header — no row separators, no outer border, no vertical
+   lines (a small card can't afford that many lines, and the row gaps already separate rows).
+   Mixed toward --ink like the marks above so it follows the fill.
+   A card is narrow and a table can be far wider than it, so the table always FITS instead of
+   scrolling: width:100% with `auto` layout so columns still size to their content, plus
+   overflow-wrap:anywhere, which is what lets a cell's min-content shrink far enough for that
+   100% to hold — without it a long unbroken cell would push the table past the card's clip
+   edge. Widen the card (drag its side) to give the columns more room. */
+.node .body table { width:100%; margin:.3em 0; border-collapse:collapse; table-layout:auto;
+  font-size:11px; }
+.node .body th, .node .body td { padding:2px 6px; text-align:left; vertical-align:top;
+  overflow-wrap:anywhere; }
+/* flush with the body's text column at both edges */
+.node .body th:first-child, .node .body td:first-child { padding-left:0; }
+.node .body th:last-child,  .node .body td:last-child  { padding-right:0; }
+/* A HAIRLINE, not a 1px rule: the table is the only body mark with a horizontal line running
+   its full width (an `hr` is a deliberate divider, this one is just a header break), so at 1px
+   it read heavier than the text it separates. Sub-pixel is safe here because #world is scaled
+   by the zoom — at k >= 1 this is a real 0.5px+ device line on retina, and Chrome floors a
+   non-zero border to one device pixel rather than dropping it, so it survives zooming out too. */
+.node .body th { font-weight:700; padding-bottom:3px;
+  border-bottom:0.5px solid color-mix(in srgb, var(--ink) 40%, transparent); }
+.node .body tbody tr:first-child td { padding-top:3px; }   /* keep the first row off the rule */
 .node .body .lk { color:inherit; text-decoration:underline; text-underline-offset:2px;
   cursor:pointer; font-weight:600; opacity:1; }
 .node .body .lk:hover { text-decoration-thickness:2px; }

@@ -1,8 +1,8 @@
 // ============================================================
 // Markdown -> HTML — a small hand-rolled subset (headings, links, emphasis, task
-// lists). NOT a full Markdown parser; extend these functions rather than reaching for
-// a library (the no-dependency constraint is deliberate). The card body is a clipped
-// preview rendered from this.
+// lists, pipe tables). NOT a full Markdown parser; extend these functions rather than
+// reaching for a library (the no-dependency constraint is deliberate). The card body is
+// a clipped preview rendered from this.
 // ============================================================
 
 // escape text for safe insertion into SVG/HTML markup
@@ -67,7 +67,67 @@ function mdInline(text: string): string {
   out += mdLinks(text.slice(last));
   return out;
 }
-// Block-level pass: headings, lists, blockquotes, fenced code, rules, paragraphs.
+// ---- GFM pipe tables -------------------------------------------------------------
+// A table is a header row, a DELIMITER row (`|:--|--:|`) with the SAME number of cells,
+// then body rows — the strict GFM rule, so a note renders the same here, in Obsidian and
+// on GitHub, and prose that merely contains a `|` stays prose. Two consequences:
+//   - Spotting one takes TWO lines, so it can't join the one-line `BLOCK` regex; `tableAt`
+//     is asked separately by the block loop AND by the paragraph gatherer, since a table
+//     interrupts a text run.
+//   - Cells go through `mdInline` (code, links, wikilinks, images, emphasis) but NOT
+//     through the task-list branch: `data-ti` numbers checkboxes by body order for
+//     write-back, and GFM has no table tasks either.
+const TABLE_DELIM_CELL = /^:?-+:?$/;
+const UNESCAPED_PIPE = /(?:^|[^\\])\|/;
+// Split a row into cells on UNESCAPED pipes (`\|` is a literal pipe in a cell). The
+// optional outer pipes are stripped from the LINE first, not dropped as empty cells —
+// `| a | |` has a genuine empty last cell.
+function tableRow(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith('|')) s = s.slice(1);
+  if (UNESCAPED_PIPE.test(s) && s.endsWith('|')) s = s.slice(0, -1);
+  const cells: string[] = [];
+  let cur = '';
+  for (let i = 0; i < s.length; i++){
+    if (s[i] === '\\' && s[i+1] === '|'){ cur += '|'; i++; continue; }
+    if (s[i] === '|'){ cells.push(cur.trim()); cur = ''; continue; }
+    cur += s[i];
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+// Column count if a table starts at line i, else 0 (so it's falsy at the call sites).
+function tableAt(lines: string[], i: number): number {
+  const head = lines[i], delim = lines[i+1];
+  if (head == null || delim == null) return 0;
+  if (!UNESCAPED_PIPE.test(head) || !UNESCAPED_PIPE.test(delim)) return 0;
+  const dc = tableRow(delim);
+  if (!dc.every(c => TABLE_DELIM_CELL.test(c))) return 0;
+  return tableRow(head).length === dc.length ? dc.length : 0;
+}
+// text-align from a delimiter cell's colons; left is the default, so it needs no style.
+function tableAlign(cell: string): string {
+  const l = cell.startsWith(':'), r = cell.endsWith(':');
+  return l && r ? 'center' : r ? 'right' : '';
+}
+// Consume the table at `start`; returns its HTML and the line after it. Ragged rows are
+// padded/truncated to the header's column count (GFM does the same).
+function renderTable(lines: string[], start: number, cols: number): { html: string; next: number } {
+  const align = tableRow(lines[start+1]).map(tableAlign);
+  const row = (cells: string[], tag: 'th' | 'td') => {
+    let out = '<tr>';
+    for (let c = 0; c < cols; c++){
+      const a = align[c] ? ` style="text-align:${align[c]}"` : '';
+      out += `<${tag}${a}>${mdInline(cells[c] ?? '')}</${tag}>`;
+    }
+    return out + '</tr>';
+  };
+  let i = start + 2, body = '';
+  while (i < lines.length && lines[i].trim() && UNESCAPED_PIPE.test(lines[i])) body += row(tableRow(lines[i++]), 'td');
+  return { html: `<table><thead>${row(tableRow(lines[start]), 'th')}</thead><tbody>${body}</tbody></table>`, next: i };
+}
+
+// Block-level pass: headings, lists, blockquotes, fenced code, rules, tables, paragraphs.
 export function renderBodyHTML(md: string | null | undefined): string {
   const src = (md || '').replace(/\r\n?/g, '\n').trim();
   if (!src) return '';                 // empty body → nothing (no stray blank line under the title)
@@ -87,6 +147,8 @@ export function renderBodyHTML(md: string | null | undefined): string {
       html += `<h${h[1].length}>${mdInline(h[2])}</h${h[1].length}>`; i++; continue;
     }
     if (/^\s*(?:[-*_]\s*){3,}$/.test(line)){ html += '<hr>'; i++; continue; }   // horizontal rule
+    const cols = tableAt(lines, i);                            // pipe table (header + delimiter row)
+    if (cols){ const t = renderTable(lines, i, cols); html += t.html; i = t.next; continue; }
     if (/^\s*>/.test(line)){                                   // blockquote
       const q: string[] = [];
       while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
@@ -111,7 +173,7 @@ export function renderBodyHTML(md: string | null | undefined): string {
     // line (like Obsidian) — including blanks right before/after a list or other block. A run
     // that's only blank lines (a gap between two blocks) becomes that many empty lines.
     const para: string[] = [];
-    while (i < lines.length && !BLOCK.test(lines[i])) para.push(lines[i++]);
+    while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) para.push(lines[i++]);
     if (para.some(l => l.trim())) html += `<p>${para.map(mdInline).join('<br>')}</p>`;
     else html += '<br>'.repeat(para.length);
   }
