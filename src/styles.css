@@ -1118,8 +1118,10 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body th { font-weight:700; padding-bottom:3px;
   border-bottom:0.5px solid color-mix(in srgb, var(--ink) 40%, transparent); }
 .node .body tbody tr:first-child td { padding-top:3px; }   /* keep the first row off the rule */
+/* The UNDERLINE is the whole signal — a link takes the body's own weight (no 600), since a card's
+   ink already carries its colour and a bolded run reads as emphasis the author didn't write. */
 .node .body .lk { color:inherit; text-decoration:underline; text-underline-offset:2px;
-  cursor:pointer; font-weight:600; opacity:1; }
+  cursor:pointer; opacity:1; }
 .node .body .lk:hover { text-decoration-thickness:2px; }
 /* inline images: always full card width, aspect ratio kept; never intercept card drag */
 .node .body img.md-img { display:block; width:100%; height:auto; margin:.45em 0; border-radius:6px;
