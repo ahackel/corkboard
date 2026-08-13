@@ -362,7 +362,14 @@ export function effectiveColor(n: MindNode): string {
 // A card shows a done checkbox only if its PARENT has `checklist` on — Trello-style: the
 // setting lives on the parent ("treat my children as a checklist"), not on the item itself, and
 // doesn't cascade past that one level (a checklist item can run its own checklist for its kids).
+// …except on an ANNOTATION, which can never carry one: an annotation IS its body — it has no title row
+// for a checkbox to sit in (styles.css hides the row outright) — and it's a remark pinned to a card, not
+// an item on that card's list. Refused HERE rather than in CSS, because the class this gates does more
+// than show the box: `.show-done > .body` also indents the text to clear the box's column, so an
+// annotation under a checklist parent was shifted sideways to make room for a control it never had.
+// It also keeps the `.done` strikethrough and the query-result row's checkbox off annotations.
 function showsDoneCheckbox(n: MindNode): boolean {
+  if (isAnnotation(n)) return false;
   const p = n.parent ? state.nodes.get(n.parent) : undefined;
   return !!(p && p.checklist);
 }
@@ -1695,6 +1702,10 @@ function navArrow(key: string): void {
 // Exported: the outline row list shows the same donebox/progress readout (features/outline.ts).
 export function toggleDone(n: MindNode): void {
   if (state.readOnly || isLockedEffective(n)) return;
+  // An annotation has no checkbox to reflect it (showsDoneCheckbox), so setting the flag would write an
+  // `mm_done: true` to disk that nothing draws and nothing can clear again. The checkbox's own change
+  // handler can't reach here for one, but a shortcut or a menu entry could.
+  if (isAnnotation(n)) return;
   record([n.id], () => { n.done = !n.done; n.dirty = true; });
   paintNode(n);
   if (n.parent){ const p = state.nodes.get(n.parent); if (p) paintNode(p); }
