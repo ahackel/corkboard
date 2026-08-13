@@ -39,6 +39,7 @@ import gridLineIcon from '../assets/icons/grid-line.svg?raw';
 import { state, GRID_STYLES, GRID_SIZES, type GridStyle, type GridSize } from '../core/state.js';
 import { scheduleSaveSettings } from '../data/persistence.js';
 import { openMenu } from '../features/context-menu.js';
+import { clamp } from '../utils/num.js';
 
 const GRID_ICONS: Record<GridStyle, string> = { none: gridOffIcon, dot: gridDotIcon, mesh: gridMeshIcon, line: gridLineIcon };
 
@@ -123,7 +124,7 @@ export function paintGrid(): void {
   // dots land on sub dots), at the price of the level step being a visible change in DENSITY rather
   // than a crossfade: the dots go from MIN_PX apart to SUBDIVS× that in one frame. It only bites at
   // the far end of a zoom-out, where the fade would have been a fine texture dissolving anyway.
-  const subAlpha = state.gridStyle === 'dot' ? 1 : Math.max(0, Math.min(1, log(sub / MIN_PX))) * SUB_MAX;
+  const subAlpha = state.gridStyle === 'dot' ? 1 : clamp(log(sub / MIN_PX), 0, 1) * SUB_MAX;
 
   const key = `${state.gridStyle}|${major}`;
   if (key !== painted){

@@ -3,10 +3,11 @@
 // connector geometry for the three edge styles and paints them into the #edges SVG. It reads the
 // render core's live card heights (nodeH) and branch colour (effectiveColor) from main.
 import { state, edgesSvg, togglesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation, type MindNode, type LayoutSide } from '../core/state.js';
-import { isRoot, isHidden } from '../utils/model.js';
-import { dropLanding, sideOf, isFrame, isContainer, stackOf, hostFrame, frameInterior } from './layout.js';
+import { isRoot, isHidden, parentOf } from '../utils/model.js';
+import { dropLanding, sideOf, isContainer, stackOf, hostFrame, frameInterior } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { nodeW, nodeH, effectiveColor, colorFill, SWATCH_BG } from '../main.js';
+import { clamp } from '../utils/num.js';
 
 const EDGE_R = 12;   // corner radius on orthogonal elbows
 // Longer parent→child edges read as more "distant" if they're softened — full opacity up close,
@@ -112,7 +113,7 @@ function previewReparent(): { parent: MindNode; box: { x: number; y: number; w: 
   const tgtNode = state.nodes.get(drag.dropTarget);
   if (!tgtNode) return null;
   const parent = drag.dropMode === 'sibling'
-    ? (tgtNode.parent ? state.nodes.get(tgtNode.parent) : null)
+    ? parentOf(tgtNode)
     : tgtNode;
   if (!parent) return null;
   // Dropping into a frame/stack previews as the box's own outline highlight (.drop-target), not a
@@ -162,7 +163,7 @@ export function paintEdges(): void {
   // A collapsed node hides its children, so those edges simply don't appear.
   for (const n of state.nodes.values()) {
     if (isRoot(n)) continue;
-    const parent = n.parent ? state.nodes.get(n.parent) : null;
+    const parent = parentOf(n);
     if (!parent) continue;
     if (isHidden(parent) || isHidden(n)) continue;
     // Drag suppressions — apply to EVERY connector incl. annotations, so a card/annotation that's
@@ -182,8 +183,8 @@ export function paintEdges(): void {
       // straight line from the annotation's CENTRE to the CLOSEST point on the parent's bounds
       // (clamp the centre into the parent rect), with the anchor dot at that closest point.
       const ax = n.x + nodeW(n)/2, ay = n.y + nodeH(n)/2;
-      const bx = Math.max(parent.x, Math.min(ax, parent.x + nodeW(parent)));
-      const by = Math.max(parent.y, Math.min(ay, parent.y + nodeH(parent)));
+      const bx = clamp(ax, parent.x, parent.x + nodeW(parent));
+      const by = clamp(ay, parent.y, parent.y + nodeH(parent));
       const els = `<path class="anno-edge" style="stroke:${tint}" stroke-dasharray="2 6" d="M ${ax} ${ay} L ${bx} ${by}"/>`
         + `<circle class="edge-dot" cx="${bx}" cy="${by}" r="${DOT_R}" fill="${tint}"/>`;
       if (inDragGroup(n.id)) dragged += els; else annos += els;
@@ -200,9 +201,9 @@ export function paintEdges(): void {
     const dist = Math.hypot(n.x - parent.x, n.y - parent.y);
     const style = `stroke:${tint ?? 'var(--edge)'};opacity:${edgeOpacity(dist).toFixed(2)}`;
     const side = sideOf(parent, n);
-    // Both ends share the same host frame whenever this edge is drawn at all (parent's never a
-    // frame here — see the isFrame(parent) skip above — so walking from either end lands on the
-    // same nearest enclosing frame, if any).
+    // Both ends share the same host frame whenever this edge is drawn at all (parent is never a
+    // container here — see the isContainer(parent) skip above — so walking from either end lands
+    // on the same nearest enclosing frame, if any).
     const d = edgePathBox(parent, { x:n.x, y:n.y, h:nodeH(n), w:nodeW(n) }, side);
     if (inDragGroup(n.id)) {
       // a dragged item's connector joins its opacity group (unclipped — the dragged cards lift out

@@ -16,7 +16,7 @@
 // doesn't start with the marker falls through to the existing paste-as-new-card behaviour
 // (features/attachments.ts).
 import { state, setStatus, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
-import { serializeMd, parseMd, type ParsedNote } from '../utils/frontmatter.js';
+import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
 import { isAncestor } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
@@ -27,9 +27,8 @@ import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { screenToWorld } from '../view/camera.js';
-import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, setSelectionSet, selectedIds, subtreeIds } from '../main.js';
+import { setSelectionSet, selectedIds, subtreeIds, remeasure } from '../main.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or
@@ -58,8 +57,8 @@ export interface CardFile { name: string; text: string }
 const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
 // …and the leaf of that path, for the one place a payload name faces the USER: the filename a single
 // card downloads/shares as. A card living in a subfolder would otherwise offer `sub/Notes.md` as a
-// download name, which no browser will honour. Zip ENTRIES keep the full path on purpose.
-const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
+// download name, which no browser will honour. Zip ENTRIES keep the full path on purpose. `fileStem`
+// drops the extension too, so both call sites below add back the one they want.
 
 // The given cards INCLUDING their subtrees as one .md file per card, parent refs payload-local.
 // Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
@@ -167,7 +166,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
       n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : newIds.get(c.p.mm.parent)!;
     }
     // paint first so the new cards have real DOM heights, then lay out, then commit
-    paintAll(); applyLayouts(); paintAll();
+    remeasure();
     setSelectionSet(rootIds);
     scheduleSave();
   });
@@ -188,11 +187,11 @@ function b64(bytes: Uint8Array): string {
   return btoa(s);
 }
 // A multi-card export .zip is named after its first (root) card.
-const zipName = (files: CardFile[]): string => baseName(files[0].name).replace(/\.md$/, '') + '.zip';
+const zipName = (files: CardFile[]): string => fileStem(files[0].name) + '.zip';
 // The selection as ONE downloadable file: a single card is its .md, more become a .zip.
 function exportFile(files: CardFile[]): { mime: string; name: string; bytes: Uint8Array } {
   return files.length === 1
-    ? { mime: 'text/markdown', name: baseName(files[0].name), bytes: new TextEncoder().encode(files[0].text) }
+    ? { mime: 'text/markdown', name: fileStem(files[0].name) + '.md', bytes: new TextEncoder().encode(files[0].text) }
     : { mime: 'application/zip', name: zipName(files),
         bytes: zipBytes(files.map(f => ({ name: f.name, data: f.text }))) };
 }

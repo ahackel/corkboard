@@ -4,13 +4,13 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, commitStep, record } from './history.js';
 
@@ -71,7 +71,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   });
   const id = n.id;
   state.nodes.set(id, n);
-  applyLayouts(); paintAll(); selectNode(id);
+  relayout(); selectNode(id);
   if (opts.edit !== false) startInlineEdit(n, { isNew: opts.isNew ?? true });
   else commitStep();   // no rename session follows, so the create step ends here
   scheduleSave();
@@ -132,7 +132,7 @@ export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): Mi
   // paint first so the new cards get real DOM heights — applyLayouts measures offsetHeight,
   // and a chain/fan of fresh copies would otherwise stack on the 64px fallback (only the first
   // lands right). Then lay out with correct heights and commit.
-  paintAll(); applyLayouts(); paintAll();
+  remeasure();
   const msg = copies.length === 1 ? `Duplicated → “${nodeLabel(copies[0])}”` : `Duplicated ${copies.length} cards`;
   if (copies.length === 1 && edit){
     selectNode(copies[0].id);
@@ -210,7 +210,7 @@ export function createSibling(refId: string){
   });
   state.nodes.set(n.id, n);
   parent.kidOrder = insertedKidOrder(parent, n.id, ref.id);   // directly after the reference
-  applyLayouts(); paintAll();
+  relayout();
   selectNode(n.id);
   startInlineEdit(n, { isNew: true });   // drop straight into renaming the fresh card; Esc cancels creation
   scheduleSave();
@@ -222,10 +222,10 @@ export function createSibling(refId: string){
 // into another card's note). All of them CUT the text out of the source, so the three helpers below
 // are the shared halves — deriving the new card's title/body, and the cut itself.
 
-// A lump of extracted text IS a card's text, so it splits exactly the way the note it came from does
-// (splitHeading): a leading `# ` line is the new card's title, and without one the card is untitled and
-// the whole lump is its body. Nothing is minted — text dragged out of a note keeps the shape it had.
-const titleAndBodyFrom = splitHeading;
+// A lump of extracted text IS a card's text, so it splits exactly the way the note it came from does —
+// hence plain `splitHeading` at both sites below: a leading `# ` line is the new card's title, and
+// without one the card is untitled and the whole lump is its body. Nothing is minted; text dragged out
+// of a note keeps the shape it had.
 // Cut [start,end) out of the card's text (tidying the blank lines it leaves) and return it. What's
 // left is re-SPLIT into title + body, because a card is one field and the range may have taken the
 // title heading with it — cut a card's whole name out and the card is simply untitled now, which is
@@ -261,7 +261,7 @@ export function extractToChild(): void {
   const ta = ui.bodyEdit.ta;
   const s = ta.selectionStart, e = ta.selectionEnd;
   if (s === e){ setStatus('Select some body text to extract'); return; }
-  const { title, body } = titleAndBodyFrom(cutCardText(n, s, e, ta.value));
+  const { title, body } = splitHeading(cutCardText(n, s, e, ta.value));
   // make the child below the parent and jump to it
   const sibs = childrenOf(n.id);
   if (n.collapsed) n.collapsed = false;
@@ -271,7 +271,7 @@ export function extractToChild(): void {
   });
   const id = child.id;
   state.nodes.set(id, child);
-  applyLayouts(); paintAll(); selectNode(id); scheduleSave();
+  relayout(); selectNode(id); scheduleSave();
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
   setStatus(`Extracted “${nodeLabel(child)}” as a child`);
 }
@@ -309,7 +309,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
     const text = cutCardText(n, src.start, src.end, value);
     touch(t.id);
     appendToBody(t, text.trim());
-    applyLayouts(); paintAll(); selectNode(t.id); scheduleSave(); commitStep();
+    relayout(); selectNode(t.id); scheduleSave(); commitStep();
     setStatus(`Moved text into “${nodeLabel(t)}”`);
     return;
   }
@@ -327,10 +327,10 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   // root: inside an OPEN frame there's no box to come out of — that frame IS the canvas — so its cards
   // keep the sibling reading.
   const parent = dest.container
-    ?? (hostFrame(n) ? nodeOrNull(detachParentId()) : nodeOrNull(n.parent));
+    ?? (hostFrame(n) ? nodeOrNull(detachParentId()) : parentOf(n));
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
-  const { title, body } = titleAndBodyFrom(text);
+  const { title, body } = splitHeading(text);
   if (parent){
     touch(parent.id);
     if (parent.collapsed) parent.collapsed = false;
@@ -344,7 +344,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   // Only a real sibling splices the order; a card dropped into a container is slotted by its
   // position (orderedKids treats an unlisted child as fresh), which is where the drop point is.
   if (parent && parent.id === n.parent) parent.kidOrder = insertedKidOrder(parent, card.id, n.id);
-  applyLayouts(); paintAll(); selectNode(card.id); scheduleSave(); commitStep();
+  relayout(); selectNode(card.id); scheduleSave(); commitStep();
   setStatus(`Extracted “${nodeLabel(card)}”`);
 }
 
@@ -477,7 +477,7 @@ export function dockFrames(target: MindNode, rootIds: string[], afterId?: string
     state.nodes.set(g.id, g);
     // The group stands exactly where the target stood, so it takes its slot in the old parent's stored
     // order too — otherwise a line/fan parent would append it at the end and visibly reshuffle.
-    const op = target.parent ? state.nodes.get(target.parent) : null;
+    const op = parentOf(target);
     if (op?.kidOrder) op.kidOrder = op.kidOrder.map(id => id === target.id ? g!.id : id);
     // …and the target becomes its first tab. Its contents don't move: the group's box is its old box.
     target.parent = g.id; target.side = undefined; target.dirty = true; target.dirtyLayout = true;
@@ -555,6 +555,19 @@ export function deleteNode(id: string): void {
     scheduleSave();
   });
 }
+// Undo a creation that never became a card — Escape out of a fresh card's first edit, or clicking away
+// from one nothing was typed into. Not a delete from the user's side, and not one in the history
+// either: the pending step still holds this card's before-image (null, from mkNode), so deleting it
+// here nets null→null and commitStep DISCARDS the whole step — neither the create nor the delete is
+// left behind for ⌘Z to walk back through. `status` is passed where the user did something explicit
+// (Escape); a card abandoned by clicking away goes quietly. Shared by all four editors that can open
+// on a brand-new card (features/inline-edit.ts ×2, the outline row, the phone editor sheet), which
+// each used to spell out these three lines and half of the reasoning.
+export function discardNewCard(id: string, status?: string): void {
+  deleteNode(id);
+  commitStep();
+  if (status) setStatus(status);
+}
 // Delete every selected card and their entire subtrees.
 export function deleteSelection(): void {
   if (state.readOnly) return;
@@ -576,7 +589,7 @@ export function deleteSelection(): void {
 function canPromoteDelete(id: string): boolean {
   const n = state.nodes.get(id); if (!n) return false;
   if (isLockedEffective(n)) return false;
-  const parent = n.parent ? state.nodes.get(n.parent) : null;
+  const parent = parentOf(n);
   if (parent && isLockedEffective(parent)) return false;
   return childrenOf(id).every(k => !isLockedEffective(k));
 }
@@ -604,7 +617,7 @@ export function deleteSelectionKeepChildren(): void {
     }
   });
   for (const id of ids) promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
-  applyLayouts(); paintAll();
+  relayout();
   setSelectionSet(promoted);
   scheduleSave();
   setStatus(`Deleted ${ids.length} card${ids.length===1?'':'s'}, kept children`);
@@ -662,5 +675,5 @@ export function extractImage(sourceId: string, path: string, alt: string,
     state.nodes.set(n.id, n);
     setStatus('Image extracted');
   }
-  applyLayouts(); paintAll(); scheduleSave(); commitStep();
+  relayout(); scheduleSave(); commitStep();
 }

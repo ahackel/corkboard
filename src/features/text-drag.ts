@@ -22,7 +22,7 @@ import { isContainer } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { centredAt, contentParent, dropCardText, cardText, canMerge,
          type TextSource } from './crud.js';
-import { firstLineLabel } from '../utils/frontmatter.js';
+import { firstLineSplit } from '../utils/frontmatter.js';
 import { effectiveColor, colorClass, applyColorVars, NODE_W } from '../main.js';
 
 // The selection as it stood when the drag began (crud.ts TextSource — which card, which half of it,
@@ -107,7 +107,7 @@ function buildGhost(source: MindNode, text: string): HTMLElement {
   el.className = 'node drag-ghost ' + colorClass(col);
   applyColorVars(el, col);
   el.style.width = NODE_W + 'px';
-  const { title, body } = firstLineLabel(text);
+  const { title, body } = firstLineSplit(text);
   const row = document.createElement('div'); row.className = 'title-row';
   const t = document.createElement('div'); t.className = 'title';
   t.textContent = title || 'New Card';

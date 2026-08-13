@@ -14,6 +14,7 @@
 // grapheme cluster as the tag.
 import { state, isAnnotation } from '../core/state.js';
 import { setTagOnNodes, tagPillHTML } from './tags.js';
+import { placeInViewport } from '../utils/dom.js';
 
 const MRU_KEY = 'corkboard.tagMru';
 const MRU_MAX = 16;
@@ -75,10 +76,7 @@ function position(anchor: HTMLElement): void {
   let left = ar.left + ar.width / 2 - pw / 2;
   let top = ar.top - ph - 8;
   if (top < 4) top = ar.bottom + 8;
-  left = Math.min(Math.max(left, 4), window.innerWidth - pw - 4);
-  top = Math.min(Math.max(top, 4), window.innerHeight - ph - 4);
-  pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
+  placeInViewport(pop, left, top);
 }
 
 export function openEmojiPicker(anchor: HTMLElement, targetIds: string[], onChange?: () => void): void {

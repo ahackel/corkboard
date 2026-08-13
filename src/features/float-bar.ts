@@ -8,10 +8,10 @@
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
 import { state, stage, setStatus, isBoxType, isImageCard, isAnnotation, isQueryCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
-import { NARROW_MQ, ui } from '../core/ui-state.js';
+import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { applyLayouts, subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget, isTabsFrame } from '../view/layout.js';
+import { subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget, isTabsFrame } from '../view/layout.js';
 import { outlineActive } from './outline.js';
 import { FOLDER_PATH } from '../view/icons.js';
 import { createProperties, type PropertyControls } from './properties.js';
@@ -20,12 +20,12 @@ import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChi
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
 import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
-import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked } from '../utils/model.js';
+import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
-import { paintAll, selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, IMAGE_W, IMAGE_H, QUERY_W, QUERY_H, relayout } from '../main.js';
+import { byId, placeInViewport } from '../utils/dom.js';
 
-function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
 const bar = byId('floatBar');
 const fbColor = byId<HTMLButtonElement>('fbColor');
@@ -167,7 +167,7 @@ export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => state.nodes.get(id)?.type === 'frame' && !isLockedEffective(state.nodes.get(id)!));
   if (!ids.length) return;
   record(ids, () => { for (const id of ids){ const n = state.nodes.get(id); if (n) { fitFrameToContent(n); n.dirty = true; } } });
-  applyLayouts(); paintAll(); scheduleSave();
+  relayout(); scheduleSave();
 }
 // Wrap the selected cards in a fresh frame: the frame lands as a child of the nearest
 // NON-selected ancestor of the first selected card (walking up past any selected ancestor —
@@ -209,7 +209,7 @@ export function groupSelectionIntoFrame(): void {
     state.nodes.set(frameId, frame);
     for (const n of nodes) { touch(n.id); n.parent = frameId; n.dirty = true; }
   });
-  applyLayouts(); paintAll(); selectNode(frameId); scheduleSave();
+  relayout(); selectNode(frameId); scheduleSave();
   setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a frame`);
 }
 (function buildTypeChips(){
@@ -262,7 +262,7 @@ function setType(type: NodeType): void {
     }
   });
   markChips();
-  applyLayouts(); paintAll(); scheduleSave();
+  relayout(); scheduleSave();
 }
 // Give a tab group's tabs their own boxes back: open every one (only one was open) and cascade them
 // inside the frame, since as tabs they were all stacked in the same strip band and would otherwise
@@ -304,7 +304,7 @@ function setLayout(layout: NodeLayout): void {
     }
   });
   markChips();
-  applyLayouts(); paintAll(); scheduleSave();
+  relayout(); scheduleSave();
 }
 // Reflect the selection's current type + layout in both popovers AND their trigger icons. A single
 // type shows its chip active and its layout set; a mixed-type selection leaves both blank. The
@@ -395,10 +395,7 @@ function positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
   let top = br.top - ph - POP_GAP;
   const above = top >= 4;
   if (!above) top = br.bottom + POP_GAP;
-  left = Math.min(Math.max(left, 4), window.innerWidth - pw - 4);
-  top = Math.min(Math.max(top, 4), window.innerHeight - ph - 4);
-  pop.style.left = `${left}px`;
-  pop.style.top = `${top}px`;
+  top = placeInViewport(pop, left, top).top;
   // the connector stem bridges the gap, centred on the ANCHOR (not the popover, which may have
   // been clamped sideways near a screen edge) so it always starts right at the trigger button.
   popConnector.style.left = `${ar.left + ar.width / 2 - 1}px`;
@@ -464,7 +461,8 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   const isQuery = isQueryCard(n);   // a leaf with its own search field, no body, but keeps its title
   const isLeaf = isImage || isAnno || isQuery; // none can hold children
   const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
-  const parentLocked = !!n.parent && isLockedEffective(state.nodes.get(n.parent)!);
+  const p = parentOf(n);
+  const parentLocked = !!p && isLockedEffective(p);
   const anyLocked = targetIds.some(id => isLockedEffective(state.nodes.get(id)!));
   const anySubtreeLocked = targetIds.some(id => subtreeHasLocked(id));
   const entries: MenuEntry[] = [];
@@ -558,16 +556,13 @@ function positionBar(): boolean {
   if (!r.width && !r.height) return false;   // hidden (display:none) — nothing to hang off
   const lr = labelRect(n);
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
-  let left = lr.left + lr.width / 2 - bw / 2;
+  const left = lr.left + lr.width / 2 - bw / 2;
   // Anchor on the node's BOUNDS top, not its element's: a frame box's element starts FRAME_TAB_DROP
   // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
   // would hang the bar over the tab and shift it when a frame is converted to a card or back.
   let top = r.top - elTop(n, 0) * state.view.k - bh - GAP;
   if (top < 4) top = r.bottom + GAP;   // not enough room above → flip below the card
-  left = Math.min(Math.max(left, 4), window.innerWidth - bw - 4);
-  top = Math.min(Math.max(top, 4), window.innerHeight - bh - 4);
-  bar.style.left = `${left}px`;
-  bar.style.top = `${top}px`;
+  placeInViewport(bar, left, top);
   if (activePopover) positionPopover(activePopover.pop, activePopover.anchor);
   return true;
 }
@@ -589,7 +584,7 @@ stage.addEventListener('wheel', markWheelBusy, { passive: true });
 stage.addEventListener('gesturestart', () => { wheelBusy = true; });
 stage.addEventListener('gestureend', () => { wheelBusy = false; });
 function isInteracting(): boolean {
-  return !!(ui.drag || ui.pan || ui.pinch || ui.marquee || ui.bodyEdit || ui.titleEdit) || wheelBusy;
+  return !!(ui.drag || ui.pan || ui.pinch || ui.marquee) || inPlaceEditActive() || wheelBusy;
 }
 // ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
 // here, so it can never paint a frame sitting in the screen corner with nothing behind it. Reports

@@ -51,7 +51,10 @@ selection core and wires the global keyboard/toolbar events.
   `gPointers` map. Mutate its properties in place (never reassign `ui`) so drag / inline-edit /
   gestures / the render core all share one live interaction state across module boundaries.
 - `utils/` — pure helpers: `markdown.ts` (`esc`, `renderBodyHTML`), `frontmatter.ts`
-  (`parseMd`/`serializeMd`), `model.ts` (derived-tree queries), `zip.ts`, `idb.ts`.
+  (`parseMd`/`serializeMd`), `model.ts` (derived-tree queries — including **`parentOf`/`ancestors`**,
+  the one spelling of the parent lookup every tree walk in the app is written off), `zip.ts`,
+  `idb.ts`, `dom.ts` (`byId` + `placeInViewport`, the shared last step of every floating panel),
+  `num.ts` (`clamp`).
 - `store/` — **the swappable I/O boundary**, one concern per file: `opfs.ts`, `fsa.ts`,
   `idb-store.ts` (the three adapters, each `satisfies Store`), `handle-store.ts` (shared
   list/write/remove/read ops — DRY), `recents.ts`, `watch.ts`, `types.ts` (the `Store`
@@ -74,7 +77,9 @@ selection core and wires the global keyboard/toolbar events.
   (in-place card editing — ONE text field per card, `startInlineEdit`/`startBodyEdit` differing only in
   where the caret lands, plus `startTitleEdit` for a container's label), `crud.ts` (node
   lifecycle: `createNode`/`addChild`/`createSibling`/`duplicateSelection`/`delete…`/`extractToChild`
-  /`dropCardText`/`mergeCardsInto`), `text-drag.ts` (dragging a card’s selected text out of its
+  /`dropCardText`/`mergeCardsInto`, plus `discardNewCard` — the shared "this creation never became a
+  card" path all four editors take, which nets the pending history step null→null so neither the
+  create nor the delete survives ⌘Z), `text-drag.ts` (dragging a card’s selected text out of its
   editor — see the MERGING section below; registers document listeners),
   `attachments.ts` (image paste/drop, registers document listeners), `search.ts` (find box,
   exports `searchBox`), `images.ts` (inline image resolution), `breadcrumbs.ts` (`#scopeBar`: the
@@ -91,6 +96,12 @@ selection core and wires the global keyboard/toolbar events.
   keyboard/toolbar wiring. Imports each feature module and exports the kernels they call back
   (`paintAll`/`paintNode`/`selectNode`/`subtreeIds`/`nodeH`/`toggleCollapse`…) — deliberate,
   runtime-only `main`↔module cycles that Rollup bundles fine. Fully strict-typed.
+  **Almost every mutation path ends in one of its two settle helpers**, which is what the ~35 former
+  hand-written `applyLayouts(); paintAll();` lines are now spelled as: **`relayout()`** (lay out, then
+  paint — positions moved, no measured height did) and **`remeasure()`** (paint, lay out, paint —
+  for anything that changes a card's own measured height, since the layout pass reads `offsetHeight`
+  and so needs a current DOM before it runs). Picking the wrong one is the paint-before-measure bug
+  `prepRow`/`sizeEmptyStack` exist to avoid, one level up.
 
 NOTE: line numbers cited elsewhere in this file refer to the pre-split inline script and
 are now only approximate — grep for the symbol.

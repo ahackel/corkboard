@@ -13,24 +13,25 @@
 // read-only behave the same as on the canvas.
 import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
-import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden } from '../utils/model.js';
+import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, parentOf, ancestors } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
-import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
+import { orderedKids, sideOf, deriveSide, orderAxisIsX } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG } from '../main.js';
+import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
-import { createNode, addChild, deleteNode, duplicateSelection } from './crud.js';
+import { createNode, addChild, deleteNode, duplicateSelection, discardNewCard } from './crud.js';
 import { reparentOnly } from './drag.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { openMenu } from './context-menu.js';
 import { touch, commitStep } from './history.js';
 import TRI from '../assets/icons/chevron.svg?raw';
+import { byId } from '../utils/dom.js';
 
-const outlineScrollEl = document.getElementById('olScroll') as HTMLElement;
-const rowsEl = document.getElementById('olRows') as HTMLElement;
-const outlineBtn = document.getElementById('outlineBtn') as HTMLButtonElement;
-const olCloseBtn = document.getElementById('olCloseBtn') as HTMLButtonElement;
+const outlineScrollEl = byId('olScroll');
+const rowsEl = byId('olRows');
+const outlineBtn = byId<HTMLButtonElement>('outlineBtn');
+const olCloseBtn = byId<HTMLButtonElement>('olCloseBtn');
 
 // ---- view-local fold state (browsing-only reveals — see the header comment) ----
 // Keyed by the node's FILE (ids are re-minted on every disk reload), falling back to the id
@@ -86,9 +87,7 @@ function endRowTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   if (titleEl) { titleEl.removeAttribute('contenteditable'); titleEl.classList.remove('editing'); titleEl.blur(); }
   if (!n) { commitStep(); return; }
   if (cancel && isNew) {                               // Esc on a freshly-created row = cancel creation
-    deleteNode(n.id);
-    commitStep();
-    setStatus('Cancelled new card');
+    discardNewCard(n.id, 'Cancelled new card');
     return;
   }
   const val = (titleEl?.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // a title is one line
@@ -99,12 +98,6 @@ function endRowTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   renderOutline();                                      // restore the canonical (plain-text) row
 }
 
-// The node's ancestor chain, nearest parent first. Shared by the reveal (unfold up the chain)
-// and the picker breadcrumb.
-function* ancestors(n: MindNode): Generator<MindNode> {
-  for (let p = n.parent ? state.nodes.get(n.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    yield p;
-}
 // The outline's TOP LEVEL, in its canonical order, less annotations (which the outline never lists).
 // Normally that's the map's roots (rootsInOrder). While a frame is OPEN, it's that frame's own
 // children instead — the outline shows what the canvas shows, so the two agree about where you are,
@@ -167,7 +160,7 @@ if (wantOutline()) { document.body.classList.add('outline'); outlineBtn.classLis
 // in its tree position; matched branches force-unfold regardless of mm_collapsed/outlineFold
 // (restored automatically once the query is cleared, since neither is touched here).
 const olHeadEl = document.querySelector('.ol-head') as HTMLElement;
-const olSearchInput = document.getElementById('olSearch') as HTMLInputElement;
+const olSearchInput = byId<HTMLInputElement>('olSearch');
 let outlineQuery = '';
 function matchesOutlineQuery(n: MindNode, q: string): boolean {
   return nodeLabel(n).toLowerCase().includes(q) || (!!n.body && n.body.toLowerCase().includes(q));
@@ -275,12 +268,6 @@ function walk(n: MindNode, depth: number, visible: Set<string> | null): void {
   if (visible ? false : isFolded(n)) return;
   for (const k of orderedKids(n, kids)) walk(k, depth + 1, visible);
 }
-// A row shows a done checkbox only if its PARENT has `checklist` on — same Trello-style rule as
-// the canvas (main.ts's showsDoneCheckbox): the setting lives on the parent, not the item.
-function showsDoneCheckbox(n: MindNode): boolean {
-  const p = n.parent ? state.nodes.get(n.parent) : undefined;
-  return !!(p && p.checklist);
-}
 // Elements inside a row with their own click behaviour — a pointerdown/click on one of these must
 // NOT also be read as "press the card" (drag-start / select-the-row).
 const ROW_CONTROLS = '.ol-done, .ol-open, .ol-more, .ol-chip';
@@ -333,7 +320,10 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
 
   const title = document.createElement('span');
   title.className = 'ol-title';
-  title.textContent = nodeLabel(n);   // an untitled card reads as its first line, else "Untitled"
+  // Derived ONCE for the row: the text plus the three aria-labels below all want it, and on an untitled
+  // card it means scanning the note's first line — paid per row, and renderOutline runs from paintAll.
+  const label = nodeLabel(n);
+  title.textContent = label;   // an untitled card reads as its first line, else "Untitled""
   // No click-to-rename any more — renaming is a ⋯-menu action (see openRowMenu) so a plain press
   // on the card is unambiguously "start a drag", never "start typing". Read-only sessions still
   // tap through to the sheet as a read-only viewer, since that's not an edit.
@@ -367,7 +357,7 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
       chip.innerHTML = FOLD_CHIP_SVG;
       chip.title = 'Collapse';
     }
-    chip.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} “${nodeLabel(n)}”`);
+    chip.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} “${label}”`);
     chip.addEventListener('pointerdown', (e) => e.stopPropagation());   // never starts a row drag
     chip.addEventListener('click', (e) => {
       e.stopPropagation();                                              // …and never selects, either
@@ -379,11 +369,11 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
   if (!state.readOnly) {
     const open = document.createElement('button');
     open.className = 'ol-open'; open.innerHTML = TRI; open.title = 'Open card';
-    open.setAttribute('aria-label', `Open “${nodeLabel(n)}” for editing`);
+    open.setAttribute('aria-label', `Open “${label}” for editing`);
     open.onclick = () => openBranchEditor(n.id, 'none');
     const more = document.createElement('button');
     more.className = 'ol-more'; more.textContent = '⋮'; more.title = 'Card actions';
-    more.setAttribute('aria-label', `Actions for “${nodeLabel(n)}”`);
+    more.setAttribute('aria-label', `Actions for “${label}”`);
     more.onclick = () => { const r = more.getBoundingClientRect(); openRowMenu(n, r.left, r.bottom + 4); };
     row.append(open, more);
 
@@ -426,7 +416,7 @@ outlineScrollEl.addEventListener('click', (e) => {
 // opens the new card for editing either way.
 // While search is active (focused or has a query) it doubles as a × that clears/cancels the
 // search instead — the same swap iOS search fields make between their trailing action and Cancel.
-const olAddBtn = document.getElementById('olAddBtn') as HTMLButtonElement;
+const olAddBtn = byId<HTMLButtonElement>('olAddBtn');
 const olAddPlus = olAddBtn.querySelector('.ol-add-plus') as HTMLElement;
 function searchIsActive(): boolean { return document.activeElement === olSearchInput || !!outlineQuery; }
 // The card a new one goes UNDER, or null for "make it a root". A LEAF kind can never hold children,
@@ -536,24 +526,7 @@ function reorderBucket(parent: MindNode, sibs: MindNode[], newOrder: MindNode[],
     shiftWhole(s, axisX ? cur - e.min : 0, axisX ? 0 : cur - e.min);
     cur += (e.max - e.min) + GAP;
   }
-  applyLayouts(); paintAll(); scheduleSave(); commitStep();
-}
-// Swap `id` with its neighbour in the parent's order — only within the same side bucket
-// (up/down across sides has no canvas meaning). Shared by the ⋯ menu's Move up / Move down.
-export function reorderSibling(id: string, dir: -1 | 1): void {
-  if (state.readOnly) return;
-  const n = state.nodes.get(id);
-  if (n && isLockedEffective(n)) { setStatus('Locked — can’t move'); return; }
-  const parent = n?.parent ? state.nodes.get(n.parent) : undefined;
-  if (!n || !parent) return;
-  const side = sideOf(parent, n);
-  const sibs = orderedKids(parent, childrenOf(parent.id)).filter(k => sideOf(parent, k) === side);
-  const i = sibs.findIndex(k => k.id === id);
-  const other = i >= 0 ? sibs[i + dir] : undefined;
-  if (!other) { setStatus(`“${n ? nodeLabel(n) : ""}” is already at the ${dir < 0 ? 'top' : 'bottom'}`); return; }
-  const newOrder = sibs.slice(); newOrder[i] = other; newOrder[i + dir] = n;
-  reorderBucket(parent, sibs, newOrder, orderAxisIsX(parent, side));
-  setStatus(`Moved “${nodeLabel(n)}” ${dir < 0 ? 'up' : 'down'}`);
+  relayout(); scheduleSave(); commitStep();
 }
 
 // ---- drag rows: reorder, reparent, or move between parents (press anywhere on the card) ----
@@ -743,7 +716,7 @@ function makeRoot(n: MindNode, dy = 0): void {
   touch(n.id, n.parent);
   n.parent = detachParentId(); n.side = undefined; n.dirtyLayout = true;
   shiftWhole(n, 0, dy);
-  applyLayouts(); paintAll(); scheduleSave(); commitStep();
+  relayout(); scheduleSave(); commitStep();
 }
 
 // Apply a drop: nest under a card (same path as the Move-to picker), or slot before/after a
@@ -843,12 +816,19 @@ function renderPicker(): void {
     mpList.appendChild(b);
   };
   if (src.parent && !q) item('⌂ Make root', 'detach from its parent', null, () => moveTo(src, null));
-  const targets = [...state.nodes.values()]
-    .filter(c => c.id !== src.id && c.id !== src.parent && !isAncestor(src.id, c.id) && !isLeafType(c))   // leaves can't be parents
-    .filter(c => !isLockedEffective(c))   // locked cards never adopt new children
-    .filter(c => !q || nodeLabel(c).toLowerCase().includes(q))
-    .sort((a, b) => nodeLabel(a).localeCompare(nodeLabel(b)));
-  for (const c of targets) item(nodeLabel(c), crumbFor(c), effectiveColor(c), () => moveTo(src, c));
+  // Each candidate's label is derived ONCE and carried into the filter, the sort and the row — this
+  // whole pass re-runs on every keystroke in the filter box, and asking again per sort COMPARISON put
+  // an O(body) read on an n·log n path.
+  const targets: { n: MindNode; label: string }[] = [];
+  for (const c of state.nodes.values()){
+    if (c.id === src.id || c.id === src.parent || isAncestor(src.id, c.id) || isLeafType(c)) continue;   // leaves can't be parents
+    if (isLockedEffective(c)) continue;   // locked cards never adopt new children
+    const l = nodeLabel(c);
+    if (q && !l.toLowerCase().includes(q)) continue;
+    targets.push({ n: c, label: l });
+  }
+  targets.sort((a, b) => a.label.localeCompare(b.label));
+  for (const t of targets) item(t.label, crumbFor(t.n), effectiveColor(t.n), () => moveTo(src, t.n));
 }
 function moveTo(src: MindNode, target: MindNode | null, reveal = true): void {
   closePicker();

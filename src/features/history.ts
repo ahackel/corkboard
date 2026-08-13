@@ -7,13 +7,13 @@
 // record() for one-shot ops. A step whose before/after images are identical is discarded, so
 // plain clicks, cancelled drags and unchanged edits never pollute the history.
 import { state, stage, setStatus, type MindNode, type Stroke } from '../core/state.js';
-import { applyLayouts } from '../view/layout.js';
 import { frameBox } from '../view/camera.js';
 import { scheduleSave, scheduleSaveSketch, scheduleSaveSettings } from '../data/persistence.js';
-import { paintAll, setSelectionSet, popScopeFor, nodeW, nodeH } from '../main.js';
+import { setSelectionSet, popScopeFor, nodeW, nodeH, remeasure } from '../main.js';
 import { paintStrokes } from './sketch.js';
 import { endInPlaceEdit } from './inline-edit.js';
 import { isScopeRoot } from '../nav/scope.js';
+import { byId } from '../utils/dom.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
@@ -164,7 +164,7 @@ function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string
   // in the same pass everything else does rather than needing a second one.
   if (canvas !== undefined) { state.canvasColor = canvas; scheduleSaveSettings(); }
   // paint first so resurrected cards have real DOM heights, then lay out, then commit
-  paintAll(); applyLayouts(); paintAll();
+  remeasure();
   const ids = [...images.keys()].filter(id => state.nodes.has(id));
   // An undo can resurrect (or move) a node that lives outside the frame you're standing in — come out
   // of as many levels as it takes to show it, or setSelectionSet would silently drop it (isSelectable
@@ -203,8 +203,8 @@ export function redo(): void {
 }
 
 // ---------- toolbar buttons ----------
-const undoBtn = document.getElementById('undoBtn') as HTMLButtonElement;
-const redoBtn = document.getElementById('redoBtn') as HTMLButtonElement;
+const undoBtn = byId<HTMLButtonElement>('undoBtn');
+const redoBtn = byId<HTMLButtonElement>('redoBtn');
 undoBtn.onclick = undo;
 redoBtn.onclick = redo;
 export function updateUndoButtons(): void {

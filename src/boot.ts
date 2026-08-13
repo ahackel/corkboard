@@ -20,6 +20,7 @@ import { applyReadOnly, subtreeIds } from './main.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';
+import { byId } from './utils/dom.js';
 
 // Chrome/Edge offer opening a real local folder (FSA); iPad/Firefox/Safari use on-device +
 // import/export. ?nofsa hides the folder option for testing the no-FSA layout on desktop.
@@ -79,17 +80,17 @@ let activeTab: MapKind = 'device';    // which backend's maps the sidebar shows
 function selectTab(tab: MapKind): void {
   activeTab = tab;
   const dev = tab === 'device';
-  document.getElementById('tabDevice')!.classList.toggle('active', dev);
-  document.getElementById('tabFolder')!.classList.toggle('active', !dev);
+  byId('tabDevice').classList.toggle('active', dev);
+  byId('tabFolder').classList.toggle('active', !dev);
   // the "+" action creates where the active tab points
-  document.getElementById('newBtnLabel')!.textContent = dev ? 'New map' : 'Open folder…';
+  byId('newBtnLabel').textContent = dev ? 'New map' : 'Open folder…';
   renaming = null;
   renderMapList();
 }
 
 function renderMapList(): void {
   const list = readMaps().filter(m => m.kind === activeTab);
-  const box = document.getElementById('mapList') as HTMLElement;
+  const box = byId('mapList');
   if (!list.length){
     box.innerHTML = `<p class="side-empty">${activeTab === 'device' ? 'No maps yet.' : 'No recent folders yet.'}</p>`;
     return;
@@ -177,20 +178,20 @@ async function deleteMap(m: MapRef): Promise<void> {
 }
 
 // ---------- home sidebar ----------
-const startScreen = document.getElementById('startScreen') as HTMLElement;
+const startScreen = byId('startScreen');
 export function showStart(): void {
   renaming = null;
-  (document.getElementById('tabFolder') as HTMLButtonElement).disabled = !HAS_FSA;
+  byId<HTMLButtonElement>('tabFolder').disabled = !HAS_FSA;
   // open on the tab of the map currently on the canvas
   selectTab(HAS_FSA && currentMap?.kind === 'folder' ? 'folder' : 'device');
   startScreen.classList.remove('hidden');
 }
 export function hideStart(): void { startScreen.classList.add('hidden'); }
 
-document.getElementById('tabDevice')!.onclick = () => selectTab('device');
-document.getElementById('tabFolder')!.onclick = () => selectTab('folder');
+byId('tabDevice').onclick = () => selectTab('device');
+byId('tabFolder').onclick = () => selectTab('folder');
 // the "+" action: a new on-device map, or the FSA folder picker — per the active tab
-document.getElementById('newBtn')!.onclick = async () => {
+byId('newBtn').onclick = async () => {
   if (activeTab === 'device'){
     const ref = await createDeviceMap(await resolveOnDeviceStore());
     await openDeviceMap(ref);
@@ -199,12 +200,12 @@ document.getElementById('newBtn')!.onclick = async () => {
     await pickFolder();
   }
 };
-(document.getElementById('importBtn') as HTMLElement).onclick = () => openImportPicker();
-(document.getElementById('startClose') as HTMLElement).onclick = () => hideStart();
+byId('importBtn').onclick = () => openImportPicker();
+byId('startClose').onclick = () => hideStart();
 // clicking the canvas area beside the sidebar closes it
 startScreen.addEventListener('click', e => { if (e.target === startScreen) hideStart(); });
 setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
-document.getElementById('appVersion')!.textContent = `v${__APP_VERSION__}`;
+byId('appVersion').textContent = `v${__APP_VERSION__}`;
 
 // ---------- help map (help/*.md, opened with F1) ----------
 // Read-only store serving the help notes; lives in its own tab (?help), so the user's own map

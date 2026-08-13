@@ -11,19 +11,19 @@
 // session, and ui.panelEdit freezes the file rename while typing.
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
-import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, effectiveColor, colorClass, applyColorVars } from '../main.js';
+import { effectiveColor, colorClass, applyColorVars, relayout } from '../main.js';
 import { autosizeBody } from './inline-edit.js';
 import { addChild } from './crud.js';
 import { touch, commitStep } from './history.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { isLockedEffective } from '../utils/model.js';
+import { byId } from '../utils/dom.js';
 
-const cardsEl = document.getElementById('olCards') as HTMLElement;
+const cardsEl = byId('olCards');
 // persistent (index.html), not part of .ol-scroll — see its CSS comment for why. Shown/hidden
 // purely via body.ol-editing, so it's wired once here rather than created/destroyed per open.
-document.getElementById('ocBack')!.addEventListener('click', () => closeBranchEditor());
+byId('ocBack').addEventListener('click', () => closeBranchEditor());
 let anchorId: string | null = null;   // the tapped card whose sibling group is shown
 let activeId: string | null = null;   // the card currently focused → the props sheet targets it
 
@@ -32,7 +32,7 @@ let activeId: string | null = null;   // the card currently focused → the prop
 // in features/properties.ts), pinned to the bottom of the outliner for the active card. Created
 // lazily: at module-import time main.ts is still evaluating and its SWATCH_BG/PALETTE aren't defined
 // yet (createProperties builds the swatch row eagerly), so we defer to first open.
-const bpEl = document.getElementById('branchProps') as HTMLElement;
+const bpEl = byId('branchProps');
 bpEl.inert = true;   // stays in the DOM (transform:translateY, not display:none) so its slide-up
 // animates — but that also leaves #bpTagRow/#bpChecklist focusable while "closed", which
 // iOS Safari counts towards showing the keyboard's Prev/Next accessory bar even for an unrelated
@@ -41,9 +41,9 @@ bpEl.inert = true;   // stays in the DOM (transform:translateY, not display:none
 let bpPanel: PropertyControls | null = null;
 function props(): PropertyControls {
   return bpPanel ??= createProperties({
-    colors: document.getElementById('bpColors') as HTMLElement,
-    tagRow: document.getElementById('bpTagRow') as HTMLElement,
-    checklist: document.getElementById('bpChecklist') as HTMLInputElement,
+    colors: byId('bpColors'),
+    tagRow: byId('bpTagRow'),
+    checklist: byId<HTMLInputElement>('bpChecklist'),
   }, () => (activeId ? [activeId] : []));
 }
 function markActiveCard(id: string | null): void {
@@ -201,7 +201,7 @@ export function closeBranchEditor(): void {
   hideProps();
   document.body.classList.remove('ol-editing');
   cardsEl.textContent = '';
-  applyLayouts(); paintAll();   // reflect the title/note edits in the list rows (+ canvas behind)
+  relayout();   // reflect the title/note edits in the list rows (+ canvas behind)
 }
 
 // Escape anywhere in the editor is a keyboard "back" button.

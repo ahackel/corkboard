@@ -23,10 +23,11 @@ import { scope, scopeActive } from '../nav/scope.js';
 import { goToScopeDepth } from '../main.js';
 import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';
+import { byId } from '../utils/dom.js';
 
-const homeBar = document.getElementById('homeBar') as HTMLElement;
-const mapCrumb = document.getElementById('folderName') as HTMLElement;
-const bar = document.getElementById('scopeBar') as HTMLElement;
+const homeBar = byId('homeBar');
+const mapCrumb = byId('folderName');
+const bar = byId('scopeBar');
 
 // How many frame levels are spelled out in full. Beyond this the middle folds into `…`, keeping the
 // deepest TAIL — where you are and what you're about to step back into is worth more than the top of
@@ -45,7 +46,10 @@ function crumb(depth: number, label: string, current: boolean): string {
     + `${current ? ' aria-current="page"' : ''} title="${esc(label)}">`
     + `<span class="sc-name">${esc(label)}</span></button>`;
 }
-const levelTitle = (i: number): string => state.nodes.get(scope.stack[i]!.rootId) ? nodeLabel(state.nodes.get(scope.stack[i]!.rootId)!) : '…';
+const levelTitle = (i: number): string => {
+  const p = state.nodes.get(scope.stack[i]!.rootId);
+  return p ? nodeLabel(p) : '…';
+};
 // The levels `…` stands for, outermost first — everything before the tail.
 const foldedLevels = (): number[] =>
   scope.stack.length > TAIL ? [...Array(scope.stack.length - TAIL).keys()] : [];
@@ -56,7 +60,7 @@ const foldedLevels = (): number[] =>
 // rebuilding this innerHTML per frame would be pure waste (cf. queryKey in main.ts).
 export function renderCrumbs(): void {
   const sig = !scopeActive() ? store.name
-    : store.name + '|' + scope.stack.map(l => l.rootId + ':' + (() => { const p = state.nodes.get(l.rootId); return p ? nodeLabel(p) : ''; })()).join('/');
+    : store.name + '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i)).join('/');
   if (bar.dataset.sig === sig) return;
   bar.dataset.sig = sig;
   document.body.classList.toggle('scoped', scopeActive());

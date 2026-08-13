@@ -10,18 +10,18 @@ import { screenToWorld, fit } from '../view/camera.js';
 import { createNode, createAnnotationHere, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
 import { record } from './history.js';
-import { typedImageBlob } from './images.js';
+import { typedImageBlob, bodyImageAt } from './images.js';
 import { esc } from '../utils/markdown.js';
 import { scheduleSave } from '../data/persistence.js';
-import { applyLayouts } from '../view/layout.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
-import { paintAll, exitScope, goToScopeDepth, selectAll } from '../main.js';
+import { exitScope, goToScopeDepth, selectAll, relayout } from '../main.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
 // — this creates a deliberate two-way import cycle with float-bar.ts (which imports openMenu /
 // copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
 // sides only touch it inside event handlers, never at module-eval time, so it's safe.
 import { buildCardMenu } from './float-bar.js';
 import { nodeLabel } from '../utils/model.js';
+import { byId, placeInViewport } from '../utils/dom.js';
 
 const menu = document.createElement('div');
 menu.id = 'ctxMenu';
@@ -84,7 +84,7 @@ function removeImage(n: MindNode, path: string): void {
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor
   if (path.startsWith('attachments/') && ![...state.nodes.values()].some(m => m.body.includes(path)))
     state.toDelete.push(path);
-  applyLayouts(); paintAll(); scheduleSave();
+  relayout(); scheduleSave();
   setStatus('Image removed');
 }
 // Copy the bitmap to the clipboard. Browsers only accept PNG ClipboardItems, so anything else is
@@ -101,15 +101,6 @@ async function copyImage(img: HTMLImageElement): Promise<void> {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     setStatus('Image copied');
   } catch { setStatus('Couldn’t copy image'); }
-}
-// Body images are pointer-events:none (clicks/drags fall through to the card), so a right-click
-// never has the <img> as its target — find the image under the cursor geometrically instead.
-function imageAt(cardEl: HTMLElement, x: number, y: number): HTMLImageElement | null {
-  for (const img of cardEl.querySelectorAll<HTMLImageElement>('img.md-img')){
-    const r = img.getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return img;
-  }
-  return null;
 }
 // Open the image in its own tab. Navigating straight to the blob URL shows raw bytes when the
 // page runs in a null-origin context (blob:null), so instead we open a blank tab and embed the
@@ -141,10 +132,7 @@ function openMenuAt(sx: number, sy: number): void {
   // number, and there was nothing pulling it back down. Clamping BOTH edges keeps the whole box
   // on-screen; #ctxMenu's own max-height + overflow-y:auto (styles.css) is the last-resort
   // fallback for the rare case where even the full viewport height can't fit every entry.
-  const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  const margin = 4;
-  menu.style.left = Math.min(Math.max(sx, margin), window.innerWidth - mw - margin) + 'px';
-  menu.style.top  = Math.min(Math.max(sy, margin), window.innerHeight - mh - margin) + 'px';
+  placeInViewport(menu, sx, sy);
 }
 
 function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
@@ -189,7 +177,7 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
 // long-press on empty canvas, for when that gesture isn't reachable (iOS Safari's synthesized
 // contextmenu on the canvas is unreliable). New cards/images land at the current view's centre
 // since there's no click point to anchor them to; the menu itself opens under the button.
-const canvasMenuBtn = document.getElementById('canvasMenuBtn') as HTMLButtonElement;
+const canvasMenuBtn = byId<HTMLButtonElement>('canvasMenuBtn');
 canvasMenuBtn.addEventListener('click', (e) => {
   e.stopPropagation();
   closeMenu();
@@ -212,7 +200,7 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
   const n = id ? state.nodes.get(id) : undefined;
   let entries: MenuEntry[];
   if (n){
-    const img = imageAt(nodeEl!, e.clientX, e.clientY);
+    const img = bodyImageAt(nodeEl!, e.clientX, e.clientY);
     // image entries above the card's own; same list the kebab menu shows for this card
     entries = [...(img ? imageMenuEntries(n, img) : []), ...buildCardMenu(n, e.clientX, e.clientY)];
   } else {

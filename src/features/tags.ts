@@ -10,8 +10,7 @@ import { state, setStatus, isAnnotation, type MindNode } from '../core/state.js'
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { applyLayouts } from '../view/layout.js';
-import { paintAll, selectedIds } from '../main.js';
+import { selectedIds, remeasure } from '../main.js';
 import { esc } from '../utils/markdown.js';
 // two-way cycle w/ emoji-picker.ts (which imports setTagOnNodes/tagPillHTML from here), evaluated
 // only inside bindCardTagPills's own click handler below, never at module-eval time — same style as
@@ -47,7 +46,7 @@ export function setTagOnNodes(ids: string[], tag: string, on: boolean): void {
   });
   // paint first so each card's height is current, then reflow (a tag row can change height), then
   // paint again.
-  paintAll(); applyLayouts(); paintAll(); scheduleSave();
+  remeasure(); scheduleSave();
 }
 
 // ---- card-rendered tag row: click a pill to remove it — from every selected card if this one is

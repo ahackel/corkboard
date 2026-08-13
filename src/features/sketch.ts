@@ -11,6 +11,8 @@ import { screenToWorld } from '../view/camera.js';
 import { scheduleSaveSketch } from '../data/persistence.js';
 import { touchStrokes, commitStep } from './history.js';
 import { selectNode } from '../main.js';
+import { byId } from '../utils/dom.js';
+import { clamp } from '../utils/num.js';
 
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -45,7 +47,7 @@ const SHARP_DEG = 55;
 function turnDeg(a: [number, number], b: [number, number], c: [number, number]): number {
   const v1x = b[0] - a[0], v1y = b[1] - a[1], v2x = c[0] - b[0], v2y = c[1] - b[1];
   const l1 = Math.hypot(v1x, v1y) || 1, l2 = Math.hypot(v2x, v2y) || 1;
-  const cos = Math.max(-1, Math.min(1, (v1x * v2x + v1y * v2y) / (l1 * l2)));
+  const cos = clamp((v1x * v2x + v1y * v2y) / (l1 * l2), -1, 1);
   return Math.acos(cos) * 180 / Math.PI;
 }
 // ---- rendering ----
@@ -103,7 +105,7 @@ function distToSeg(px: number, py: number, ax: number, ay: number, bx: number, b
   const dx = bx - ax, dy = by - ay;
   const len2 = dx * dx + dy * dy;
   let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
-  t = Math.max(0, Math.min(1, t));
+  t = clamp(t, 0, 1);
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 function strokeHit(s: Stroke, px: number, py: number, tol: number): boolean {
@@ -171,7 +173,6 @@ export function sketchCancel(): void {
 const round = (v: number): number => Math.round(v * 10) / 10;
 
 // ---- toolbar wiring ----
-function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 export function setSketchMode(on: boolean): void {
   ui.sketchOn = on;
   if (!on) sketchCancel();

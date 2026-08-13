@@ -6,17 +6,18 @@
 // shortcut can focus it.
 import { state, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
-import { nodeLabel, disambiguatedLabel, firstVisible } from '../utils/model.js';
+import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible } from '../utils/model.js';
 import { outOfScope } from '../nav/scope.js';
 import { paintAll, focusNode } from '../main.js';
 import { outlineActive, revealInOutline } from './outline.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
+import { byId } from '../utils/dom.js';
 
-export const searchBox = document.getElementById('searchBox') as HTMLInputElement;
-const searchWrap = document.getElementById('searchWrap') as HTMLElement;
-const searchBtn = document.getElementById('searchBtn') as HTMLButtonElement;
-const searchResults = document.getElementById('searchResults') as HTMLElement;
-const searchClear = document.getElementById('searchClear') as HTMLButtonElement;
+export const searchBox = byId<HTMLInputElement>('searchBox');
+const searchWrap = byId('searchWrap');
+const searchBtn = byId<HTMLButtonElement>('searchBtn');
+const searchResults = byId('searchResults');
+const searchClear = byId<HTMLButtonElement>('searchClear');
 let searchHits: MindNode[] = [], searchActive = -1;
 // Open the search bar and focus the box (also the "/" shortcut entry point). The bar sits where
 // the main toolbar does and hides it for as long as it's open (styles.css keys off `.open`).
@@ -38,18 +39,26 @@ export function runSearch(): void {
   // match on title OR body content — within the frame you're standing in, if any (nav/scope.ts):
   // search finds what's on the canvas, so a hit is always something you can be shown and select.
   // The way back OUT of a frame is the breadcrumbs, not a search result that teleports you.
-  const matches = [...state.nodes.values()].filter(n =>
-    !outOfScope(n) && (nodeLabel(n).toLowerCase().includes(q) || (n.body && n.body.toLowerCase().includes(q))));
+  // Each node's label is derived ONCE here and carried through the filter, the sort and the ranking —
+  // a label off an untitled card means scanning its first line, and asking for it again per sort
+  // COMPARISON put that on an n·log n path that reruns on every keystroke.
+  const matches: { n: MindNode; label: string; onLabel: boolean }[] = [];
+  for (const n of state.nodes.values()){
+    if (outOfScope(n)) continue;
+    const label = nodeLabel(n);
+    const onLabel = label.toLowerCase().includes(q);
+    if (onLabel || (n.body && n.body.toLowerCase().includes(q))) matches.push({ n, label, onLabel });
+  }
   // highlight every match — surfacing a hidden match through its first visible parent
-  state.searchMatch = new Set(matches.map(n => firstVisible(n).id));
+  state.searchMatch = new Set(matches.map(m => firstVisible(m.n).id));
   // dropdown: title matches first, then body-only matches, alphabetical within each
-  searchHits = matches.sort((a,b) => {
-    const at = nodeLabel(a).toLowerCase().includes(q), bt = nodeLabel(b).toLowerCase().includes(q);
-    return at !== bt ? (at ? -1 : 1) : nodeLabel(a).localeCompare(nodeLabel(b));
-  }).slice(0, 12);
+  searchHits = matches.sort((a,b) =>
+    a.onLabel !== b.onLabel ? (a.onLabel ? -1 : 1) : a.label.localeCompare(b.label)
+  ).slice(0, 12).map(m => m.n);
   searchActive = searchHits.length ? 0 : -1;
+  const dup = duplicateLabels();
   searchResults.innerHTML = searchHits.length
-    ? searchHits.map((n,i) => `<button class="sr-item${i===searchActive?' active':''}" data-id="${n.id}">${esc(disambiguatedLabel(n))}</button>`).join('')
+    ? searchHits.map((n,i) => `<button class="sr-item${i===searchActive?' active':''}" data-id="${n.id}">${esc(disambiguatedLabel(n, dup))}</button>`).join('')
     : '<div class="sr-none">No card matches</div>';
   searchResults.classList.add('open');
   markActive();   // white outline on the active option's (visible) card

@@ -14,13 +14,13 @@
 import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, esc } from './utils/markdown.js';
-import { joinHeading } from './utils/frontmatter.js';
+import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, disambiguatedLabel, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked } from './utils/model.js';
+import { childrenOf, isHidden, nodeLabel, disambiguatedLabel, duplicateLabels, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked, parentOf, ancestors } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
-import { mountIcons, FOLDER_PATH, FOLDER_SVG } from './view/icons.js';
+import { mountIcons, FOLDER_SVG } from './view/icons.js';
 import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
@@ -31,7 +31,7 @@ import './features/gestures.js';   // registers the canvas pan/zoom/marquee gest
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import { openMenu } from './features/context-menu.js';   // also registers the custom right-click menu on the canvas
-import { startInlineEdit, startBodyEdit, endBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
+import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createAnnotationHere, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt, NEW_CARD_H } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
@@ -43,7 +43,7 @@ import { copySelection, cutSelection, bindCardFileDrag } from './features/clipbo
 import { toggleSketchMode } from './features/sketch.js';   // also registers the sketch toolbar wiring
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
 import { commitStep, record, touch, undo, redo, updateUndoButtons } from './features/history.js';
-import { resetImageCache, hydrateImages } from './features/images.js';
+import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
@@ -51,14 +51,14 @@ import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.j
 import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode, EdgeStyle } from './core/state.js';
-import { ui, isTypingInField, type Pt, type Drag } from './core/ui-state.js';
+import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
+import { byId } from './utils/dom.js';
+import { clamp } from './utils/num.js';
 
 declare global {
   interface Window { __dbg: { readonly state: typeof state; readonly drag: Drag | null }; }
 }
 
-// The DOM shell (index.html) is fixed, so these elements always exist — assert non-null.
-function byId<T extends HTMLElement = HTMLElement>(id: string): T { return document.getElementById(id) as T; }
 
 window.__dbg = { get state(){ return state; }, get drag(){ return ui.drag; } };   // TEMP debug hook
 
@@ -241,7 +241,7 @@ function nodeEl(n: MindNode): HTMLElement {
     // wrapper), so this is about plain cards.
     e.stopPropagation();
     // while editing this node, a double-click selects a word — don't take it over
-    if ((ui.bodyEdit && ui.bodyEdit.id === n.id) || (ui.titleEdit && ui.titleEdit.id === n.id)) return;
+    if (inPlaceEditOn(n.id)) return;
     if (isNodeControlAt(e.clientX, e.clientY)) return;   // the card's own buttons keep their click
     e.preventDefault();
     activateNode(n, e.clientX, e.clientY);
@@ -303,10 +303,9 @@ function addChildIn(n: MindNode, cx: number, cy: number): void {
   const PAD = 8;
   const box = frameInterior(n);
   const p = centredAt(screenToWorld(cx, cy));   // the same "new card HERE" centring the canvas uses
-  const cl = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
   addChild(n.id, {
-    x: cl(p.x, box.x + PAD, box.x + box.w - NODE_W - PAD),
-    y: cl(p.y, box.y + PAD, box.y + box.h - NEW_CARD_H - PAD),
+    x: clamp(p.x, box.x + PAD, box.x + box.w - NODE_W - PAD),
+    y: clamp(p.y, box.y + PAD, box.y + box.h - NEW_CARD_H - PAD),
   });
 }
 // A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor. While
@@ -348,13 +347,13 @@ export function effectiveColor(n: MindNode): string {
   else if (drag && drag.dropTarget && drag.dropTarget !== drag.active.id) {
     previewId = drag.active.id;
     const tgt = state.nodes.get(drag.dropTarget);
-    previewParent = drag.dropMode === 'sibling' ? (tgt?.parent ? state.nodes.get(tgt.parent) : null) : tgt;
+    previewParent = drag.dropMode === 'sibling' ? (tgt ? parentOf(tgt) : null) : tgt;
     if (previewParent?.id === previewId) previewParent = null;
   }
   // `guard`, like effectiveLayout's: a chain is only as trustworthy as the data behind it, and this
   // runs on every paint of every card — a cycle must degrade to a fallback colour, not hang the tab.
   let guard = 0;
-  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : (c.parent ? state.nodes.get(c.parent) : null))
+  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c))
     if (c.color) return c.color;
   // light theme: the neutral fallback card reads better as white than as the dark-grey card
   return document.body.classList.contains('light') ? 'white' : 'grey';
@@ -368,16 +367,17 @@ export function effectiveColor(n: MindNode): string {
 // than show the box: `.show-done > .body` also indents the text to clear the box's column, so an
 // annotation under a checklist parent was shifted sideways to make room for a control it never had.
 // It also keeps the `.done` strikethrough and the query-result row's checkbox off annotations.
-function showsDoneCheckbox(n: MindNode): boolean {
+// Exported because the OUTLINE asks the same question of the same nodes: it used to keep its own copy,
+// and the annotation rule above landed in only one of the two.
+export function showsDoneCheckbox(n: MindNode): boolean {
   if (isAnnotation(n)) return false;
-  const p = n.parent ? state.nodes.get(n.parent) : undefined;
+  const p = parentOf(n);
   return !!(p && p.checklist);
 }
 // true if ANY ancestor (at any depth, not just the direct parent) has a title containing `needle`
 // (already lowercased) — backs the "p:<parent>" query token below.
 function hasAncestorTitleContaining(n: MindNode, needle: string): boolean {
-  for (let p = n.parent ? state.nodes.get(n.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    if (p.title.toLowerCase().includes(needle)) return true;
+  for (const p of ancestors(n)) if (p.title.toLowerCase().includes(needle)) return true;
   return false;
 }
 // ---------- query card: search field + scrollable results list ----------
@@ -441,23 +441,23 @@ function renderQueryResults(n: MindNode): void {
     : 'none';
   if (el.dataset.queryKey === key) return;
   el.dataset.queryKey = key;
-  el.innerHTML = !hasQuery
-    ? ''
-    : hits.length
-      ? hits.map(m => queryItemHTML(m)).join('')
-      : '<div class="query-empty">No matches</div>';
+  if (!hasQuery){ el.innerHTML = ''; return; }
+  if (!hits.length){ el.innerHTML = '<div class="query-empty">No matches</div>'; return; }
+  const dup = duplicateLabels();   // one pass for the whole list, not one per row
+  el.innerHTML = hits.map(m => queryItemHTML(m, dup)).join('');
 }
 // One matched note, rendered as a small card (colour, lock badge, checklist done box, title) —
 // the outline's `.ol-row` in miniature, minus drag-to-reorder (these are search hits, not
 // siblings). The "⋮" opens a menu with the same actions the outline row's own ⋯ menu offers.
-function queryItemHTML(m: MindNode): string {
+function queryItemHTML(m: MindNode, dup: Set<string>): string {
   const done = showsDoneCheckbox(m);
   const col = effectiveColor(m);
+  const label = nodeLabel(m);
   return `<div class="query-item ${colorClass(col)}${done && m.done ? ' done' : ''}" style="${colorVars(col)}" data-id="${m.id}">
     ${m.locked ? `<span class="qi-lock" title="Locked">${LOCK_BADGE_SVG}</span>` : ''}
     ${done ? `<input type="checkbox" class="qi-done" ${m.done ? 'checked' : ''} title="Mark done">` : ''}
-    <span class="qi-title">${esc(disambiguatedLabel(m))}</span>
-    <button type="button" class="qi-more" title="Card actions" aria-label="Actions for “${esc(nodeLabel(m))}”">⋮</button>
+    <span class="qi-title">${esc(disambiguatedLabel(m, dup))}</span>
+    <button type="button" class="qi-more" title="Card actions" aria-label="Actions for “${esc(label)}”">⋮</button>
   </div>`;
 }
 function openQueryItemMenu(m: MindNode, x: number, y: number): void {
@@ -476,20 +476,6 @@ function onQueryInput(n: MindNode, value: string): void {
   n.query = value; n.dirty = true;
   const pending = queryDebounce.get(n.id); if (pending != null) clearTimeout(pending);
   queryDebounce.set(n.id, window.setTimeout(() => { queryDebounce.delete(n.id); renderQueryResults(n); }, 150));
-}
-// Append a whole `token` (e.g. "t:bug") to a query card's search text, if not already present —
-// used by the tag panel's drag-onto-query-card assignment (features/tags.ts). The caller owns
-// touch()/scheduleSave()/commitStep() around this, same as any other single-field mutation; this
-// just updates the model and, if the field isn't mid-edit, its rendered input + results.
-export function appendQueryToken(n: MindNode, token: string): void {
-  const raw = (n.query ?? '').trim();
-  const tokens = raw ? raw.split(/\s+/) : [];
-  if (tokens.some(t => t.toLowerCase() === token.toLowerCase())) return;
-  n.query = tokens.length ? `${raw} ${token}` : token;
-  n.dirty = true;
-  const input = n.el?.querySelector('.query-input') as HTMLInputElement | null;
-  if (input && !(ui.queryEdit && ui.queryEdit.id === n.id)) input.value = n.query;
-  renderQueryResults(n);
 }
 function endQueryEdit(n: MindNode): void {
   if (!ui.queryEdit || ui.queryEdit.id !== n.id) return;
@@ -616,7 +602,7 @@ export function paintNode(n: MindNode): void {
     // whole subtree via the compositor: moving the parent's element moves every descendant with it,
     // no per-descendant left/top rewrite. Roots stay under #world; a direct frame child stays in the
     // frame's overflow:hidden wrapper (place()). isFrameBox covers frames (image cards are leaves).
-    const p = n.parent ? state.nodes.get(n.parent) : null;
+    const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
     if (isAnnotation(n)) {
       // An annotation always renders directly under #world at absolute coords — never nested in its
@@ -721,23 +707,43 @@ export function paintNode(n: MindNode): void {
     // display:none because the box below holds child cards, not a note.
     if (n.type === 'frame') {
       const md = collapsed ? collapsedMarkdown(label) : cardMarkdown(label);
-      // A frame is the one kind that may never be blank — the tab is the only thing you can grab the box
-      // by — so with no text at all it falls back to nodeLabel as plain text.
-      titleEl.innerHTML = md.trim() ? renderBodyHTML(md) : esc(nodeLabel(label));
-      titleEl.title = nodeLabel(label);   // one ellipsised line, so the full name lives in the tooltip
+      const full = nodeLabel(label);
+      // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
+      // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
+      // destroys and rebuilds the tab's child nodes — where nothing about the label has changed. The
+      // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
+      // on its own, e.g. when the file is renamed) and `md` alone would never notice.
+      const key = md.trim() ? md : ' ' + full;
+      if (titleEl.dataset.md !== key){
+        titleEl.dataset.md = key;
+        // A frame is the one kind that may never be blank — the tab is the only thing you can grab the
+        // box by — so with no text at all it falls back to nodeLabel as plain text.
+        titleEl.innerHTML = md.trim() ? renderBodyHTML(md) : esc(full);
+      }
+      titleEl.title = full;   // one ellipsised line, so the full name lives in the tooltip
       el.classList.remove('no-title');
     } else {
       const text = isQueryBox(n) ? ((n.query ?? '').trim() || nodeLabel(n)) : '';
       titleEl.textContent = text;
       titleEl.removeAttribute('title');
+      delete titleEl.dataset.md;    // retyped away from a frame: don't let the stale key match later
       el.classList.toggle('no-title', !text);
     }
   }
   const bodyEl = el.querySelector('.body') as HTMLElement;
   // don't clobber the body while it's being edited in place (the textarea lives inside .body)
   if (!editingBody) {
-    bodyEl.innerHTML = renderBodyHTML(collapsed ? collapsedMarkdown(n) : cardMarkdown(n));
-    hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
+    // Same guard as the frame tab above, and this is the one that pays: every card on screen renders
+    // its whole note per paint, i.e. per animation frame for the length of a resize or relayout — a
+    // markdown parse, an HTML re-parse that replaces every child element, and hydrateImages' own
+    // querySelectorAll, all to produce what is already there. Keyed on the source text, so a paint
+    // that only MOVED cards skips the lot.
+    const md = collapsed ? collapsedMarkdown(n) : cardMarkdown(n);
+    if (bodyEl.dataset.md !== md){
+      bodyEl.dataset.md = md;
+      bodyEl.innerHTML = renderBodyHTML(md);
+      hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
+    }
   }
   if (isQueryBox(n)) {
     const qInput = el.querySelector('.query-input') as HTMLInputElement;
@@ -816,7 +822,7 @@ function cardMarkdown(n: MindNode): string {
 // styles.css) — this handles "there is more".
 function collapsedMarkdown(n: MindNode): string {
   const lines = cardMarkdown(n).split('\n');
-  const i = lines.findIndex(l => l.trim());
+  const i = firstTextLine(lines);
   if (i < 0) return '';
   const more = lines.slice(i + 1).some(l => l.trim());
   return more ? lines[i].replace(/\s+$/, '') + '…' : lines[i];
@@ -1065,7 +1071,7 @@ export function layoutH(n: MindNode): number {
 // `hostFrame` (view/layout.ts) does the actual ancestor walk — shared with edges.ts so an edge
 // between two cards inside the same frame clips to it too, not just the cards themselves.
 function settledHost(n: MindNode): MindNode | null {
-  if (ui.drag || ui.bodyEdit || ui.titleEdit) return n.hostFrameId ? (state.nodes.get(n.hostFrameId) ?? null) : null;
+  if (ui.drag || inPlaceEditActive()) return n.hostFrameId ? (state.nodes.get(n.hostFrameId) ?? null) : null;
   const want = hostFrame(n);
   n.hostFrameId = want ? want.id : null;
   return want;
@@ -1408,7 +1414,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // below it jumps on release. paintNode(n) above already ran, so the measurement is current.
     if ((flow || !sizeH) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
       subtreeRAF = null;
-      applyLayouts(); paintAll();
+      relayout();
     });
     // A north/west resize shifts the frame's own x/y, which shifts its content wrapper's origin —
     // repaint the whole subtree (not just direct children) so every hosted descendant's live,
@@ -1437,7 +1443,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     shiftAnnos();        // settle the latched annotations against the snapped edges
     // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
     // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
-    applyLayouts(); paintAll(); scheduleSave(); commitStep();
+    relayout(); scheduleSave(); commitStep();
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
@@ -1449,6 +1455,17 @@ export function paintAll(): void {
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
   syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
 }
+// The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
+// in the app ends in one of them — some 35 call sites, which is why they used to be written out by
+// hand — and which one is correct turns on a single question: did the change alter a MEASURED size?
+//   relayout()  — lay out, then paint. The default: positions moved, no card's own height did.
+//   remeasure() — paint FIRST, then lay out, then paint again. For anything that changes a card's
+//                 measured height (its text, its width, or a card so new it has no element yet): the
+//                 layout pass reads offsetHeight, so the DOM has to be current BEFORE it runs, and
+//                 the second paint applies the positions it worked out. The same paint-before-measure
+//                 rule prepRow / sizeEmptyStack follow inside the layout pass itself.
+export function relayout(): void { applyLayouts(); paintAll(); }
+export function remeasure(): void { paintAll(); applyLayouts(); paintAll(); }
 
 // First-run hints ("Drag to create a card" / "Click for help") show only on an empty canvas.
 // The help hint tracks the (centred, variable-x) help button; the ghost hint is CSS-anchored.
@@ -1473,8 +1490,7 @@ function placeNodeEl(n: MindNode): void { if (n.el) placeSelf(n, n.x, elTop(n, n
 function setNodeElXY(n: MindNode, x: number, y: number): void { if (n.el) placeSelf(n, x, elTop(n, y)); }
 // Newly revealed cards emanate from the nearest ancestor that was already on screen.
 function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
-  let p = node.parent ? state.nodes.get(node.parent) : null;
-  while (p){ const b = before.get(p.id); if (b) return b; p = p.parent ? state.nodes.get(p.parent) : null; }
+  for (const p of ancestors(node)){ const b = before.get(p.id); if (b) return b; }
   return { x: node.x, y: node.y };
 }
 // Cards glide to new spots via a CSS transition; SVG edges can't transition, so for the duration
@@ -1559,8 +1575,7 @@ const EDGE_ICONS: Record<EdgeStyle, string> = { straight: edgeStraightIcon, orth
 function updateEdgeIcon(): void {
   const span = document.querySelector('#edgeBtn .ic');
   if (span) span.innerHTML = EDGE_ICONS[state.edgeStyle];
-  const btn = document.getElementById('edgeBtn');
-  if (btn) btn.title = `Edge style: ${state.edgeStyle} — click to cycle`;
+  byId('edgeBtn').title = `Edge style: ${state.edgeStyle} — click to cycle`;
 }
 function initEdgeStyle(): void {
   let saved: string | null = null;
@@ -1708,7 +1723,7 @@ export function toggleDone(n: MindNode): void {
   if (isAnnotation(n)) return;
   record([n.id], () => { n.done = !n.done; n.dirty = true; });
   paintNode(n);
-  if (n.parent){ const p = state.nodes.get(n.parent); if (p) paintNode(p); }
+  const p = parentOf(n); if (p) paintNode(p);
   scheduleSave();
 }
 // Lock/unlock every selected card (the float bar's lock toggle / L). Locking freezes that card in place — no move,
@@ -1764,8 +1779,7 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
   if (!target) return;
   const before = layoutSnapshot();             // pre-reveal frame to glide away from
   const toReveal: MindNode[] = [];
-  for (let p = target.parent ? state.nodes.get(target.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    toReveal.push(p);
+  for (const p of ancestors(target)) toReveal.push(p);
   toReveal.reverse();                          // root → immediate parent (shallowest first)
   if (openTarget) toReveal.push(target);       // open the card itself last (deepest level)
   let revealed = false;
@@ -1784,7 +1798,7 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
     }
   });
   selectNode(target.id);                       // select → the card shows its full body (grows)
-  applyLayouts(); paintAll();                  // reflow siblings around the now-taller selection
+  relayout();                  // reflow siblings around the now-taller selection
   animateReflow(before);                       // one glide from the pre-reveal frame to the final
   frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
   if (revealed && store.isOpen) scheduleSave();
@@ -2022,9 +2036,8 @@ export function popScopeFor(t: MindNode): void {
 // ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
 // coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
 function hasAuthoredColor(n: MindNode): boolean {
-  let guard = 0;   // same caution as effectiveColor's: a cycle must degrade, not hang
-  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = c.parent ? state.nodes.get(c.parent) : null)
-    if (c.color) return true;
+  if (n.color) return true;
+  for (const a of ancestors(n)) if (a.color) return true;
   return false;
 }
 // WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
@@ -2170,9 +2183,12 @@ export function colorVars(c: string): string {
 // recolouring a custom card back to a palette key has to drop the inline triple, or it would keep
 // overriding the .c-* class that now owns the colour (an inline custom property beats any selector).
 export function applyColorVars(el: HTMLElement, c: string): void {
-  const custom = isHexColor(c);
-  for (const [prop, val] of [['--card', c], ['--ink', custom ? inkFor(c) : ''], ['--scrim', custom ? scrimFor(c) : '']] as const) {
-    if (custom) el.style.setProperty(prop, val); else el.style.removeProperty(prop);
+  if (isHexColor(c)) {
+    el.style.setProperty('--card', c);
+    el.style.setProperty('--ink', inkFor(c));
+    el.style.setProperty('--scrim', scrimFor(c));
+  } else {
+    for (const prop of ['--card', '--ink', '--scrim']) el.style.removeProperty(prop);
   }
 }
 // After a theme switch: re-read the palette hexes, re-derive their inks, and repaint everything that
@@ -2313,21 +2329,28 @@ export function selectNode(rawId: string | null): void {
 // A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
 // so these card shortcuts stay out of the way while you're naming something.
 window.addEventListener('keydown', (e) => {
+  // The letter shortcuts below are case-INSENSITIVE (Caps Lock, or a held ⇧ that means something of
+  // its own like ⇧A), so a single printable character is folded down once here rather than tested
+  // twice per line. Named keys keep their own spelling — 'F2' must not become 'f2', nor 'ArrowUp'
+  // 'arrowup' — hence the length test rather than a blanket toLowerCase.
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const mod = e.metaKey || e.ctrlKey;
+  const del = key === 'Delete' || key === 'Backspace';
   // F1 opens the bundled help map (read-only) in a new tab — works even while typing.
-  if (e.key === 'F1'){ e.preventDefault(); openHelpTab(); return; }
+  if (key === 'F1'){ e.preventDefault(); openHelpTab(); return; }
 
   // Intercept browser zoom shortcuts (Cmd/Ctrl +/-/0) so they drive the canvas, not the viewport.
   // Must be checked before the `typing` guard so they work even while a text field is focused.
-  if (e.metaKey || e.ctrlKey) {
-    if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2); return; }
-    if (e.key === '-')                  { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2); return; }
-    if (e.key === '0')                  { e.preventDefault(); focusOrFit(); return; }
+  if (mod) {
+    if (key === '=' || key === '+') { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2); return; }
+    if (key === '-')                { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2); return; }
+    if (key === '0')                { e.preventDefault(); focusOrFit(); return; }
   }
 
   const active = document.activeElement as HTMLElement | null;
   const typing = isTypingInField();
   // Esc blurs the active field (so Delete works next), or deselects when not typing.
-  if (e.key === 'Escape'){
+  if (key === 'Escape'){
     e.preventDefault();
     if (typing) { active?.blur?.(); }
     else if (state.sel.size) selectNode(null);
@@ -2337,22 +2360,22 @@ window.addEventListener('keydown', (e) => {
   // ←→↑↓ walk / fold the tree (navArrow). Canvas only: the outline view is its own tree widget with
   // its own fold state (outlineFold), so arrows there are a separate concern. No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
-  if (e.key.startsWith('Arrow') && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !outlineActive()){
-    e.preventDefault(); navArrow(e.key); return;
+  if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey && !outlineActive()){
+    e.preventDefault(); navArrow(key); return;
   }
-  if (e.key === 'r' || e.key === 'R'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
-  if ((e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey){ e.preventDefault(); if (!outlineActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
-  if ((e.key === 'o' || e.key === 'O') && !e.metaKey && !e.ctrlKey){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
-  if (e.key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
+  if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
+  if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
+  if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
+  if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // Space = hand-tool to pan while held; a quick tap (released without panning) makes a node.
-  if (e.key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
-  if (e.key === 'f' || e.key === 'F'){ e.preventDefault(); focusOrFit(); return; }
-  if ((e.key === 'd' || e.key === 'D') && state.sel.size){ e.preventDefault(); duplicateSelection(); return; }
-  if ((e.key === 'a' || e.key === 'A') && e.shiftKey && !e.metaKey && !e.ctrlKey && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: auto-size selected frames to fit
-  if ((e.key === 'g' || e.key === 'G') && !e.metaKey && !e.ctrlKey && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
+  if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
+  if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
+  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection(); return; }
+  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: auto-size selected frames to fit
+  if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
   // A -> create an annotation at the cursor (mirrors Space's new-card tap). If a card is selected
   // the annotation becomes its child; otherwise it's a root. ⇧A is auto-size (handled just above).
-  if ((e.key === 'a' || e.key === 'A') && !e.shiftKey && !e.metaKey && !e.ctrlKey && !outlineActive()){
+  if (key === 'a' && !e.shiftKey && !mod && !outlineActive()){
     e.preventDefault();
     const p = ui.lastMouse ? screenToWorld(ui.lastMouse.x, ui.lastMouse.y) : screenToWorld(window.innerWidth/2, window.innerHeight/2);
     createAnnotationHere(p.x - 80, p.y - 16);
@@ -2360,34 +2383,29 @@ window.addEventListener('keydown', (e) => {
   }
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
   // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
-  if ((e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey) && state.sel.size){
-    e.preventDefault(); void copySelection(); return;
-  }
-  if ((e.key === 'x' || e.key === 'X') && (e.metaKey || e.ctrlKey) && state.sel.size){
-    e.preventDefault(); void cutSelection(); return;
-  }
-  if ((e.key === 'x' || e.key === 'X') && state.sel.size && !e.metaKey && !e.ctrlKey){   // don't shadow cut
+  if (key === 'c' && mod && state.sel.size){ e.preventDefault(); void copySelection(); return; }
+  if (key === 'x' && mod && state.sel.size){ e.preventDefault(); void cutSelection(); return; }
+  if (key === 'x' && !mod && state.sel.size){   // don't shadow cut
     e.preventDefault(); toggleCollapseSelection(state.sel); return;
   }
-  if ((e.key === 'l' || e.key === 'L') && state.sel.size && !e.metaKey && !e.ctrlKey && !state.readOnly){
+  if (key === 'l' && !mod && state.sel.size && !state.readOnly){
     e.preventDefault();
     setLockedSelection(state.sel, !anyLocked(state.sel));
     return;
   }
   // image cards have no title/body UI to rename or edit — they're a leaf that shows only the image
-  if (e.key === 'F2' && state.selId && !isImageCard(state.nodes.get(state.selId))){
+  if (key === 'F2' && state.selId && !isImageCard(state.nodes.get(state.selId))){
     e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
   }
-  if ((e.key === 'e' || e.key === 'E') && state.selId && !e.metaKey && !e.ctrlKey){
+  if (key === 'e' && !mod && state.selId){
     e.preventDefault(); const n = state.nodes.get(state.selId); if (n && !isImageCard(n) && !isQueryCard(n)) startBodyEdit(n); return;
   }
-  if (e.key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
-  if (e.key === 'Tab' && state.selId){ e.preventDefault(); addChild(state.selId); return; }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && e.altKey && state.sel.size){
-    e.preventDefault(); deleteSelectionKeepChildren(); return;
-  }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && state.sel.size){
-    e.preventDefault(); deleteSelection();
+  if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
+  if (key === 'Tab' && state.selId){ e.preventDefault(); addChild(state.selId); return; }
+  if (del && state.sel.size){
+    e.preventDefault();
+    // ⌥Delete keeps the children, promoting them to the deleted card's parent.
+    if (e.altKey) deleteSelectionKeepChildren(); else deleteSelection();
   }
 });
 // Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.

@@ -8,12 +8,12 @@ import { state, world, setStatus, isBoxType, GRID_STYLES, GRID_SIZES, type MindN
 import { parseMd, serializeMd, firstLineLabel, fileStem } from '../utils/frontmatter.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
-import { childrenOf } from '../utils/model.js';
+import { childrenOf, parentOf } from '../utils/model.js';
 import { applyLayouts, collapseAtDepth, deriveSide, commitRel } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
-import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import { opfsStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import { paintAll, selectNode, colorFill, NODE_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad } from '../nav/scope.js';
@@ -21,6 +21,7 @@ import { paintStrokes } from '../features/sketch.js';
 import { refreshGrid } from '../view/grid.js';
 import { ui, isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
+import { byId } from '../utils/dom.js';
 
 // The sketch layer lives beside the notes as one plain JSON data file (Obsidian .canvas-style),
 // not a note — it holds no mm_* / frontmatter, just world-space strokes. Read/written through the
@@ -113,8 +114,8 @@ export async function exportZip(): Promise<void> {
   const used = new Set<string>();
   const files: { name: string; data?: string; bytes?: Uint8Array }[] = nodes.map(n => {
     // A node that has never been saved has no file yet; name it the way desiredFileFor would, off
-    // its title or (untitled) off its first line.
-    let name = n.file || (safeName(n.title.trim() || firstLineLabel(n.body).title) + '.md');
+    // its title or (untitled) off its first line — hence the shared slugStem.
+    let name = n.file || (slugStem(n) + '.md');
     while (used.has(name.toLowerCase())) name = name.replace(/(\.md)?$/, '') + '-1.md';
     used.add(name.toLowerCase());
     return { name, data: serializeMd(n) };
@@ -229,7 +230,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   const stack = [...(kidsOf.get(null) ?? [])];
   while (stack.length) {
     const n = stack.pop()!;
-    const p = n.parent ? state.nodes.get(n.parent) : null;
+    const p = parentOf(n);
     const pax = p ? p.x : 0, pay = p ? p.y : 0;   // final (parents are visited before their children)
     const alreadyRel = relSeed.has(n.id) || (legacySeed.has(n.id) && !!p && p.type === 'frame');
     if (p && !alreadyRel) { n.rx -= pax; n.ry -= pay; }   // absolute seed → parent-relative
@@ -240,7 +241,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // backfilled from its saved position, once, right here — not re-derived on every relayout.
   for (const n of state.nodes.values()) {
     if (n.parent && !n.side) {
-      const p = state.nodes.get(n.parent);
+      const p = parentOf(n);
       if (p) n.side = deriveSide(p, n);
     }
   }
@@ -272,7 +273,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
 }
 // Show the open map's name in the home button (:empty hides it until loaded) + the tab title.
 export function updateMapTitle(): void {
-  document.getElementById('folderName')!.textContent = store.name;
+  byId('folderName').textContent = store.name;
   updateDocumentTitle();
 }
 // title -> safe filename component (no path separators or illegal chars)
@@ -292,17 +293,33 @@ function safeName(title: string): string {
 // its children's mm_parent with it, on every edit; and re-deriving would mass-rename a vault whose
 // notes don't carry their titles as headings yet. A slug that goes stale costs nothing — an untitled
 // card has no name to be wrong about.
-function desiredFileFor(n: MindNode): string {
+// The bare slug a node's own text gives it, with no directory and no `.md` — the ONE spelling of that
+// rule, shared with exportZip, which has to name never-saved nodes the same way.
+function slugStem(n: MindNode): string {
+  return safeName(n.title.trim() || firstLineLabel(n.body));
+}
+// The lowercased filename -> node index the collision test reads. Built ONCE per save rather than
+// re-derived per candidate name: saveAll asks for every node's desired name, so a per-call
+// `[...state.nodes.values()].some(…)` made settling filenames O(n²) with two string allocations per
+// comparison. Lowercased because that is how the filesystem collides (see below).
+function filesInUse(): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const o of state.nodes.values()) if (o.file) m.set(o.file.toLowerCase(), o.id);
+  return m;
+}
+function desiredFileFor(n: MindNode, inUse: Map<string, string>): string {
   const dir = n.file ? n.file.slice(0, n.file.lastIndexOf('/')+1) : '';
   const title = n.title.trim();
   if (!title && n.file) return n.file;              // untitled and already named: keep the slug
-  const stem = safeName(title || firstLineLabel(n.body).title);
+  const stem = slugStem(n);
   let rel = dir + stem + '.md';
   // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since
   // that's how the filesystem collides on macOS/Windows: "Notes" and "notes" are one file there, so
   // an exact-match test would hand both nodes "their own" name and let the second write eat the first.
-  const taken = (p: string): boolean =>
-    [...state.nodes.values()].some(o => o !== n && o.file?.toLowerCase() === p.toLowerCase());
+  const taken = (p: string): boolean => {
+    const owner = inUse.get(p.toLowerCase());
+    return owner !== undefined && owner !== n.id;
+  };
   let i = 2;
   while (taken(rel)) rel = dir + stem + ' ' + (i++) + '.md';
   return rel;
@@ -322,17 +339,22 @@ export async function saveAll(): Promise<void> {
   // by path (mm_parent), so a renamed parent forces its children to be rewritten, and all
   // parent paths must be final before we serialize anyone.
   const removals: string[] = [];
+  // Kept in step with n.file below, so a name this loop has already handed out is seen as taken by
+  // the nodes after it — the live `state.nodes` scan this replaced got that for free.
+  const inUse = filesInUse();
   for (const n of state.nodes.values()) {
     // While the title is being typed (in-card rename OR the editor sheet), keep the current
     // filename (rename happens when the edit session commits).
-    const freezeName = frozenFileNodeId(state.selId) === n.id && n.file;
-    const target = freezeName ? n.file : desiredFileFor(n);
+    const frozen = frozenFileNodeId() === n.id ? n.file : null;
+    const target = frozen ?? desiredFileFor(n, inUse);
     if (n.file && n.file !== target) {
       removals.push(n.file);                       // old file to delete once the rename is written
       for (const c of childrenOf(n.id)) needWrite.add(c.id);
     }
     if (n.file !== target) needWrite.add(n.id);    // brand-new node, or a rename
+    if (n.file) inUse.delete(n.file.toLowerCase());
     n.file = target;                               // adopt the final name
+    inUse.set(target.toLowerCase(), n.id);
   }
 
   // Phase 2 — write everything that changed, now that all paths are final.

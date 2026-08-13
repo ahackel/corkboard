@@ -31,8 +31,16 @@ export const fsaStore = {
     const opts = { mode: 'readwrite' };
     const h = handle as unknown as Permable;
     if ((await h.queryPermission(opts)) === 'granted') return true;
-    if ((await h.requestPermission(opts)) === 'granted') return true;
-    return false;
+    return (await h.requestPermission(opts)) === 'granted';
+  },
+
+  // The tail both ways IN share: confirm read-write permission, adopt the handle as the live root,
+  // and remember it for the recents list.
+  async _adopt(handle: FileSystemDirectoryHandle): Promise<PickResult> {
+    if (!(await this._ensurePerm(handle))) return 'denied';
+    this._dir = handle;
+    await this._remember(handle);
+    return 'ok';
   },
 
   // Pick a NEW source (needs a user gesture — the toolbar / start-screen click).
@@ -41,10 +49,7 @@ export const fsaStore = {
     let handle: FileSystemDirectoryHandle;
     try { handle = await showDirectoryPicker({ mode: 'readwrite' }); }
     catch (e){ return (e as DOMException).name === 'AbortError' ? 'cancel' : 'error'; }
-    if (!(await this._ensurePerm(handle))) return 'denied';
-    this._dir = handle;
-    await this._remember(handle);
-    return 'ok';
+    return this._adopt(handle);
   },
 
   // Reopen a REMEMBERED source by its recents key (the click is the gesture).
@@ -53,10 +58,7 @@ export const fsaStore = {
     let handle: FileSystemDirectoryHandle | undefined;
     try { handle = await idbGet(key); } catch {}
     if (!handle) return 'gone';
-    if (!(await this._ensurePerm(handle))) return 'denied';
-    this._dir = handle;
-    await this._remember(handle);
-    return 'ok';
+    return this._adopt(handle);
   },
 
   // Silent reopen at boot — only succeeds if permission is ALREADY granted (no prompt/gesture).

@@ -3,36 +3,33 @@
 // silently reopen the folder at boot. Plain get/put/del over a single object store.
 // Open a single-object-store IndexedDB database, creating the store on first run. Shared by this
 // key/value helper and the on-device file vault (store/idb-store.ts) so the open boilerplate lives once.
+// IndexedDB is a callback API, so every operation below is the same two-line Promise wrapper around
+// either a REQUEST's success/error or a TRANSACTION's complete/error. Those two wrappers, once:
+const result = <T>(r: IDBRequest<T>): Promise<T> =>
+  new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const done = (tx: IDBTransaction): Promise<void> =>
+  new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
+
 export function openDB(name: string, store: string): Promise<IDBDatabase> {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open(name, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(store);
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
+  const r = indexedDB.open(name, 1);
+  r.onupgradeneeded = () => r.result.createObjectStore(store);
+  return result(r);
 }
 
-// Promise-wrapped single-op transactions over any db/store (shared with store/idb-store.ts).
+// Promise-wrapped single-op transactions over any db/store (shared with store/idb-store.ts). A write
+// waits on the TRANSACTION (the value isn't durable until it commits); a read waits on the REQUEST.
 export function dbPut(db: IDBDatabase, store: string, key: IDBValidKey, val: unknown): Promise<void> {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    tx.objectStore(store).put(val, key);
-    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-  });
+  const tx = db.transaction(store, 'readwrite');
+  tx.objectStore(store).put(val, key);
+  return done(tx);
 }
 export function dbGet(db: IDBDatabase, store: string, key: IDBValidKey): Promise<any> {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readonly');
-    const g = tx.objectStore(store).get(key);
-    g.onsuccess = () => res(g.result); g.onerror = () => rej(g.error);
-  });
+  return result(db.transaction(store, 'readonly').objectStore(store).get(key));
 }
 export function dbDel(db: IDBDatabase, store: string, key: IDBValidKey): Promise<void> {
-  return new Promise((res, rej) => {
-    const tx = db.transaction(store, 'readwrite');
-    tx.objectStore(store).delete(key);
-    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-  });
+  const tx = db.transaction(store, 'readwrite');
+  tx.objectStore(store).delete(key);
+  return done(tx);
 }
 
 // ---- one-time rename migration (mindmap → Corkboard) ----
@@ -53,10 +50,7 @@ export async function openRenamed(name: string, legacy: string, store: string): 
   return db;
 }
 function dbCount(db: IDBDatabase, store: string): Promise<number> {
-  return new Promise((res, rej) => {
-    const c = db.transaction(store, 'readonly').objectStore(store).count();
-    c.onsuccess = () => res(c.result); c.onerror = () => rej(c.error);
-  });
+  return result(db.transaction(store, 'readonly').objectStore(store).count());
 }
 // `indexedDB.databases()` is missing on older Safari/Firefox, where merely OPENING the legacy
 // name would create it. Assume it exists there and let the copy find it empty instead.
@@ -68,21 +62,17 @@ async function dbExists(name: string): Promise<boolean> {
 // transactions on two databases; interleaving them lets the write tx auto-commit mid-walk.
 async function dbCopyAll(from: IDBDatabase, to: IDBDatabase, store: string): Promise<void> {
   const rows: { key: IDBValidKey; value: unknown }[] = [];
-  await new Promise<void>((res, rej) => {
-    const tx = from.transaction(store, 'readonly');
-    tx.objectStore(store).openCursor().onsuccess = e => {
-      const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (c){ rows.push({ key: c.key, value: c.value }); c.continue(); }
-    };
-    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-  });
+  const readTx = from.transaction(store, 'readonly');
+  readTx.objectStore(store).openCursor().onsuccess = e => {
+    const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+    if (c){ rows.push({ key: c.key, value: c.value }); c.continue(); }
+  };
+  await done(readTx);
   if (!rows.length) return;
-  await new Promise<void>((res, rej) => {
-    const tx = to.transaction(store, 'readwrite');
-    const os = tx.objectStore(store);
-    for (const r of rows) os.put(r.value, r.key);
-    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-  });
+  const writeTx = to.transaction(store, 'readwrite');
+  const os = writeTx.objectStore(store);
+  for (const r of rows) os.put(r.value, r.key);
+  await done(writeTx);
 }
 
 const IDB_DB = 'corkboard', LEGACY_IDB_DB = 'mindmap', IDB_STORE = 'handles';

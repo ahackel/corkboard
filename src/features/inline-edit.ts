@@ -13,20 +13,20 @@
 import { state, setStatus, isAnnotation, isQueryCard, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { joinHeading, splitHeading } from '../utils/frontmatter.js';
+import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { outlineActive, startRowTitleEdit } from './outline.js';
-import { applyLayouts, actionTarget, isTabsFrame } from '../view/layout.js';
+import { actionTarget, isTabsFrame } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { paintAll, selectNode, startQueryEdit, toggleCollapse } from '../main.js';
+import { selectNode, startQueryEdit, toggleCollapse, relayout, remeasure } from '../main.js';
 import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
-import { extractToChild, deleteNode } from './crud.js';
+import { extractToChild, discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
 
 // The text the editor holds: the note with its title back on the front as a heading — exactly the
 // file's own body (utils/frontmatter.ts joinHeading), which is what makes the editor a view of the
 // note rather than a form over two fields.
-export const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body);
+const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body);
 
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
@@ -68,21 +68,21 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
 }
 
 // ---------- a container's label, renamed in place (one line, on the tab/header itself) ----------
-export function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}): void {
+function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}): void {
   if (!n.el) return;
   if (ui.bodyEdit) endBodyEdit();                                  // close a card editor first
   if (ui.titleEdit) endTitleEdit();                                // …or any other label editor
   touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh frame, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);
-  // A folded frame / docked tab IS its label, so the element carrying the title differs — labelEl walks
-  // to whichever it is, the same way the float bar finds what to centre on.
-  const titleEl = (n.el.querySelector(':scope > .title-row > .title') ?? n.el.querySelector('.title')) as HTMLElement | null;
-  if (!titleEl) return;
+  // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded frame and a
+  // docked tab included, and a container's child cards are DOM-nested inside it — so an unscoped
+  // `.title` lookup could pick a child card's title instead of this node's own.
+  const titleEl = n.el.querySelector(':scope > .title-row > .title') as HTMLElement;
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
   // text for the duration. Otherwise the editor would show `Name` where the file says `# Name`, and
   // committing would write the rendered text back and silently strip the heading away.
   const raw = cardEditText(n);
-  ui.titleEdit = { id:n.id, orig:raw, el:titleEl, isNew };
+  ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
   titleEl.textContent = raw;
   titleEl.setAttribute('contenteditable', 'plaintext-only');
@@ -104,7 +104,7 @@ export function setCardDraggable(n: MindNode | undefined, on: boolean): void {
 // both legal), which is what took the old `.invalid` outline away.
 export function onTitleInput(n: MindNode): void {
   if (!ui.titleEdit || ui.titleEdit.id !== n.id) return;
-  applyLayouts(); paintAll();
+  relayout();
 }
 export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.titleEdit || ui.titleEdit.id !== n.id) return;
@@ -126,9 +126,7 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   te.el.blur();                                       // ensure the keyboard closes on iOS
   if (!n) { commitStep(); return; }
   if (cancel && te.isNew){                            // Esc on a freshly-created frame = cancel creation
-    deleteNode(n.id);
-    commitStep();
-    setStatus('Cancelled new card');
+    discardNewCard(n.id, 'Cancelled new card');
     return;
   }
   const val = (te.el.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // a tab is a single line
@@ -137,7 +135,7 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     n.title = title; n.body = body;
   }
   n.dirty = true;
-  paintAll(); applyLayouts(); paintAll();             // the label may have changed width → reflow
+  remeasure();             // the label may have changed width → reflow
   scheduleSave();
   commitStep();                                       // one undo step per rename session
 }
@@ -153,10 +151,10 @@ export function endInPlaceEdit(): void { endBodyEdit(); endTitleEdit(); }
 // Esc cancels, blur commits.
 export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
 // Where the caret lands: on the card's NAME (selected, so typing replaces it — the old rename's
-// select-all), at the very start, or at the end. 'title' on an untitled card lands at the top and
-// types a heading for you, which is the one nudge that keeps F2 meaningful there.
-type Caret = 'title' | 'start' | 'end';
-export function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
+// select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
+// which is the one nudge that keeps F2 meaningful there.
+type Caret = 'title' | 'end';
+function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
   if (isLockedEffective(n)) { setStatus('Locked — can’t edit'); return; }
   if (outlineActive()) { openBranchEditor(n.id, caret === 'title' ? 'title' : 'body'); return; }   // see startInlineEdit
@@ -178,6 +176,10 @@ export function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { c
   // than just reverting the edit the way it does for an existing card.
   ui.bodyEdit = { id:n.id, orig:seeded, el:bodyEl, ta, isNew };
   n.el.classList.remove('no-body');                            // give the body slot room while editing
+  // The textarea REPLACES the rendered note, so the render cache paintNode keys `.body` on is no longer
+  // describing what's in there — clear it, or committing an edit that changed nothing would leave the
+  // textarea sitting in the card (the guarded re-render would see a matching key and skip).
+  delete bodyEl.dataset.md;
   bodyEl.innerHTML = ''; bodyEl.appendChild(ta);
   bodyEl.classList.add('editing');
   // typing: keep the textarea sized to its content and reflow siblings as the card grows/shrinks
@@ -188,29 +190,45 @@ export function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { c
   ta.addEventListener('pointerdown', (e) => e.stopPropagation());   // place the caret, don't drag the card
   ta.focus();
   autosizeBody(ta);              // size to content first so the card's real height is known…
-  applyLayouts(); paintAll();    // …then reflow siblings around it (not just after a newline)
+  relayout();    // …then reflow siblings around it (not just after a newline)
   const [from, to] = caretIn(seeded, caret);
   ta.setSelectionRange(from, to);
 }
 // Give an untitled card a `# ` to type its name into. Only for a rename — "edit the note" must not put
 // a marker in a note nobody asked to name.
+const SEED = '# ';
 const seedHeading = (text: string): string =>
-  /^[^\S\n]*#{1,6}[^\S\n]+\S/.test(text) ? text : '# ' + (text ? '\n\n' + text : '');
+  headingOf(text)?.title ? text : SEED + (text ? '\n\n' + text : '');
+// The heading of the FIRST non-blank line, which is the only one that can be a note's title — the
+// format rule itself lives in utils/frontmatter.ts, so seeding, the caret and the strip below all read
+// one regex instead of three that have to be kept in agreement. `at` is the offset of the title's first
+// character into the WHOLE text, since that's what a caret is measured in: the heading need not be on
+// line 0 (a note may open with blank lines), and a marker length alone would then be off by them.
+function headingOf(text: string): { at: number; title: string } | null {
+  const lines = text.split('\n');
+  const i = firstTextLine(lines);
+  if (i < 0) return null;
+  const h = headingOnLine(lines[i]);
+  if (!h) return null;
+  let start = 0;
+  for (let k = 0; k < i; k++) start += lines[k].length + 1;
+  return { at: start + h.markerLen, title: h.title };
+}
 // Where the caret goes. 'title' SELECTS the name so typing replaces it — which is what the old rename
 // editor's select-all did — but only the NAME, not the `# ` that marks it as one, or the first keystroke
 // would demote the card's title to a plain first line. On a just-seeded card there's nothing to select,
 // so the caret sits after the marker.
 function caretIn(text: string, caret: Caret): [number, number] {
-  if (caret === 'start') return [0, 0];
   if (caret === 'end') return [text.length, text.length];
-  const m = text.match(/^([^\S\n]*#{1,6}[^\S\n]+)(.*\S)/);
-  return m ? [m[1].length, m[1].length + m[2].length] : [2, 2];
+  const h = headingOf(text);
+  if (!h) return [SEED.length, SEED.length];
+  return [h.at, h.at + h.title.length];
 }
 // "Edit the note" — the same one editor, caret past the name rather than on it. Kept as its own name
 // because that's what its callers mean (double-click the body, `E`, the pen, an annotation's rename
-// redirect); `atStart` is ⌘-less entry from the top, e.g. straight after a create.
-export function startBodyEdit(n: MindNode, { atStart = false }: { atStart?: boolean } = {}): void {
-  startCardEdit(n, { caret: atStart ? 'start' : 'end' });
+// redirect).
+export function startBodyEdit(n: MindNode): void {
+  startCardEdit(n, { caret: 'end' });
 }
 // A rename seeds `# ` for the name to be typed into (seedHeading). If it's STILL empty at commit — the
 // user typed the note instead, or changed their mind — the bare marker would otherwise survive as the
@@ -218,7 +236,7 @@ export function startBodyEdit(n: MindNode, { atStart = false }: { atStart?: bool
 // title. So the empty line goes here, at the one place a human's half-finished text becomes a note.
 function dropEmptyHeading(text: string): string {
   const lines = text.split('\n');
-  const i = lines.findIndex(l => l.trim());
+  const i = firstTextLine(lines);
   if (i >= 0 && /^#{1,6}$/.test(lines[i].trim())) lines.splice(i, 1);
   return lines.join('\n').trim();
 }
@@ -235,7 +253,7 @@ export function dropBodyEdit(): void {
 // so an in-progress edit can't corrupt anything — the textarea content is preserved by paintNode.
 function onBodyInput(n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) return;
-  applyLayouts(); paintAll();
+  relayout();
 }
 function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) return;
@@ -262,17 +280,11 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   // into means you didn't want it, which is what Bear and Apple Notes do with an empty note too. Only
   // when isNew — emptying an EXISTING card is an edit, and it keeps its file, children and position.
   if (be.isNew && !be.ta.value.trim()){
-    deleteNode(n.id);
-    commitStep();
+    discardNewCard(n.id);
     return;
   }
   if (cancel && be.isNew){                              // Esc on a freshly-created card = cancel creation
-    // The pending step still holds this card's before-image (null, from mkNode); deleteNode rides
-    // it as a non-owner, so committing here nets null→null and the step is discarded — no create
-    // OR delete ends up in the history.
-    deleteNode(n.id);
-    commitStep();
-    setStatus('Cancelled new card');
+    discardNewCard(n.id, 'Cancelled new card');
     return;
   }
   const changed = !cancel && be.ta.value !== be.orig;
@@ -281,7 +293,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.title = title; n.body = body;
     n.dirty = true;
   }
-  paintAll(); applyLayouts(); paintAll();               // re-render and reflow the height change
+  remeasure();               // re-render and reflow the height change
   if (changed) scheduleSave();
   commitStep();                                         // no-op sessions (cancel/unchanged) are discarded
 }

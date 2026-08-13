@@ -8,6 +8,21 @@ import { scope } from '../nav/scope.js';
 export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
 }
+// A node's parent NODE (`parent` is a file path, and a dangling one means "root"). Every ancestor
+// walk in the app is written `for (let p = parentOf(n); p; p = parentOf(p))` off this, rather than
+// re-spelling the lookup-or-null ternary inline — it was the single most repeated line in the
+// codebase, and the two spellings of "no parent" (null vs undefined) had drifted apart between them.
+export function parentOf(n: MindNode): MindNode | null {
+  return n.parent ? state.nodes.get(n.parent) ?? null : null;
+}
+// …and the same chain as a sequence, nearest parent first, for the walks that just ITERATE it (no
+// early return keyed on the node in hand). Guarded once, here: a corrupt parent chain has to degrade
+// to a short walk rather than hang the tab, which is what the hand-copied `guard++ < 4096` counters
+// at the call sites were for.
+export function* ancestors(n: MindNode): Generator<MindNode> {
+  let guard = 0;
+  for (let p = parentOf(n); p && guard++ < 4096; p = parentOf(p)) yield p;
+}
 export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
 // The top level in its ONE canonical order — canvas y, then x, with the filename as a stable
 // tie-break so the sequence can't reshuffle between two reads of the same map. Roots have no parent
@@ -36,11 +51,11 @@ export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
 // buried in a folded branch be opened from a URL and still show its contents.
 export function isHidden(n: MindNode): boolean {
   const scopeId = scope.rootId;            // null in the overwhelmingly common case
-  let p = n.parent ? state.nodes.get(n.parent) : undefined;
-  while (p){
+  // A plain loop rather than `ancestors`: this is the hottest walk in the app (~38 call sites, every
+  // one of them on the paint path), so it keeps the early returns and skips the generator.
+  for (let p = parentOf(n); p; p = parentOf(p)){
     if (p.id === scopeId) return false;
     if (p.collapsed) return true;
-    p = p.parent ? state.nodes.get(p.parent) : undefined;
   }
   return scopeId !== null;
 }
@@ -49,11 +64,7 @@ export function isHidden(n: MindNode): boolean {
 // containing a match that's buried inside a collapsed branch.
 export function firstVisible(n: MindNode): MindNode {
   if (!isHidden(n)) return n;
-  let p = n.parent ? state.nodes.get(n.parent) : undefined;
-  while (p){
-    if (!isHidden(p)) return p;
-    p = p.parent ? state.nodes.get(p.parent) : undefined;
-  }
+  for (const p of ancestors(n)) if (!isHidden(p)) return p;
   // A root is always visible, so the walk resolves — EXCEPT for a node outside the open frame,
   // whose ancestors are hidden all the way up. Search filters those out before it ever asks
   // (features/search.ts), so the fallback is only a backstop, not a case anyone relies on.
@@ -65,11 +76,7 @@ export function descendantCount(id: string): number {
 // A node whose lock cascades down: any ANCESTOR (not itself) is locked. Such a node can't even be
 // selected — only the locked card itself remains selectable (see isLockedEffective below).
 export function hasLockedAncestor(n: MindNode): boolean {
-  let p = n.parent ? state.nodes.get(n.parent) : undefined;
-  while (p){
-    if (p.locked) return true;
-    p = p.parent ? state.nodes.get(p.parent) : undefined;
-  }
+  for (let p = parentOf(n); p; p = parentOf(p)) if (p.locked) return true;
   return false;
 }
 // A node protected from move/collapse-toggle/edit/delete: it's locked itself, or a descendant of a
@@ -96,26 +103,35 @@ export function subtreeHasLocked(id: string): boolean {
 // discarded, so only a node with no text and no file yet — one that exists for a few milliseconds
 // mid-create — can reach it. Purely for display: n.title stays '' throughout and nothing here is written.
 export function nodeLabel(n: MindNode): string {
-  return n.title.trim() || firstLineLabel(n.body).title || fileStem(n.file ?? '') || 'Untitled';
+  return n.title.trim() || firstLineLabel(n.body) || fileStem(n.file ?? '') || 'Untitled';
 }
 // …and the label with its PARENT appended, but only where the label alone is ambiguous. Two cards may
 // share a title now, and in a FLAT list (search hits, a query card's results) two identical rows give
 // you no way to tell which is which. The outline needs none of this: its indentation already says where
 // a row sits. The suffix is the parent rather than the filename because "which one" is a question about
 // the map, not about the disk — the file's ` 2` would answer it in bookkeeping nobody chose.
-export function disambiguatedLabel(n: MindNode): string {
-  const label = nodeLabel(n);
+// The set of labels worn by more than one node — ONE pass over the map, where asking
+// `disambiguatedLabel` to answer for itself costs a pass per row. Both callers render a LIST, so they
+// build this once and hand it down; that's the whole reason it's a parameter rather than a cache, which
+// would need invalidating on every mutation that can rename anything (i.e. nearly all of them).
+export function duplicateLabels(): Set<string> {
+  const seen = new Set<string>(), dup = new Set<string>();
   for (const o of state.nodes.values()){
-    if (o === n || nodeLabel(o) !== label) continue;
-    const p = n.parent ? state.nodes.get(n.parent) : null;
-    return p ? `${label} — ${nodeLabel(p)}` : label;
+    const l = nodeLabel(o);
+    if (seen.has(l)) dup.add(l); else seen.add(l);
   }
-  return label;
+  return dup;
+}
+export function disambiguatedLabel(n: MindNode, dup: Set<string> = duplicateLabels()): string {
+  const label = nodeLabel(n);
+  if (!dup.has(label)) return label;
+  const p = parentOf(n);
+  return p ? `${label} — ${nodeLabel(p)}` : label;
 }
 // guard against cycles when re-parenting
 export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
-  let p = state.nodes.get(nodeId);
-  p = p && p.parent ? state.nodes.get(p.parent) : undefined;
-  while (p){ if (p.id === maybeAncestorId) return true; p = p.parent ? state.nodes.get(p.parent) : undefined; }
+  const n = state.nodes.get(nodeId);
+  if (!n) return false;
+  for (const p of ancestors(n)) if (p.id === maybeAncestorId) return true;
   return false;
 }

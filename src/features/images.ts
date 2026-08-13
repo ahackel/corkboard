@@ -3,9 +3,8 @@
 // We resolve each referenced path to a URL ONCE and cache it: vault paths become blob URLs read
 // from the active store, remote/data URLs map to themselves. A card that grows when an image
 // finally loads triggers a single debounced relayout so siblings/edges re-settle.
-// (store/applyLayouts/paintAll come from main.js — a runtime-only cycle.)
-import { paintAll } from '../main.js';
-import { applyLayouts } from '../view/layout.js';
+// (relayout comes from main.js — a runtime-only cycle.)
+import { relayout } from '../main.js';
 import { store } from '../data/persistence.js';
 
 const imgUrlCache = new Map<string, string>();    // src path -> resolved URL (blob:… or the original remote/data URL)
@@ -38,10 +37,22 @@ function loadImgUrl(path: string): Promise<string | null> {
   imgInflight.set(path, p);
   return p;
 }
+// A card's body images are `pointer-events:none` (a click or drag over one falls through to the card
+// itself), so no event ever has an <img> as its target — anything that needs to know WHICH image the
+// pointer is over has to hit-test the geometry. Both callers do (features/drag.ts starts an ⌥ image
+// extract from it, features/context-menu.ts builds a right-click menu for it), and they had a copy
+// each, differing only in a redundant `.body` in the selector.
+export function bodyImageAt(cardEl: HTMLElement, x: number, y: number): HTMLImageElement | null {
+  for (const img of cardEl.querySelectorAll<HTMLImageElement>('img.md-img')){
+    const r = img.getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return img;
+  }
+  return null;
+}
 let imgRelayoutTimer: number | undefined;
 function scheduleImgRelayout(): void {
   clearTimeout(imgRelayoutTimer);
-  imgRelayoutTimer = setTimeout(() => { applyLayouts(); paintAll(); }, 60);
+  imgRelayoutTimer = setTimeout(() => { relayout(); }, 60);
 }
 export function hydrateImages(el: ParentNode): void {
   el.querySelectorAll<HTMLImageElement>('img.md-img[data-img-src]').forEach(img => {

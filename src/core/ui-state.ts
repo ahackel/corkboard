@@ -64,7 +64,9 @@ export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLT
 // hidden element can't be focused or typed into. So its label is edited ON itself, one line, in a
 // contenteditable. Same contract as BodyEdit otherwise: while set, persistence freezes this node's
 // filename and skips the focus-reload.
-export interface TitleEdit { id: string; orig: string; el: HTMLElement; isNew?: boolean; }
+// No `orig`: unlike a card's editor there is nothing to compare against on commit — an empty label
+// falls back to what the node had, and the element's own text is the only value read.
+export interface TitleEdit { id: string; el: HTMLElement; isNew?: boolean; }
 // A query card's search-field editing session (main.ts nodeEl/onQueryInput/endQueryEdit) — mirrors
 // InlineEdit/BodyEdit's touch-once-on-focus, commit-on-blur shape so the whole typing session is one
 // undo step instead of one per keystroke.
@@ -131,13 +133,22 @@ export const gPointers = new Map<number, Pt>();
 // One source of truth for "is some editor holding uncommitted text", so the save loop and the
 // disk-reload guard can't drift as editors are added (in-card title/body + the full-screen sheet).
 export function editSessionActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit || ui.sheetEdit || ui.panelEdit); }
+// "Is an IN-PLACE editor open" — the two on-canvas sessions only (a card's one text field, a
+// container's label), as against editSessionActive's four. Named here rather than spelled out as
+// `ui.bodyEdit || ui.titleEdit` at each of its call sites — the render core, drag's tap/pointerdown
+// bails, the float bar's busy test, a canvas tap — because that pair is exactly what had to be found
+// and rewritten by hand when the single inlineEdit session split in two.
+export function inPlaceEditActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
+// …and the same question about ONE node: is this the card/label currently being typed into.
+export function inPlaceEditOn(id: string): boolean {
+  return ui.bodyEdit?.id === id || ui.titleEdit?.id === id;
+}
 // The node whose filename must stay frozen while its title is being typed (the rename lands on
 // commit, so the folder isn't littered with M.md, Ma.md, Mag.md…). The in-card editor is IN here now:
 // it used to be excluded because a body edit couldn't touch the title, and now the title is the first
-// line of the very text it holds. null → nothing frozen. (`selId` is no longer consulted — the
-// session names its own node — but the parameter stays, since the sheet/panel arms are unchanged and
-// callers pass it.)
-export function frozenFileNodeId(_selId: string | null): string | null {
+// line of the very text it holds. null → nothing frozen. Every arm names its OWN node, so the
+// selection has nothing to say about it.
+export function frozenFileNodeId(): string | null {
   if (ui.bodyEdit) return ui.bodyEdit.id;
   if (ui.titleEdit) return ui.titleEdit.id;
   if (ui.sheetEdit) return ui.sheetEdit.id;

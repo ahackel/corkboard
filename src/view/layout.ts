@@ -9,9 +9,10 @@
 // helpers) — a runtime-only cycle.
 import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
-import { childrenOf, isHidden, isRoot } from '../utils/model.js';
+import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { clamp } from '../utils/num.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -29,7 +30,7 @@ import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, 
 // writes — raw float noise would otherwise mark every node dirty on every save.
 export function commitRel(): void {
   for (const n of state.nodes.values()) {
-    const p = n.parent ? state.nodes.get(n.parent) : null;
+    const p = parentOf(n);
     const rx = n.x - (p ? p.x : 0), ry = n.y - (p ? p.y : 0);
     if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) n.dirty = true;
     n.rx = rx; n.ry = ry;
@@ -63,7 +64,7 @@ const LANDING_GAP = 40;   // gap below/beside the hovered card a drag-reparented
 // `afterId` is the explicit insertion anchor when the caller resolved one (`null` = front of
 // the order, `undefined` = default: after `target` in sibling mode, append in child mode).
 export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' | 'sibling' | 'reorder', side: LayoutSide, afterId?: string | null): { x: number; y: number } {
-  const governor = mode === 'child' || mode === 'reorder' ? target : (target.parent ? state.nodes.get(target.parent) : null) ?? target;
+  const governor = mode === 'child' || mode === 'reorder' ? target : parentOf(target) ?? target;
   // Landing inside a stack's outliner: a row is `free` (the stack owns every position), so there's no
   // managed simulation to run — put it one indent under the governing row, below its current subtree.
   // Only an interim value: the drop commits, then applyLayouts re-runs the outline and owns the
@@ -210,7 +211,7 @@ export function isFrame(node: MindNode): boolean { return node.type === 'frame' 
 // just another indented node. The stack test comes FIRST: a stack ancestor's own type isn't 'card', so
 // checking the re-scope condition before it would bail out before ever spotting the stack.
 function insideStack(node: MindNode): boolean {
-  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+  for (let p = parentOf(node); p; p = parentOf(p)) {
     if (p.type === 'stack') return !p.collapsed;      // an expanded stack governs; folded, it hides us anyway
     if (p.type !== 'card') return false;              // a frame/image/query ancestor re-scopes
   }
@@ -235,8 +236,8 @@ export function isTabsFrame(node: MindNode): boolean { return node.type === 'fra
 // The group `node` is docked into as a tab, or null. A tab is always a FRAME child of a tabs frame:
 // any other child kind is ordinary content (e.g. a card dropped into the box), never a tab.
 export function tabGroupOf(node: MindNode): MindNode | null {
-  if (node.type !== 'frame' || !node.parent) return null;
-  const p = state.nodes.get(node.parent);
+  if (node.type !== 'frame') return null;
+  const p = parentOf(node);
   return p && isTabsFrame(p) ? p : null;
 }
 export function isDockedTab(node: MindNode): boolean { return !!tabGroupOf(node); }
@@ -349,7 +350,7 @@ export function isContainer(node: MindNode): boolean { return isFrame(node) || i
 export function stackRowW(node: MindNode): number | null {
   if (isAnnotation(node)) return null;   // stackOutline skips annotations — they float, they don't stack
   let depth = 0;
-  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+  for (let p = parentOf(node); p; p = parentOf(p)) {
     // isStack(p), not p.type — a stack nested in another stack is itself just a row of the outer one
     if (isStack(p)) return Math.max(STACK_MIN_ROW_W, stackInnerW(p) - depth * STACK_INDENT);
     if (isContainer(p) || p.collapsed) return null;   // a nearer frame governs, or we're folded away
@@ -442,7 +443,7 @@ export function stackDropTarget(stack: MindNode, dragged: MindNode, skip: Set<st
   //    never offers the deeper slot.
   const maxDepth = prev ? prev.depth + (isLeafType(prev.node) ? 0 : 1) : 0;
   const minDepth = next ? next.depth : 0;
-  const depth = Math.max(minDepth, Math.min(maxDepth, Math.round((dragged.x - innerLeft) / STACK_INDENT)));
+  const depth = clamp(Math.round((dragged.x - innerLeft) / STACK_INDENT), minDepth, maxDepth);
   // 3) parent + anchor: one level deeper means "first child of the row above"; otherwise walk up from
   //    that row to the ancestor sitting AT this depth and slot in right after it.
   let parentId = stack.id, afterId: string | null = null;
@@ -466,8 +467,7 @@ export function stackDropTarget(stack: MindNode, dragged: MindNode, skip: Set<st
 // frame moved by its own parent's layout leaves its (hidden, free) children behind, and they
 // reappear misplaced on expand. Uses `type` (not isFrame) so a COLLAPSED frame still counts.
 function insideFrame(node: MindNode): boolean {
-  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    if (p.type === 'frame') return true;
+  for (const p of ancestors(node)) if (p.type === 'frame') return true;
   return false;
 }
 // The nearest ANCESTOR frame actually hosting `node` right now — walking PAST non-frame ancestors
@@ -492,7 +492,7 @@ export function hostFrame(node: MindNode): MindNode | null {
 // by main.ts's inStack/inFrame for exactly that.
 export function containerHost(node: MindNode): MindNode | null {
   if (isAnnotation(node)) return null;   // annotations render on top, under #world — never hosted/clipped by a frame
-  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
+  for (let p = parentOf(node); p; p = parentOf(p))
     if (isContainer(p)) return p;   // a frame OR a stack hosts/clips its children's elements + edges
   return null;
 }
@@ -501,7 +501,7 @@ export function containerHost(node: MindNode): MindNode | null {
 // pointer-hover hit-test (updateDropTarget), which both need "deepest wins" among frame hits.
 export function ancestorDepth(node: MindNode): number {
   let d = 0;
-  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) d++;
+  for (let p = parentOf(node); p; p = parentOf(p)) d++;
   return d;
 }
 // A frame's INTERIOR rect (absolute world coords, inside its border) — the single source of truth
@@ -597,7 +597,7 @@ export function effectiveLayout(node: MindNode): { type: string } {
   // no-op and the stack's outline pass places it. Checked before the normal walk so an explicit
   // line/fan on a descendant doesn't override the outliner.
   if (isStack(node)) return { type: 'stack' };
-  for (let p = node.parent ? state.nodes.get(node.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+  for (let p = parentOf(node); p; p = parentOf(p)) {
     if (isStack(p)) return { type: 'free' };   // governed by the stack's outliner
     if (p.type !== 'card') break;                 // a nearer frame/box governs instead — normal rules
   }
@@ -605,7 +605,7 @@ export function effectiveLayout(node: MindNode): { type: string } {
   while (n && guard++ < 4096){
     if (n.type !== 'card') return { type: 'free' };   // frame/image → free child placement
     if (n.layout !== 'inherit') return { type: n.layout };   // free | line | fan (stack handled above)
-    n = n.parent ? state.nodes.get(n.parent) : null;
+    n = parentOf(n);
   }
   return { type: 'free' };   // unresolved inherit → free
 }
@@ -681,8 +681,13 @@ export function orderAxisIsX(node: MindNode, side: LayoutSide): boolean {
 function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
   const tie = (n: MindNode) => n.file || n.title || n.id;
   const cmpTie = (a: MindNode, b: MindNode) => (tie(a) < tie(b) ? -1 : tie(a) > tie(b) ? 1 : 0);
-  // Box midpoint, falling back to the card's own centre when the subtree is fully hidden
-  // (its governor is collapsed → empty box) so order still seeds deterministically.
+  // The subtree box's TOP-LEFT and its MIDPOINT — both falling back to the card's own corner/centre
+  // when the subtree is fully hidden (its governor is collapsed → empty box), so order still seeds
+  // deterministically. Which of the two a branch below wants differs; the fallback must not.
+  const boxTL = (k: MindNode): { x: number; y: number } => {
+    const b = subtreeBox(k);
+    return Number.isFinite(b.x0) ? { x: b.x0, y: b.y0 } : { x: k.x, y: k.y };
+  };
   const midXY = (k: MindNode): { x: number; y: number } => {
     const b = subtreeBox(k);
     return Number.isFinite(b.x0)
@@ -702,25 +707,16 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
   // child dragged up/down re-slots into the reseeded order at its new row. Applies at EVERY level of
   // an outline (stackOf, not just the stack itself): a row's own children are rows in the same
   // column, so they order by y as well — side/midpoint ranking is meaningless in an outline.
-  if (stackOf(node)) {
-    const top = (k: MindNode): number => {
-      const b = subtreeBox(k);
-      return Number.isFinite(b.y0) ? b.y0 : k.y;
-    };
-    return kids.slice().sort((a, b) => top(a) - top(b) || cmpTie(a, b)).map(k => k.id);
-  }
+  if (stackOf(node))
+    return kids.slice().sort((a, b) => boxTL(a).y - boxTL(b).y || cmpTie(a, b)).map(k => k.id);
   // TABS: one left→right strip, so order is purely the tab's own x — the slot it sits in, which is
   // what mm_position_x persists (no separate order key). The tab's OWN x, not its subtree box: an
   // open tab's contents sit in the box the group lent it, nowhere near its label in the strip.
   if (isTabsFrame(node)) return kids.slice().sort((a, b) => a.x - b.x || cmpTie(a, b)).map(k => k.id);
   const flow = frameFlow(node);
   if (flow) {
-    const tl = (k: MindNode): { x: number; y: number } => {
-      const b = subtreeBox(k);
-      return Number.isFinite(b.x0) ? { x: b.x0, y: b.y0 } : { x: k.x, y: k.y };
-    };
-    const cross = (k: MindNode) => flow === 'flow-h' ? tl(k).y : tl(k).x;
-    const along = (k: MindNode) => flow === 'flow-h' ? tl(k).x : tl(k).y;
+    const cross = (k: MindNode) => flow === 'flow-h' ? boxTL(k).y : boxTL(k).x;
+    const along = (k: MindNode) => flow === 'flow-h' ? boxTL(k).x : boxTL(k).y;
     const byCross = kids.slice().sort((a, b) => cross(a) - cross(b) || cmpTie(a, b));
     let band = 0;
     const banded = byCross.map((k, i) => {
@@ -1095,8 +1091,7 @@ export function applyLayouts(): void {
 // the shallower levels on screen as expandable stubs. depth = 1 → root stays, each of its
 // children becomes a collapsed section you click to open.
 export function collapseAtDepth(depth = 1): void {
-  const depthOf = (n: MindNode) => { let d=0,p: MindNode | undefined =n; while(p && p.parent){ p=state.nodes.get(p.parent); d++; } return d; };
   for (const n of state.nodes.values()){
-    n.collapsed = depthOf(n) === depth && childrenOf(n.id).length > 0;
+    n.collapsed = ancestorDepth(n) === depth && childrenOf(n.id).length > 0;
   }
 }

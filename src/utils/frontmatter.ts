@@ -16,16 +16,32 @@ import { state, isBoxType, type MindNode, type NodeType, type NodeLayout, type F
 // what a Markdown author writes anyway, so the file reads correctly in Obsidian and every other
 // renderer.
 // NO heading means the card is UNTITLED — a sticky note that is only its text. That's why this tests
-// for `#` alone: firstLineLabel (features/crud.ts) also strips bullets, quotes and list numbers,
-// which is right when minting a label out of arbitrary dragged text and wrong here — a note starting
-// `- milk` is a list, not a card titled "milk".
+// for `#` alone: firstLineLabel (below) also strips bullets, quotes and list numbers, which is right
+// when minting a label out of arbitrary dragged text and wrong here — a note starting `- milk` is a
+// list, not a card titled "milk".
+//
+// Where does this text actually START — the index of its first non-blank line, or -1 if it has none.
+// The ONE spelling of that question: splitHeading, firstLineLabel, the editor's heading probes
+// (features/inline-edit.ts) and collapsedMarkdown (main.ts) all read it, and the four hand-written
+// copies it replaced had already drifted apart over the all-blank case.
+export function firstTextLine(lines: string[]): number {
+  return lines.findIndex(l => l.trim());
+}
+// Is THIS line a heading, and if so where does its text begin — the FORMAT rule, in one regex. The
+// title is optional so a bare `# ` still matches: the editor needs to know a marker is sitting there
+// (to strip it again if nothing gets typed after it) where splitHeading reads that as untitled.
+// `markerLen` is what a caret must clear to land on the title, so nothing has to hard-code `'# '`.
+export function headingOnLine(line: string): { markerLen: number; title: string } | null {
+  const m = line.match(/^([^\S\n]*#{1,6}[^\S\n]+)(.*\S)?[^\S\n]*$/);
+  return m ? { markerLen: m[1].length, title: (m[2] ?? '').trim() } : null;
+}
 export function splitHeading(text: string): { title: string; body: string } {
   const lines = text.split('\n');
-  const i = lines.findIndex(l => l.trim());
+  const i = firstTextLine(lines);
   if (i < 0) return { title: '', body: '' };
-  const m = lines[i].match(/^\s*#{1,6}\s+(.*\S)\s*$/);
-  if (!m) return { title: '', body: text.trim() };
-  return { title: m[1].trim(), body: lines.slice(i + 1).join('\n').trim() };
+  const h = headingOnLine(lines[i]);
+  if (!h || !h.title) return { title: '', body: text.trim() };
+  return { title: h.title, body: lines.slice(i + 1).join('\n').trim() };
 }
 // …and back. The inverse of splitHeading, so a load/save round-trip is a no-op: an untitled note is
 // its body alone, and a titled one gets its heading back as the first line.
@@ -34,22 +50,33 @@ export function joinHeading(title: string, body: string): string {
   if (!t) return b;
   return b ? `# ${t}\n\n${b}` : `# ${t}`;
 }
-// A human LABEL off the first non-blank line of arbitrary text, shorn of whatever markdown marker
-// introduced it — a heading's #, a bullet, a quote, a list number. Deliberately WIDER than
-// splitHeading, and the two must not be confused: this mints a name for something that hasn't got
-// one (an untitled card's filename slug, the text-drag ghost's caption), where any first line will
-// do; splitHeading answers the FORMAT question "does this note carry a title", which only `#` may
-// answer — or a note beginning `- milk` would be a card titled "milk" instead of a list.
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
 // this, and it survives in two places for that reason: the one-shot migration of a body-less note
 // (data/persistence.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).
 export function fileStem(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
 }
-export function firstLineLabel(text: string): { title: string; body: string } {
+// A human LABEL off the first non-blank line of arbitrary text, shorn of whatever markdown marker
+// introduced it — a heading's #, a bullet, a quote, a list number. Deliberately WIDER than
+// splitHeading, and the two must not be confused: this mints a name for something that hasn't got
+// one (an untitled card's filename slug, the text-drag ghost's caption), where any first line will
+// do; splitHeading answers the FORMAT question "does this note carry a title", which only `#` may
+// answer — or a note beginning `- milk` would be a card titled "milk" instead of a list.
+const MARKER_RE = /^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/;
+// The LABEL ALONE, which is what nearly every caller wants — nodeLabel (on every display site, in
+// search's filter and its sort comparator) and the filename slug. Kept apart from the pair below
+// because that one rebuilds the whole remaining body just to hand it back, and a note's body can be
+// long: paying O(body) in two allocations per row of a list is real work for a string nobody reads.
+export function firstLineLabel(text: string): string {
+  const m = text.match(/^[^\S\n]*\S.*$/m);
+  return m ? m[0].replace(MARKER_RE, '').trim() : '';
+}
+// …and the same first line WITH the rest of the text as a body — the split form, for the one caller
+// that is really breaking text in two (the text-drag ghost's caption + its new card's note).
+export function firstLineSplit(text: string): { title: string; body: string } {
   const lines = text.split('\n');
-  let i = lines.findIndex(l => l.trim()); if (i < 0) i = 0;
-  return { title: (lines[i] ?? '').replace(/^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/, '').trim(),
+  let i = firstTextLine(lines); if (i < 0) i = 0;
+  return { title: (lines[i] ?? '').replace(MARKER_RE, '').trim(),
            body: lines.slice(i + 1).join('\n').trim() };
 }
 
@@ -196,7 +223,7 @@ export function serializeMd(n: MindNode): string {
   if (n.color) fmSet(entries, 'color', `color: ${n.color.startsWith('#') ? `"${n.color}"` : n.color}`);
   else fmRemove(entries, 'color');
   if (!fmEntry(entries, 'date')) entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
-  const parentNode = n.parent ? state.nodes.get(n.parent) : null;
+  const parentNode = n.parent ? state.nodes.get(n.parent) ?? null : null;
   if (parentNode) entries.push({ key:'mm_parent', lines:[`mm_parent: ${parentNode.file}`] });
   if (parentNode && n.side) entries.push({ key:'mm_side', lines:[`mm_side: ${n.side}`] });
   // rx/ry is the parent-relative persisted form (see MindNode in core/state.ts); commitRel() has

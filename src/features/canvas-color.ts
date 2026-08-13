@@ -21,6 +21,7 @@ import { scheduleSave, scheduleSaveSettings } from '../data/persistence.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintAll, colorFill, canvasOwner, syncCanvasBackground } from '../main.js';
+import { placeInViewport } from '../utils/dom.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
 const pop = document.getElementById('canvasColorPop');
@@ -159,8 +160,7 @@ function position(): void {
   let left = r.left + r.width / 2 - pw / 2;
   let top = r.top - ph - POP_GAP;
   if (top < 4) top = r.bottom + POP_GAP;
-  pop.style.left = `${Math.min(Math.max(left, 4), window.innerWidth - pw - 4)}px`;
-  pop.style.top = `${Math.min(Math.max(top, 4), window.innerHeight - ph - 4)}px`;
+  placeInViewport(pop, left, top);
 }
 function close(): void { pop?.classList.remove('open'); }
 function toggle(): void {

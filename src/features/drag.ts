@@ -7,21 +7,21 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
-import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, frameInterior, TAB_GAP } from '../view/layout.js';
+import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
-import { ui, NARROW_MQ, type Pt, type Seg, type Drag } from '../core/ui-state.js';
+import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
 import { paintEdges } from '../view/edges.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
-         subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin } from '../main.js';
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, foldImageCardsIntoBody, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
+import { bodyImageAt } from './images.js';
 
 // The #outline drawer overlays the canvas from the right on wide screens; cache it too so
 // auto-pan can treat it as a right obstruction (see autoPanStep).
@@ -89,15 +89,6 @@ function trueRoots(ids: string[]): string[] {
   const idSet = new Set(ids);
   return ids.filter(id => { const p = state.nodes.get(id)?.parent; return !p || !idSet.has(p); });
 }
-// The inline body image under a screen point (body images are pointer-events:none, so a geometric
-// hit-test is needed) — used to start an image-extract drag from an Alt-press.
-function bodyImageAt(el: HTMLElement, x: number, y: number): HTMLImageElement | null {
-  for (const img of el.querySelectorAll<HTMLImageElement>('.body img.md-img')){
-    const r = img.getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return img;
-  }
-  return null;
-}
 
 const RIP_THRESHOLD = 200; // screen-space px — the base rip distance (see distanceRip)
 
@@ -107,7 +98,7 @@ const RIP_THRESHOLD = 200; // screen-space px — the base rip distance (see dis
 // ripped) and the leftover must exceed HALF the base threshold. Zoom-scaled so it's a screen-space
 // feel. Returns false for a root (nothing to rip from).
 function distanceRip(node: MindNode): boolean {
-  const p = node.parent ? state.nodes.get(node.parent) : null;
+  const p = parentOf(node);
   if (!p) return false;
   const dist = Math.hypot((node.x + nodeW(node)/2) - (p.x + nodeW(p)/2),
                           (node.y + nodeH(node)/2) - (p.y + nodeH(p)/2));
@@ -136,7 +127,7 @@ function updateRip(drag: Drag): void {
   // (about to detach) only once its centre leaves the frame's bounds — the SAME outOfFrame trigger
   // dragPointerUp commits on. Sharing drag.rip means effectiveColor previews the detach colour the
   // instant it crosses out, exactly as a distance-rip does for a non-frame child.
-  const parent = act.parent ? state.nodes.get(act.parent) : null;
+  const parent = parentOf(act);
   // An annotation is never "in" a frame for rip purposes — it renders on top, not inside the box —
   // so it detaches ONLY by being dragged past the rip threshold, never by leaving a frame's bounds.
   // isContainer covers a stack too: its child detaches by leaving the stack box, same as a frame.
@@ -275,7 +266,7 @@ export function bindNodeDrag(n: MindNode): void {
     // opening its parent's note editor on top of it.
     e.stopPropagation();
     // While editing this node, let the browser handle double-tap normally (word selection)
-    if ((ui.bodyEdit && ui.bodyEdit.id === n.id) || (ui.titleEdit && ui.titleEdit.id === n.id)) { lastTouchTap = 0; return; }
+    if (inPlaceEditOn(n.id)) { lastTouchTap = 0; return; }
     // The card's own controls act on a single tap (main.ts isNodeControlAt): a tap there must not also
     // count toward a double-tap, or the second one would fire the button AND open the card.
     const t0 = e.touches[0];
@@ -339,7 +330,7 @@ export function bindNodeDrag(n: MindNode): void {
     if (ui.bodyEdit && ui.bodyEdit.id !== n.id) endBodyEdit();
     if (ui.titleEdit && ui.titleEdit.id !== n.id) endTitleEdit();
     // while this node is being edited, let clicks place the caret — don't start a drag
-    if ((ui.bodyEdit && ui.bodyEdit.id === n.id) || (ui.titleEdit && ui.titleEdit.id === n.id)) { e.stopPropagation(); return; }
+    if (inPlaceEditOn(n.id)) { e.stopPropagation(); return; }
     // A drag inside an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather
     // than moving the frame — you move the frame from its interior only once it's selected. A
     // no-move click selects the frame (endMarquee). ⌘/Ctrl-click still falls through to the normal
@@ -497,7 +488,7 @@ function dragPointerUp(): void {
           const folded = foldImageCardsIntoBody(mergeNode.id, selRoots);
           if (folded){
             setStatus(folded > 1 ? `Merged ${folded} images into "${nodeLabel(mergeNode)}"` : `Merged image into "${nodeLabel(mergeNode)}"`);
-            paintAll(); applyLayouts(); paintAll();
+            remeasure();
             selectNode(mergeNode.id);
             scheduleSave(); commitStep();
             return;
@@ -514,7 +505,7 @@ function dragPointerUp(): void {
             setStatus(merged > 1
               ? `Merged ${merged} cards into “${nodeLabel(fuseNode)}”`
               : `Merged “${nodeLabel(act)}” into “${nodeLabel(fuseNode)}”`);
-            paintAll(); applyLayouts(); paintAll();
+            remeasure();
             selectNode(fuseNode.id);
             scheduleSave(); commitStep();
             return;
@@ -538,7 +529,7 @@ function dragPointerUp(): void {
               : selRoots.length > 1
               ? `Docked ${selRoots.length} frames as tabs of “${nodeLabel(g)}”`
               : `Docked “${nodeLabel(act)}” as a tab of “${nodeLabel(g)}”`);
-            paintAll(); applyLayouts(); paintAll();
+            remeasure();
             selectNode(act.id);
             scheduleSave(); commitStep();
             return;
@@ -593,7 +584,7 @@ function dragPointerUp(): void {
           // delta so relative layout is preserved. A card inside a frame snaps RELATIVE to the
           // frame's origin (its children live in the frame's coordinate space); anyone else snaps
           // to the world grid.
-          const fp = act.parent ? state.nodes.get(act.parent) : null;
+          const fp = parentOf(act);
           const inFrame = !!(fp && isContainer(fp));   // frame OR stack: snap relative to the box origin
           const ax = inFrame ? fp!.x : 0, ay = inFrame ? fp!.y : 0;
           const g = gridSnap();
@@ -656,9 +647,9 @@ function dragPointerUp(): void {
         }
         // Paint first so freshly-created clone cards have real DOM heights before applyLayouts
         // measures them — otherwise a chain/fan of clones lays out on the 64px height fallback
-        // (only the first lands right). Mirrors the duplicate path: paint -> layout -> paint.
-        paintAll();
-        applyLayouts(); paintAll();   // re-snap any dragged child back into its parent's layout
+        // (only the first lands right). That paint -> layout -> paint order IS remeasure(), which the
+        // duplicate path also takes; re-snaps any dragged child back into its parent's layout.
+        remeasure();
         // select the new clone(s) you just dragged out
         if (cloned){ if (clones && clones.length > 1) setSelectionSet(clones.map(c => c.id)); else selectNode(act.id); }
         scheduleSave();
@@ -721,7 +712,7 @@ export function cancelDragRestore(): void {
     const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = true; }
   }
   abortDrag();
-  applyLayouts(); paintAll();   // no new cards to measure — one layout + paint suffices
+  relayout();   // no new cards to measure — one layout + paint suffices
   commitStep();   // nothing changed → the pending step nets out and is discarded
 }
 // Bring the Shift-clone state in line with the live `drag.shift` flag. Shift down (and moved past
@@ -938,7 +929,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     setStatus('Locked — can’t drop there');
   } else if (hovered) {
     const hoveredNode = state.nodes.get(hovered)!;
-    const pf = hoveredNode.parent ? state.nodes.get(hoveredNode.parent) : null;
+    const pf = parentOf(hoveredNode);
     const stackHost = hostFrame(hoveredNode);
     if (isStack(hoveredNode) || (stackHost && isStack(stackHost))) {
       // ---- STACK OUTLINER drop ----
@@ -1019,7 +1010,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     // drags only (a multi-drag keeps the plain-reposition fallback) and never while Alt
     // (detach) is held. The `near` gate is what keeps rip-detach reachable: close to the band a
     // release means "re-slot"; pulled away from it, today's rip behaviour returns.
-    const parent = state.nodes.get(dragged.parent);
+    const parent = parentOf(dragged);
     // A flow frame is box-flowed (no side-based in-parent reorder bar). Sliding its child just
     // repositions it; the release reseeds the flow order from the dropped positions.
     // A stack row opts out too: its in-outline slot is previewed by the stack branch above (which

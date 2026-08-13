@@ -8,6 +8,8 @@ import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
+import { byId } from '../utils/dom.js';
+import { clamp } from '../utils/num.js';
 
 // Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
 // chip, the lock badge, the emoji tag row, the "add note" pill — is a handful of unreadable pixels
@@ -93,7 +95,7 @@ export function screenToWorld(sx: number, sy: number): { x: number; y: number } 
 export function zoomAt(mx: number, my: number, factor: number): void {
   cancelViewAnim();
   const k0 = state.view.k;
-  const k1 = Math.min(2.5, Math.max(0.2, k0 * factor));
+  const k1 = clamp(k0 * factor, 0.2, 2.5);
   state.view.x = mx - (mx - state.view.x) * (k1 / k0);
   state.view.y = my - (my - state.view.y) * (k1 / k0);
   state.view.k = k1;
@@ -151,7 +153,7 @@ export function fit(): void {
 // and it eats height. Every camera move that has to land a node in the VISIBLE canvas subtracts
 // this — frameBox and revealInView both — so the two can't disagree about where the bottom is.
 function bottomInset(): number {
-  const fb = document.getElementById('floatBar') as HTMLElement;
+  const fb = byId('floatBar');
   return (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
 }
 
@@ -172,8 +174,8 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStro
   const r = stageSize();   // available canvas = stage minus the docked edit bar (bottomInset)
   const availW = r.width;
   const availH = r.height - bottomInset();
-  const k = Math.max(FOCUS_MIN_K, Math.min(FOCUS_MAX_K,
-    Math.min((availW - 2*FOCUS_PAD) / bw, (availH - 2*FOCUS_PAD) / bh)));
+  const k = clamp(Math.min((availW - 2*FOCUS_PAD) / bw, (availH - 2*FOCUS_PAD) / bh),
+                  FOCUS_MIN_K, FOCUS_MAX_K);
   animateViewTo(availW/2 - cx*k, availH/2 - cy*k, k);   // glide + zoom, never jump
 }
 

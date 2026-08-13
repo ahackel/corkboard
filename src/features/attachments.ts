@@ -6,9 +6,8 @@ import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
 import { store, scheduleSave } from '../data/persistence.js';
-import { applyLayouts } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
-import { paintAll, selectNode, IMAGE_W, IMAGE_H } from '../main.js';
+import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
 import { createNode, centredAt } from './crud.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { nodeLabel } from '../utils/model.js';
@@ -88,7 +87,7 @@ async function appendImagesToNode(id: string, files: FileList | File[]): Promise
     n.dirty = true;
   });
   if (ui.bodyEdit && ui.bodyEdit.id === id) ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor
-  paintAll(); applyLayouts(); paintAll(); scheduleSave();
+  remeasure(); scheduleSave();
   setStatus(addedMsg(imgs.length));
 }
 // Insert images at the caret in the in-card body editor (used by paste / drop onto it).
@@ -107,7 +106,7 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
   ta.selectionStart = ta.selectionEnd = s + ins.length;
   autosizeBody(ta);
   n.body = ta.value; n.dirty = true;
-  applyLayouts(); paintAll(); scheduleSave();        // reflow; the editing textarea is preserved
+  relayout(); scheduleSave();        // reflow; the editing textarea is preserved
   setStatus(addedMsg(imgs.length));
 }
 
@@ -224,7 +223,7 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
       const cur = state.nodes.get(n.id);
       if (!ok || !cur || cur.body !== text) return;   // gone or edited meanwhile → leave it alone
       record([cur.id], () => { cur.body = `![](${text})`; cur.dirty = true; });
-      applyLayouts(); paintAll(); scheduleSave();
+      relayout(); scheduleSave();
       setStatus('Pasted image link');
     });
     return;

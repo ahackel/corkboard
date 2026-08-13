@@ -6,12 +6,13 @@
 import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
-import { ui, gPointers, type Pt, type GestureEvt } from '../core/ui-state.js';
+import { ui, gPointers, inPlaceEditActive, type Pt, type GestureEvt } from '../core/ui-state.js';
 import { nodeW, nodeH, selectNode, setSelectionSet, exitScope } from '../main.js';
 import { scopeActive } from '../nav/scope.js';
 import { createNode, centredAt } from './crud.js';
 import { endInPlaceEdit } from './inline-edit.js';
 import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
+import { clamp } from '../utils/num.js';
 
 const marqueeEl = document.createElement('div');
 marqueeEl.id = 'marquee'; stage.appendChild(marqueeEl);
@@ -30,7 +31,7 @@ stage.addEventListener('pointerdown', (e) => {
   if (e.button === 2) return;         // right-click = context menu only: no marquee, keep editors/selection
   cancelViewAnim();
   // Tapping the canvas background closes any open in-place text editor (important on touch)
-  if (ui.bodyEdit || ui.titleEdit) { endInPlaceEdit(); return; }
+  if (inPlaceEditActive()) { endInPlaceEdit(); return; }
 
   if (e.pointerType !== 'mouse'){                   // touch / pen
     gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
@@ -229,7 +230,7 @@ stage.addEventListener('gesturechange', (ev) => {
   const e = ev as GestureEvt;
   if (gPointers.size) return;   // …so we don't double-apply zoom on iPad
   const k0 = state.view.k;
-  const target = Math.min(2.5, Math.max(0.2, ui.gestureStartK * e.scale));
+  const target = clamp(ui.gestureStartK * e.scale, 0.2, 2.5);
   zoomAt(ui.gestureMid.x, ui.gestureMid.y, target / k0);
 });
 

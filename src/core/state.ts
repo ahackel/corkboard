@@ -4,6 +4,7 @@
 // binding) so the live view is shared across modules. DOM nodes live under #world /
 // #stage; edges in the #edges SVG, collapse toggles in #toggles.
 // ============================================================
+import { byId } from '../utils/dom.js';
 
 // A node's KIND, orthogonal to how it arranges its children (`layout` below):
 //   · card       — an ordinary titled/bodied node.
@@ -171,18 +172,18 @@ export const state: AppState = {
   toDelete: [],
 };
 
-export const world = document.getElementById('world') as HTMLElement;
-export const stage = document.getElementById('stage') as HTMLElement;
+export const world = byId('world');
+export const stage = byId('stage');
 // Freehand sketch layer — sits behind the cards (see index.html / styles.css z-index).
-export const sketchSvg = document.getElementById('sketch') as unknown as SVGSVGElement;
-export const edgesSvg = document.getElementById('edges') as unknown as SVGSVGElement;
-export const togglesSvg = document.getElementById('toggles') as unknown as SVGSVGElement;
+export const sketchSvg = byId<SVGSVGElement>('sketch');
+export const edgesSvg = byId<SVGSVGElement>('edges');
+export const togglesSvg = byId<SVGSVGElement>('toggles');
 // Top overlay for drag-time edges (dragged card's connectors + reparent preview) — see view/edges.ts.
-export const dragEdgesSvg = document.getElementById('dragEdges') as unknown as SVGSVGElement;
+export const dragEdgesSvg = byId<SVGSVGElement>('dragEdges');
 // Group-opacity layer for the CURRENTLY DRAGGED items: while a drag is live the dragged cards and
 // their connectors are re-parented in here so the whole set composites as one translucent group
 // (see #dragLayer in styles.css / dragRoot() in main.ts). dragLayerEdges holds their connectors.
-export const dragLayer = document.getElementById('dragLayer') as HTMLElement;
-export const dragLayerEdges = document.getElementById('dragLayerEdges') as unknown as SVGSVGElement;
-export const statusEl = document.getElementById('status') as HTMLElement;
+export const dragLayer = byId('dragLayer');
+export const dragLayerEdges = byId<SVGSVGElement>('dragLayerEdges');
+export const statusEl = byId('status');
 export const setStatus = (t: string): void => { statusEl.textContent = t; };

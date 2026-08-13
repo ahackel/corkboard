@@ -6,19 +6,19 @@
 // Contracts mirror inline-edit: n.title/n.body stay untouched until commit, the whole session
 // is ONE undo step (touch/commitStep), and an open ui.sheetEdit defers the file rename and
 // the focus-reload (see data/persistence.ts).
-import { state, setStatus, type MindNode } from '../core/state.js';
+import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
-import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode } from '../main.js';
-import { deleteNode } from './crud.js';
+import { selectNode, remeasure } from '../main.js';
+import { discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
+import { byId } from '../utils/dom.js';
 
-const sheet = document.getElementById('editorSheet') as HTMLElement;
-const shTitle = document.getElementById('shTitle') as HTMLInputElement;
-const shBody = document.getElementById('shBody') as HTMLTextAreaElement;
-const shDone = document.getElementById('shDone') as HTMLButtonElement;
-const shCancel = document.getElementById('shCancel') as HTMLButtonElement;
+const sheet = byId('editorSheet');
+const shTitle = byId<HTMLInputElement>('shTitle');
+const shBody = byId<HTMLTextAreaElement>('shBody');
+const shDone = byId<HTMLButtonElement>('shDone');
+const shCancel = byId<HTMLButtonElement>('shCancel');
 
 // read-only sessions (help map / locked mode) never set ui.sheetEdit — nothing can be written,
 // so the persistence guards don't apply; the sheet just displays the note.
@@ -58,18 +58,14 @@ export function closeEditorSheet({ cancel = false }: { cancel?: boolean } = {}):
   const n = state.nodes.get(se.id);
   if (!n) { commitStep(); return; }
   if (cancel && se.isNew) {
-    // same net-null trick as endBodyEdit: the pending step holds the create's null
-    // before-image, so deleting here nets null→null and the step is discarded.
-    deleteNode(n.id);
-    commitStep();
-    setStatus('Cancelled new card');
+    discardNewCard(n.id, 'Cancelled new card');
     return;
   }
   if (!cancel) {
     n.title = shTitle.value.replace(/[\r\n]+/g, ' ').trim();   // a title is one line
     n.body = shBody.value;
     n.dirty = true;
-    paintAll(); applyLayouts(); paintAll();           // content changed height → reflow the canvas
+    remeasure();           // content changed height → reflow the canvas
     scheduleSave();
   }
   commitStep();                                       // cancelled/unchanged sessions are discarded
