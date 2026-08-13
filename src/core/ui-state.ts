@@ -40,6 +40,10 @@ export interface Drag {
   // Alt-dragging image CARD(s) over a plain body card: the target card's id to fold the image(s)
   // into on drop (instead of reparenting). Set by updateDropTarget, consumed by dragPointerUp.
   imageMerge?: string | null;
+  // Alt-dragging plain CARD(s)/annotation(s) over another card: the target card's id to fold their
+  // notes into on drop (crud.ts mergeCardsInto) instead of reparenting. Same shape as imageMerge —
+  // the two are the same gesture on different content, and neither is a reparent-with-a-landing.
+  cardMerge?: string | null;
   // The frame whose TAB the dragged frame(s) are poised over: releasing DOCKS them there as tabs
   // (features/drag.ts tabZoneAt → crud.ts dockFrames). Its own resolution, not a dropMode, because it
   // isn't a reparent-with-a-landing: dropTarget/dropSide stay null, so every other preview stands

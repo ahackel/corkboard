@@ -5,12 +5,12 @@
 import { state, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, takenTitles, isLockedEffective, subtreeHasLocked, isAncestor } from '../utils/model.js';
-import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo } from '../view/layout.js';
+import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H } from '../main.js';
-import { startInlineEdit } from './inline-edit.js';
+import { startInlineEdit, dropInlineEdit, dropBodyEdit, titleProblem } from './inline-edit.js';
 import { touch, commitStep, record } from './history.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
@@ -236,7 +236,64 @@ export function createSibling(refId: string){
   scheduleSave();
 }
 
-// ---------- extract selected body text into a new child card ----------
+// ---------- breaking a note apart: extract selected body text into a card of its own ----------
+// Two gestures share this: ⌘⇧E (→ a child) and dragging the selection out of the editor
+// (features/text-drag.ts → a sibling, a card in whatever container it was dropped in, or straight
+// into another card's note). All of them CUT the text out of the source, so the three helpers below
+// are the shared halves — deriving the new card's title/body, and the cut itself.
+
+// Split a lump of extracted text into a card's title + body: the first non-blank line becomes the
+// title, stripped of whatever markdown marker introduced it (a heading's #, a bullet, a quote, a
+// list number); everything after it is the body.
+// …split in two, because the DRAG PREVIEW needs the same reading of the text before anything is cut
+// (features/text-drag.ts paints a ghost card with this title on it) and must not mint a title —
+// uniqueTitle would number it against a map the drop may never change.
+export function splitTitleText(text: string): { title: string; body: string } {
+  const lines = text.split('\n');
+  let ti = lines.findIndex((l: string) => l.trim()); if (ti < 0) ti = 0;
+  return { title: lines[ti].replace(/^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/, '').trim(),
+           body: lines.slice(ti+1).join('\n').trim() };
+}
+function titleAndBodyFrom(text: string): { title: string; body: string } {
+  const { title, body } = splitTitleText(text);
+  return { title: uniqueTitle(title || newCardTitle()), body };
+}
+// Cut [start,end) out of the card's note (tidying the blank lines it leaves) and return it. The
+// in-card editor is DROPPED rather than ended: endBodyEdit would write the textarea's now-stale
+// value back over the shortened body. The caller owns closing the undo step (commitStep), since
+// nothing else will.
+function cutBodyRange(n: MindNode, start: number, end: number, value: string): string {
+  touch(n.id);   // usually already touched by startBodyEdit — idempotent
+  const text = value.slice(start, end);
+  n.body = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
+  n.dirty = true;
+  dropBodyEdit();   // same teardown reason as the title's — see inline-edit.ts
+  return text;
+}
+// …and the same cut out of a TITLE, which is a different thing to cut: a title is the card's
+// FILENAME, so what's left has to stand as one on its own (titleProblem — non-empty, no path
+// characters, not already taken). If it wouldn't, the gesture is refused whole rather than done
+// half: nothing is cut and nothing is created, and the message says why. Whitespace is re-collapsed
+// because a cut out of the MIDDLE of a title leaves two spaces where one belongs.
+function cutTitleRange(n: MindNode, start: number, end: number, value: string): string | null {
+  const rest = (value.slice(0, start) + value.slice(end)).replace(/\s+/g, ' ').trim();
+  const problem = rest ? titleProblem(rest, n.id) : 'A card needs a title';
+  if (problem){ setStatus(problem); return null; }
+  touch(n.id);
+  n.title = rest; n.dirty = true;
+  dropInlineEdit();   // the element still shows the pre-cut title — see inline-edit.ts
+  return value.slice(start, end);
+}
+// Append a lump of markdown to a card's note, blank-line separated. Shared by every "this text now
+// lives in THAT card" path (the merge below, a dragged-in selection) — including the sync of an
+// editor that happens to be open on the target, which is easy to forget and leaves the next commit
+// writing the pre-merge text straight back over it.
+function appendToBody(t: MindNode, md: string): void {
+  if (!md) return;
+  t.body = (t.body && t.body.trim()) ? t.body.replace(/\s*$/, '') + '\n\n' + md : md;
+  t.dirty = true;
+  if (ui.bodyEdit && ui.bodyEdit.id === t.id) ui.bodyEdit.ta.value = t.body;
+}
 // Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the
 // note and drop it into a fresh child card.
 export function extractToChild(): void {
@@ -245,29 +302,152 @@ export function extractToChild(): void {
   const ta = ui.bodyEdit.ta;
   const s = ta.selectionStart, e = ta.selectionEnd;
   if (s === e){ setStatus('Select some body text to extract'); return; }
-  touch(n.id);   // usually already touched by startBodyEdit — idempotent
-  const sel = ta.value.slice(s, e);
-  const lines = sel.split('\n');
-  let ti = lines.findIndex((l: string) => l.trim()); if (ti < 0) ti = 0;
-  const title = uniqueTitle(
-    lines[ti].replace(/^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/, '').trim() || newCardTitle());
-  const childBody = lines.slice(ti+1).join('\n').trim();
-  // cut the selection out of the parent (tidy up the blank lines it leaves) and close its editor
-  n.body = (ta.value.slice(0, s) + ta.value.slice(e)).replace(/\n{3,}/g, '\n\n').trim();
-  n.dirty = true;
-  ui.bodyEdit = null;   // commit & drop the in-card editor
+  const { title, body } = titleAndBodyFrom(cutBodyRange(n, s, e, ta.value));
   // make the child below the parent and jump to it
   const sibs = childrenOf(n.id);
   if (n.collapsed) n.collapsed = false;
   const child = mkNode({
     x: n.x + 40 + sibs.length*30, y: n.y + 180 + sibs.length*10,
-    parent: n.id, title, body: childBody,
+    parent: n.id, title, body,
   });
   const id = child.id;
   state.nodes.set(id, child);
   applyLayouts(); paintAll(); selectNode(id); scheduleSave();
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
   setStatus(`Extracted “${title}” as a child`);
+}
+const nodeOrNull = (id: string | null | undefined): MindNode | null =>
+  (id ? state.nodes.get(id) ?? null : null);
+// WHICH TEXT is being dragged: a range of the card's note, or of its TITLE — whichever editor is
+// open on it (features/text-drag.ts captures this at dragstart; the offsets are into that editor's
+// live text, which is why the drop re-reads it rather than trusting n.title/n.body).
+export interface TextSource { id: string; part: 'title' | 'body'; start: number; end: number }
+function liveText(src: TextSource): string | null {
+  if (src.part === 'title')
+    return ui.inlineEdit && ui.inlineEdit.id === src.id ? (ui.inlineEdit.el.textContent ?? '') : null;
+  return ui.bodyEdit && ui.bodyEdit.id === src.id ? ui.bodyEdit.ta.value : null;
+}
+// Take the dragged range OUT of whichever half it came from. `null` = refused (only a title can
+// refuse — see cutTitleRange), and then nothing at all has happened yet.
+function cut(n: MindNode, src: TextSource, value: string): string | null {
+  return src.part === 'title'
+    ? cutTitleRange(n, src.start, src.end, value)
+    : cutBodyRange(n, src.start, src.end, value);
+}
+// The text under the drag, read live — `null` once that editor is no longer open on that card, which
+// is also the drop's own "did this drag outlive its editor" test. Exported for the drag PREVIEW, so
+// the ghost card and the drop read the selection through the one piece of code that knows how.
+export function cardText(src: TextSource): string | null {
+  const value = liveText(src);
+  return value == null ? null : value.slice(src.start, src.end);
+}
+// The landing of a dragged-out selection: INTO an existing card's note, or as a card of its own at a
+// world point — inside `container` when it was dropped in one, else out on the canvas (see the rule
+// below). features/text-drag.ts resolves which; canMerge says what counts as a note here.
+export type TextDrop = { into: MindNode } | { container: MindNode | null; at: Pt };
+export function dropCardText(src: TextSource, dest: TextDrop): void {
+  if (state.readOnly) return;
+  const n = state.nodes.get(src.id); if (!n) return;
+  const value = liveText(src); if (value == null) return;   // the editor closed under the drag
+  if (src.start >= src.end || src.end > value.length) return;
+  // Resolve (and refuse) the landing BEFORE cutting, so a drop that can't be honoured leaves the
+  // card's text alone rather than removing it with nowhere to put it.
+  if ('into' in dest){
+    const t = dest.into;
+    if (t.id === src.id || !canMerge(t)) return;
+    const text = cut(n, src, value); if (text == null) return;
+    touch(t.id);
+    appendToBody(t, text.trim());
+    applyLayouts(); paintAll(); selectNode(t.id); scheduleSave(); commitStep();
+    setStatus(`Moved text into “${t.title}”`);
+    return;
+  }
+  // WHERE THE NEW CARD BELONGS, in one rule read both ways: the box you dropped in governs.
+  //  · dropped IN a container → its child, wherever in it you let go;
+  //  · dropped on the open canvas, from a card that LIVES in a container (a stack's row, a card in a
+  //    frame) → out to the top level, i.e. the open frame while there is one (detachParentId). This is
+  //    the half "sibling of the source" got wrong: it parented the card back INSIDE the box, so
+  //    dragging text out of a stack row put a new ROW in the outline instead of a card where you
+  //    dropped it, and out of a frame's card put one at a drop point the box's overflow:hidden clips
+  //    away to nothing. Dropping on the canvas is how a note comes OUT;
+  //  · dropped on the open canvas from a card already ON it → a sibling of that card, slotted directly
+  //    after it the way createSibling does, so the new card joins the branch it was cut from.
+  // hostFrame is the "am I inside a box" test, and it's the right one because it stops at the scope
+  // root: inside an OPEN frame there's no box to come out of — that frame IS the canvas — so its cards
+  // keep the sibling reading.
+  const parent = dest.container
+    ?? (hostFrame(n) ? nodeOrNull(detachParentId()) : nodeOrNull(n.parent));
+  if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
+  const text = cut(n, src, value); if (text == null) return;
+  const { title, body } = titleAndBodyFrom(text);
+  if (parent){
+    touch(parent.id);
+    if (parent.collapsed) parent.collapsed = false;
+  }
+  const card = mkNode({
+    x: dest.at.x, y: dest.at.y,
+    parent: parent?.id ?? null, title, body,
+    side: parent && parent.id === n.parent ? n.side : undefined,   // a sibling keeps the source's side
+  });
+  state.nodes.set(card.id, card);
+  // Only a real sibling splices the order; a card dropped into a container is slotted by its
+  // position (orderedKids treats an unlisted child as fresh), which is where the drop point is.
+  if (parent && parent.id === n.parent) parent.kidOrder = insertedKidOrder(parent, card.id, n.id);
+  applyLayouts(); paintAll(); selectNode(card.id); scheduleSave(); commitStep();
+  setStatus(`Extracted “${title}”`);
+}
+
+// ---------- merging cards into one ----------
+// What can FUSE with another note, on EITHER side of the gesture: a plain card or an annotation —
+// the two kinds whose whole content is a body (a card just also has a title above it). Every other
+// kind is a box or a leaf whose own shape is the point (a frame, a stack, an image, a query card),
+// so folding it into a body would throw away exactly what it is. One predicate rather than a
+// source/target pair, because the answer really is the same question both ways round.
+export const canMerge = (n: MindNode): boolean =>
+  (n.type === 'card' || n.type === 'annotation') && !isLockedEffective(n);
+// ⌥-drop card(s) onto another card (features/drag.ts): fold each dragged note into the target's
+// body — `## Title` then its text, in the order they were selected — and let the now-redundant cards
+// go. The target is the card that SURVIVES, so it keeps its own id, file, colour, size and flags;
+// only tags are unioned in, since a tag is a label on content that just moved. Their CHILDREN come
+// up onto the target rather than going with them: merging notes must never take a branch with it.
+// Runs INSIDE the live drag undo step — it touches + mutates only, and the caller (dragPointerUp)
+// commits. Returns how many cards were folded in.
+export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): number {
+  if (state.readOnly) return 0;
+  const target = state.nodes.get(targetId);
+  if (!target || !canMerge(target)) return 0;
+  const cards = [...sourceIds]
+    .map(id => state.nodes.get(id))
+    .filter((n): n is MindNode => !!n && n.id !== targetId && canMerge(n));
+  if (!cards.length) return 0;
+  touch(targetId);
+  // An annotation IS its body — it has no title worth a heading — so it contributes just its text.
+  const section = (c: MindNode): string => {
+    const body = (c.body || '').trim();
+    if (isAnnotation(c)) return body;
+    return body ? `## ${c.title}\n\n${body}` : `## ${c.title}`;
+  };
+  appendToBody(target, cards.map(section).filter(Boolean).join('\n\n'));
+  const tags = new Set(target.tags);
+  for (const c of cards) for (const t of c.tags) tags.add(t);
+  target.tags = [...tags];
+  target.dirty = true;
+  // Where the swallowed cards' children land. Normally the target — but an ANNOTATION is a leaf
+  // (isLeafType: it never adopts children, and nothing would draw them), so a merge into one hands
+  // them to the card that annotation is pinned to instead, which is where they'd have gone had the
+  // annotation not been in the way. Pinned to nothing → the top level, i.e. the open frame.
+  const kidHome = isAnnotation(target) ? (target.parent ?? detachParentId()) : targetId;
+  // No kidOrder splice for the adopted children: orderedKids already slots a reparented-but-unlisted
+  // child by position (same as deleteSelectionKeepChildren).
+  for (const c of cards){
+    const kids = childrenOf(c.id);
+    touch(...kids.map(k => k.id));
+    for (const k of kids){ k.parent = kidHome; k.dirty = true; }
+  }
+  const parents = cards.map(c => c.parent);
+  deleteNodes(cards.map(c => c.id));
+  dissolveEmptyTabGroups(parents);   // a card can be the lone content of an empty tab group
+  return cards.length;
 }
 
 // ---------- docking frames as tabs ----------

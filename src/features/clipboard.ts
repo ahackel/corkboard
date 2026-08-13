@@ -24,6 +24,7 @@ import { mkNode, uniqueTitle, deleteSelection, contentParent } from './crud.js';
 import { touch, record } from './history.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
+import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { screenToWorld } from '../view/camera.js';
 import { applyLayouts } from '../view/layout.js';
@@ -193,6 +194,12 @@ export function bindCardFileDrag(n: MindNode): void {
   const el = n.el!;
   el.draggable = true;
   el.addEventListener('dragstart', (e: DragEvent) => {
+    // The card's note is open with text selected → this is the body-text drag (features/text-drag.ts),
+    // which is a NATIVE drag like this one and must be let through: returning without preventDefault
+    // (unlike the two bails below, which hand the gesture back to the pointer machinery) leaves the
+    // browser's text drag alive for text-drag.ts's own document-level handlers to land. First, so a
+    // held ⌥ can't turn a drag of the text into an export of the whole card.
+    if (cardTextDrag(e.target)) return;
     if (!e.altKey || !e.dataTransfer){ e.preventDefault(); return; }
     // ⌥-press began on an inline body image → that's an image EXTRACT gesture (image-extract.ts),
     // not a card-file export; let the native drag stand down so the pointer machinery keeps it.

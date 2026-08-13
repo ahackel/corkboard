@@ -977,6 +977,16 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.reparent-ghost { background:transparent !important; box-shadow:none !important;
   border:2px dashed var(--node-sel); }
 .node.reparent-ghost > * { visibility:hidden; }
+/* The DRAG IMAGE for a body-text drag (features/text-drag.ts buildGhost): a card, so it's plain that
+   a card is what the drop makes — not the browser's default snapshot of the dragged letters. It's in
+   the document only for the tick the browser needs to snapshot it, which is why it's parked off to the
+   LEFT rather than hidden (display:none / visibility:hidden snapshot as nothing) and why only the
+   horizontal axis is moved: the snapshot has to keep the card's real width. `position:fixed` overrides
+   .node's absolute, since this one is not in #world; the shadow is what the snapshot renders as a
+   lifted card, and the body is clamped so a long selection can't make a ghost taller than the screen. */
+.node.drag-ghost { position:fixed; left:-9999px; top:0; pointer-events:none;
+  white-space:pre-line; box-shadow:0 10px 28px rgba(0,0,0,.4); }
+.node.drag-ghost .body { max-height:96px; overflow:hidden; }
 /* dragging an annotation over a candidate parent: highlight it with a dashed ghost-colour outline
    (outline, not border, so no layout shift). Annotations only ever re-parent — no reorder/landing
    preview — so this outline is the whole affordance. */
@@ -997,8 +1007,12 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* inline title rename (double-click / F2 / on-create): edit the card's title in place.
    --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
    as .oc-title/.oc-note in the outliner below, which take the same variable. */
+/* user-select:text overrides .node's own `none` for the one element that IS text being edited: a
+   browser forces selection inside a contenteditable anyway, but the inherited `none` is enough to
+   make dragging that selection out (features/text-drag.ts) unreliable. */
 .node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-inner);
   cursor:text; white-space:pre-wrap; overflow:visible; background:var(--scrim);
+  -webkit-user-select:text; user-select:text;
   box-shadow:0 0 0 2px var(--scrim); }   /* fill the outline-offset gap so the scrim reaches the border */
 /* tag pills on a card — float along the card's lower edge, OUTSIDE the border, the same way
    .addnote floats at the opposite (bottom-left) corner, so a tagged card is exactly as tall as an

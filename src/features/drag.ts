@@ -19,7 +19,7 @@ import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
          subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin } from '../main.js';
 import { endInlineEdit, endBodyEdit } from './inline-edit.js';
-import { leaveClone, foldImageCardsIntoBody, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
+import { leaveClone, foldImageCardsIntoBody, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 
@@ -382,7 +382,7 @@ export function bindNodeDrag(n: MindNode): void {
              moved:false, dropTarget:null as string | null, dropMode:'child', dropSide:null, dropAfter:undefined, dropLine:null, alt:e.altKey, shift:e.shiftKey, cloned:false, rip:false,
              meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
              touch: e.pointerType === 'touch',  // higher move threshold for finger taps
-             imageMerge: null };
+             imageMerge: null, cardMerge: null };
     for (const id of ids) { const m2 = state.nodes.get(id); if (m2?.el){ m2.el.style.willChange = 'transform'; m2.el.classList.add('dragging'); } }
     // Continue/commit this drag on `window`, not `el` — pointer capture (above) is still requested
     // best-effort so the dragged card's own hover/other handlers stay quiet, but capture can be
@@ -480,7 +480,7 @@ function dragPointerUp(): void {
         // dropped onto a node? re-parent (the whole multi-selection, if that's what's dragging).
         // Alt+drop on empty canvas? detach to root. Otherwise it's just a move.
         const tgt = drag.dropTarget;
-        const { cloned, targets, alt, shift, clones, dropMode, dropSide, dropAfter, selRoots, imageMerge, dock } = drag;
+        const { cloned, targets, alt, shift, clones, dropMode, dropSide, dropAfter, selRoots, imageMerge, cardMerge, dock } = drag;
         clearDropTarget();
         hideLandingGhost();
         // Null drag NOW so every paintAll/paintEdges in the commit phase sees no active drag
@@ -499,6 +499,23 @@ function dragPointerUp(): void {
             setStatus(folded > 1 ? `Merged ${folded} images into "${mergeNode.title}"` : `Merged image into "${mergeNode.title}"`);
             paintAll(); applyLayouts(); paintAll();
             selectNode(mergeNode.id);
+            scheduleSave(); commitStep();
+            return;
+          }
+        }
+        // Alt-drop plain CARD(s) onto another card (cardMerge, resolved by updateDropTarget): fold
+        // their notes into that card's body under `## Title` headings and let them go, their children
+        // moving up onto the target. The card you dropped ONTO is the one that survives — it keeps
+        // its id, its file and everything authored on it. Supersedes reparent/detach, as above.
+        const fuseNode = cardMerge ? state.nodes.get(cardMerge) : null;
+        if (fuseNode) {
+          const merged = mergeCardsInto(fuseNode.id, selRoots);
+          if (merged){
+            setStatus(merged > 1
+              ? `Merged ${merged} cards into “${fuseNode.title}”`
+              : `Merged “${act.title}” into “${fuseNode.title}”`);
+            paintAll(); applyLayouts(); paintAll();
+            selectNode(fuseNode.id);
             scheduleSave(); commitStep();
             return;
           }
@@ -663,7 +680,7 @@ export function startNodeDrag(n: MindNode, clientX: number, clientY: number): vo
   const origins = new Map<string, Pt>([[n.id, { x:n.x, y:n.y }]]);
   ui.drag = { n, active:n, multi:false, sx:clientX, sy:clientY, cx:clientX, cy:clientY,
     start, targets, origins, selRoots:[n.id], moved:true, dropTarget:null, dropMode:'child', dropSide:null, dropAfter:undefined, dropLine:null,
-    alt:false, shift:false, cloned:false, rip:false, meta:false, touch:false, imageMerge:null };
+    alt:false, shift:false, cloned:false, rip:false, meta:false, touch:false, imageMerge:null, cardMerge:null };
   if (n.el){ n.el.style.willChange = 'transform'; n.el.classList.add('dragging'); }
   document.body.classList.add('grabbing');
 }
@@ -758,10 +775,13 @@ function dragFollow(): void {
   paintEdges();   // modifier changed mid-drag — always repaint (infrequent)
 }
 // Update the detach preview the instant Alt is pressed/released mid-drag, even if the pointer
-// isn't moving: repaint the dragged subtree (its colour previews the detached result) and the edges.
+// isn't moving: repaint the dragged subtree (its colour previews the detached result) and re-resolve
+// the drop target — ⌥ doesn't only mean "detach", it's also what turns a drop onto a card into a
+// MERGE (and an image drop into a fold), so the target's dashed outline has to appear the moment the
+// key goes down rather than on the next mouse jiggle. dragFollow repaints the edges as well.
 function paintDetachPreview(): void {
   if (ui.drag) for (const id of subtreeIds(ui.drag.active.id)){ const m = state.nodes.get(id); if (m) paintNode(m); }
-  paintEdges();
+  dragFollow();
 }
 window.addEventListener('keydown', (e) => {
   const drag = ui.drag;
@@ -848,12 +868,20 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   // Alt-dragging image CARD(s): the drop only ever FOLDS the image(s) into a plain body card — no
   // reparent, sibling, or reorder is possible (see request). Handled as its own branch below.
   const imgDrag = !!drag && !!drag.alt && drag.selRoots.length > 0 && drag.selRoots.every(id => isImageCard(state.nodes.get(id)));
+  // …and ⌥-dragging plain CARD(s)/annotation(s) over another card MERGES them into it: their notes
+  // fold into its body and the cards go (crud.ts mergeCardsInto). The image fold's twin, resolved the
+  // same way and taken as exclusive: while poised over a valid card the merge supersedes the
+  // reparent that a plain drag would do, and with nothing valid under the cursor ⌥ keeps its ordinary
+  // meaning (detach to root) — which is what makes the modifier free to carry this at all.
+  const mergeDrag = !!drag && !!drag.alt && !imgDrag && drag.selRoots.length > 0
+    && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
   let target: string | null = null;
   let mode: 'child' | 'sibling' | 'reorder' = 'child';
   let side: LayoutSide | null = null;
   let after: string | null | undefined = undefined;   // insertion anchor (sibling/reorder)
   let line: Seg | null = null;   // reorder gap indicator
   let mergeTarget: string | null = null;   // image-fold target card (imgDrag over a plain card)
+  let fuseTarget: string | null = null;    // card-merge target card (mergeDrag over a plain card)
   let dockTarget: string | null = null;    // frame whose tab band the dragged FRAME(s) are poised over
   let dockAfter: string | null = null;     // …and the tab they'd slot in after (null = first)
   // Dragging frames or plain cards — every root, so a mixed selection can't half-dock — over another
@@ -885,6 +913,10 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       const hn = state.nodes.get(hovered)!;
       if (!isImageCard(hn) && !isFrame(hn) && !isAnnotation(hn) && !isLockedEffective(hn)) mergeTarget = hovered;
     }
+  } else if (mergeDrag) {
+    // Only an unlocked card or annotation can swallow a note (canMerge). Over anything else nothing is
+    // set, so every preview stands down and the release falls through to ⌥'s detach.
+    if (hovered && canMerge(state.nodes.get(hovered)!)) fuseTarget = hovered;
   } else if (isAnnotation(dragged)) {
     // An annotation can't be reordered and never adopts siblings — dragging one only ever RE-PARENTS
     // it, to any non-annotation node (cards, frames, AND images). No sibling/reorder preview; the
@@ -1009,7 +1041,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const colorKey = (t: string | null, m: string): string => (!t || m === 'reorder') ? '' : m + ':' + t;
   const changed = !!drag && colorKey(drag.dropTarget, drag.dropMode) !== colorKey(target, mode);
   const prevLine = drag?.dropLine ?? null;
-  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropSide = side; drag.dropAfter = after; drag.dropLine = line; drag.imageMerge = mergeTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; }
+  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropSide = side; drag.dropAfter = after; drag.dropLine = line; drag.imageMerge = mergeTarget; drag.cardMerge = fuseTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; }
   if (changed) for (const id of sub) { const m = state.nodes.get(id); if (m) paintNode(m); }
   if (dockTarget) {
     // Dock preview: the target's own box outline goes dashed (.drop-target — "it lands in here", the
@@ -1024,10 +1056,11 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     t.el?.classList.add('drop-target');
     if (line) showInsertLine(line);
     else showLandingGhost(t.x + frameLabelW(t) + TAB_GAP, tabBandRect(t).y, frameLabelW(dragged), FRAME_TAB_H);
-  } else if (mergeTarget) {
-    // Alt-dragging image card(s) over a plain card: a dashed outline on the target is the whole
-    // affordance — no landing ghost, insertion bar, or reparent edge (target/side stayed null).
-    state.nodes.get(mergeTarget)!.el?.classList.add('drop-merge');
+  } else if (mergeTarget || fuseTarget) {
+    // Alt-dragging image card(s) — or plain cards — over a plain card: a dashed outline on the target
+    // is the whole affordance for both, since neither is a reparent (target/side stayed null), so
+    // there's no landing ghost, insertion bar or reparent edge to draw.
+    state.nodes.get((mergeTarget ?? fuseTarget)!)!.el?.classList.add('drop-merge');
     hideLandingGhost();
   } else if (target && side && isAnnotation(dragged)) {
     // Annotation reparent: only a dashed ghost-colour outline on the candidate parent — no landing

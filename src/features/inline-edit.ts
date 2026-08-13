@@ -66,11 +66,22 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it),
   // rather than just reverting the rename the way it does for an existing card.
   ui.inlineEdit = { id:n.id, orig:n.title, el:titleEl, isNew };
+  setCardDraggable(n, false);
   titleEl.setAttribute('contenteditable', 'plaintext-only');
   titleEl.classList.add('editing'); titleEl.classList.remove('invalid');
   titleEl.focus();
   const r = document.createRange(); r.selectNodeContents(titleEl);     // select-all so typing replaces
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
+}
+// A card element is `draggable` (the ⌥ card-file export, features/clipboard.ts), and a draggable
+// ANCESTOR is decisive: the browser then resolves any drag begun inside it as that ELEMENT's drag, so
+// a selection can never be dragged out of the contenteditable title (features/text-drag.ts) while it
+// holds. A <textarea> is the exception that hid this — a text control with a selection outranks the
+// ancestor, which is why the note half of the gesture worked and the title half could not. So the card
+// stops being draggable for as long as an editor is open on it; exporting a card mid-rename isn't a
+// gesture anyone can be making, and every teardown path puts it back.
+export function setCardDraggable(n: MindNode | undefined, on: boolean): void {
+  if (n?.el) n.el.draggable = on;
 }
 // Live: validate + reflow as the user types. We never touch n.title here (layout uses the live DOM
 // height, not the stored title), so a half-typed invalid title can't corrupt anything.
@@ -89,12 +100,35 @@ export function onInlineKeydown(e: KeyboardEvent, n: MindNode): void {
   // ↓ from the title drops straight into editing the body (handy right after creating a card)
   else if (e.key === 'ArrowDown'){ e.preventDefault(); e.stopPropagation(); endInlineEdit(); startBodyEdit(n, { atStart:true }); }
 }
+// The note editor's twin of dropInlineEdit below: drop it WITHOUT reading the textarea back, because
+// the caller (crud.ts cutBodyRange) has already written the shortened n.body and endBodyEdit would
+// commit the textarea's pre-cut value straight over it. The textarea element itself goes with the
+// next paintNode, which re-renders .body once no editor claims this card.
+export function dropBodyEdit(): void {
+  const be = ui.bodyEdit; if (!be) return;
+  ui.bodyEdit = null;
+  setCardDraggable(state.nodes.get(be.id), true);
+  be.el.classList.remove('editing');
+}
+// Drop the title editor WITHOUT reading its text back: the caller has already written n.title (the
+// text-drag cut, features/crud.ts cutTitleRange), and the element still shows the PRE-cut title, so
+// endInlineEdit would write that straight back over it. Same teardown otherwise; `ui.inlineEdit` is
+// nulled first, which is what makes the blur below a no-op, and the caller owns the undo step.
+export function dropInlineEdit(): void {
+  const ie = ui.inlineEdit; if (!ie) return;
+  ui.inlineEdit = null;
+  setCardDraggable(state.nodes.get(ie.id), true);
+  ie.el.removeAttribute('contenteditable');
+  ie.el.classList.remove('editing', 'invalid');
+  ie.el.blur();
+}
 // Commit (or cancel) the rename: keep the typed title if valid, else fall back to the node's
 // current (last-valid) title. Restores canonical text, then reflows + saves.
 export function endInlineEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   const ie = ui.inlineEdit; if (!ie) return;
   ui.inlineEdit = null;                               // null first → the blur handler becomes a no-op
   const n = state.nodes.get(ie.id);
+  setCardDraggable(n, true);
   ie.el.removeAttribute('contenteditable');
   ie.el.classList.remove('editing', 'invalid');
   ie.el.blur();                                       // ensure keyboard closes on iOS when ended by keypress
@@ -136,6 +170,7 @@ export function startBodyEdit(n: MindNode, { atStart = false }: { atStart?: bool
   const ta = document.createElement('textarea');
   ta.className = 'body-edit'; ta.spellcheck = false; ta.value = n.body;
   ui.bodyEdit = { id:n.id, orig:n.body, el:bodyEl, ta };
+  setCardDraggable(n, false);   // see the note above: an editor open on a card outranks its file-export drag
   n.el.classList.remove('no-body');                            // give the body slot room while editing
   bodyEl.innerHTML = ''; bodyEl.appendChild(ta);
   bodyEl.classList.add('editing');
@@ -172,6 +207,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   ui.bodyEdit = null;                                   // null first → the blur handler becomes a no-op
   be.ta.blur();                                         // ensure keyboard closes on iOS when ended by keypress
   const n = state.nodes.get(be.id);
+  setCardDraggable(n, true);
   be.el.classList.remove('editing');
   const changed = !!n && !cancel && be.ta.value !== be.orig;
   if (changed){ n.body = be.ta.value; n.dirty = true; }

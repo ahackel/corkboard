@@ -72,7 +72,9 @@ selection core and wires the global keyboard/toolbar events.
   sharing state via `ui`: `drag.ts` (`bindNodeDrag` + clone/detach/auto-pan + reparent-by-drop),
   `gestures.ts` (canvas pan/zoom/marquee, registers its own listeners on import), `inline-edit.ts`
   (in-place title/body editing: `startInlineEdit`/`startBodyEdit`/`end…`), `crud.ts` (node
-  lifecycle: `createNode`/`addChild`/`createSibling`/`duplicateSelection`/`delete…`/`extractToChild`),
+  lifecycle: `createNode`/`addChild`/`createSibling`/`duplicateSelection`/`delete…`/`extractToChild`
+  /`dropCardText`/`mergeCardsInto`), `text-drag.ts` (dragging a card’s selected text out of its
+  editor — see the MERGING section below; registers document listeners),
   `attachments.ts` (image paste/drop, registers document listeners), `search.ts` (find box,
   exports `searchBox`), `images.ts` (inline image resolution), `breadcrumbs.ts` (`#scopeBar`: the
   open-frame path, the one way back out of an open frame — see the OPENING section below).
@@ -605,6 +607,89 @@ moved to `Space`, `Tab` and the canvas right-click, which all land it in that fr
   `ui.renameTimer` every fresh interaction had to `clearTimeout`, the `ui.pendingGroupFold` stash that
   let a double-click fold a just-reduced multi-selection, and `Drag.downTarget`. Don't reintroduce a
   timer here: it can only race the double-click it was invented to lose to.
+
+**MERGING notes and BREAKING them apart are two DRAGS, not two commands** — deliberately, and it's
+the one place this app parts company with its closest precedents (Scrivener's `Documents ▸ Merge` +
+`Split at Selection`, Ulysses' `Merge Sheets` + `Split at Selection`, both list commands on a
+multi-selection). There is no menu entry and no shortcut for either, and adding one is a decision, not
+a gap: what a canvas has that a binder doesn't is a place to point at. Neither writes a new frontmatter
+key — a merge is a body edit plus a delete, a break is a body edit plus a create.
+- **⌥-drop card(s) onto a card MERGES them into it** (`mergeDrag`/`cardMerge` in `features/drag.ts`,
+  `mergeCardsInto` in `crud.ts`). The card you dropped ONTO survives — it keeps its id, its file, its
+  colour, size and flags — and each dragged note folds into its body as `## Title` then its text, in
+  the order the cards were selected. Tags are unioned in (a tag labels content that just moved); their
+  CHILDREN come up onto the target rather than going with them, since merging notes must never take a
+  branch with it. `canMerge` is the ONE kind test, and it answers for both sides of the gesture: a
+  plain card or an annotation (which contributes text and no heading, and takes none either — an
+  annotation IS its body). Every other kind is a box or a leaf whose own shape is the point, so folding
+  it into a body would throw away exactly what it is. Merging INTO an annotation is the one case that
+  needs its own line (`kidHome`): an annotation is a LEAF — `isLeafType`, it never adopts children — so
+  the swallowed cards' children go to the card that annotation is PINNED to (or the top level), which
+  is where they'd have gone had the annotation not been in the way.
+  It is the **image fold's twin** (`imageMerge`/`foldImageCardsIntoBody`), resolved in the same branch
+  chain and previewed with the same `.drop-merge` dashed outline, and that's what makes ⌥ affordable
+  here: the modifier's ordinary meaning (detach to root) applies when there's nothing valid under the
+  cursor, so nothing was displaced — the plain drag still reparents, ⇧ still clones, ⌘ still toggles
+  the selection. The centre/edge zones on a card were already spoken for (sibling/child), which is why
+  this needs a modifier at all. One knock-on: `paintDetachPreview` (⌥ pressed mid-drag) now goes
+  through `dragFollow`, so the target's outline appears on the KEYPRESS rather than on the next mouse
+  jiggle — ⌥ no longer only means "detach", so repainting the dragged subtree alone is no longer the
+  whole preview.
+- **Dragging a card's selected text OUT of its editor BREAKS it apart** (`features/text-drag.ts` →
+  `dropCardText`), after Heptabase's whiteboard gesture: drop it on empty canvas and it becomes a card
+  of its own, drop it in a container and it becomes a card THERE, drop it on another card (or an
+  annotation) and it's appended to that note. Always a MOVE — the text leaves the source, whose editor
+  is DROPPED rather than ended, since `endBodyEdit`/`endInlineEdit` would write the editor's stale
+  value straight back over what was just cut (`dropInlineEdit` is that teardown for the title).
+  **Either half of a card can be the source** — its note or its TITLE — and `TextSource`
+  (`{id, part, start, end}`) is what says which, captured at `dragstart` and read back live at the drop
+  (`liveText`), since the offsets are into what the EDITOR shows, not into `n.title`/`n.body`. The two
+  differ in three ways and nowhere else: a contenteditable has no `selectionStart`, so a title range is
+  measured off a `Range` (`selectedRangeIn`); a title is one line, so the new card gets it as a title
+  and no body; and a title is the card's FILENAME, so `cutTitleRange` can REFUSE — what's left has to
+  stand as a title on its own (`titleProblem`, and never empty), and when it wouldn't, nothing is cut
+  and nothing is created rather than the gesture half-happening. `.title.editing` also has to opt out
+  of `.node`'s `user-select:none`: a browser forces selection inside a contenteditable anyway, but the
+  inherited `none` is enough to make dragging that selection out unreliable.
+  **Where the new card belongs is ONE rule read both ways: the box you dropped in governs.** Dropped in
+  a container, it's that container's child. Dropped on the open canvas *from a card that lives in a
+  container*, it goes to the TOP LEVEL (`detachParentId`) — dropping on the canvas is how a note comes
+  OUT. That second half is what "a sibling of the source" got wrong: it parented the card back INSIDE
+  the box, so dragging text out of a stack's row put a new ROW in the outline instead of a card where
+  you dropped it, and out of a frame's card put one at a drop point the box's `overflow:hidden` clipped
+  away to nothing. Only a source already on the canvas keeps the sibling reading (slotted right after
+  it, like `createSibling`), so the new card joins the branch it was cut from. The "am I in a box" test
+  is `hostFrame`, and it's the right one precisely because it stops at the scope root: inside an OPEN
+  frame there is no box to come out of — that frame IS the canvas — so its cards stay siblings. `titleAndBodyFrom` gives the new card its title
+  from the first non-blank line (marker stripped), which is what `⌘⇧E` already did implicitly and is
+  now shared with it (`splitTitleText`).
+  **What rides the cursor is a CARD** (`buildGhost` → `setDragImage`, `.node.drag-ghost` in
+  `styles.css`): the default drag image is a translucent snapshot of the dragged LETTERS, which reads
+  as moving text around, when the whole point of the gesture is that a card comes out of it. So the
+  ghost is a real `.node` carrying the title the new card would get — the same `splitTitleText` reading
+  the drop will make — tinted with the SOURCE card's resolved colour, since a sibling is what the text
+  becomes and it would inherit exactly that. It has to be IN the document for the browser to snapshot
+  it during `dragstart`, so it's parked off-screen horizontally (`display:none`/`visibility:hidden`
+  snapshot as nothing, and moving it off vertically only would keep its width) and removed on the next
+  tick — removing it inside the handler can beat the snapshot.
+  This rides the browser's NATIVE text drag (a textarea selection is draggable for free) rather than
+  the pointer machinery in `drag.ts`, which is what keeps it out of that file's gesture vocabulary
+  entirely — at the cost of being desktop-only, leaving `⌘⇧E` (extract to a child) as the way to break
+  a note apart on iPad. **A card element being `draggable` (the ⌥ card-file export,
+  `features/clipboard.ts`) gets in the way of this twice, and each half needs its own answer.**
+  · A draggable ANCESTOR is decisive about what a drag begun inside it drags: the browser resolves it
+  as that ELEMENT's drag, so a selection can never come out of the contenteditable TITLE while it
+  holds. A `<textarea>` is the exception that hid this — a text control with a selection outranks the
+  ancestor — which is why the note half worked and the title half could not. So `setCardDraggable`
+  turns it off for as long as an editor is open on that card (every teardown puts it back); exporting a
+  card mid-rename isn't a gesture anyone can be making. `.title.editing` also opts out of `.node`'s
+  `user-select:none` for good measure.
+  · That same `dragstart` handler **cancels every native drag it doesn't own**, so it must also stand
+  aside for this one — `cardTextDrag` is the shared resolver, and it tests the CARD the drag began on,
+  not just "some editor is open", or an editor left open elsewhere would make that card's export (or an
+  ⌥ image extract) stand down. And the drag DATA is left to the browser:
+  the one drop we don't handle is the selection dragged back into its own note, which is a plain
+  in-textarea move and must stay one (hence `destAt` returning null for the source card, editor or not).
 
 **Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `main.ts`):** `↑` opens the selected
 frame, `↓` leaves the open one, `→` unfolds, `←` folds. All four are about DEPTH, in the two senses
