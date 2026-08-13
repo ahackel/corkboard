@@ -9,4 +9,6 @@ mm_y: 331
 mm_collapsed: true
 ---
 
+# ⚡ Power features
+
 The handy extras: undo/redo, the right-click menu, pasting images, a freehand sketch layer, and a safe read-only mode.

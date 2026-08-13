@@ -9,6 +9,8 @@ mm_y: 392
 mm_collapsed: true
 ---
 
+# 🅰️ Keyboard shortcuts
+
 ## Create
 - `Space` — new card at the pointer
 - `Tab` — add a child

@@ -10,7 +10,7 @@ import { ui, gPointers, type Pt, type GestureEvt } from '../core/ui-state.js';
 import { nodeW, nodeH, selectNode, setSelectionSet, exitScope } from '../main.js';
 import { scopeActive } from '../nav/scope.js';
 import { createNode, centredAt } from './crud.js';
-import { endInlineEdit, endBodyEdit } from './inline-edit.js';
+import { endInPlaceEdit } from './inline-edit.js';
 import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
 
 const marqueeEl = document.createElement('div');
@@ -30,8 +30,7 @@ stage.addEventListener('pointerdown', (e) => {
   if (e.button === 2) return;         // right-click = context menu only: no marquee, keep editors/selection
   cancelViewAnim();
   // Tapping the canvas background closes any open in-place text editor (important on touch)
-  if (ui.inlineEdit) { endInlineEdit(); return; }
-  if (ui.bodyEdit)   { endBodyEdit();   return; }
+  if (ui.bodyEdit || ui.titleEdit) { endInPlaceEdit(); return; }
 
   if (e.pointerType !== 'mouse'){                   // touch / pen
     gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
@@ -155,8 +154,7 @@ window.addEventListener('pointercancel', (e) => {
 // Registering the touch pointer in gPointers lets a second finger still upgrade to pinch-zoom.
 export function beginMarqueeFromNode(e: PointerEvent, nodeId: string): void {
   cancelViewAnim();
-  if (ui.inlineEdit) endInlineEdit();
-  if (ui.bodyEdit)   endBodyEdit();
+  endInPlaceEdit();
   if (e.pointerType !== 'mouse') gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
   ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey, base:new Set(state.sel), moved:false, clickNode:nodeId };
   drawMarquee(e.clientX, e.clientY);

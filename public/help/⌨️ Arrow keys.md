@@ -8,6 +8,8 @@ mm_y: 272
 mm_collapsed: true
 ---
 
+# ⌨️ Arrow keys
+
 Four keys, all about **depth** — which frame you're standing in, and whether a branch is showing:
 
 - `↑` — **open** the selected frame. The canvas becomes its inside.

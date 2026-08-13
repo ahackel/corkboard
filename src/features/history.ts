@@ -12,7 +12,7 @@ import { frameBox } from '../view/camera.js';
 import { scheduleSave, scheduleSaveSketch, scheduleSaveSettings } from '../data/persistence.js';
 import { paintAll, setSelectionSet, popScopeFor, nodeW, nodeH } from '../main.js';
 import { paintStrokes } from './sketch.js';
-import { endInlineEdit, endBodyEdit } from './inline-edit.js';
+import { endInPlaceEdit } from './inline-edit.js';
 import { isScopeRoot } from '../nav/scope.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
@@ -183,7 +183,7 @@ function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string
 }
 export function undo(): void {
   if (state.readOnly) return;
-  endInlineEdit(); endBodyEdit();      // an open edit session becomes the step being undone
+  endInPlaceEdit();      // an open edit session becomes the step being undone
   commitStep();                        // flush any dangling pending step
   const step = undoStack.pop();
   if (!step) { setStatus('Nothing to undo'); return; }
@@ -193,7 +193,7 @@ export function undo(): void {
 }
 export function redo(): void {
   if (state.readOnly) return;
-  endInlineEdit(); endBodyEdit();
+  endInPlaceEdit();
   commitStep();                        // a fresh step clears redo, so this usually empties it
   const step = redoStack.pop();
   if (!step) { setStatus('Nothing to redo'); return; }

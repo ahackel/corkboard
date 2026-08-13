@@ -5,7 +5,7 @@
 // `store` is the active backend (reassigned by useStore); main holds the open() flows.
 // ============================================================
 import { state, world, setStatus, isBoxType, GRID_STYLES, GRID_SIZES, type MindNode, type LayoutSide } from '../core/state.js';
-import { parseMd, serializeMd } from '../utils/frontmatter.js';
+import { parseMd, serializeMd, firstLineLabel, fileStem } from '../utils/frontmatter.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf } from '../utils/model.js';
@@ -108,11 +108,15 @@ export async function exportZip(): Promise<void> {
   const nodes = [...state.nodes.values()];
   if (!nodes.length){ setStatus('Nothing to export yet.'); return; }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
+  // Lowercased, because the folder this unpacks into collides case-insensitively on macOS/Windows —
+  // same reason desiredFileFor tests that way.
   const used = new Set<string>();
   const files: { name: string; data?: string; bytes?: Uint8Array }[] = nodes.map(n => {
-    let name = n.file || (safeName(n.title) + '.md');
-    while (used.has(name)) name = name.replace(/(\.md)?$/, '') + '-1.md';
-    used.add(name);
+    // A node that has never been saved has no file yet; name it the way desiredFileFor would, off
+    // its title or (untitled) off its first line.
+    let name = n.file || (safeName(n.title.trim() || firstLineLabel(n.body).title) + '.md');
+    while (used.has(name.toLowerCase())) name = name.replace(/(\.md)?$/, '') + '-1.md';
+    used.add(name.toLowerCase());
     return { name, data: serializeMd(n) };
   });
   // collect every vault-relative image referenced in a body, and pack the files alongside the notes
@@ -146,10 +150,8 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
 
   // First pass: read every .md and parse it (layout now lives in each note's frontmatter).
   const entries: { rel: string; parsed: ReturnType<typeof parseMd> }[] = [];
-  for (const { path, text } of await store.list()) {
-    const base = path.slice(path.lastIndexOf('/') + 1);
-    entries.push({ rel: path, parsed: parseMd(text, base) });
-  }
+  for (const { path, text } of await store.list())
+    entries.push({ rel: path, parsed: parseMd(text) });
 
   // Ids are ephemeral (minted fresh each load) since the filename is the real identity —
   // parent links are stored/resolved BY PATH, so ids never need to survive a reload.
@@ -178,6 +180,16 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   };
   for (const { rel, parsed } of entries) {
     const { mm, ...rest } = parsed;
+    // An UNMIGRATED note: no `# ` heading AND nothing in its body either. Its title used to BE its
+    // filename, so there is no longer anything in the file to read a name off, and the card would show
+    // up as a blank on the canvas and "Untitled" in every list. So take the name off the filename ONE
+    // last time and mark the note dirty, which persists it as the `# Heading` it should have been —
+    // after that the file stands on its own and this never fires for it again.
+    // Deliberately only when the body is EMPTY. A note WITH text and no heading is a legitimately
+    // UNTITLED card under this format (it shows its text and no title row, which is the point of
+    // allowing it), and promoting its filename to a title would put a name on something nobody named.
+    const unmigrated = !rest.title.trim() && !rest.body.trim();
+    if (unmigrated) rest.title = fileStem(rel);
     const hasRel = (mm.px != null && mm.py != null);
     const hasLegacy = (mm.x != null && mm.y != null);
     const hasPos = hasRel || hasLegacy;
@@ -196,7 +208,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       h: mm.h ?? undefined,
       query: mm.query || undefined,
       side: (mm.side || undefined) as LayoutSide | undefined,
-      ...rest, dirty:false, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
+      ...rest, dirty:unmigrated, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
     };
     if (hasRel) relSeed.add(node.id);
     else if (hasLegacy) legacySeed.add(node.id);
@@ -267,16 +279,32 @@ export function updateMapTitle(): void {
 function safeName(title: string): string {
   return (title || 'Untitled').trim().replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g,' ').slice(0,120);
 }
-// returns the filename a node SHOULD have, given its title, keeping its current directory.
+// The filename a node SHOULD have, given its title, keeping its current directory.
+//
+// The filename is a SLUG, not the node's identity any more — the title lives in the note itself (the
+// body's leading heading, utils/frontmatter.ts splitHeading), so this is free to suffix a colliding
+// name without that suffix ever being read back as part of the title. Which is what lets two cards
+// share a title: `Notes.md` and `Notes 2.md`, both titled "Notes".
+//
+// An UNTITLED card has no name to slug, so it gets one off its first line — minted ONCE and never
+// re-derived. Two reasons it can't track the text the way a title does: the first line of a note is
+// edited constantly (a card's whole text is one field now), so re-deriving would rename the file, and
+// its children's mm_parent with it, on every edit; and re-deriving would mass-rename a vault whose
+// notes don't carry their titles as headings yet. A slug that goes stale costs nothing — an untitled
+// card has no name to be wrong about.
 function desiredFileFor(n: MindNode): string {
   const dir = n.file ? n.file.slice(0, n.file.lastIndexOf('/')+1) : '';
-  const base = safeName(n.title) + '.md';
-  let rel = dir + base;
-  // avoid clobbering a DIFFERENT node that already uses this filename
+  const title = n.title.trim();
+  if (!title && n.file) return n.file;              // untitled and already named: keep the slug
+  const stem = safeName(title || firstLineLabel(n.body).title);
+  let rel = dir + stem + '.md';
+  // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since
+  // that's how the filesystem collides on macOS/Windows: "Notes" and "notes" are one file there, so
+  // an exact-match test would hand both nodes "their own" name and let the second write eat the first.
+  const taken = (p: string): boolean =>
+    [...state.nodes.values()].some(o => o !== n && o.file?.toLowerCase() === p.toLowerCase());
   let i = 2;
-  while ([...state.nodes.values()].some(o => o !== n && o.file === rel)) {
-    rel = dir + safeName(n.title) + ' ' + (i++) + '.md';
-  }
+  while (taken(rel)) rel = dir + stem + ' ' + (i++) + '.md';
   return rel;
 }
 export async function saveAll(): Promise<void> {

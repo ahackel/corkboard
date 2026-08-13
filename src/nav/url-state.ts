@@ -27,6 +27,7 @@ import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
 import { outlineActive, setOutline } from '../features/outline.js';
 import { searchBox, openSearch, runSearch } from '../features/search.js';
+import { nodeLabel } from '../utils/model.js';
 
 function slugify(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'map';
@@ -42,7 +43,7 @@ function decodeFilePath(encoded: string): string {
 
 export function currentDocumentTitle(): string {
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
-  return node ? `${node.title} — ${store.name}` : `Corkboard — ${store.name}`;
+  return node ? `${nodeLabel(node)} — ${store.name}` : `Corkboard — ${store.name}`;
 }
 export function updateDocumentTitle(): void {
   document.title = currentDocumentTitle();

@@ -9,6 +9,8 @@ mm_y: 26
 mm_collapsed: true
 ---
 
+# ✏️ Add & edit cards
+
 Everything starts with a card. Create them, name them, and write notes right on the canvas.
 
 **Expand this branch** for the how-to on creating, editing, and formatting.

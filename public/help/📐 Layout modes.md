@@ -8,6 +8,8 @@ mm_y: 209
 mm_collapsed: true
 ---
 
+# 📐 Layout modes
+
 **Any card can be made wider** — drag its left or right edge. Handy when a long title or note wraps
 into a tall, narrow card: widen it and the text re-flows, so the card gets shorter. The height always
 follows the content, and a card never goes narrower than the standard width. Notes pinned to a card

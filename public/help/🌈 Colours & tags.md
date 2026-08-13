@@ -8,6 +8,8 @@ mm_y: 148
 mm_collapsed: true
 ---
 
+# 🌈 Colours & tags
+
 Open the side panel (`S`) with a card selected:
 
 - **Colour:** pick a swatch. Children **inherit** the colour by default, so a whole branch shares a hue.

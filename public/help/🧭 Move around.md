@@ -9,4 +9,6 @@ mm_y: 87
 mm_collapsed: true
 ---
 
+# 🧭 Move around
+
 Pan, zoom, snap the view to what matters, and jump straight to any card by name.

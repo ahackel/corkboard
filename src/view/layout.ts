@@ -362,9 +362,17 @@ function stackInnerW(stack: MindNode): number { return nodeW(stack) - 2 * FRAME_
 // The height a stack reserves above its first row for its OWN title-row — measured live, so a
 // multi-line title pushes the rows down instead of being drawn over (STACK_HEADER is the pre-render
 // fallback). Shared by the layout pass and the drop resolver so both agree where row 0 starts.
+// Measures the title ROW *and* the BODY, because a stack's header is now its own rendered text (the row
+// holds only the fold chip and the done checkbox, and collapses to nothing without them). `:scope >` on
+// both: a stack's rows are cards with a .title-row and a .body of their own, and although they live in a
+// sibling wrapper rather than inside the stack's element, an unscoped query here would be one refactor
+// away from measuring a row's header instead of the stack's.
 function stackHeaderH(stack: MindNode): number {
-  const trH = (stack.el?.querySelector('.title-row') as HTMLElement | null)?.offsetHeight ?? 0;
-  return trH ? FRAME_BORDER + STACK_PAD + trH + STACK_GAP : STACK_HEADER;
+  const el = stack.el;
+  const part = (sel: string): number =>
+    (el?.querySelector(sel) as HTMLElement | null)?.offsetHeight ?? 0;
+  const h = part(':scope > .title-row') + part(':scope > .body');
+  return h ? FRAME_BORDER + STACK_PAD + h + STACK_GAP : STACK_HEADER;
 }
 // Size an EMPTY stack: its own title row, inset equally all round. The height is the zero-row
 // reduction of the `node.h = …` line that closes the stack branch in layoutSubtree (with no rows, cy

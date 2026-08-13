@@ -8,6 +8,8 @@ mm_y: 209
 mm_collapsed: true
 ---
 
+# ✅ Checklists
+
 Turn a card into a checklist from the side panel (`S`):
 
 - Each **direct child** gets a done checkbox.

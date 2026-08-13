@@ -13,14 +13,13 @@
 // read-only behave the same as on the canvas.
 import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
-import { childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden } from '../utils/model.js';
+import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
 import { orderedKids, sideOf, deriveSide, orderAxisIsX, applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
-import { titleProblem } from './inline-edit.js';
 import { createNode, addChild, deleteNode, duplicateSelection } from './crud.js';
 import { reparentOnly } from './drag.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -64,16 +63,15 @@ export function startRowTitleEdit(n: MindNode, { isNew = false }: { isNew?: bool
   touch(n.id);   // the whole edit session becomes ONE undo step (incl. a fresh card's creation)
   rowEditId = n.id; rowEditIsNew = isNew;
   titleEl.setAttribute('contenteditable', 'plaintext-only');
-  titleEl.classList.add('editing'); titleEl.classList.remove('invalid');
+  titleEl.classList.add('editing');
   titleEl.focus();
   const r = document.createRange(); r.selectNodeContents(titleEl);   // select-all so typing replaces
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
 }
-function onRowTitleInput(n: MindNode, titleEl: HTMLElement): void {
-  if (rowEditId !== n.id) return;
-  const problem = titleProblem(titleEl.textContent ?? '', n.id);
-  titleEl.classList.toggle('invalid', !!problem);
-}
+// Nothing to validate any more: a title may be EMPTY (an untitled card, which reads as "Untitled" in a
+// row — see nodeLabel) and may be a DUPLICATE (the file takes the suffix, not the name). titleProblem
+// had no rule left to enforce, so the whole live-validation pass, and the `.invalid` styling it drove,
+// went with it.
 function onRowTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   if (rowEditId !== n.id) return;
   if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); endRowTitleEdit(); }
@@ -85,7 +83,7 @@ function endRowTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   const isNew = rowEditIsNew; rowEditIsNew = false;
   const titleEl = findRowTitle(id);
   const n = state.nodes.get(id);
-  if (titleEl) { titleEl.removeAttribute('contenteditable'); titleEl.classList.remove('editing', 'invalid'); titleEl.blur(); }
+  if (titleEl) { titleEl.removeAttribute('contenteditable'); titleEl.classList.remove('editing'); titleEl.blur(); }
   if (!n) { commitStep(); return; }
   if (cancel && isNew) {                               // Esc on a freshly-created row = cancel creation
     deleteNode(n.id);
@@ -93,8 +91,8 @@ function endRowTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
     setStatus('Cancelled new card');
     return;
   }
-  const val = (titleEl?.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // titles map to filenames
-  if (!cancel && !titleProblem(val, n.id)) n.title = val;
+  const val = (titleEl?.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // a title is one line
+  if (!cancel) n.title = val;
   n.dirty = true;
   scheduleSave();
   commitStep();                                        // one undo step per rename session
@@ -172,7 +170,7 @@ const olHeadEl = document.querySelector('.ol-head') as HTMLElement;
 const olSearchInput = document.getElementById('olSearch') as HTMLInputElement;
 let outlineQuery = '';
 function matchesOutlineQuery(n: MindNode, q: string): boolean {
-  return n.title.toLowerCase().includes(q) || (!!n.body && n.body.toLowerCase().includes(q));
+  return nodeLabel(n).toLowerCase().includes(q) || (!!n.body && n.body.toLowerCase().includes(q));
 }
 // Every match plus its ancestor chain, so filtered rows still read as a tree.
 function outlineSearchVisible(q: string): Set<string> {
@@ -335,12 +333,11 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
 
   const title = document.createElement('span');
   title.className = 'ol-title';
-  title.textContent = n.title;
+  title.textContent = nodeLabel(n);   // an untitled card reads as its first line, else "Untitled"
   // No click-to-rename any more — renaming is a ⋯-menu action (see openRowMenu) so a plain press
   // on the card is unambiguously "start a drag", never "start typing". Read-only sessions still
   // tap through to the sheet as a read-only viewer, since that's not an edit.
   if (state.readOnly) title.onclick = () => openEditorSheet(n);
-  title.addEventListener('input', () => onRowTitleInput(n, title));
   title.addEventListener('keydown', (e) => onRowTitleKeydown(e, n));
   title.addEventListener('blur', () => { if (rowEditId === n.id) endRowTitleEdit(); });
 
@@ -370,7 +367,7 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
       chip.innerHTML = FOLD_CHIP_SVG;
       chip.title = 'Collapse';
     }
-    chip.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} “${n.title}”`);
+    chip.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} “${nodeLabel(n)}”`);
     chip.addEventListener('pointerdown', (e) => e.stopPropagation());   // never starts a row drag
     chip.addEventListener('click', (e) => {
       e.stopPropagation();                                              // …and never selects, either
@@ -382,11 +379,11 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
   if (!state.readOnly) {
     const open = document.createElement('button');
     open.className = 'ol-open'; open.innerHTML = TRI; open.title = 'Open card';
-    open.setAttribute('aria-label', `Open “${n.title}” for editing`);
+    open.setAttribute('aria-label', `Open “${nodeLabel(n)}” for editing`);
     open.onclick = () => openBranchEditor(n.id, 'none');
     const more = document.createElement('button');
     more.className = 'ol-more'; more.textContent = '⋮'; more.title = 'Card actions';
-    more.setAttribute('aria-label', `Actions for “${n.title}”`);
+    more.setAttribute('aria-label', `Actions for “${nodeLabel(n)}”`);
     more.onclick = () => { const r = more.getBoundingClientRect(); openRowMenu(n, r.left, r.bottom + 4); };
     row.append(open, more);
 
@@ -447,7 +444,7 @@ function updateAddBtnMode(): void {
   // The label names the target, since the button's meaning now depends on the selection — and it's
   // the only place that says so (a phone has no status bar in view).
   const parent = addTarget();
-  const label = parent ? `New card in “${parent.title}”` : 'New root card';
+  const label = parent ? `New card in “${nodeLabel(parent)}”` : 'New root card';
   olAddBtn.title = active ? 'Clear search' : label + (parent ? ' (Tab)' : '');
   olAddBtn.setAttribute('aria-label', active ? 'Clear search' : label);
   olAddPlus.textContent = active ? '×' : '+';
@@ -553,10 +550,10 @@ export function reorderSibling(id: string, dir: -1 | 1): void {
   const sibs = orderedKids(parent, childrenOf(parent.id)).filter(k => sideOf(parent, k) === side);
   const i = sibs.findIndex(k => k.id === id);
   const other = i >= 0 ? sibs[i + dir] : undefined;
-  if (!other) { setStatus(`“${n?.title}” is already at the ${dir < 0 ? 'top' : 'bottom'}`); return; }
+  if (!other) { setStatus(`“${n ? nodeLabel(n) : ""}” is already at the ${dir < 0 ? 'top' : 'bottom'}`); return; }
   const newOrder = sibs.slice(); newOrder[i] = other; newOrder[i + dir] = n;
   reorderBucket(parent, sibs, newOrder, orderAxisIsX(parent, side));
-  setStatus(`Moved “${n.title}” ${dir < 0 ? 'up' : 'down'}`);
+  setStatus(`Moved “${nodeLabel(n)}” ${dir < 0 ? 'up' : 'down'}`);
 }
 
 // ---- drag rows: reorder, reparent, or move between parents (press anywhere on the card) ----
@@ -777,7 +774,7 @@ function commitRowDrop(n: MindNode, drop: RowDrop): boolean {
   const newOrder = others.slice();
   newOrder.splice(drop.kind === 'before' ? idx : idx + 1, 0, n);
   reorderBucket(parent, sibs, newOrder, orderAxisIsX(parent, side));
-  setStatus(`Moved “${n.title}” ${drop.kind} “${ref.title}”`);
+  setStatus(`Moved “${nodeLabel(n)}” ${drop.kind} “${nodeLabel(ref)}”`);
   return true;
 }
 // Drop beside a ROOT row → make the card a top-level root too, ordered among the roots by its
@@ -790,7 +787,7 @@ function dropAtRootLevel(n: MindNode, ref: MindNode, pos: 'before' | 'after'): b
   const next = pos === 'before' ? roots[idx] : roots[idx + 1];
   const newY = prev && next ? (prev.y + next.y) / 2 : prev ? prev.y + 200 : next!.y - 200;
   makeRoot(n, newY - n.y);   // land the subtree at newY among the roots, formation kept
-  setStatus(`“${n.title}” is now a top-level card`);
+  setStatus(`“${nodeLabel(n)}” is now a top-level card`);
   return true;
 }
 
@@ -820,7 +817,7 @@ function openMovePicker(n: MindNode): void {
 function closePicker(): void { picker.classList.remove('open'); moveSrc = null; }
 
 function crumbFor(n: MindNode): string {
-  return [...ancestors(n)].reverse().map(p => p.title).join(' › ');
+  return [...ancestors(n)].reverse().map(p => nodeLabel(p)).join(' › ');
 }
 function renderPicker(): void {
   const src = moveSrc ? state.nodes.get(moveSrc) : undefined;
@@ -829,7 +826,7 @@ function renderPicker(): void {
   mpList.textContent = '';
   const label = document.createElement('div');
   label.className = 'mp-label';
-  label.textContent = `Move “${src.title}” under…`;
+  label.textContent = `Move “${nodeLabel(src)}” under…`;
   mpList.appendChild(label);
   const item = (title: string, crumb: string, color: string | null, run: () => void): void => {
     const b = document.createElement('button');
@@ -849,9 +846,9 @@ function renderPicker(): void {
   const targets = [...state.nodes.values()]
     .filter(c => c.id !== src.id && c.id !== src.parent && !isAncestor(src.id, c.id) && !isLeafType(c))   // leaves can't be parents
     .filter(c => !isLockedEffective(c))   // locked cards never adopt new children
-    .filter(c => !q || c.title.toLowerCase().includes(q))
-    .sort((a, b) => a.title.localeCompare(b.title));
-  for (const c of targets) item(c.title, crumbFor(c), effectiveColor(c), () => moveTo(src, c));
+    .filter(c => !q || nodeLabel(c).toLowerCase().includes(q))
+    .sort((a, b) => nodeLabel(a).localeCompare(nodeLabel(b)));
+  for (const c of targets) item(nodeLabel(c), crumbFor(c), effectiveColor(c), () => moveTo(src, c));
 }
 function moveTo(src: MindNode, target: MindNode | null, reveal = true): void {
   closePicker();
@@ -865,10 +862,10 @@ function moveTo(src: MindNode, target: MindNode | null, reveal = true): void {
     const sibs = orderedKids(target, childrenOf(target.id)).filter(k => sideOf(target, k) === side);
     const others = sibs.filter(s => s.id !== src.id);
     reorderBucket(target, sibs, [...others, src], orderAxisIsX(target, side));   // packs + saves + commits
-    setStatus(`Moved “${src.title}” → “${target.title}”`);
+    setStatus(`Moved “${nodeLabel(src)}” → “${nodeLabel(target)}”`);
   } else {
     makeRoot(src);
-    setStatus(`“${src.title}” is now a root`);
+    setStatus(`“${nodeLabel(src)}” is now a root`);
   }
 }
 mpFilter.addEventListener('input', renderPicker);

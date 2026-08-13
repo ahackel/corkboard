@@ -8,6 +8,8 @@ mm_y: 300
 mm_collapsed: true
 ---
 
+# 📦 Import & export
+
 To move a map between devices, use the sidebar:
 
 - **Export .zip** (in a map's ⋮ menu) bundles the open map into one file.

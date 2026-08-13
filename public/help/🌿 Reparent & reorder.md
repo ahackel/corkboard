@@ -8,6 +8,8 @@ mm_y: 87
 mm_collapsed: true
 ---
 
+# 🌿 Reparent & reorder
+
 - **Reparent:** drag a card onto another to make it that card's child. The subtree comes along.
 - **Reorder:** drag between two siblings — a **dashed insertion bar** previews where it will land.
 - **Detach:** drag a card to empty canvas to break it off as its own root.

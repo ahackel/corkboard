@@ -15,7 +15,7 @@
 // ids, and at the top level the target isn't a node. Hence this module: the same row, a different
 // target, and its own undo bookkeeping for the half that isn't a node (history.ts's touchCanvas).
 import { state, setStatus } from '../core/state.js';
-import { isLockedEffective } from '../utils/model.js';
+import { nodeLabel, isLockedEffective } from '../utils/model.js';
 import { record, touchCanvas, commitStep } from './history.js';
 import { scheduleSave, scheduleSaveSettings } from '../data/persistence.js';
 import { rememberColor } from './color-recents.js';
@@ -61,7 +61,7 @@ function repaint(): void {
 function setColor(color: string): void {
   if (state.readOnly) { setStatus('Read-only — can’t recolour the canvas'); return; }
   const owner = canvasOwner();
-  if (owner && isLockedEffective(owner)) { setStatus(`“${owner.title}” is locked`); return; }
+  if (owner && isLockedEffective(owner)) { setStatus(`“${nodeLabel(owner)}” is locked`); return; }
   if (owner) {
     record([owner.id], () => applyColor(color));
     repaint();
@@ -94,7 +94,7 @@ export function markCanvasColorBtn(): void {
   else if (fill) chip.style.setProperty('--sw', fill);
   else chip.classList.add('inherit');
   const owner = canvasOwner();
-  btn.title = owner ? `Colour of “${owner.title}” — the frame you’re in` : 'Canvas colour of this map';
+  btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the frame you’re in` : 'Canvas colour of this map';
 }
 
 // ---------- the popover ----------

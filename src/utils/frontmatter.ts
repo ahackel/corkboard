@@ -8,6 +8,51 @@
 // ============================================================
 import { state, isBoxType, type MindNode, type NodeType, type NodeLayout, type FmEntry } from '../core/state.js';
 
+// ---------- a note's TITLE is the leading heading of its body ----------
+// `# Notes` on the first non-blank line IS the title, and nothing else is. Not a frontmatter key,
+// and NOT the filename: the filename is a derived slug that may carry a ` 2` suffix to stay unique
+// on disk, so reading the title back off it would put that suffix into the title. Storing it as the
+// body's first line instead means duplicate titles need no new frontmatter key at all — and it's
+// what a Markdown author writes anyway, so the file reads correctly in Obsidian and every other
+// renderer.
+// NO heading means the card is UNTITLED — a sticky note that is only its text. That's why this tests
+// for `#` alone: firstLineLabel (features/crud.ts) also strips bullets, quotes and list numbers,
+// which is right when minting a label out of arbitrary dragged text and wrong here — a note starting
+// `- milk` is a list, not a card titled "milk".
+export function splitHeading(text: string): { title: string; body: string } {
+  const lines = text.split('\n');
+  const i = lines.findIndex(l => l.trim());
+  if (i < 0) return { title: '', body: '' };
+  const m = lines[i].match(/^\s*#{1,6}\s+(.*\S)\s*$/);
+  if (!m) return { title: '', body: text.trim() };
+  return { title: m[1].trim(), body: lines.slice(i + 1).join('\n').trim() };
+}
+// …and back. The inverse of splitHeading, so a load/save round-trip is a no-op: an untitled note is
+// its body alone, and a titled one gets its heading back as the first line.
+export function joinHeading(title: string, body: string): string {
+  const t = title.trim(), b = body.trim();
+  if (!t) return b;
+  return b ? `# ${t}\n\n${b}` : `# ${t}`;
+}
+// A human LABEL off the first non-blank line of arbitrary text, shorn of whatever markdown marker
+// introduced it — a heading's #, a bullet, a quote, a list number. Deliberately WIDER than
+// splitHeading, and the two must not be confused: this mints a name for something that hasn't got
+// one (an untitled card's filename slug, the text-drag ghost's caption), where any first line will
+// do; splitHeading answers the FORMAT question "does this note carry a title", which only `#` may
+// answer — or a note beginning `- milk` would be a card titled "milk" instead of a list.
+// A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
+// this, and it survives in two places for that reason: the one-shot migration of a body-less note
+// (data/persistence.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).
+export function fileStem(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
+}
+export function firstLineLabel(text: string): { title: string; body: string } {
+  const lines = text.split('\n');
+  let i = lines.findIndex(l => l.trim()); if (i < 0) i = 0;
+  return { title: (lines[i] ?? '').replace(/^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/, '').trim(),
+           body: lines.slice(i + 1).join('\n').trim() };
+}
+
 // The shape parseMd yields — a node-to-be plus its raw layout (mm_*) values.
 export interface ParsedNote {
   title: string;
@@ -98,12 +143,12 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
   return { type: 'card', layout: 'inherit' };
 }
 
-export function parseMd(text: string, fileName: string): ParsedNote {
+export function parseMd(text: string): ParsedNote {
   const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   const entries = m ? parseFM(m[1]) : [];
-  const body = m ? m[2] : text;
-  // The TITLE is always the filename (without .md) — it's the node's identity on disk.
-  const title = (fileName || 'Untitled').replace(/\.md$/i, '').trim() || 'Untitled';
+  // The TITLE is the body's leading heading (splitHeading above); no heading = an untitled card.
+  // The filename is deliberately NOT consulted — it's a derived slug, suffix and all.
+  const { title, body } = splitHeading(m ? m[2] : text);
   const num = (v: string): number | null => (v !== '' && !isNaN(+v)) ? +v : null;
   return {
     title,
@@ -113,7 +158,7 @@ export function parseMd(text: string, fileName: string): ParsedNote {
     color: fmValue(entries, 'color').replace(/^["']|["']$/g, ''),
     keepStatus: fmValue(entries, 'status'),
     tags: fmTags(entries),
-    body: body.trim(),
+    body,                                  // already trimmed, and shorn of the title heading
     // layout keys — note identity is its filename; parent stored as the PARENT note's path.
     mm: {
       parent: fmValue(entries, 'mm_parent'),
@@ -175,6 +220,8 @@ export function serializeMd(n: MindNode): string {
   if (isBoxType(n.type) && n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
   if (n.type === 'query' && n.query) entries.push({ key:'mm_query', lines:[`mm_query: ${n.query}`] });
   const fm = entries.flatMap(e => e.lines).join('\n');
-  const body = n.body.trim();
+  // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse
+  // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing).
+  const body = joinHeading(n.title, n.body);
   return `---\n${fm}\n---\n` + (body ? '\n' + body + '\n' : '\n');
 }

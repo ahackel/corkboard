@@ -14,7 +14,7 @@ import { ui } from '../core/ui-state.js';
 import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, effectiveColor, colorClass, applyColorVars } from '../main.js';
-import { titleProblem, autosizeBody } from './inline-edit.js';
+import { autosizeBody } from './inline-edit.js';
 import { addChild } from './crud.js';
 import { touch, commitStep } from './history.js';
 import { createProperties, type PropertyControls } from './properties.js';
@@ -146,14 +146,13 @@ function cardFor(n: MindNode): HTMLElement {
   addNote.addEventListener('click', revealNote);
 
   title.addEventListener('focus', () => beginEdit(n));
+  // No validation left: a title may be empty (untitled) and may duplicate another (the FILE takes the
+  // suffix). What titleProblem used to refuse, desiredFileFor now absorbs.
   title.addEventListener('input', () => {
-    const val = title.value.replace(/[\r\n]+/g, ' ');   // titles map to filenames — no newlines
-    const problem = titleProblem(val, n.id);
-    title.classList.toggle('invalid', !!problem);
-    if (problem) return;                                // keep the last valid title until it's fixed
-    n.title = val.trim(); n.dirty = true; scheduleSave();
+    n.title = title.value.replace(/[\r\n]+/g, ' ').trim();   // a title is one line
+    n.dirty = true; scheduleSave();
   });
-  title.addEventListener('blur', () => { title.value = n.title; title.classList.remove('invalid'); endEdit(); });
+  title.addEventListener('blur', () => { title.value = n.title; endEdit(); });
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); revealNote(); } });
 
   note.addEventListener('focus', () => beginEdit(n));

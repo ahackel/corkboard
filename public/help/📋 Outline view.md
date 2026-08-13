@@ -8,6 +8,8 @@ mm_y: 210
 mm_collapsed: true
 ---
 
+# 📋 Outline view
+
 Press `O` (or the list button in the toolbar) to view the map as a **collapsible list** — great on phones and small screens.
 
 - Tap a row to **select** it. Its round fold button then appears at the top-right corner, exactly

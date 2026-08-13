@@ -7,6 +7,8 @@ mm_y: 0
 mm_layout: fan
 ---
 
+# 👋 Welcome!
+
 **Corkboard** is a local-first visual editor for a folder of Markdown notes.
 
 - **One file per card.** Each card is a Markdown (`.md`) note: the title is the filename, the body is your text.

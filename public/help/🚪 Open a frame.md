@@ -8,6 +8,8 @@ mm_y: 334
 mm_collapsed: true
 ---
 
+# 🚪 Open a frame
+
 A frame is a folder, so you can go **inside** it. The canvas then shows nothing but what that frame
 holds — no box, no border, no tab, and none of the rest of the map. Everything you do happens in
 there: new cards belong to the frame, search and the outline list only its contents, and `F` frames it

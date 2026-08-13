@@ -8,6 +8,8 @@ mm_y: 87
 mm_collapsed: true
 ---
 
+# 🎯 Fit & focus
+
 Press `F`:
 
 - With **nothing selected**, it fits the whole map to the screen.

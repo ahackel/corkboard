@@ -11,7 +11,6 @@ import { ui } from '../core/ui-state.js';
 import { applyLayouts } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode } from '../main.js';
-import { titleProblem } from './inline-edit.js';
 import { deleteNode } from './crud.js';
 import { touch, commitStep } from './history.js';
 
@@ -40,7 +39,6 @@ export function openEditorSheet(n: MindNode | undefined, { focus, isNew = false 
   shBody.value = n.body;
   shTitle.readOnly = state.readOnly;
   shBody.readOnly = state.readOnly;
-  shTitle.classList.remove('invalid');
   document.body.classList.add('sheet-open');
   fitToViewport();
   if (focus === 'title' || isNew) { shTitle.focus(); shTitle.select(); }
@@ -60,7 +58,7 @@ export function closeEditorSheet({ cancel = false }: { cancel?: boolean } = {}):
   const n = state.nodes.get(se.id);
   if (!n) { commitStep(); return; }
   if (cancel && se.isNew) {
-    // same net-null trick as endInlineEdit: the pending step holds the create's null
+    // same net-null trick as endBodyEdit: the pending step holds the create's null
     // before-image, so deleting here nets null→null and the step is discarded.
     deleteNode(n.id);
     commitStep();
@@ -68,8 +66,7 @@ export function closeEditorSheet({ cancel = false }: { cancel?: boolean } = {}):
     return;
   }
   if (!cancel) {
-    const t = shTitle.value.replace(/[\r\n]+/g, ' ').trim();   // titles map to filenames — no newlines
-    if (!titleProblem(t, n.id)) n.title = t;
+    n.title = shTitle.value.replace(/[\r\n]+/g, ' ').trim();   // a title is one line
     n.body = shBody.value;
     n.dirty = true;
     paintAll(); applyLayouts(); paintAll();           // content changed height → reflow the canvas
@@ -78,11 +75,8 @@ export function closeEditorSheet({ cancel = false }: { cancel?: boolean } = {}):
   commitStep();                                       // cancelled/unchanged sessions are discarded
 }
 
-// live title validation, same rule as the inline rename (empty / duplicate filename)
-shTitle.addEventListener('input', () => {
-  const se = ui.sheetEdit; if (!se) return;
-  shTitle.classList.toggle('invalid', !!titleProblem(shTitle.value, se.id));
-});
+// No live validation any more: an empty title means an untitled card, and a duplicate one is fine —
+// the FILENAME takes the suffix (data/persistence.ts desiredFileFor), not the name you typed.
 shDone.addEventListener('click', () => closeEditorSheet());
 shCancel.addEventListener('click', () => closeEditorSheet({ cancel: true }));
 sheet.addEventListener('keydown', (e) => {

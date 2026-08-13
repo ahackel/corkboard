@@ -52,8 +52,19 @@ export interface Drag {
   // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
   dockAfter?: string | null;
 }
-export interface InlineEdit { id: string; orig: string; el: HTMLElement; isNew?: boolean; }
-export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; }
+// A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
+// its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the
+// textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
+// cancels the CREATION rather than just the edit (it used to live on the title editor).
+export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; }
+// A CONTAINER's label being renamed in place — a frame's folder tab, a docked tab, a stack's header.
+// A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
+// A container can't do that, and the reason is structural rather than stylistic — its `.body` is
+// `display:none` (styles.css: a frame's box holds child cards, not its own note), and an editor inside a
+// hidden element can't be focused or typed into. So its label is edited ON itself, one line, in a
+// contenteditable. Same contract as BodyEdit otherwise: while set, persistence freezes this node's
+// filename and skips the focus-reload.
+export interface TitleEdit { id: string; orig: string; el: HTMLElement; isNew?: boolean; }
 // A query card's search-field editing session (main.ts nodeEl/onQueryInput/endQueryEdit) — mirrors
 // InlineEdit/BodyEdit's touch-once-on-focus, commit-on-blur shape so the whole typing session is one
 // undo step instead of one per keystroke.
@@ -88,11 +99,12 @@ export const ui = {
   pinch: null as Pinch | null,                    // active two-finger gesture
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,
-  // ---- in-place title/body editing (features/inline-edit.ts) ----
-  // An open inlineEdit/bodyEdit defers the file rename / disk-reload while typing
-  // (read as `!!ui.inlineEdit` / `!!ui.bodyEdit` in persistence.ts).
-  inlineEdit: null as InlineEdit | null,
+  // ---- in-place card editing (features/inline-edit.ts) ----
+  // Either open defers the file rename / disk-reload while typing. A CARD gets `bodyEdit`: one field
+  // holding its title and its note together. A CONTAINER gets `titleEdit`: its label alone (see above).
+  // At most one of the two is ever set — each opener closes the other.
   bodyEdit: null as BodyEdit | null,
+  titleEdit: null as TitleEdit | null,
   queryEdit: null as QueryEdit | null,
   // ---- full-screen editor sheet (features/editor-sheet.ts) ----
   sheetEdit: null as SheetEdit | null,
@@ -118,12 +130,16 @@ export const gPointers = new Map<number, Pt>();
 // ---- edit-session predicates (shared by persistence.ts) ----
 // One source of truth for "is some editor holding uncommitted text", so the save loop and the
 // disk-reload guard can't drift as editors are added (in-card title/body + the full-screen sheet).
-export function editSessionActive(): boolean { return !!(ui.inlineEdit || ui.bodyEdit || ui.sheetEdit || ui.panelEdit); }
+export function editSessionActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit || ui.sheetEdit || ui.panelEdit); }
 // The node whose filename must stay frozen while its title is being typed (the rename lands on
-// commit): the in-card rename freezes the SELECTED node, the sheet freezes its own node. Body
-// edits don't touch the title, so bodyEdit is deliberately excluded. null → nothing frozen.
-export function frozenFileNodeId(selId: string | null): string | null {
-  if (ui.inlineEdit) return selId;
+// commit, so the folder isn't littered with M.md, Ma.md, Mag.md…). The in-card editor is IN here now:
+// it used to be excluded because a body edit couldn't touch the title, and now the title is the first
+// line of the very text it holds. null → nothing frozen. (`selId` is no longer consulted — the
+// session names its own node — but the parameter stays, since the sheet/panel arms are unchanged and
+// callers pass it.)
+export function frozenFileNodeId(_selId: string | null): string | null {
+  if (ui.bodyEdit) return ui.bodyEdit.id;
+  if (ui.titleEdit) return ui.titleEdit.id;
   if (ui.sheetEdit) return ui.sheetEdit.id;
   if (ui.panelEdit) return ui.panelEdit.id;
   return null;

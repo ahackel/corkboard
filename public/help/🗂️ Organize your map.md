@@ -9,4 +9,6 @@ mm_y: 148
 mm_collapsed: true
 ---
 
+# 🗂️ Organize your map
+
 Shape the tree: move cards between parents, reorder siblings, fold away detail, and track progress.

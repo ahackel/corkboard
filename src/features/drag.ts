@@ -7,7 +7,7 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
-import { isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { applyLayouts, reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, frameInterior, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
@@ -18,7 +18,7 @@ import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel,
          subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin } from '../main.js';
-import { endInlineEdit, endBodyEdit } from './inline-edit.js';
+import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, foldImageCardsIntoBody, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
@@ -274,8 +274,8 @@ export function bindNodeDrag(n: MindNode): void {
     // double-tap on a child fired activateNode all the way up the chain — renaming the child, then
     // opening its parent's note editor on top of it.
     e.stopPropagation();
-    // While editing this card, let the browser handle double-tap normally (word selection)
-    if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) { lastTouchTap = 0; return; }
+    // While editing this node, let the browser handle double-tap normally (word selection)
+    if ((ui.bodyEdit && ui.bodyEdit.id === n.id) || (ui.titleEdit && ui.titleEdit.id === n.id)) { lastTouchTap = 0; return; }
     // The card's own controls act on a single tap (main.ts isNodeControlAt): a tap there must not also
     // count toward a double-tap, or the second one would fire the button AND open the card.
     const t0 = e.touches[0];
@@ -335,11 +335,11 @@ export function bindNodeDrag(n: MindNode): void {
         return;
       }
     }
-    // Close an editor open on a DIFFERENT card (tap-outside on touch where blur may not fire)
-    if (ui.inlineEdit && ui.inlineEdit.id !== n.id) endInlineEdit();
-    if (ui.bodyEdit   && ui.bodyEdit.id   !== n.id) endBodyEdit();
-    // while this card's title/body is being edited, let clicks place the caret — don't start a drag
-    if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) { e.stopPropagation(); return; }
+    // Close an editor open on a DIFFERENT node (tap-outside on touch where blur may not fire)
+    if (ui.bodyEdit && ui.bodyEdit.id !== n.id) endBodyEdit();
+    if (ui.titleEdit && ui.titleEdit.id !== n.id) endTitleEdit();
+    // while this node is being edited, let clicks place the caret — don't start a drag
+    if ((ui.bodyEdit && ui.bodyEdit.id === n.id) || (ui.titleEdit && ui.titleEdit.id === n.id)) { e.stopPropagation(); return; }
     // A drag inside an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather
     // than moving the frame — you move the frame from its interior only once it's selected. A
     // no-move click selects the frame (endMarquee). ⌘/Ctrl-click still falls through to the normal
@@ -496,7 +496,7 @@ function dragPointerUp(): void {
         if (mergeNode) {
           const folded = foldImageCardsIntoBody(mergeNode.id, selRoots);
           if (folded){
-            setStatus(folded > 1 ? `Merged ${folded} images into "${mergeNode.title}"` : `Merged image into "${mergeNode.title}"`);
+            setStatus(folded > 1 ? `Merged ${folded} images into "${nodeLabel(mergeNode)}"` : `Merged image into "${nodeLabel(mergeNode)}"`);
             paintAll(); applyLayouts(); paintAll();
             selectNode(mergeNode.id);
             scheduleSave(); commitStep();
@@ -512,8 +512,8 @@ function dragPointerUp(): void {
           const merged = mergeCardsInto(fuseNode.id, selRoots);
           if (merged){
             setStatus(merged > 1
-              ? `Merged ${merged} cards into “${fuseNode.title}”`
-              : `Merged “${act.title}” into “${fuseNode.title}”`);
+              ? `Merged ${merged} cards into “${nodeLabel(fuseNode)}”`
+              : `Merged “${nodeLabel(act)}” into “${nodeLabel(fuseNode)}”`);
             paintAll(); applyLayouts(); paintAll();
             selectNode(fuseNode.id);
             scheduleSave(); commitStep();
@@ -534,10 +534,10 @@ function dragPointerUp(): void {
           if (g) {
             dissolveEmptyTabGroups(oldParents);
             setStatus(wasTab
-              ? `Moved “${act.title}” in the tab row`
+              ? `Moved “${nodeLabel(act)}” in the tab row`
               : selRoots.length > 1
-              ? `Docked ${selRoots.length} frames as tabs of “${g.title}”`
-              : `Docked “${act.title}” as a tab of “${g.title}”`);
+              ? `Docked ${selRoots.length} frames as tabs of “${nodeLabel(g)}”`
+              : `Docked “${nodeLabel(act)}” as a tab of “${nodeLabel(g)}”`);
             paintAll(); applyLayouts(); paintAll();
             selectNode(act.id);
             scheduleSave(); commitStep();
@@ -584,10 +584,10 @@ function dragPointerUp(): void {
           }
           const parentTitle = state.nodes.get(effectiveParent)?.title ?? 'that card';
           setStatus(dropMode === 'reorder'
-            ? `Reordered "${act.title}"`
+            ? `Reordered "${nodeLabel(act)}"`
             : moved > 1
               ? `Re-parented ${moved} cards -> "${parentTitle}"`
-              : `Re-parented "${act.title}" -> "${parentTitle}"`);
+              : `Re-parented "${nodeLabel(act)}" -> "${parentTitle}"`);
         } else {
           // snap onto the grid: align the dragged node, shift the rest of its subtree by the same
           // delta so relative layout is preserved. A card inside a frame snaps RELATIVE to the
@@ -644,8 +644,8 @@ function dragPointerUp(): void {
           }
           if (detached) setStatus(
             detached > 1 ? `Detached ${detached} cards`
-              : leftFrame ? `"${act.title}" left the frame`
-              : `"${act.title}" is now a root`);
+              : leftFrame ? `"${nodeLabel(act)}" left the frame`
+              : `"${nodeLabel(act)}" is now a root`);
           dissolveEmptyTabGroups(emptied);   // the last tab out leaves an empty box + label behind
           // Refresh sibling order from the dropped positions (the ONLY position-based reorder).
           // The drop-target branch above skips this: there the previewed kidOrder was just set
@@ -761,7 +761,7 @@ function applyDragClone(): void {
     drag.selRoots = trueRoots(drag.multi ? [...state.sel] : [drag.n.id]);   // clones are gone — back to the originals' roots
     drag.targets = new Map([...drag.start].map(([id, s]) => [id, { x:s.x, y:s.y }] as [string, Pt]));
     drag.origins = new Map([...drag.start]);         // restore origins for the original subtree
-    setStatus(`Duplication cancelled — moving "${drag.n.title}"`);
+    setStatus(`Duplication cancelled — moving "${nodeLabel(drag.n)}"`);
     paintAll();
   }
 }
@@ -905,7 +905,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     // no target/side: the reparent previews (landing ghost, dashed edge) stand down, and the dock
     // preview below draws either the insertion bar in the strip or the tab this would become.
   } else if (hovered && sub.has(hovered)){
-    setStatus(`Can't parent "${dragged.title}" onto its own child/descendant`);
+    setStatus(`Can't parent "${nodeLabel(dragged)}" onto its own child/descendant`);
   } else if (imgDrag) {
     // Only a hovered plain body card is a valid fold target (not another image, a frame, or an
     // annotation). No target/side/line set → the normal ghost/bar/edge previews all stand down.

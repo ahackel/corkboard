@@ -8,6 +8,8 @@ mm_y: 239
 mm_collapsed: true
 ---
 
+# ↩️ Undo & redo
+
 Made a mistake? Every edit — create, delete, move, recolour, rename — is undoable.
 
 - **Undo:** `Ctrl` / `⌘` + `Z`

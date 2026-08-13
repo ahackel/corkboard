@@ -8,6 +8,8 @@ mm_y: 79
 mm_collapsed: true
 ---
 
+# ✍️ Markdown formatting
+
 Card notes are Markdown. Supported:
 
 - Headings — `# Heading`

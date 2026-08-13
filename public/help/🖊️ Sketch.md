@@ -8,6 +8,8 @@ mm_y: 483
 mm_collapsed: true
 ---
 
+# 🖊️ Sketch
+
 Press `S` to toggle sketch mode and draw freehand ink right on the canvas.
 
 - The side panel offers a **pen** and an **eraser** (which removes a whole stroke), plus colour and width dots.

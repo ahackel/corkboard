@@ -16,7 +16,7 @@ import { outlineActive } from './outline.js';
 import { FOLDER_PATH } from '../view/icons.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
-import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, addChild, createSibling, mkNode, uniqueTitle } from './crud.js';
+import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, addChild, createSibling, mkNode } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
 import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
@@ -201,7 +201,9 @@ export function groupSelectionIntoFrame(): void {
     const fh = isFinite(y1) ? Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - fy)) : FRAME_H;
     const frame = mkNode({
       x: fx, y: fy, w: fw, h: fh, parent: parentId,
-      title: uniqueTitle('Frame'), type: 'frame', layout: 'free',
+      // A frame is one kind that keeps a required title: its folder tab is the only thing you can
+      // grab it by, and a blank tab reads as broken. No dedupe — the FILE takes the suffix now.
+      title: 'Frame', type: 'frame', layout: 'free',
     });
     frameId = frame.id;
     state.nodes.set(frameId, frame);
@@ -587,7 +589,7 @@ stage.addEventListener('wheel', markWheelBusy, { passive: true });
 stage.addEventListener('gesturestart', () => { wheelBusy = true; });
 stage.addEventListener('gestureend', () => { wheelBusy = false; });
 function isInteracting(): boolean {
-  return !!(ui.drag || ui.pan || ui.pinch || ui.marquee || ui.inlineEdit || ui.bodyEdit) || wheelBusy;
+  return !!(ui.drag || ui.pan || ui.pinch || ui.marquee || ui.bodyEdit || ui.titleEdit) || wheelBusy;
 }
 // ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
 // here, so it can never paint a frame sitting in the screen corner with nothing behind it. Reports

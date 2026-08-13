@@ -8,6 +8,8 @@ mm_y: 26
 mm_collapsed: true
 ---
 
+# 🖐️ Pan & zoom
+
 - **Pan:** drag the empty canvas — or hold `Space` and drag. One finger on touch.
 - **Zoom:** pinch with two fingers, or `Ctrl` / `⌘` + scroll.
 - The whole canvas is infinite; there's no edge to bump into.

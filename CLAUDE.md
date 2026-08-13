@@ -47,7 +47,7 @@ selection core and wires the global keyboard/toolbar events.
 - `core/state.ts` — the shared mutable `state` object + domain types (`MindNode`, `View`,
   `AppState`, …) + DOM handles (`world`/`stage`/`edgesSvg`/`togglesSvg`) + `setStatus`.
 - `core/ui-state.ts` — the shared mutable **`ui`** holder for the interactive subsystem
-  (`drag`/`inlineEdit`/`bodyEdit`/`pan`/`marquee`/`pinch`/timers…) + their types, plus the
+  (`drag`/`bodyEdit`/`titleEdit`/`pan`/`marquee`/`pinch`/timers…) + their types, plus the
   `gPointers` map. Mutate its properties in place (never reassign `ui`) so drag / inline-edit /
   gestures / the render core all share one live interaction state across module boundaries.
 - `utils/` — pure helpers: `markdown.ts` (`esc`, `renderBodyHTML`), `frontmatter.ts`
@@ -71,7 +71,8 @@ selection core and wires the global keyboard/toolbar events.
 - `features/` — the interactive subsystems split out of `main.ts`, each owning its concern and
   sharing state via `ui`: `drag.ts` (`bindNodeDrag` + clone/detach/auto-pan + reparent-by-drop),
   `gestures.ts` (canvas pan/zoom/marquee, registers its own listeners on import), `inline-edit.ts`
-  (in-place title/body editing: `startInlineEdit`/`startBodyEdit`/`end…`), `crud.ts` (node
+  (in-place card editing — ONE text field per card, `startInlineEdit`/`startBodyEdit` differing only in
+  where the caret lands, plus `startTitleEdit` for a container's label), `crud.ts` (node
   lifecycle: `createNode`/`addChild`/`createSibling`/`duplicateSelection`/`delete…`/`extractToChild`
   /`dropCardText`/`mergeCardsInto`), `text-drag.ts` (dragging a card’s selected text out of its
   editor — see the MERGING section below; registers document listeners),
@@ -94,9 +95,57 @@ selection core and wires the global keyboard/toolbar events.
 NOTE: line numbers cited elsewhere in this file refer to the pre-split inline script and
 are now only approximate — grep for the symbol.
 
-**One `.md` file per node; the filename is the node's identity.** There is no
-database and no sidecar file. In-memory node `id`s are ephemeral, minted fresh on
-every load — never persist them.
+**One `.md` file per node; the file's PATH is the node's identity** (it's what `mm_parent` points at,
+and what the hash encodes). There is no database and no sidecar file. In-memory node `id`s are
+ephemeral, minted fresh on every load — never persist them.
+
+**A node's TITLE is the leading `# ` line of its body, and nothing else is** (`splitHeading` /
+`joinHeading`, `utils/frontmatter.ts` — exact inverses, so a load/save round-trip changes nothing).
+Not a frontmatter key, and — this is the part that changed — **not the filename**. Three things follow,
+and they're the whole reason for the arrangement:
+- **Two cards may share a title.** The filename is a derived SLUG that takes a ` 2` suffix to stay
+  unique on disk (`desiredFileFor`, `data/persistence.ts`), and since nothing reads the title back off
+  it, that suffix never becomes part of the name. `Notes.md` and `Notes 2.md`, both titled "Notes",
+  told apart by where they sit — which is what a canvas is for. Duplicate titles therefore needed **no
+  new frontmatter key at all**; a `title:` key was the obvious design and this is better, because
+  `# Notes` on the first line is what a Markdown author writes anyway and reads correctly in Obsidian.
+- **NO heading means the card is UNTITLED** — a sticky note that is only its text, showing no title row
+  at all (`no-title`, `styles.css`). That's why the test is `#{1,6}` and nothing else: `firstLineLabel`
+  (the same file) also strips bullets, quotes and list numbers, which is right when minting a name for
+  something that hasn't got one (an untitled card's slug, the text-drag ghost's caption) and wrong here —
+  a note beginning `- milk` is a list, not a card titled "milk". Don't confuse the two functions.
+  Fresh cards are untitled: `New Card 1` and the minted `Annotation 7` existed only so a node had a
+  unique filename, which is no longer the title's job, and `uniqueTitle`/`copyTitle`/`takenTitles`/
+  `titleProblem` all went with them.
+- **A slug is minted ONCE and never re-derived.** An untitled card's name comes off its first line at
+  first save and then stays, however the text changes. Two reasons, both load-bearing: the first line of
+  a card is edited constantly now that a card is one text field, so re-deriving would rename the file —
+  and rewrite every child's `mm_parent` — on every edit; and it's what stops a vault whose notes don't
+  carry `# ` headings yet from being mass-renamed on first open. A stale slug costs nothing, because an
+  untitled card has no name to be wrong about.
+**A body-less note is MIGRATED on load, once** (`loadFromDir`): no `# ` heading *and* an empty body means
+its title used to be its filename and nothing in the file says so any more, so the stem becomes the title
+and the note is marked dirty — the next save writes the `# Heading` it should have had, and it never fires
+for that note again (verified idempotent). The filename doesn't change, so no `mm_parent` is rewritten.
+Only when the body is EMPTY: a note WITH text and no heading is a legitimately untitled card, and naming
+it from its filename would put a name on something nobody named. **The word "Untitled" should therefore
+be unreachable**, and it takes all three of these to keep it that way — this migration, `nodeLabel`'s
+filename fallback below, and `endBodyEdit` DISCARDING a brand-new card committed with nothing typed into
+it (a card with no title, no text and no name anything could show it under; emptying an EXISTING card is
+an ordinary edit and keeps everything).
+
+**Where a node's name is SHOWN rather than edited, use `nodeLabel`** (`utils/model.ts`): the title, else
+the first line, else the FILENAME stem (`fileStem` — where the title lived before this format, so an
+unmigrated note still reads correctly), else "Untitled". A blank row in the outline, in search, in a
+status line or on a folder tab is never right, so ~40 display sites go through it — and `disambiguatedLabel` appends the parent for
+the FLAT lists only (search hits, a query card's results), since the outline's indentation already says
+where a row sits. Only a CONTAINER falls back to it on the canvas: a card that shows nothing is the
+point, but a frame's tab is the only thing you can grab the box by.
+
+**`desiredFileFor`'s collision test is case-INSENSITIVE**, and must stay that way. macOS and Windows
+collide `Notes.md` with `notes.md`, so an exact-match test would hand two nodes "their own" filename and
+let the second write eat the first. It used to be exact and got away with it only because the title
+uniqueness check upstream lowercased.
 
 **Edges are derived, never stored.** A node's parent is `mm_parent` (the parent
 note's relative path) in its frontmatter; the tree and all edges are computed from
@@ -572,8 +621,10 @@ every ancestor's chip at once), and the chip's `pointerdown` must `stopPropagati
 which freed the gesture for what a double-click means nearly everywhere else. One gesture, dispatched
 by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a `.title-row` (a card's title
 row, a frame's folder tab, a docked tab's whole label) renames via `startInlineEdit` — the single
-rename funnel, so the tab-group/annotation/query redirects and the lock refusal come for free; anything
-else on a card edits its note; a FRAME's interior OPENS it (`openFrame` — see the OPENING section
+rename funnel, so the tab-group/annotation/query redirects, the CONTAINER hand-off and the lock refusal
+come for free; anything else on a card edits its note. On a CARD those two are now the same editor with
+the caret in a different place — its name is the first line of its one text field — so the distinction
+survives as a courtesy rather than a necessity; a FRAME's interior OPENS it (`openFrame` — see the OPENING section
 above: the folder metaphor's own gesture, and the only one that reads as "go in"); any OTHER
 container's interior — i.e. a stack, which `canOpen` refuses because an outliner is not a box you can
 stand in — gets a new card THERE (`addChildIn` → `addChild`, which routes a group to its open tab,
@@ -588,8 +639,8 @@ moved to `Space`, `Tab` and the canvas right-click, which all land it in that fr
   so both handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/drag.ts`) `stopPropagation`
   BEFORE their bails, not after — otherwise a gesture this card refuses bubbles to its host card, which
   reads it as a double-click on itself. That's what broke renaming: double-clicking a word inside an
-  open title editor (the ordinary way to fix one word of a name) reached the host and opened the HOST's
-  note editor, which closed the rename and sent the rest of the typing into the parent's body. On touch
+  open editor (the ordinary way to fix one word of a name) reached the host and opened the HOST's
+  editor, which closed this one and sent the rest of the typing into the parent's note. On touch
   it's worse, since each ancestor keeps its OWN tap counter and so sees the same two taps. A container's
   children are exempt by construction — they live in its sibling `.frame-content` / `.tab-strip` wrapper,
   not inside its element.
@@ -639,18 +690,14 @@ key — a merge is a body edit plus a delete, a break is a body edit plus a crea
   `dropCardText`), after Heptabase's whiteboard gesture: drop it on empty canvas and it becomes a card
   of its own, drop it in a container and it becomes a card THERE, drop it on another card (or an
   annotation) and it's appended to that note. Always a MOVE — the text leaves the source, whose editor
-  is DROPPED rather than ended, since `endBodyEdit`/`endInlineEdit` would write the editor's stale
-  value straight back over what was just cut (`dropInlineEdit` is that teardown for the title).
-  **Either half of a card can be the source** — its note or its TITLE — and `TextSource`
-  (`{id, part, start, end}`) is what says which, captured at `dragstart` and read back live at the drop
-  (`liveText`), since the offsets are into what the EDITOR shows, not into `n.title`/`n.body`. The two
-  differ in three ways and nowhere else: a contenteditable has no `selectionStart`, so a title range is
-  measured off a `Range` (`selectedRangeIn`); a title is one line, so the new card gets it as a title
-  and no body; and a title is the card's FILENAME, so `cutTitleRange` can REFUSE — what's left has to
-  stand as a title on its own (`titleProblem`, and never empty), and when it wouldn't, nothing is cut
-  and nothing is created rather than the gesture half-happening. `.title.editing` also has to opt out
-  of `.node`'s `user-select:none`: a browser forces selection inside a contenteditable anyway, but the
-  inherited `none` is enough to make dragging that selection out unreliable.
+  is DROPPED rather than ended, since `endBodyEdit` would write the editor's stale value straight back
+  over what was just cut. `TextSource` (`{id, start, end}`) is the range, captured at `dragstart` and
+  read back live at the drop (`liveText`), since the offsets are into what the EDITOR shows, not into
+  `n.title`/`n.body`. **Dragging a card's NAME out is the same gesture and needs no second arm**, the
+  name being the `# ` line inside that very field: `cutCardText` re-SPLITS whatever is left, so cutting
+  the heading away just leaves the card untitled. That retired a `part: 'title' | 'body'` discriminator,
+  a `Range`-based `selectedRangeIn` (a contenteditable has no `selectionStart`), and `cutTitleRange`'s
+  REFUSAL — "a title is a filename, so it can't be cut to nothing" stopped being true twice over.
   **Where the new card belongs is ONE rule read both ways: the box you dropped in governs.** Dropped in
   a container, it's that container's child. Dropped on the open canvas *from a card that lives in a
   container*, it goes to the TOP LEVEL (`detachParentId`) — dropping on the canvas is how a note comes
@@ -660,14 +707,16 @@ key — a merge is a body edit plus a delete, a break is a body edit plus a crea
   away to nothing. Only a source already on the canvas keeps the sibling reading (slotted right after
   it, like `createSibling`), so the new card joins the branch it was cut from. The "am I in a box" test
   is `hostFrame`, and it's the right one precisely because it stops at the scope root: inside an OPEN
-  frame there is no box to come out of — that frame IS the canvas — so its cards stay siblings. `titleAndBodyFrom` gives the new card its title
-  from the first non-blank line (marker stripped), which is what `⌘⇧E` already did implicitly and is
-  now shared with it (`splitTitleText`).
+  frame there is no box to come out of — that frame IS the canvas — so its cards stay siblings.
+  `titleAndBodyFrom` IS `splitHeading`: a lump of dragged text is a card's text, so it splits the way a
+  card's own does — a leading `# ` line becomes the new card's title, and without one the card is
+  untitled and the whole lump is its body. Shared with `⌘⇧E`, which used to mint a numbered name here.
   **What rides the cursor is a CARD** (`buildGhost` → `setDragImage`, `.node.drag-ghost` in
   `styles.css`): the default drag image is a translucent snapshot of the dragged LETTERS, which reads
   as moving text around, when the whole point of the gesture is that a card comes out of it. So the
-  ghost is a real `.node` carrying the title the new card would get — the same `splitTitleText` reading
-  the drop will make — tinted with the SOURCE card's resolved colour, since a sibling is what the text
+  ghost is a real `.node` captioned with the dragged text's own first line (`firstLineLabel` — the WIDE
+  read: any first line makes a caption, where only a `# ` line would make the new card a real title),
+  tinted with the SOURCE card's resolved colour, since a sibling is what the text
   becomes and it would inherit exactly that. It has to be IN the document for the browser to snapshot
   it during `dragstart`, so it's parked off-screen horizontally (`display:none`/`visibility:hidden`
   snapshot as nothing, and moving it off vertically only would keep its width) and removed on the next
@@ -676,14 +725,15 @@ key — a merge is a body edit plus a delete, a break is a body edit plus a crea
   the pointer machinery in `drag.ts`, which is what keeps it out of that file's gesture vocabulary
   entirely — at the cost of being desktop-only, leaving `⌘⇧E` (extract to a child) as the way to break
   a note apart on iPad. **A card element being `draggable` (the ⌥ card-file export,
-  `features/clipboard.ts`) gets in the way of this twice, and each half needs its own answer.**
-  · A draggable ANCESTOR is decisive about what a drag begun inside it drags: the browser resolves it
-  as that ELEMENT's drag, so a selection can never come out of the contenteditable TITLE while it
-  holds. A `<textarea>` is the exception that hid this — a text control with a selection outranks the
-  ancestor — which is why the note half worked and the title half could not. So `setCardDraggable`
-  turns it off for as long as an editor is open on that card (every teardown puts it back); exporting a
-  card mid-rename isn't a gesture anyone can be making. `.title.editing` also opts out of `.node`'s
-  `user-select:none` for good measure.
+  `features/clipboard.ts`) used to get in the way of this twice; one half is now gone.**
+  · A draggable ANCESTOR is decisive about what a drag begun inside it drags: the browser resolves it as
+  that ELEMENT's drag, so a selection could never come out of the contenteditable TITLE while it held —
+  which is why the note half of the gesture worked and the title half could not, and why
+  `setCardDraggable` had to turn the export off for as long as an editor was open. A `<textarea>` is the
+  exception (a text control holding a selection outranks the ancestor), so now that a card is ONE
+  textarea the problem is structurally absent and that dance is gone from the card path. It survives only
+  for a CONTAINER's label editor, which is still a contenteditable (`ui.titleEdit` — a frame's `.body` is
+  `display:none`, so its tab can't host the card field; see `core/ui-state.ts`).
   · That same `dragstart` handler **cancels every native drag it doesn't own**, so it must also stand
   aside for this one — `cardTextDrag` is the shared resolver, and it tests the CARD the drag began on,
   not just "some editor is open", or an editor left open elsewhere would make that card's export (or an

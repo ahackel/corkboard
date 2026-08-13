@@ -369,12 +369,23 @@ svg#edges path, svg#dragEdges path { fill:none; stroke:var(--edge); stroke-width
    stay pixel-for-pixel identical at any zoom level. */
 svg#dragEdges path.ghost-edge { stroke-width:2; }
 
+/* A card SHRINKS TO FIT its text — it is its content and nothing more, so a one-line note is a one-line
+   card. There is no minimum: the 10px/12px padding is the floor (a card can't measure 0, which matters,
+   because nodeH reads a zero offsetHeight as "not rendered yet" and substitutes 64). Only the WIDTH is
+   fixed, and only until the user drags an edge (n.w). The `min-height:64px` this replaces predated
+   untitled cards and had already been switched off for the bodyless case (`.node.no-body`), so the two
+   halves of a card now behave the same way: whatever is in it decides how tall it is. */
 .node {
-  position:absolute; width:200px; min-height:64px;
+  position:absolute; width:200px;
   background: var(--card, var(--node)); border:none;
   /* text colour = the ink this card's own fill demands (see the .c-* block up top). The literal
      fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
-  border-radius:var(--r-card); padding:10px 12px; cursor:default; color:var(--ink, #ffffff);
+  /* Padding as a PAIR OF VARIABLES, not literals, because the untitled card's absolutely positioned
+     checkbox has to start where the content starts and a stack's row halves these (.node.stack-child).
+     Same reasoning as --donebox-w/--title-gap below: one declaration, read by everything that has to
+     agree with it. Kinds that own their whole interior (.frame, .stack, image/query cards) still set
+     `padding` outright — they have no checkbox to line up. */
+  border-radius:var(--r-card); padding:var(--pad-y) var(--pad-x); cursor:default; color:var(--ink, #ffffff);
   user-select:none; -webkit-touch-callout:none; touch-action:none;
   /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
      the selection ring must appear INSTANTLY, so that a frame's ring (on its box) and its title
@@ -385,8 +396,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .node.lt-anim { transition: opacity .2s ease,
   left .3s cubic-bezier(.22,1,.36,1), top .3s cubic-bezier(.22,1,.36,1); }
-/* bodyless cards shrink to just fit the title (no reserved body height) */
-.node.no-body { min-height:0; }
+/* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
+   so the only thing left to remove here is the space that was separating the title from a body that
+   isn't there. The `min-height:0` this rule used to carry is what `.node` itself does now. */
 .node.no-body .title { margin-bottom:0; }
 /* direct-child combinator only — a child card nested inside this one (see main.ts paintNode's
    DOM nesting) has its OWN .tag-row further down the tree and must stay unaffected by its
@@ -400,7 +412,19 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    below the row repeats their sum so it lines up under the TITLE rather than under the box — px
    and not em deliberately, since .body is 12px against the row's 16px, so one em sum would
    resolve to two different indents. */
-.node { --donebox-w:14px; --title-gap:8px; }
+/* --h1-size is THE heading size, and every label in the app is one heading: a card's leading `# ` line,
+   a frame's folder tab, a stack's header, a docked tab. One variable so they cannot drift — they were
+   three separate declarations that happened to agree, which is not the same thing as being the same, and
+   the one time they stopped agreeing it took four rounds to find.
+   It matches the BODY size: on a dense board a heading marks its line by WEIGHT (600 against the body's
+   400), not by taking up more room. So `# Name` reads as a heading without a card growing to hold it.
+   The two line boxes below are spelled out rather than computed: `em` inside .title-row resolves against
+   the CARD's font-size, not the body's. --h1-lh is --h1-size × the 1.2 pinned on `.node .body h1`;
+   --body-lh is 12px × the 1.4 pinned on `.node .body`. The collapsed clamp takes the TALLER of the two
+   with max() rather than naming one, since which is taller flips with --h1-size — at 16px the heading's
+   was, at 12px the paragraph's is. The checkbox centres on --body-lh. */
+.node { --pad-y:10px; --pad-x:12px; --h1-size:12px; --h1-lh:14.4px; --body-lh:16.8px;
+  --donebox-w:14px; --title-gap:8px; }
 .node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
 /* Direct child, same reason as .donebox below: a DOM-nested child card has its own .body, and its
@@ -418,14 +442,49 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    has no checklist — see showsDoneCheckbox in main.ts, which is already parent-only. */
 .node > .title-row > .donebox { display:none; margin:3px 0 0; left:1px; }
 .node.show-done > .title-row > .donebox { display:block; }
-/* Struck-through title = THIS card is checked off. Direct-child combinators for the same reason as
-   .donebox above: a child card is DOM-nested inside its parent's element (paintNode), so a
-   descendant combinator struck out every title below a done card — the whole subtree read as done,
-   and in a stack's outline that looks like the card's own content being crossed out. Checking a
-   parent off says nothing about its children, so only its own title-row is affected. */
-.node.done > .title-row > .title { text-decoration:line-through; opacity:.65; }
+/* An UNTITLED card's checkbox leaves the row's FLOW. In the row it was the only visible item left once
+   the label went, so it held the row open at its own height and the body started underneath it — a
+   checkbox alone on one line, blank to its right, text below. Absolutely positioned it takes the row's
+   height back to nothing and the FIRST LINE OF THE BODY comes up beside it, which is where a checkbox
+   belongs. Nothing has to be lined up by hand: `.show-done > .body` already indents past the box, so the
+   gap between them stays the row's own --title-gap. `left` is the flow version's 12px + 1px unchanged, so
+   the box doesn't move sideways. Both offsets resolve against `.node`'s padding box — a plain card's
+   .title-row is unpositioned, so it is not the containing block here (a frame's tab is, but a frame has
+   no checkbox).
+   Both are CENTRED on the body's first line, and both are derived rather than typed: an absolutely
+   positioned child resolves against the PADDING box, so the card's own padding has to be added back —
+   and a stack's ROW halves it (.node.stack-child sets --pad-y/--pad-x to 5/6), which is exactly the bug
+   these numbers were hardcoded as 10/12 for. `--body-lh` is the first line's box (12px × 1.4); half the
+   leftover around a 14px box centres it. The horizontal +1px is the flow version's own nudge, kept so
+   the box doesn't move sideways between the two states.
+   The other half of the arithmetic is the `.node .body > :first-child` margin below — load-bearing, not
+   tidying: with a `<p>`'s own .3em still in place the first line began 3.6px lower than this assumes and
+   the box sat visibly high above the text. That margin is now --text-drop rather than 0, and this offset
+   deliberately does NOT add it back: dropping the text by an optical hair while the box stays put is the
+   whole point of that variable — see its own comment for why the two aren't symmetrical. */
+.node.no-title.show-done > .title-row > .donebox { position:absolute; margin:0;
+  top:calc(var(--pad-y) + (var(--body-lh) - var(--donebox-w)) / 2);
+  left:calc(var(--pad-x) + 1px); }
+/* Struck-through = THIS card is checked off. It strikes the note's FIRST BLOCK — its heading, or its
+   first paragraph when it hasn't got one — because that is the line a card's name now lives on; the rule
+   used to target `.title`, which no longer carries a card's text at all. Only the first block, not the
+   whole note: a struck-out paragraph of detail is unreadable, and "done" is a mark on the thing, not a
+   deletion of what it says. `.title` keeps it for the kinds that still HAVE a label (a frame's tab, a
+   stack's header). Direct-child combinators for the same reason as .donebox above: a child card is
+   DOM-nested inside its parent's element, so a descendant combinator struck out every title below a done
+   card — the whole subtree read as done, and in a stack's outline that looks like the card's own content
+   being crossed out. Checking a parent off says nothing about its children. */
+.node.done > .title-row > .title,
+.node.done > .body > :first-child { text-decoration:line-through; opacity:.65; }
 /* checklist owner: this card's own "n/m" progress over its direct children */
 .node .progress { flex:none; margin-left:auto; padding-left:.5em; font-size:11px; font-weight:600; opacity:.7; }
+/* On a node with no LABEL — a card, a stack — the "n/m" badge leaves the row's flow, for exactly the
+   reason the checkbox does: it was the last flex item in there once the label went, so it held the row
+   open at its own height and the text started below it. The insets put it back where `margin-left:auto`
+   had it (the content's top-right corner), minus the line it was occupying; the matching padding on the
+   first line is what stops a long one running underneath it. */
+.node.no-title > .title-row > .progress { position:absolute; top:var(--pad-y); right:var(--pad-x); padding:0; }
+.node.no-title.has-progress > .body > :first-child { padding-right:34px; }
 /* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
    .hidden-count's upper-right collapse bubble (same footprint, opposite corner so the two never
    collide on a card that's both locked and collapsed). That badge is the ONLY cue — no dashed
@@ -481,7 +540,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    STACK_PAD (main.ts) when it places the rows and closes the box under the last one, so anything but
    STACK_PAD here shows up as a title sitting 1px nearer the top edge than the bottom gap below it —
    most visible on an empty stack, where the title IS the content. Keep the two in step. */
-.node.stack { padding:6px; }
+/* the VARIABLES, not `padding` — a stack renders a body now, so the checkbox offset derived from these
+   applies to it too (see `.node`, and the .stack-child rule further down for the same reason) */
+.node.stack { --pad-y:6px; --pad-x:6px; }
 .node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
 /* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
    Its title needs no rule of its own either way: an untabbed frame's tab has no fill at all (see
@@ -544,8 +605,25 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
      shape to round, and the selection ring carries its own (::before below). */
   padding:10px 12px; color:var(--tab-ink, var(--ink)); }
 .node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
-  margin-bottom:0; padding-right:0; font-size:14px; line-height:20px;
+  /* The tab renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a frame whose text
+     is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1 rule
+     below, exactly as a card does. That's the whole of "a frame's tab is card text too".
+     The LINE HEIGHT is pinned at 20px and must stay: FRAME_TAB_H is 40px of exactly this padding + line
+     box, so the tab's height is independent of what it renders — a heading, a bullet or a paragraph all
+     leave the tab strip's geometry alone. */
+  margin-bottom:0; padding-right:0; font-size:12px; font-weight:400; line-height:20px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* The markdown a tab renders has to become ONE line: every block markdown produces goes inline with its
+   margins dropped, and anything after the first block is left off (a tab shows a name, not a note — the
+   text is still all there in the file and in the editor). A heading keeps the shared heading size, so the
+   tab looks like the h1 it is; `line-height` is deliberately NOT restated, so the h1 inherits the tab's
+   pinned 20px and FRAME_TAB_H holds. */
+.node.frame > .title-row > .title > *,
+.node.frame-folded > .title-row > .title > * { display:inline; margin:0; }
+.node.frame > .title-row > .title > :not(:first-child),
+.node.frame-folded > .title-row > .title > :not(:first-child) { display:none; }
+.node.frame > .title-row > .title h1,
+.node.frame-folded > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
 /* while renaming, let a long title wrap and spill out of the tab instead of being ellipsised */
 .node.frame > .title-row > .title.editing,
 .node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
@@ -726,7 +804,8 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    only hands out dark ink BELOW its contrast floor, i.e. exactly on the fills that were too pale for
    a white step to show. Everything else still has white ink, and so still brightens by the same 7%. */
 .node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, var(--ink, #fff));
-  padding:5px 6px; border-radius:var(--r-inner); }
+  /* the VARIABLES, not `padding` — the checkbox offset above is derived from them (see `.node`) */
+  --pad-y:5px; --pad-x:6px; border-radius:var(--r-inner); }
 /* …and a card inside a FRAME's box takes the SAME step, for the same reason (main.ts .frame-child):
    a card inherits its colour from its ancestors (effectiveColor), so one dropped into a coloured
    frame resolved to the frame's own --card and vanished into it. Only the fill steps — a frame's
@@ -760,7 +839,10 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 /* a stack is a container too: it shows only its title header (its children are framed below it), so
    hide its own body / +N chip / add-note pill — but KEEP its "n/m" progress, since a stack is a
    natural checklist container (its direct children carry the done-boxes). */
-.node.stack > .body { display:none; }
+/* A stack's body IS its header — the text above its rows, rendered as markdown like any card's, so a
+   heading needs a `# ` there exactly as it does anywhere else. It used to be `display:none` with the name
+   drawn in `.title` instead, which is what made a stack's name a heading whether one was written or not.
+   view/layout.ts stackHeaderH measures this box, so however many lines it renders, the rows start below it. */
 .node.stack .addnote { display:none !important; }
 /* drag-into-container preview: restyle the box's OWN border to a white dash — like the other drag
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
@@ -1002,14 +1084,22 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    bar's long axis, set inline per orientation — see features/drag.ts showInsertLine */
 .insert-line { position:absolute; pointer-events:none; z-index:5; }
 /* break long words / URLs and clip anything that still overflows the card horizontally */
-.node .title { font-weight:600; font-size:14px; margin-bottom:9px; padding-right:16px;
-  overflow-wrap:anywhere; overflow:hidden; }
+/* A card's title IS the leading `# ` line of its note, so it must LOOK like one: this metric is shared
+   verbatim with `.node .body h1` below (the same heading, rendered by renderBodyHTML when it appears
+   anywhere further down the note), and the two must not drift — a card whose name is styled unlike the
+   `# heading` it literally is reads as a separate field, which is exactly what this format stopped
+   having. h2–h6 step down from it. `padding-right` is the fold chip's room and belongs to the title
+   alone; a frame's TAB pins its own font-size/line-height/weight (and needs to — FRAME_TAB_H is 40px of
+   exactly those), so nothing here can move a tab. */
+.node .title, .node .body h1 { font-weight:600; font-size:var(--h1-size); }
+.node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
 /* inline title rename (double-click / F2 / on-create): edit the card's title in place.
    --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
    as .oc-title/.oc-note in the outliner below, which take the same variable. */
-/* user-select:text overrides .node's own `none` for the one element that IS text being edited: a
-   browser forces selection inside a contenteditable anyway, but the inherited `none` is enough to
-   make dragging that selection out (features/text-drag.ts) unreliable. */
+/* Only a CONTAINER's label is ever `.editing` now — a frame's folder tab, a docked tab, a stack's
+   header (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
+   is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
+   `none` for the one element that IS text being edited. */
 .node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-inner);
   cursor:text; white-space:pre-wrap; overflow:visible; background:var(--scrim);
   -webkit-user-select:text; user-select:text;
@@ -1046,10 +1136,45 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
   width:22px; height:22px; min-width:22px; padding:0; font-size:13px;
   background:color-mix(in srgb, var(--card, var(--node)) 72%, white 28%);
 }
-.node .title.editing.invalid { outline-color:#e0564a; }
-.node .body  { font-size:12px; color:inherit; opacity:.9; line-height:1.4;
+/* No `opacity` here. It used to sit at .9, which de-emphasised the note against its title — but `--ink`
+   is already the MINIMUM contrast this fill can carry (utils/ink.ts measures it against a 2.5 floor, and
+   a card inside a stack or a frame then steps its fill 93% toward that same ink), so trimming another
+   10% off came straight out of the thinnest margin in the app. It showed worst exactly where the
+   screenshot showed it: ordinary un-bold text in a stack's row. */
+.node .body  { font-size:12px; color:inherit; line-height:1.4;
   overflow-wrap:anywhere; overflow:hidden; }
-/* in-place body editor (double-click the body / ↓ from the title): raw markdown in a textarea */
+/* The note's first and last blocks give up their outer margins. Every block in here carries one (a `<p>`
+   is .3em/.75em — see below), and at the EDGES of the body those margins are not spacing BETWEEN
+   anything: they're a gap under the title and a gap above the card's bottom edge. Both were invisible
+   while a card had a 64px floor to hide them in; now that a card shrink-wraps its text, they are the
+   card's own padding twice over. The first-child rule is also what makes the untitled card's checkbox
+   land right — see .no-title.show-done above, whose offset centres the box on a first line it can now
+   count on starting at the content top. */
+/* --text-drop is an OPTICAL nudge, not spacing: the checkbox is a 14px square whose weight sits evenly
+   inside it, while a line of text carries its weight above the middle of its 16.8px line box (the
+   descender space under the baseline is mostly empty). Centring the two on each other geometrically
+   therefore leaves the text reading a shade high, and this pays that back. Applied to EVERY card, not
+   only the ones with a checkbox, so a checklist row and a plain row side by side in a stack keep their
+   first lines level. One value, easy to retune — the only thing in this file that is a matter of eye
+   rather than arithmetic. */
+.node { --text-drop:2px; }
+.node .body > :first-child { margin-top:var(--text-drop); }
+.node .body > :last-child { margin-bottom:0; }
+/* A card is ONE text field, so while its editor is open the rendered title row stands down: the name is
+   the `# ` line inside the textarea, and showing it in both places would read as two fields (and let
+   them disagree mid-edit). The row — not just the label — because its checkbox and fold chip aren't
+   controls you can use while typing anyway. Containers never take this class; they rename on the label
+   itself (.title.editing above). */
+.node.card-editing > .title-row { display:none; }
+/* An UNTITLED card shows no name at all — it IS its text (main.ts paintNode writes `no-title`), and it
+   must reserve NO space for the name it hasn't got: visually such a card is its body and nothing else.
+   The row itself stays, because the fold chip hangs off it and the done checkbox sits in it, but with the
+   label gone every remaining child is either zero-height or absolutely positioned, so the row collapses
+   to nothing — as long as it contributes no box of its own, hence the explicit zeroing. (A checklist
+   card's checkbox does give the row height back, which is right: there IS something on that line then.) */
+.node.no-title > .title-row > .title { display:none; }
+.node.no-title > .title-row { margin:0; min-height:0; }
+/* in-place card editor (double-click, F2, E, the pen): the whole note as raw markdown in a textarea */
 .node .body.editing { overflow:visible; opacity:1; }
 .node .body-edit { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-size:12px; line-height:1.4; color:inherit;
@@ -1058,13 +1183,25 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
   outline:2px solid var(--accent); outline-offset:2px; resize:none; overflow:hidden;
   white-space:pre-wrap; overflow-wrap:anywhere; }
 /* markdown elements inside a card body — tight spacing, clipped preview */
-.node .body > :first-child { margin-top:0; }
 .node .body > :last-child  { margin-bottom:0; }
 .node .body ul, .node .body ol,
 .node .body blockquote, .node .body pre { margin:.3em 0; }
 .node .body p { margin:.3em 0 .75em; }   /* a little breathing room after each paragraph */
-.node .body h1,.node .body h2,.node .body h3,
+/* h2–h6 only. h1 is deliberately NOT in this group: it's the card's own name (the leading `# ` line) and
+   takes the shared heading metric instead — see the rule below. It USED to be listed here, and because
+   this rule sits after the shared one with the same specificity, it silently won: every card's h1 came
+   out at 12px while a frame's tab rendered the same heading at --h1-size, which is exactly the "frame
+   headers are bigger than card headers" that this pair of rules kept producing. */
+.node .body h2,.node .body h3,
 .node .body h4,.node .body h5,.node .body h6 { margin:.3em 0; font-size:12px; font-weight:700; }
+/* …and h1 takes the card TITLE's metric instead (shared rule above), since on a card the leading `# ` line
+   IS the title — there is no separate title element any more, this rule is what draws a card's name.
+   `line-height` is PINNED rather than left at `normal`, and that's load-bearing twice over: it makes 14px
+   text occupy exactly one --body-lh (14 × 1.2 = 16.8px, the same box a 12px/1.4 paragraph occupies), which
+   is what lets the collapsed clamp above cut either kind of first line to one line without clipping
+   descenders off a heading — and it takes the card's height off the font's own metrics, which vary by
+   platform. `margin-bottom` is the gap the title used to carry below itself. */
+.node .body h1 { margin:.3em 0 9px; line-height:1.2; }
 /* An OUTSIDE list marker is painted to the LEFT of the li's content box, in the ul's own padding —
    and .body clips at its content edge (overflow:hidden above), so the padding has to be wide enough
    to hold the whole marker or the browser draws it half off the card. At this 12px body font Chrome
@@ -1284,7 +1421,25 @@ body.zoom-far .node > .addnote { display:none !important; }
 /* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
    covers both branches-with-children and leaf cards whose body is folded away. */
 .node.collapsed { min-height:0; }   /* shrink to the title, like a bodyless card */
-.node.collapsed .body { display:none; }
+/* A COLLAPSED card is its FIRST LINE, cut by CSS. It used to be `display:none` on the whole body, which
+   worked only while a card had a separate title element to fall back on — with the note being the only
+   thing a card draws now, hiding it folded the card down to a blank stub.
+   So the cut is CSS, never a rewrite of the text in JS: a folded card shows the same text in the same
+   style it shows unfolded, just less of it — `# Heading` folds to a heading, plain text to plain text,
+   and nothing is bold that wasn't already.
+   WHICH text is shown, and the `…` that says more follows, are decided in main.ts (collapsedMarkdown):
+   only the first line's markdown is rendered here at all. That is not a preference — `text-overflow` and
+   `-webkit-line-clamp` can only ellipsise WITHIN one element, and what a fold hides is usually a SIBLING
+   block (a heading then a paragraph, or several short lines that become separate `<p>`s), so neither ever
+   marked the case that mattered.
+   What's left for CSS is the other case, a single line too WIDE for the card: `nowrap` + `text-overflow`
+   puts an ellipsis on that one, and `max-height` caps the box at the taller of the two possible first
+   lines (a 16px heading's, or a 12px paragraph's) so nothing can spill however it renders. The two levels
+   of "first" cover a leading LIST, whose text is really in its `<li>`. */
+.node.collapsed > .body { max-height:max(var(--h1-lh), var(--body-lh)); overflow:hidden; }
+.node.collapsed > .body > :first-child,
+.node.collapsed > .body > :first-child > li:first-child {
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node.collapsed .title { margin-bottom:0; }
 /* matching empty-swatch in light theme */
 body.light .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#fff 5px,#e7ebf1 5px,#e7ebf1 10px); }
@@ -1787,8 +1942,6 @@ body.ol-editing .oc-back { display:inline-flex; }
    in-card title/body editors on the canvas (.node .title.editing / .body-edit). */
 .oc-title:focus, .oc-note:focus { outline:2px solid var(--accent); outline-offset:1px;
   background:var(--scrim); }
-.oc-title.invalid:focus { outline-color:#e0564a; }
-.oc-title.invalid { text-decoration:underline wavy #e0564a; }
 .oc-note { resize:none; overflow:hidden; min-height:1.4em; line-height:1.5; font-size:13px;
   opacity:.92; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 .oc-note::placeholder { color:inherit; opacity:.5; }
@@ -1901,7 +2054,6 @@ body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in 
 /* inline rename (⋯ menu → Rename, F2, or on-create) — same treatment as the canvas' .node .title.editing */
 .ol-title.editing { outline:2px solid var(--accent); outline-offset:0; cursor:text;
   white-space:pre-wrap; overflow:visible; background:var(--scrim); }
-.ol-title.editing.invalid { outline-color:#e0564a; }
 /* checklist item: the same donebox the canvas shows next to a checklist parent's children */
 .ol-done { -webkit-appearance:none; appearance:none; width:14px; height:14px; margin:0 5px 0 0;
   border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
@@ -2024,7 +2176,6 @@ body.sheet-open #editorSheet { display:flex; }
 #shTitle { flex:1 1 auto; min-width:0; height:44px; padding:0 12px; font-size:16px; font-weight:600;
   background:var(--panel); color:var(--text); border:none; border-radius:var(--r-full); }
 #shTitle:focus { box-shadow:0 0 0 2px var(--accent); }
-#shTitle.invalid { box-shadow:0 0 0 2px #e0564a; }
 #shDone { flex:none; height:44px; padding:0 18px; border:none; border-radius:var(--r-full);
   background:var(--accent); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
 #shBody { flex:1 1 auto; min-height:0; resize:none; padding:10px 12px;

@@ -40,8 +40,20 @@ function refreshRaster(): void {
   }, RASTER_SETTLE);
 }
 
+// Snap the pan to whole DEVICE pixels. `state.view.x/y` are floats — a fit, a glide and a zoom anchor all
+// produce fractions — and a fractional translate lands every glyph in the world off the pixel grid. On a
+// 2x screen half a CSS pixel IS a whole device pixel, so it costs nothing and nobody notices; on a 1x
+// screen it smears each glyph across a pixel boundary and throws away the subpixel (LCD) rendering that
+// makes small text look sharp there. That is what "the text looks pixellated on a non-retina screen" is,
+// and it is NOT anti-aliasing being off: `-webkit-font-smoothing:antialiased` would make it worse, since
+// it replaces subpixel AA with the grayscale kind — thinner and softer at 1x, which is the opposite of
+// what's wanted.
+// The TRANSFORM is snapped, never `state.view` itself: the model stays exact, so a zoom anchor can't
+// drift and screenToWorld keeps its arithmetic — and a disagreement of under half a device pixel between
+// hit-testing and paint is invisible by definition. The SCALE is never snapped (that would quantise zoom).
+const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; return Math.round(v * d) / d; };
 export function applyView(): void {
-  world.style.transform = `translate(${state.view.x}px,${state.view.y}px) scale(${state.view.k})`;
+  world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
   refreshRaster();
   paintGrid();

@@ -9,4 +9,6 @@ mm_y: 270
 mm_collapsed: true
 ---
 
+# 💾 Storage & sync
+
 You can have **many maps**. The **home button** (top left) opens the sidebar where they all live — switch, create, rename, export or delete them there.

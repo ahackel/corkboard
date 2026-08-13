@@ -21,6 +21,7 @@ import { paintAll, exitScope, goToScopeDepth, selectAll } from '../main.js';
 // copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
 // sides only touch it inside event handlers, never at module-eval time, so it's safe.
 import { buildCardMenu } from './float-bar.js';
+import { nodeLabel } from '../utils/model.js';
 
 const menu = document.createElement('div');
 menu.id = 'ctxMenu';
@@ -164,7 +165,7 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   // leaving isn't a mutation.
   const open = scopeRootNode();
   if (open){
-    entries.push({ label:`Leave “${open.title}”`, shortcut:'↓', run: () => exitScope() });
+    entries.push({ label:`Leave “${nodeLabel(open)}”`, shortcut:'↓', run: () => exitScope() });
     if (scope.stack.length > 1) entries.push({ label:'Back to the whole map', run: () => goToScopeDepth(0) });
     entries.push('sep');
   }
@@ -203,8 +204,8 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
   closeMenu();
   if (!t || !t.closest('#stage')) return;                 // toolbar / sidebar / dialogs: native menu
   // an active in-place editor keeps the native menu (spellcheck, copy/paste)
-  if (ui.inlineEdit && t.closest('.title.editing')) return;
   if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) return;
+  if (ui.titleEdit && t.closest('.title.editing')) return;
   e.preventDefault();
   const nodeEl = t.closest('.node[data-id]') as HTMLElement | null;
   const id = nodeEl?.dataset.id;

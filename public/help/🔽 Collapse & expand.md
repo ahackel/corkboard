@@ -8,6 +8,8 @@ mm_y: 148
 mm_collapsed: true
 ---
 
+# 🔽 Collapse & expand
+
 - **Fold a branch:** click the round button at the card's top-right corner. It appears when you
   hover a card, or when the card is selected — handy on a touch screen: tap the card, then the button.
   Frames and stacks have one too, on the corner of their title, and with several cards selected each

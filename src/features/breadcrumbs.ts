@@ -17,6 +17,7 @@
 // #toolbar — capping the pill's width can't, because the folder icons and separators are flex:none and
 // simply overflow it. Same behaviour as Explorer's and Notion's paths.
 import { state } from '../core/state.js';
+import { nodeLabel } from '../utils/model.js';
 import { store } from '../data/persistence.js';
 import { scope, scopeActive } from '../nav/scope.js';
 import { goToScopeDepth } from '../main.js';
@@ -44,7 +45,7 @@ function crumb(depth: number, label: string, current: boolean): string {
     + `${current ? ' aria-current="page"' : ''} title="${esc(label)}">`
     + `<span class="sc-name">${esc(label)}</span></button>`;
 }
-const levelTitle = (i: number): string => state.nodes.get(scope.stack[i]!.rootId)?.title ?? '…';
+const levelTitle = (i: number): string => state.nodes.get(scope.stack[i]!.rootId) ? nodeLabel(state.nodes.get(scope.stack[i]!.rootId)!) : '…';
 // The levels `…` stands for, outermost first — everything before the tail.
 const foldedLevels = (): number[] =>
   scope.stack.length > TAIL ? [...Array(scope.stack.length - TAIL).keys()] : [];
@@ -55,7 +56,7 @@ const foldedLevels = (): number[] =>
 // rebuilding this innerHTML per frame would be pure waste (cf. queryKey in main.ts).
 export function renderCrumbs(): void {
   const sig = !scopeActive() ? store.name
-    : store.name + '|' + scope.stack.map(l => l.rootId + ':' + (state.nodes.get(l.rootId)?.title ?? '')).join('/');
+    : store.name + '|' + scope.stack.map(l => l.rootId + ':' + (() => { const p = state.nodes.get(l.rootId); return p ? nodeLabel(p) : ''; })()).join('/');
   if (bar.dataset.sig === sig) return;
   bar.dataset.sig = sig;
   document.body.classList.toggle('scoped', scopeActive());

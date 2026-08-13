@@ -9,4 +9,6 @@ mm_y: 209
 mm_collapsed: true
 ---
 
+# 🎨 Style & layout
+
 Make the map yours: card colours, how children arrange, connector style, and light / dark theme.

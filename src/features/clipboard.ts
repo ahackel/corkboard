@@ -20,7 +20,7 @@ import { serializeMd, parseMd, type ParsedNote } from '../utils/frontmatter.js';
 import { isAncestor } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
-import { mkNode, uniqueTitle, deleteSelection, contentParent } from './crud.js';
+import { mkNode, deleteSelection, contentParent } from './crud.js';
 import { touch, record } from './history.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
@@ -47,8 +47,19 @@ function withParentRef(md: string, parentName: string | null): string {
   return `---\n${fm.join('\n')}\n---\n${m[2]}`;
 }
 
-// One card as a would-be .md file: its filename (title) + its exact file content.
+// One card as a would-be .md file: its path + its exact file content.
 export interface CardFile { name: string; text: string }
+
+// The payload-local NAME of a card — the key its children's mm_parent points at, and the filename it
+// unpacks to. Its own file path, which is unique by construction. Deliberately NOT its title, which
+// two cards may now share (both would collapse into one payload entry and adopt each other's children)
+// and which an untitled card hasn't got at all. A never-saved card has no path yet, so its ephemeral id
+// stands in — unique within the payload, which is all this has to be.
+const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
+// …and the leaf of that path, for the one place a payload name faces the USER: the filename a single
+// card downloads/shares as. A card living in a subfolder would otherwise offer `sub/Notes.md` as a
+// download name, which no browser will honour. Zip ENTRIES keep the full path on purpose.
+const baseName = (path: string): string => path.slice(path.lastIndexOf('/') + 1);
 
 // The given cards INCLUDING their subtrees as one .md file per card, parent refs payload-local.
 // Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
@@ -60,7 +71,7 @@ export function filesFor(ids: string[]): CardFile[] {
   return all.map(id => {
     const n = state.nodes.get(id)!;
     const p = n.parent && inPayload.has(n.parent) ? state.nodes.get(n.parent) : null;
-    return { name: `${n.title}.md`, text: withParentRef(serializeMd(n), p ? `${p.title}.md` : null) };
+    return { name: payloadName(n), text: withParentRef(serializeMd(n), p ? payloadName(p) : null) };
   });
 }
 export function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
@@ -108,7 +119,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   for (let i = 0; i < marks.length; i++){
     const start = marks[i].index + marks[i][0].length;
     const end = i + 1 < marks.length ? marks[i + 1].index : text.length;
-    cards.push({ name: marks[i][1], p: parseMd(text.slice(start, end).trim(), marks[i][1]) });
+    cards.push({ name: marks[i][1], p: parseMd(text.slice(start, end).trim()) });
   }
   if (!cards.length) return false;
   const byName = new Map(cards.map(c => [c.name, c]));
@@ -135,7 +146,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
       const root = isPayloadRoot(c);
       const n = mkNode({
         x: (c.p.mm.x ?? target.x) + dx, y: (c.p.mm.y ?? target.y) + dy,
-        title: uniqueTitle(c.p.title),
+        title: c.p.title,   // verbatim: a pasted card keeps its name, and duplicates are allowed now
         color: c.p.color, keepStatus: c.p.keepStatus,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
         collapsed: c.p.mm.collapsed, done: c.p.mm.done, checklist: c.p.mm.checklist,
@@ -177,11 +188,11 @@ function b64(bytes: Uint8Array): string {
   return btoa(s);
 }
 // A multi-card export .zip is named after its first (root) card.
-const zipName = (files: CardFile[]): string => files[0].name.replace(/\.md$/, '') + '.zip';
+const zipName = (files: CardFile[]): string => baseName(files[0].name).replace(/\.md$/, '') + '.zip';
 // The selection as ONE downloadable file: a single card is its .md, more become a .zip.
 function exportFile(files: CardFile[]): { mime: string; name: string; bytes: Uint8Array } {
   return files.length === 1
-    ? { mime: 'text/markdown', name: files[0].name, bytes: new TextEncoder().encode(files[0].text) }
+    ? { mime: 'text/markdown', name: baseName(files[0].name), bytes: new TextEncoder().encode(files[0].text) }
     : { mime: 'application/zip', name: zipName(files),
         bytes: zipBytes(files.map(f => ({ name: f.name, data: f.text }))) };
 }

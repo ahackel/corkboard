@@ -9,7 +9,9 @@ import { store, scheduleSave } from '../data/persistence.js';
 import { applyLayouts } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { paintAll, selectNode, IMAGE_W, IMAGE_H } from '../main.js';
-import { createNode, uniqueTitle, newCardTitle, centredAt } from './crud.js';
+import { createNode, centredAt } from './crud.js';
+import { splitHeading } from '../utils/frontmatter.js';
+import { nodeLabel } from '../utils/model.js';
 import { autosizeBody } from './inline-edit.js';
 import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
@@ -110,8 +112,8 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
 }
 
 // Make one IMAGE CARD per file — a resizable leaf that shows nothing but that image (see
-// isImageBox in main.ts). No title/body UI, no rename prompt; its file is named after the image
-// (deduped by uniqueTitle) purely so it has a valid, stable filename on disk — the name itself is
+// isImageBox in main.ts). No title/body UI, no rename prompt; its title exists purely so it has a
+// readable, stable filename on disk (desiredFileFor suffixes a collision) — the name itself is
 // never shown or editable. Shared by a canvas/card drop AND a clipboard paste (⌘V or the context
 // menu's Paste) — both land an image as a card of its own rather than inline body markdown.
 async function createImageCards(imgs: File[], sx: number | null, sy: number | null, parent: string | null): Promise<void> {
@@ -125,7 +127,7 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
     const { w, h } = imageCardSize(natural);
     createNode({
       x: p.x - w / 2 + i * 24, y: p.y - h / 2 + i * 24,
-      parent, title: uniqueTitle(alt), body: `![${alt}](${path})`,
+      parent, title: alt, body: `![${alt}](${path})`,
       type: 'image', color: 'none', w, h, edit: false,
     });
     i++;
@@ -216,7 +218,7 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   // probed in the background: if the URL actually loads as an image, the link upgrades to ![](…).
   if (/^https?:\/\/\S+$/i.test(text)){
     const isImg = /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?\S*)?$/i.test(text);
-    const n = createNode({ ...opts, title: newCardTitle(), body: isImg ? `![](${text})` : text });
+    const n = createNode({ ...opts, body: isImg ? `![](${text})` : text });
     if (n) setStatus(isImg ? 'Pasted image link' : 'Pasted link');
     if (n && !isImg) void probeImage(text).then(ok => {
       const cur = state.nodes.get(n.id);
@@ -227,12 +229,12 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
     });
     return;
   }
-  const lines = text.split('\n');
-  let ti = lines.findIndex(l => l.trim()); if (ti < 0) ti = 0;
-  const title = lines[ti].replace(/^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/, '').replace(/[/\\]/g, '-').trim().slice(0, 80);
-  const body = lines.slice(ti + 1).join('\n').trim();
-  const n = createNode({ ...opts, title: title ? uniqueTitle(title) : newCardTitle(), body });
-  if (n) setStatus(`Pasted “${n.title}”`);
+  // Pasted text is a card's text, so it splits the way a card's own does (splitHeading): a leading
+  // `# ` line becomes the title, and without one the card is untitled and this is all body. It used to
+  // hand-roll its own first-line-as-title read here, complete with a second copy of the marker strip.
+  const { title, body } = splitHeading(text);
+  const n = createNode({ ...opts, title, body });
+  if (n) setStatus(`Pasted “${nodeLabel(n)}”`);
 }
 document.addEventListener('paste', (e) => {
   if (isTypingInField()) return;                 // field/editor pastes keep their native behaviour

@@ -4,13 +4,14 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, takenTitles, isLockedEffective, subtreeHasLocked, isAncestor } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor } from '../utils/model.js';
+import { splitHeading } from '../utils/frontmatter.js';
 import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H } from '../main.js';
-import { startInlineEdit, dropInlineEdit, dropBodyEdit, titleProblem } from './inline-edit.js';
+import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, commitStep, record } from './history.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
@@ -58,7 +59,11 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const n = mkNode({
     x: opts.x ?? c.x, y: opts.y ?? c.y,
     parent: parentId,
-    title: opts.title ?? (opts.type === 'annotation' ? uniqueTitle('Annotation') : newCardTitle()),
+    // A fresh card is UNTITLED — it has no name until the first line of its text is a `# ` heading
+    // (utils/frontmatter.ts splitHeading), and its file is slugged off that text instead. This is
+    // where "New Card 1" and the minted "Annotation 7" used to come from: both existed only so the
+    // node had a unique filename, which is no longer the title's job.
+    title: opts.title ?? '',
     color: opts.color ?? '',
     tags: opts.tags ? [...opts.tags] : [], body: opts.body ?? '',
     type: opts.type ?? 'card', layout: opts.layout ?? 'inherit',
@@ -88,45 +93,22 @@ export function createDetachedNode(x: number, y: number): MindNode | undefined {
   if (state.readOnly) return;
   // …parented to the open frame while there is one, so the ghost card rides the ordinary frame-child
   // machinery instead of being dragged onto a canvas that can't show it.
-  const n = mkNode({ x, y, parent: detachParentId(), title: newCardTitle() });
+  const n = mkNode({ x, y, parent: detachParentId() });
   state.nodes.set(n.id, n);
   paintAll();   // give the card a DOM element so it can be dragged
   return n;
 }
-// Pick a title not already in use: "Some heading" -> "Some heading 2" -> "Some heading 3"…
-export function uniqueTitle(base: string): string {
-  const taken = takenTitles();
-  if (!taken.has(base.toLowerCase())) return base;
-  let i = 2;
-  while (taken.has(`${base} ${i}`.toLowerCase())) i++;
-  return `${base} ${i}`;
-}
-// Titles are numbered: fresh cards are "New Card 1", "New Card 2", …; a copy of "Idea 3" tries
-// "Idea 4" next (or the first free number after it), and a copy of an unnumbered "Idea" starts
-// a new suffix at "Idea 2".
-function splitNumbered(title: string): { base: string; num: number | null } {
-  const m = title.match(/^(.*\S) (\d+)$/);
-  return m ? { base: m[1], num: parseInt(m[2], 10) } : { base: title, num: null };
-}
-function nextNumberedTitle(base: string, from = 1): string {
-  const taken = takenTitles();
-  let i = from;
-  while (taken.has(`${base} ${i}`.toLowerCase())) i++;
-  return `${base} ${i}`;
-}
-export const newCardTitle = (): string => nextNumberedTitle('New Card');
-const copyTitle = (title: string): string => {
-  const { base, num } = splitNumbered(title);
-  return nextNumberedTitle(base, (num ?? 1) + 1);   // numbered → next free number; plain → "… 2"
-};
 // Clone one card (not its subtree) at (x,y): same content/colour, keeping its parent so the copy
-// stays attached as a sibling. Gets the next free numbered title (copyTitle) so its file is valid.
+// stays attached as a sibling. Keeps the source's title VERBATIM — a duplicate of "Idea" is another
+// card called "Idea", and the two are told apart by where they sit, which is what a canvas is for.
+// (It used to become "Idea 2", numbered against every other title in the map, purely so the copy's
+// filename wouldn't collide; that's desiredFileFor's business now, and it suffixes the FILE.)
 // Shared by the duplicate (sidebar/keyboard) and Shift-drag clone paths; doesn't touch selection/layout.
 function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
   const copy = mkNode({
     x, y,
     parent: s.parent,
-    title: copyTitle(s.title),
+    title: s.title,
     color: s.color,
     tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist,
     type: s.type, layout: s.layout, side: s.side,
@@ -151,7 +133,7 @@ export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): Mi
   // and a chain/fan of fresh copies would otherwise stack on the 64px fallback (only the first
   // lands right). Then lay out with correct heights and commit.
   paintAll(); applyLayouts(); paintAll();
-  const msg = copies.length === 1 ? `Duplicated → “${copies[0].title}”` : `Duplicated ${copies.length} cards`;
+  const msg = copies.length === 1 ? `Duplicated → “${nodeLabel(copies[0])}”` : `Duplicated ${copies.length} cards`;
   if (copies.length === 1 && edit){
     selectNode(copies[0].id);
     startInlineEdit(copies[0], { isNew: false });
@@ -167,7 +149,7 @@ export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): Mi
 // while the original is the node being dragged away. Doesn't steal selection/focus.
 export function leaveClone(s: MindNode, pos: Pt): MindNode {
   const copy = cloneNodeAt(s, pos.x, pos.y);
-  setStatus(`Cloned → “${copy.title}”`);
+  setStatus(`Cloned → “${nodeLabel(copy)}”`);
   return copy;
 }
 
@@ -196,7 +178,6 @@ export function addChild(parentId: string, at?: Pt): void {
     x: at ? at.x : parent.x + 40 + sibs.length * 30,
     y: at ? at.y : parent.y + 150 + sibs.length * 10,
     parent: parentId,
-    title: newCardTitle(),
   });
   const id = n.id;
   state.nodes.set(id, n);
@@ -226,7 +207,6 @@ export function createSibling(refId: string){
     x: ref.x, y: ref.y + nodeH(ref) + 24,
     parent: ref.parent,
     side: sideOf(parent, ref),                             // same direction as the reference card
-    title: newCardTitle(),
   });
   state.nodes.set(n.id, n);
   parent.kidOrder = insertedKidOrder(parent, n.id, ref.id);   // directly after the reference
@@ -242,47 +222,26 @@ export function createSibling(refId: string){
 // into another card's note). All of them CUT the text out of the source, so the three helpers below
 // are the shared halves — deriving the new card's title/body, and the cut itself.
 
-// Split a lump of extracted text into a card's title + body: the first non-blank line becomes the
-// title, stripped of whatever markdown marker introduced it (a heading's #, a bullet, a quote, a
-// list number); everything after it is the body.
-// …split in two, because the DRAG PREVIEW needs the same reading of the text before anything is cut
-// (features/text-drag.ts paints a ghost card with this title on it) and must not mint a title —
-// uniqueTitle would number it against a map the drop may never change.
-export function splitTitleText(text: string): { title: string; body: string } {
-  const lines = text.split('\n');
-  let ti = lines.findIndex((l: string) => l.trim()); if (ti < 0) ti = 0;
-  return { title: lines[ti].replace(/^\s*(#{1,6}|[-*+]|>|\d+\.)\s*/, '').trim(),
-           body: lines.slice(ti+1).join('\n').trim() };
-}
-function titleAndBodyFrom(text: string): { title: string; body: string } {
-  const { title, body } = splitTitleText(text);
-  return { title: uniqueTitle(title || newCardTitle()), body };
-}
-// Cut [start,end) out of the card's note (tidying the blank lines it leaves) and return it. The
-// in-card editor is DROPPED rather than ended: endBodyEdit would write the textarea's now-stale
-// value back over the shortened body. The caller owns closing the undo step (commitStep), since
+// A lump of extracted text IS a card's text, so it splits exactly the way the note it came from does
+// (splitHeading): a leading `# ` line is the new card's title, and without one the card is untitled and
+// the whole lump is its body. Nothing is minted — text dragged out of a note keeps the shape it had.
+const titleAndBodyFrom = splitHeading;
+// Cut [start,end) out of the card's text (tidying the blank lines it leaves) and return it. What's
+// left is re-SPLIT into title + body, because a card is one field and the range may have taken the
+// title heading with it — cut a card's whole name out and the card is simply untitled now, which is
+// the whole of what used to be a refusal ("a title is a filename, so it can't be cut to nothing").
+// The in-card editor is DROPPED rather than ended: endBodyEdit would write the textarea's now-stale
+// value back over the shortened text. The caller owns closing the undo step (commitStep), since
 // nothing else will.
-function cutBodyRange(n: MindNode, start: number, end: number, value: string): string {
-  touch(n.id);   // usually already touched by startBodyEdit — idempotent
+function cutCardText(n: MindNode, start: number, end: number, value: string): string {
+  touch(n.id);   // usually already touched by startCardEdit — idempotent
   const text = value.slice(start, end);
-  n.body = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
+  const rest = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
+  const split = splitHeading(rest);
+  n.title = split.title; n.body = split.body;
   n.dirty = true;
-  dropBodyEdit();   // same teardown reason as the title's — see inline-edit.ts
+  dropBodyEdit();   // see inline-edit.ts — the editor still shows the pre-cut text
   return text;
-}
-// …and the same cut out of a TITLE, which is a different thing to cut: a title is the card's
-// FILENAME, so what's left has to stand as one on its own (titleProblem — non-empty, no path
-// characters, not already taken). If it wouldn't, the gesture is refused whole rather than done
-// half: nothing is cut and nothing is created, and the message says why. Whitespace is re-collapsed
-// because a cut out of the MIDDLE of a title leaves two spaces where one belongs.
-function cutTitleRange(n: MindNode, start: number, end: number, value: string): string | null {
-  const rest = (value.slice(0, start) + value.slice(end)).replace(/\s+/g, ' ').trim();
-  const problem = rest ? titleProblem(rest, n.id) : 'A card needs a title';
-  if (problem){ setStatus(problem); return null; }
-  touch(n.id);
-  n.title = rest; n.dirty = true;
-  dropInlineEdit();   // the element still shows the pre-cut title — see inline-edit.ts
-  return value.slice(start, end);
 }
 // Append a lump of markdown to a card's note, blank-line separated. Shared by every "this text now
 // lives in THAT card" path (the merge below, a dragged-in selection) — including the sync of an
@@ -302,7 +261,7 @@ export function extractToChild(): void {
   const ta = ui.bodyEdit.ta;
   const s = ta.selectionStart, e = ta.selectionEnd;
   if (s === e){ setStatus('Select some body text to extract'); return; }
-  const { title, body } = titleAndBodyFrom(cutBodyRange(n, s, e, ta.value));
+  const { title, body } = titleAndBodyFrom(cutCardText(n, s, e, ta.value));
   // make the child below the parent and jump to it
   const sibs = childrenOf(n.id);
   if (n.collapsed) n.collapsed = false;
@@ -314,25 +273,17 @@ export function extractToChild(): void {
   state.nodes.set(id, child);
   applyLayouts(); paintAll(); selectNode(id); scheduleSave();
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
-  setStatus(`Extracted “${title}” as a child`);
+  setStatus(`Extracted “${nodeLabel(child)}” as a child`);
 }
 const nodeOrNull = (id: string | null | undefined): MindNode | null =>
   (id ? state.nodes.get(id) ?? null : null);
-// WHICH TEXT is being dragged: a range of the card's note, or of its TITLE — whichever editor is
-// open on it (features/text-drag.ts captures this at dragstart; the offsets are into that editor's
-// live text, which is why the drop re-reads it rather than trusting n.title/n.body).
-export interface TextSource { id: string; part: 'title' | 'body'; start: number; end: number }
+// WHICH TEXT is being dragged: a range of the card's one editor (features/text-drag.ts captures this
+// at dragstart; the offsets are into that editor's live text, which is why the drop re-reads it rather
+// than trusting n.title/n.body). It used to carry a `part: 'title' | 'body'` too, with a contenteditable
+// measured by Range on one side and a textarea's selectionStart on the other — one field, one arm.
+export interface TextSource { id: string; start: number; end: number }
 function liveText(src: TextSource): string | null {
-  if (src.part === 'title')
-    return ui.inlineEdit && ui.inlineEdit.id === src.id ? (ui.inlineEdit.el.textContent ?? '') : null;
   return ui.bodyEdit && ui.bodyEdit.id === src.id ? ui.bodyEdit.ta.value : null;
-}
-// Take the dragged range OUT of whichever half it came from. `null` = refused (only a title can
-// refuse — see cutTitleRange), and then nothing at all has happened yet.
-function cut(n: MindNode, src: TextSource, value: string): string | null {
-  return src.part === 'title'
-    ? cutTitleRange(n, src.start, src.end, value)
-    : cutBodyRange(n, src.start, src.end, value);
 }
 // The text under the drag, read live — `null` once that editor is no longer open on that card, which
 // is also the drop's own "did this drag outlive its editor" test. Exported for the drag PREVIEW, so
@@ -355,11 +306,11 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   if ('into' in dest){
     const t = dest.into;
     if (t.id === src.id || !canMerge(t)) return;
-    const text = cut(n, src, value); if (text == null) return;
+    const text = cutCardText(n, src.start, src.end, value);
     touch(t.id);
     appendToBody(t, text.trim());
     applyLayouts(); paintAll(); selectNode(t.id); scheduleSave(); commitStep();
-    setStatus(`Moved text into “${t.title}”`);
+    setStatus(`Moved text into “${nodeLabel(t)}”`);
     return;
   }
   // WHERE THE NEW CARD BELONGS, in one rule read both ways: the box you dropped in governs.
@@ -378,7 +329,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   const parent = dest.container
     ?? (hostFrame(n) ? nodeOrNull(detachParentId()) : nodeOrNull(n.parent));
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
-  const text = cut(n, src, value); if (text == null) return;
+  const text = cutCardText(n, src.start, src.end, value);
   const { title, body } = titleAndBodyFrom(text);
   if (parent){
     touch(parent.id);
@@ -394,7 +345,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   // position (orderedKids treats an unlisted child as fresh), which is where the drop point is.
   if (parent && parent.id === n.parent) parent.kidOrder = insertedKidOrder(parent, card.id, n.id);
   applyLayouts(); paintAll(); selectNode(card.id); scheduleSave(); commitStep();
-  setStatus(`Extracted “${title}”`);
+  setStatus(`Extracted “${nodeLabel(card)}”`);
 }
 
 // ---------- merging cards into one ----------
@@ -421,11 +372,16 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
     .filter((n): n is MindNode => !!n && n.id !== targetId && canMerge(n));
   if (!cards.length) return 0;
   touch(targetId);
-  // An annotation IS its body — it has no title worth a heading — so it contributes just its text.
+  // An annotation IS its body — it has no title worth a heading — so it contributes just its text. So
+  // does an UNTITLED card, for the same reason and by the same test: `n.title` is empty exactly when the
+  // note carries no `# ` line, and inventing a heading here (from its first line, say) would put words
+  // in the note that nobody wrote. A titled card contributes `## Title` — one level under the `# ` line
+  // that is now the target's own title, which is what makes the merged note a correctly nested document.
   const section = (c: MindNode): string => {
     const body = (c.body || '').trim();
-    if (isAnnotation(c)) return body;
-    return body ? `## ${c.title}\n\n${body}` : `## ${c.title}`;
+    const title = c.title.trim();
+    if (isAnnotation(c) || !title) return body;
+    return body ? `## ${title}\n\n${body}` : `## ${title}`;
   };
   appendToBody(target, cards.map(section).filter(Boolean).join('\n\n'));
   const tags = new Set(target.tags);
@@ -514,7 +470,7 @@ export function dockFrames(target: MindNode, rootIds: string[], afterId?: string
     // for good. An explicit colour on the group still overrides, for whoever wants a fixed box.
     g = mkNode({
       type: 'frame', layout: 'tabs',
-      title: uniqueTitle(`${target.title} tabs`),
+      title: `${nodeLabel(target)} tabs`,
       parent: target.parent, side: target.side,
       x: target.x, y: target.y, w: target.w, h: target.h,
     });
@@ -700,7 +656,7 @@ export function extractImage(sourceId: string, path: string, alt: string,
     }
     setStatus('Image moved');
   } else {
-    const n = mkNode({ x: target.x, y: target.y, parent: null, title: uniqueTitle(alt || 'image'),
+    const n = mkNode({ x: target.x, y: target.y, parent: null, title: alt || 'image',
       body: md, type: 'image', color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);

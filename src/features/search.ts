@@ -6,7 +6,7 @@
 // shortcut can focus it.
 import { state, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
-import { firstVisible } from '../utils/model.js';
+import { nodeLabel, disambiguatedLabel, firstVisible } from '../utils/model.js';
 import { outOfScope } from '../nav/scope.js';
 import { paintAll, focusNode } from '../main.js';
 import { outlineActive, revealInOutline } from './outline.js';
@@ -39,17 +39,17 @@ export function runSearch(): void {
   // search finds what's on the canvas, so a hit is always something you can be shown and select.
   // The way back OUT of a frame is the breadcrumbs, not a search result that teleports you.
   const matches = [...state.nodes.values()].filter(n =>
-    !outOfScope(n) && (n.title.toLowerCase().includes(q) || (n.body && n.body.toLowerCase().includes(q))));
+    !outOfScope(n) && (nodeLabel(n).toLowerCase().includes(q) || (n.body && n.body.toLowerCase().includes(q))));
   // highlight every match — surfacing a hidden match through its first visible parent
   state.searchMatch = new Set(matches.map(n => firstVisible(n).id));
   // dropdown: title matches first, then body-only matches, alphabetical within each
   searchHits = matches.sort((a,b) => {
-    const at = a.title.toLowerCase().includes(q), bt = b.title.toLowerCase().includes(q);
-    return at !== bt ? (at ? -1 : 1) : a.title.localeCompare(b.title);
+    const at = nodeLabel(a).toLowerCase().includes(q), bt = nodeLabel(b).toLowerCase().includes(q);
+    return at !== bt ? (at ? -1 : 1) : nodeLabel(a).localeCompare(nodeLabel(b));
   }).slice(0, 12);
   searchActive = searchHits.length ? 0 : -1;
   searchResults.innerHTML = searchHits.length
-    ? searchHits.map((n,i) => `<button class="sr-item${i===searchActive?' active':''}" data-id="${n.id}">${esc(n.title)}</button>`).join('')
+    ? searchHits.map((n,i) => `<button class="sr-item${i===searchActive?' active':''}" data-id="${n.id}">${esc(disambiguatedLabel(n))}</button>`).join('')
     : '<div class="sr-none">No card matches</div>';
   searchResults.classList.add('open');
   markActive();   // white outline on the active option's (visible) card

@@ -8,6 +8,8 @@ mm_y: 178
 mm_collapsed: true
 ---
 
+# 🗺️ Your maps
+
 Open the sidebar with the **home button** (top left):
 
 - **Click a map** to open it. The current one is highlighted.

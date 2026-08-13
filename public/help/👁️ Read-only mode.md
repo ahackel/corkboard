@@ -8,6 +8,8 @@ mm_y: 422
 mm_collapsed: true
 ---
 
+# 👁️ Read-only mode
+
 Press `R` to toggle read-only mode.
 
 - All edits and saves are disabled — you can still pan, zoom, collapse, and explore.

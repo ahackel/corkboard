@@ -8,6 +8,8 @@ mm_y: 18
 mm_collapsed: true
 ---
 
+# 📝 Edit text
+
 - **Double-click opens a card for editing.** Where you hit it decides what opens: the **title** starts
   a rename, anywhere **else** on the card opens its note. On a touch screen, double-tap.
 

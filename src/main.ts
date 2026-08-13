@@ -14,8 +14,9 @@
 import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, esc } from './utils/markdown.js';
+import { joinHeading } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
-import { childrenOf, isHidden, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked } from './utils/model.js';
+import { childrenOf, isHidden, nodeLabel, disambiguatedLabel, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
@@ -30,7 +31,7 @@ import './features/gestures.js';   // registers the canvas pan/zoom/marquee gest
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import { openMenu } from './features/context-menu.js';   // also registers the custom right-click menu on the canvas
-import { startInlineEdit, startBodyEdit, endInlineEdit, endBodyEdit, onInlineInput, onInlineKeydown } from './features/inline-edit.js';
+import { startInlineEdit, startBodyEdit, endBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createAnnotationHere, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt, NEW_CARD_H } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
@@ -219,25 +220,28 @@ function nodeEl(n: MindNode): HTMLElement {
   doneEl.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); if (isLockedEffective(n)) e.preventDefault(); });
   doneEl.addEventListener('click', (e)=>{ e.stopPropagation(); });
   doneEl.addEventListener('change', (e)=>{ e.stopPropagation(); toggleDone(n); });
-  // inline title rename: typing reflows + validates; Enter/Tab commit, Escape cancels, blur commits
+  // For a CARD the `.title` is a rendered label and nothing else — its name is the leading `# ` line of
+  // its one text field, so there's no title editor to bind (which is what took the `.invalid` styling
+  // with it). These listeners are for a CONTAINER's label, the one thing still renamed on itself
+  // (ui-state.ts TitleEdit): a frame's folder tab, a docked tab, a stack's header.
   const titleEl = el.querySelector('.title') as HTMLElement;
-  titleEl.addEventListener('input',   ()  => onInlineInput(n));
-  titleEl.addEventListener('keydown', (e) => onInlineKeydown(e as KeyboardEvent, n));
-  titleEl.addEventListener('blur',    ()  => { if (ui.inlineEdit && ui.inlineEdit.id === n.id) endInlineEdit(); });
+  titleEl.addEventListener('input',   ()  => onTitleInput(n));
+  titleEl.addEventListener('keydown', (e) => onTitleKeydown(e as KeyboardEvent, n));
+  titleEl.addEventListener('blur',    ()  => { if (ui.titleEdit && ui.titleEdit.id === n.id) endTitleEdit(); });
   // Double-click OPENS the node — rename / edit its note / add a card inside it, dispatched by what
   // was hit (activateNode). Folding lives on the corner chip above.
   el.addEventListener('dblclick', (e)=>{
     // The INNERMOST card owns the gesture, whether or not it acts on it — child cards are DOM-nested,
     // so anything this handler DECLINES still bubbles to its host card, which reads it as a
     // double-click on itself. Hence the stopPropagation ahead of the two bails rather than after
-    // them: double-clicking a word inside an open title editor (the ordinary way to fix one word of
-    // a name) reached the host and opened the HOST's note editor, which closed the rename and sent
-    // the rest of the typing into the parent's body. Same for a word inside an open body editor, and
-    // for a double-click on a nested card's own controls. A container's children are NOT nested (they
-    // live in its sibling .frame-content / .tab-strip wrapper), so this is about plain cards.
+    // them: double-clicking a word inside an open editor (the ordinary way to fix one word of a name)
+    // reached the host and opened the HOST's editor, which closed this one and sent the rest of the
+    // typing into the parent's note. Same for a double-click on a nested card's own controls. A
+    // container's children are NOT nested (they live in its sibling .frame-content / .tab-strip
+    // wrapper), so this is about plain cards.
     e.stopPropagation();
-    // while editing this card's title or body, a double-click selects a word — don't take it over
-    if ((ui.inlineEdit && ui.inlineEdit.id === n.id) || (ui.bodyEdit && ui.bodyEdit.id === n.id)) return;
+    // while editing this node, a double-click selects a word — don't take it over
+    if ((ui.bodyEdit && ui.bodyEdit.id === n.id) || (ui.titleEdit && ui.titleEdit.id === n.id)) return;
     if (isNodeControlAt(e.clientX, e.clientY)) return;   // the card's own buttons keep their click
     e.preventDefault();
     activateNode(n, e.clientX, e.clientY);
@@ -426,7 +430,7 @@ function renderQueryResults(n: MindNode): void {
   // the SET of matches changing (e.g. recolouring a hit from elsewhere on the canvas) — fold those
   // into the key too so the result cards refresh live, not just when the match set itself changes.
   const key = !hasQuery ? '' : hits.length
-    ? hits.map(m => `${m.id}:${effectiveColor(m)}:${m.locked ? 1 : 0}:${m.done ? 1 : 0}:${m.title}`).join(',')
+    ? hits.map(m => `${m.id}:${effectiveColor(m)}:${m.locked ? 1 : 0}:${m.done ? 1 : 0}:${nodeLabel(m)}`).join(',')
     : 'none';
   if (el.dataset.queryKey === key) return;
   el.dataset.queryKey = key;
@@ -445,8 +449,8 @@ function queryItemHTML(m: MindNode): string {
   return `<div class="query-item ${colorClass(col)}${done && m.done ? ' done' : ''}" style="${colorVars(col)}" data-id="${m.id}">
     ${m.locked ? `<span class="qi-lock" title="Locked">${LOCK_BADGE_SVG}</span>` : ''}
     ${done ? `<input type="checkbox" class="qi-done" ${m.done ? 'checked' : ''} title="Mark done">` : ''}
-    <span class="qi-title">${esc(m.title)}</span>
-    <button type="button" class="qi-more" title="Card actions" aria-label="Actions for “${esc(m.title)}”">⋮</button>
+    <span class="qi-title">${esc(disambiguatedLabel(m))}</span>
+    <button type="button" class="qi-more" title="Card actions" aria-label="Actions for “${esc(nodeLabel(m))}”">⋮</button>
   </div>`;
 }
 function openQueryItemMenu(m: MindNode, x: number, y: number): void {
@@ -554,6 +558,11 @@ export function paintNode(n: MindNode): void {
     // the tab). `sel-join` is the ring the other half then draws; see styles.css.
     + (selJoin(n) ? ' sel-join' : '')
     + (n.locked ? ' locked' : '')
+    // While this card's ONE text field is open, its rendered title row stands down — the name is the
+    // `# ` line inside the textarea (styles.css .card-editing). Driven from here rather than toggled by
+    // startCardEdit, because this very line reassigns className on every paint and would drop it: the
+    // editor calls paintAll() itself right after opening.
+    + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
     + (isFrameBox(n) || isStack(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
     + (showDone ? ' show-done' : '')
@@ -563,8 +572,13 @@ export function paintNode(n: MindNode): void {
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   (el.querySelector('.donebox') as HTMLInputElement).checked = n.done;
   // this card's own checklist (over ITS children) → an "n/m done" progress readout by the title
-  el.querySelector('.progress')!.textContent =
-    (n.checklist && hasKids) ? `${kids.filter(k => k.done).length}/${kids.length}` : '';
+  const progress = (n.checklist && hasKids) ? `${kids.filter(k => k.done).length}/${kids.length}` : '';
+  el.querySelector('.progress')!.textContent = progress;
+  // …which on a node with no LABEL has to float over the text rather than sit beside it: it's a flex item
+  // in the title row, so on a card or a stack (whose name is its rendered text, not a label) it was the
+  // one thing left holding that row open — a badge alone on a line, blank to its left, the text below it.
+  // styles.css lifts it out of flow and pays for the overlap with a right inset on the first line.
+  el.classList.toggle('has-progress', !!progress);
   // Which frame (if any) hosts this card's element — settled outside gestures (see settledHost).
   const host = settledHost(n);
   // During drag: keep left/top frozen at the pre-drag origin and move via transform (compositor-
@@ -677,23 +691,45 @@ export function paintNode(n: MindNode): void {
   // so switching the layout away (or folding the group) can't strand an empty band on the canvas.
   if (isTabsFrame(n) && !n.collapsed) tabStripEl(n);
   else if (n.tabStripEl) { n.tabStripEl.remove(); n.tabStripEl = null; }
-  // don't clobber the title while it's being inline-edited (the user is typing into it). A query
-  // card has no editable title of its own — its title slot always shows the live query text
-  // instead (falling back to n.title before any query has been typed), so the card always reads as
-  // "what it's searching for" rather than whatever name it happened to be created with.
-  if (!(ui.inlineEdit && ui.inlineEdit.id === n.id)) {
+  // Don't clobber a CONTAINER's label while it's being renamed on itself (ui.titleEdit — the user is
+  // typing into this very element). A card needs no such guard: its name is the leading `# ` line of its
+  // one text field, and while that's open the whole row is hidden (`.card-editing`). A query card has no
+  // name on show either — its title slot always shows the live query text, so the card reads as "what
+  // it's searching for".
+  if (!(ui.titleEdit && ui.titleEdit.id === n.id)) {
     const titleEl = el.querySelector('.title') as HTMLElement;
     // A folded tab group shows its OPEN TAB's title, not its own (foldedTab) — everything else its own.
     const label = foldedTab(n) ?? n;
-    titleEl.textContent = isQueryBox(n) ? ((n.query ?? '').trim() || n.title) : label.title;
-    // A frame's title tab is a single ellipsised line (it must stay exactly FRAME_TAB_H tall), so give
-    // it a native tooltip with the full name. Every other kind wraps and needs none.
-    if (n.type === 'frame') titleEl.title = label.title; else titleEl.removeAttribute('title');
+    // A CARD HAS NO LABEL OF ITS OWN, titled or not: it is its text, rendered as markdown, and a leading
+    // `# ` line is therefore an H1 in that text exactly as `- item` is a bullet — one renderer, one set of
+    // rules, nothing hoisted out of the note into a field of its own. So the slot stays empty (`no-title`
+    // below collapses the row away, keeping only the fold chip and the done checkbox that live in it) and
+    // cardMarkdown feeds the whole note to the body below.
+    // A STACK is a card too, now: its header is its own text, rendered by the same markdown, so `# Name`
+    // is a heading there and `Name` is a paragraph — the label it used to draw unconditionally is what
+    // made a stack's name look like a heading whether or not anybody wrote one.
+    // A FRAME's tab renders that same markdown, flattened to ONE inline line (styles.css) — so it obeys
+    // the same rule while staying a tab. It keeps a `.title` element rather than a body only because its
+    // geometry is fixed: FRAME_TAB_H is 40px of padding plus one 20px line box, and its own `.body` is
+    // display:none because the box below holds child cards, not a note.
+    if (n.type === 'frame') {
+      const md = collapsed ? collapsedMarkdown(label) : cardMarkdown(label);
+      // A frame is the one kind that may never be blank — the tab is the only thing you can grab the box
+      // by — so with no text at all it falls back to nodeLabel as plain text.
+      titleEl.innerHTML = md.trim() ? renderBodyHTML(md) : esc(nodeLabel(label));
+      titleEl.title = nodeLabel(label);   // one ellipsised line, so the full name lives in the tooltip
+      el.classList.remove('no-title');
+    } else {
+      const text = isQueryBox(n) ? ((n.query ?? '').trim() || nodeLabel(n)) : '';
+      titleEl.textContent = text;
+      titleEl.removeAttribute('title');
+      el.classList.toggle('no-title', !text);
+    }
   }
   const bodyEl = el.querySelector('.body') as HTMLElement;
   // don't clobber the body while it's being edited in place (the textarea lives inside .body)
   if (!editingBody) {
-    bodyEl.innerHTML = renderBodyHTML(n.body);
+    bodyEl.innerHTML = renderBodyHTML(collapsed ? collapsedMarkdown(n) : cardMarkdown(n));
     hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
   }
   if (isQueryBox(n)) {
@@ -745,6 +781,39 @@ export function paintNode(n: MindNode): void {
     chip.title = isDockedTab(n) ? 'Collapse tab group' : (hasKids ? 'Collapse (X)' : 'Fold note away (X)');
   }
 }
+// The markdown a node RENDERS — its whole note, title included.
+//
+// For a plain card that's `joinHeading(title, body)`: the title is the leading `# ` line of the text, and
+// putting it back means renderBodyHTML makes it an H1 the same way it makes `- item` a bullet. There is no
+// title element on a card any more, so this is the only place its name is drawn, and a card can't end up
+// showing its name in one typeface in the row and another in the note.
+// A STACK renders the same way — its header IS its text, above its rows — which is what makes "write
+// `# Name` if you want a heading" one rule instead of a card rule plus a container exception.
+// The two kinds that keep their body alone each have their own reason: a FRAME draws no body at all (its
+// name is a folder tab of fixed height, so it can't hold a note), and an IMAGE card's title is pure
+// bookkeeping — the alt text its file is named after — so hoisting it into the note would print a heading
+// nobody wrote above the picture.
+function cardMarkdown(n: MindNode): string {
+  return n.type === 'image' || n.type === 'query' ? n.body : joinHeading(n.title, n.body);
+}
+// …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
+// follows it. Still MARKDOWN, fed to the same renderer, which is the whole point — `# Name` folds to a
+// heading, `- milk` to a bullet, plain text to plain text, nothing restyled and nothing made bold.
+//
+// The `…` has to be put here rather than left to CSS, and the reason is a hard limit rather than a
+// preference: `text-overflow` and `-webkit-line-clamp` can only ellipsise WITHIN one element. The text
+// that a fold hides usually isn't in the same element — a heading followed by a paragraph, or several
+// short lines that markdown makes into separate `<p>`s, are SIBLING blocks, and hiding a sibling
+// truncates nothing the browser will mark. So CSS showed an ellipsis only when a single line happened to
+// be too wide, which is the one case that needed it least. CSS still handles exactly that case (see
+// styles.css) — this handles "there is more".
+function collapsedMarkdown(n: MindNode): string {
+  const lines = cardMarkdown(n).split('\n');
+  const i = lines.findIndex(l => l.trim());
+  if (i < 0) return '';
+  const more = lines.slice(i + 1).some(l => l.trim());
+  return more ? lines[i].replace(/\s+$/, '') + '…' : lines[i];
+}
 // The tab whose title a FOLDED tab group wears — its open one — else null (any other node, and an
 // EMPTY group, which has only its own name to show). A group doesn't exist from the user's side:
 // there are tabs, one of them open. So folding one leaves a pill carrying the very label that was on
@@ -787,11 +856,12 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   }
   if (isTabsFrame(n)) return collapsed ? 'count' : '';
   if (collapsed) return 'count';
-  // A frame's and a stack's own body is never rendered (styles.css), so only CHILDREN make one
-  // collapsible; every other kind can also fold a body away to just its title. Deliberately a test on
-  // the KIND and not isContainer/isFrame/isStack: those also carry state (a collapsed frame, a stack
-  // demoted to a row inside another stack) that has no bearing on whether the body is drawn.
-  const foldable = (n.type === 'frame' || n.type === 'stack') ? hasKids : (hasKids || hasBody);
+  // A FRAME's own body is never rendered (styles.css — its name is a folder tab), so only CHILDREN make
+  // one collapsible. Every other kind, a STACK now included, can also fold its text down to one line:
+  // a stack's header IS its rendered body these days, so there is something there to fold. Deliberately
+  // a test on the KIND and not isContainer/isFrame/isStack: those also carry state (a collapsed frame, a
+  // stack demoted to a row inside another stack) that has no bearing on whether the body is drawn.
+  const foldable = n.type === 'frame' ? hasKids : (hasKids || hasBody);
   if (!foldable) return '';
   // An annotation IS its body (no title row at all), so folding it would leave an empty shell —
   // it keeps double-click/X but is never invited to. An image/query card is a box whose whole
@@ -988,7 +1058,7 @@ export function layoutH(n: MindNode): number {
 // `hostFrame` (view/layout.ts) does the actual ancestor walk — shared with edges.ts so an edge
 // between two cards inside the same frame clips to it too, not just the cards themselves.
 function settledHost(n: MindNode): MindNode | null {
-  if (ui.drag || ui.inlineEdit || ui.bodyEdit) return n.hostFrameId ? (state.nodes.get(n.hostFrameId) ?? null) : null;
+  if (ui.drag || ui.bodyEdit || ui.titleEdit) return n.hostFrameId ? (state.nodes.get(n.hostFrameId) ?? null) : null;
   const want = hostFrame(n);
   n.hostFrameId = want ? want.id : null;
   return want;
@@ -1516,7 +1586,7 @@ export function activateTab(t: MindNode): void {
   if (!t.collapsed && tabs.every(k => k === t || k.collapsed)) return;   // already the open one
   record(tabs.map(k => k.id), () => withLayoutAnimation(() => openTabFlags(t)));
   scheduleSave();
-  setStatus(`Tab “${t.title}”`);
+  setStatus(`Tab “${nodeLabel(t)}”`);
 }
 // The flag half of "open this tab": expand it, close its siblings. No history, save or paint of its
 // own, so a caller that has several to open — a reveal walking a chain of nested closed tabs — can
@@ -1547,7 +1617,7 @@ export function toggleCollapse(id: string): void {
   // the label on the pill (foldedTab), open it's the tab holding the box — never the group's own
   // bookkeeping title, which appears nowhere on the canvas.
   const shown = isTabsFrame(n) ? (activeTab(n) ?? n) : n;
-  setStatus(n.collapsed ? `Collapsed “${shown.title}”` : `Expanded “${shown.title}”`);
+  setStatus(n.collapsed ? `Collapsed “${nodeLabel(shown)}”` : `Expanded “${nodeLabel(shown)}”`);
 }
 // Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
 // Only foldable cards (children or a body) count; the group lands on one shared state — expand
@@ -1571,7 +1641,7 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   record(cards.map(n => n.id),
     () => withLayoutAnimation(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   scheduleSave();
-  const what = cards.length > 1 ? `${cards.length} cards` : `“${cards[0]!.title}”`;
+  const what = cards.length > 1 ? `${cards.length} cards` : `“${nodeLabel(cards[0]!)}”`;
   setStatus(`${collapsed ? 'Collapsed' : 'Expanded'} ${what}`);
 }
 export function toggleCollapseSelection(ids: Iterable<string>): void {
@@ -1708,15 +1778,31 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
   frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
   if (revealed && store.isOpen) scheduleSave();
 }
-// Follow a [[wikilink]]: find the node by title (case-insensitive) and focus it. Map-wide, on
-// purpose — a link that only worked inside the frame you happened to be in would be a broken link —
-// so it comes out of as many scope levels as it takes to show the target (popScopeFor).
+// Follow a [[wikilink]] and focus its target. Map-wide, on purpose — a link that only worked inside the
+// frame you happened to be in would be a broken link — so it comes out of as many scope levels as it
+// takes to show the target (popScopeFor).
+//
+// Two cards may now share a title, so a bare `[[Notes]]` can be AMBIGUOUS. It resolves to the first
+// match either way (a link has to go somewhere, and refusing to move would read as a dead link), but it
+// SAYS so, since the alternative — picking silently and looking like a bug — is the worse of the two.
+// The way to be exact is the PATH form, `[[Frames/Notes]]` or `[[Notes 2]]`, matched against the node's
+// file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
+// there rather than in some new syntax.
 function focusByTitle(title: string): void {
   const t = title.trim().toLowerCase();
-  const target = [...state.nodes.values()].find(n => n.title.trim().toLowerCase() === t);
+  const nodes = [...state.nodes.values()];
+  // The path form first: with the `.md` optional, so both `[[Notes 2]]` and `[[Notes 2.md]]` land.
+  const byFile = nodes.filter(n => {
+    const f = (n.file ?? '').toLowerCase();
+    return f === t || f === t + '.md';
+  });
+  const hits = byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
+  const target = hits[0];
   if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
   popScopeFor(target);
   focusNode(target);
+  if (hits.length > 1)
+    setStatus(`${hits.length} cards are titled “${title}” — went to the one in ${target.file ?? 'this map'}`);
 }
 // The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
 // frame the whole map when nothing is selected — both glide with the same easing. While a frame is
@@ -1811,7 +1897,7 @@ interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiti
 function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   // A scope change re-parents elements (a child moves between #world and a wrapper), which would
   // drop a captured pointer or blur an open editor — the same precaution setOutline takes.
-  endInlineEdit(); endBodyEdit();
+  endInPlaceEdit();
   cancelViewAnim();
   const before = scope.rootId;
   const left = before ? state.nodes.get(before) : undefined;
@@ -1863,7 +1949,7 @@ export function openFrame(target: MindNode | undefined): void {
   if (isTabsFrame(t) && !t.collapsed) { normalizeTabs(t); t = actionTarget(t); }
   if (isScopeRoot(t)) return;                  // already standing in it
   applyScope(t, { back });
-  setStatus(`Opened “${t.title}”`);
+  setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.
 export function exitScope(): void { goToScopeDepth(scope.stack.length - 1); }
@@ -1996,7 +2082,7 @@ function syncScopeChrome(): void {
   if (state.sel.size || state.selId) setSelectionSet([]);
   focusScope();
   const open = scopeRootNode();
-  setStatus(open ? `That frame is gone — back to “${open.title}”` : 'That frame is gone — back to the whole map');
+  setStatus(open ? `That frame is gone — back to “${nodeLabel(open)}”` : 'That frame is gone — back to the whole map');
 }
 // Keep the rect honest across a window resize. Nothing to re-lay-out — an open frame's contents are
 // FREE (frameFlow), so no layout reads the rect to place anything; what still reads it is where a
@@ -2199,9 +2285,10 @@ export function selectNode(rawId: string | null): void {
 
 
 // ---------- image attachments live in features/attachments.ts ----------
-// ---------- inline title/body editing lives in features/inline-edit.ts ----------
-// While a title is being renamed inline, the save loop defers the file rename until editing ends
-// (so the folder isn't littered with M.md, Ma.md, Mag.md…) — it keys off `ui.inlineEdit` directly.
+// ---------- in-place card editing lives in features/inline-edit.ts ----------
+// While a card is being edited, the save loop defers the file rename until editing ends (so the folder
+// isn't littered with M.md, Ma.md, Mag.md…) — it keys off `ui.bodyEdit` directly, which now holds the
+// title too: the card is one text field whose first `# ` line IS its name.
 
 // keyboard:
 //  · Space          → new node at the pointer (only when nothing is selected)
@@ -2347,7 +2434,7 @@ window.addEventListener('keyup', (e) => {
   ghost.addEventListener('pointerdown', (e: PointerEvent) => {
     if (state.readOnly) return;
     e.preventDefault();
-    endInlineEdit(); endBodyEdit();         // grabbing the ghost commits any in-progress edit
+    endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
     // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
     // world space), then drive it with the real drag so it rides the cursor at that same offset
     const r = ghost.getBoundingClientRect();

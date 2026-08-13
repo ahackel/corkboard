@@ -8,6 +8,8 @@ mm_y: 148
 mm_collapsed: true
 ---
 
+# 🔍 Find cards
+
 Press `/` to open the search box and type any part of a title.
 
 - Matches jump into view as you type.
