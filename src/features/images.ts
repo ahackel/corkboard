@@ -22,6 +22,10 @@ export function typedImageBlob(blob: Blob, path: string): Blob {
   const mime = EXT_MIME[(path.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase()];
   return mime ? new Blob([blob], { type: mime }) : blob;
 }
+// A referenced path -> its resolved URL, through the shared cache: vault paths become blob URLs read
+// from the store (once), remote/data URLs map to themselves. Exported for the full-screen viewer,
+// which pages through images that may not be on screen — and so may not have been hydrated yet.
+export function imageUrl(path: string): Promise<string | null> { return loadImgUrl(path); }
 function loadImgUrl(path: string): Promise<string | null> {
   if (imgUrlCache.has(path)) return Promise.resolve(imgUrlCache.get(path)!);
   if (/^(https?:|data:)/i.test(path)){ imgUrlCache.set(path, path); return Promise.resolve(path); }

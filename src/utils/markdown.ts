@@ -40,6 +40,62 @@ function mdLinks(text: string): string {
   out += mdEmphasis(text.slice(last));
   return out;
 }
+// ---------- a note that is nothing but a picture ----------
+// There is no image KIND: a card whose whole note is one `![alt](src)` — and which carries no title
+// to draw — IS that image, and renders as one (no padding, both axes authored, the picture flush to
+// its corners; see isImageCard in core/state.ts and isImageBox in main.ts). The test is deliberately
+// the WHOLE body, so the rule is one a user can see in the text: type a word or a heading and the
+// card is an ordinary card again, with its padding and its measured height back.
+// Returns the alt + src so the callers that name a file after the picture don't re-parse it.
+export interface SoleImage { alt: string; src: string }
+export function soleImage(body: string | null | undefined): SoleImage | null {
+  const m = (body ?? '').trim().match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
+  return m ? { alt: m[1].trim(), src: m[2] } : null;
+}
+
+// ---------- writing a link, rather than rendering one ----------
+// Pasting a URL over selected text LINKS that text, the way every note app does it — the one thing
+// markdown's `[label](url)` costs that a rich editor's ⌘K doesn't. The rule lives here beside mdLinks
+// because it's the same three forms read backwards, and drifting from them would link text the
+// renderer then wouldn't show as a link. Every note editor binds it (features/inline-edit.ts
+// pasteUrlLink); this half is pure so the editors share one answer.
+// A URL is a single whitespace-free token carrying a scheme — `mailto:` included, since it's the one
+// common form with no `//`. Deliberately strict: `docs/notes.md` pasted over a word is text a user
+// meant to paste, not a link they meant to make.
+const URL_ONLY = /^(?:[a-z][a-z0-9+.-]*:\/\/|mailto:)[^\s<>]+$/i;
+// The three forms mdLinks renders, matched to be REWRITTEN — the url group is `*` rather than `+`
+// here so a half-written `[label]()` is still recognised as the link it's going to be.
+const LINK_SCAN = /!\[([^\]]*)\]\(([^)\s]*)\)|\[([^\]]+)\]\(([^)\s]*)\)|(https?:\/\/[^\s)]+)/g;
+export interface LinkPaste { text: string; start: number; end: number }
+// The text after pasting `url` over [start,end), plus where the selection lands (on the LABEL, so
+// what you selected is still what you see) — or null to let the paste happen natively.
+export function linkPaste(text: string, start: number, end: number, url: string): LinkPaste | null {
+  const u = url.trim();
+  if (start === end || !URL_ONLY.test(u)) return null;
+  const sel = text.slice(start, end);
+  if (sel.includes('\n')) return null;               // a label is one line; wrapping two would break it
+  // An existing link the selection touches gets its URL REPLACED, label intact — whether the
+  // selection is the label, the whole `[…](…)`, or a stretch of text containing one. That last case
+  // could equally mean "link all of this", but a link inside a label is invalid markdown, and
+  // rewriting the one that's there is the reading that can't produce a broken note.
+  LINK_SCAN.lastIndex = 0;
+  for (let m: RegExpExecArray | null; (m = LINK_SCAN.exec(text)); ){
+    const ms = m.index, me = ms + m[0].length;
+    if (me <= start || ms >= end) continue;          // no overlap with the selection
+    if (m[1] !== undefined) return null;             // an image: its src isn't a link to update
+    if (m[5]) return { text: text.slice(0, ms) + u + text.slice(me), start: ms, end: ms + u.length };
+    const label = m[3];
+    return { text: text.slice(0, ms) + `[${label}](${u})` + text.slice(me), start: ms + 1, end: ms + 1 + label.length };
+  }
+  // Otherwise wrap what was selected, leaving any whitespace it caught outside the brackets.
+  const lead = sel.length - sel.trimStart().length;
+  const label = sel.trim();
+  if (!label) return null;
+  const at = start + lead;
+  return { text: text.slice(0, at) + `[${label}](${u})` + text.slice(at + label.length),
+           start: at + 1, end: at + 1 + label.length };
+}
+
 // An <img> for inline markdown. The real src is resolved after insertion (hydrateImages): vault
 // paths are read from the store as blob URLs, remote/data URLs pass through — so rendering stays
 // synchronous while disk reads happen lazily.

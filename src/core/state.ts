@@ -5,11 +5,11 @@
 // #stage; edges in the #edges SVG, collapse toggles in #toggles.
 // ============================================================
 import { byId } from '../utils/dom.js';
+import { soleImage } from '../utils/markdown.js';
 
 // A node's KIND, orthogonal to how it arranges its children (`layout` below):
 //   · card       — an ordinary titled/bodied node.
 //   · frame      — a resizable container box (mm_w/mm_h) that adopts cards dropped inside.
-//   · image      — a leaf box (mm_w/mm_h) showing one image, no children, no title/body UI.
 //   · annotation — a leaf note pinned to its parent: no title, no children, doesn't take part in
 //                  layout, and renders ON TOP of everything (never clipped by a frame's mask). Its
 //                  own colour drives its always-dotted connector; it never inherits a background.
@@ -17,7 +17,7 @@ import { byId } from '../utils/dom.js';
 //                  title/body matches across the whole map; no children, keeps its title UI.
 //                  Search text persisted as mm_query.
 // Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
-export type NodeType = 'card' | 'frame' | 'stack' | 'image' | 'annotation' | 'query';
+export type NodeType = 'card' | 'frame' | 'stack' | 'annotation' | 'query';
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
 //   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread).
 //   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
@@ -26,12 +26,14 @@ export type NodeType = 'card' | 'frame' | 'stack' | 'image' | 'annotation' | 'qu
 //             tab is open borrows the whole box — see isTabsFrame in view/layout.ts).
 //   · stack → none: a stack always outlines its whole subtree (one indented full-width column), so
 //             it offers no arrangement choice and every descendant's own layout is ignored.
-//   · image / annotation → none (a leaf; `layout` is unused, kept `free`).
+//   · annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
 export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'tabs';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
-// sizing from title/body content — a frame, an image, or a query card.
-export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'image' || t === 'query';
+// sizing from title/body content — a frame or a query card. An IMAGE card authors a height too, but
+// it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
+// reads this asks isImageCard beside it (utils/frontmatter.ts serializeMd).
+export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'query';
 export type LayoutSide = 'left' | 'right' | 'up' | 'down';
 export type EdgeStyle = 'straight' | 'orthogonal' | 'bezier';
 export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
@@ -75,12 +77,12 @@ export interface MindNode {
   checklist: boolean;              // Trello-style: treat my DIRECT children as a checklist — each
                                     // gets a done checkbox and I show their `n/m` progress. Doesn't
                                     // cascade further down; a child can run its own checklist too.
-  type: NodeType;                  // card | frame | image | query — the node's kind (persisted as mm_type)
+  type: NodeType;                  // card | frame | stack | annotation | query (persisted as mm_type)
   layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
-  // Resizable box size (world px). Meaningful for a frame (the box whose interior adopts cards
-  // dropped in), for type === 'image' (an image-only leaf card — no children, no title UI;
-  // its body is a single `![alt](path)` filling the box), and for type === 'query' (a leaf card
-  // with a search field over a scrollable results list). Persisted as mm_w/mm_h.
+  // Resizable box size (world px). `w` is authored by every kind; `h` only by a frame (the box
+  // whose interior adopts cards dropped in), a query card (a leaf with a search field over a
+  // scrollable results list), and an IMAGE card — a card holding nothing but one `![alt](src)`,
+  // which is its picture and so owns both axes (isImageCard above). Persisted as mm_w/mm_h.
   w?: number;
   h?: number;
   // type === 'query' only: the search text typed into the card's own search field, matched
@@ -95,6 +97,11 @@ export interface MindNode {
   keepStatus: string;              // preserved `status:` frontmatter value
   tags: string[];
   body: string;
+  titleGap?: boolean;              // false = the note's first line sits directly under the `# ` line,
+                                    // with no blank line between (utils/frontmatter.ts splitHeading).
+                                    // NOT a frontmatter key — it's implicit in the file's own text,
+                                    // and read back by joinHeading so a round-trip invents nothing.
+                                    // Absent means the default, spaced form.
   fmEntries?: FmEntry[];           // original frontmatter, preserved verbatim on save
   dirty: boolean;                  // needs a disk write
   dirtyLayout: boolean;            // needs (re)positioning by applyLayouts
@@ -107,17 +114,24 @@ export interface MindNode {
                                     // bookkeeping, settled outside gestures (see main.ts settledHost)
 }
 
-// An image card is a leaf: no children, no title/body-edit UI (its body is just `![alt](path)`).
-// Single source of truth for that fact — call this instead of comparing `type` directly, so
-// every "can this node have children / be renamed" check stays in sync as kinds evolve.
-export function isImageCard(n: MindNode | null | undefined): boolean { return n?.type === 'image'; }
+// An IMAGE card is a card that IS its picture: untitled, and its whole note is one `![alt](src)`.
+// DERIVED from the note, not a kind of its own — there is no `mm_type: image` any more (the legacy
+// value folds to `card`, utils/frontmatter.ts foldTypeLayout). So it's an ordinary card in every
+// other respect: it takes children, renames, merges, docks as a tab. What it gets for being one is
+// the render (no padding, the picture flush to its corners), an authored HEIGHT as well as a width,
+// and an aspect-locked resize — see isImageBox in main.ts, which adds "…and isn't folded or open in
+// an editor", the two states where a card shows something other than its picture.
+export function isImageCard(n: MindNode | null | undefined): boolean {
+  return !!n && n.type === 'card' && !n.title.trim() && !!soleImage(n.body);
+}
 // An annotation: a title-less leaf note pinned on top of its parent (see NodeType above).
 export function isAnnotation(n: MindNode | null | undefined): boolean { return n?.type === 'annotation'; }
 // A query card: a resizable leaf with a search field over a scrollable results list (see NodeType above).
 export function isQueryCard(n: MindNode | null | undefined): boolean { return n?.type === 'query'; }
-// Leaf kinds that cannot hold children (image + annotation + query). Card/frame can.
+// Leaf kinds that cannot hold children (annotation + query). Card/frame/stack can — an image card
+// included, it being an ordinary card wearing a picture.
 export function isLeafType(n: MindNode | null | undefined): boolean {
-  return n?.type === 'image' || n?.type === 'annotation' || n?.type === 'query';
+  return n?.type === 'annotation' || n?.type === 'query';
 }
 
 export interface View { x: number; y: number; k: number; }

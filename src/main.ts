@@ -154,7 +154,7 @@ function nodeEl(n: MindNode): HTMLElement {
     if (zoom){
       e.stopPropagation();
       const img = zoom.closest('.img-wrap')?.querySelector('img.md-img') as HTMLImageElement | null;
-      if (img && img.src && !img.classList.contains('md-img-missing')) openImageViewer(img.src, img.alt);
+      openImageAt(n, img);
       return;
     }
     const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null; if (!a) return;
@@ -248,6 +248,22 @@ function nodeEl(n: MindNode): HTMLElement {
   });
   return el;
 }
+// A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
+// what a Space tap used to. Refuses in the outline view, which has no canvas to drop it onto.
+function newCardAtPointer(): void {
+  if (outlineActive()) return;
+  if (ui.lastMouse) createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
+  else createNode();
+}
+// Open one of a card's images full-screen. The RESOLVED src comes off the rendered <img> (hydrateImages
+// has already put it there), and `n` + the image's own path give the viewer its run: every image in the
+// cards that share this card's parent, paged with ‹ / › (features/image-viewer.ts). Shared by the
+// magnifier button and the Space tap below, so both open the same view of the same set.
+function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
+  if (!img || !img.src || img.classList.contains('md-img-missing')) return false;
+  openImageViewer(img.src, img.alt, { nodeId: n.id, path: img.dataset.path ?? '' });
+  return true;
+}
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
 const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge, .query-icon, .query-input, .query-box, .tag-row, .img-zoom, a.lk, .fh';
@@ -290,7 +306,7 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   // falls through to the branch below and still appends a row.
   if (canOpen(actionTarget(n))) { openFrame(n); return; }
   if (isContainer(n)) { addChildIn(n, cx, cy); return; }
-  if (isImageCard(n) || isQueryCard(n)) return;   // no note to edit; only their title is editable
+  if (isQueryCard(n)) return;   // no note to edit — its title slot IS the query field
   startBodyEdit(n);
 }
 // Add a card inside a container at the double-clicked point. A stack is an OUTLINER — the point
@@ -532,7 +548,7 @@ export function paintNode(n: MindNode): void {
     + (isStack(n) ? ' stack' : '')
     + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
     + (inFrame(n) ? ' frame-child' : '')   // …and a card inside a frame's box, by the same step
-    + (isImageBox(n) ? ' image-card' : '')
+    + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
     + (isQueryBox(n) ? ' query-card' : '')
     + (isAnnotation(n) ? ' annotation' : '')
     + (state.sel.has(n.id) ? ' sel' : '')
@@ -655,6 +671,13 @@ export function paintNode(n: MindNode): void {
     // An OPEN docked tab still hosts its children — in the box its group lent it, not in this label —
     // so it keeps a clipping wrapper of its own, positioned at that lent interior (frameInterior).
     if (isDockedTab(n) && !n.collapsed) frameContentEl(n);
+  } else if (isImageFold(n)) {
+    // folded: a fixed IMAGE_FOLD square of the picture itself (styles.css .image-card.collapsed), so
+    // no inline size — nodeW/nodeH already declare it. It KEEPS its handles, though: scaling the icon
+    // back up is how you unfold it (startNodeResize), the mirror of scaling a card down to fold it.
+    // The authored w/h stay on the node untouched meanwhile, for the chip's own unfold.
+    el.style.width = ''; el.style.height = '';
+    ensureResizeHandles(n, FRAME_DIRS);
   } else if (isStack(n)) {
     el.style.width = nodeW(n) + 'px';    // authored (n.w, default STACK_W) — resizable on this axis only
     el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
@@ -802,12 +825,11 @@ export function paintNode(n: MindNode): void {
 // showing its name in one typeface in the row and another in the note.
 // A STACK renders the same way — its header IS its text, above its rows — which is what makes "write
 // `# Name` if you want a heading" one rule instead of a card rule plus a container exception.
-// The two kinds that keep their body alone each have their own reason: a FRAME draws no body at all (its
-// name is a folder tab of fixed height, so it can't hold a note), and an IMAGE card's title is pure
-// bookkeeping — the alt text its file is named after — so hoisting it into the note would print a heading
-// nobody wrote above the picture.
+// A QUERY card keeps its body alone: its title slot shows the live query text instead, so hoisting the
+// name into the note would print a heading nobody wrote. (An image card needs no arm of its own — it is
+// untitled by definition, so joinHeading hands back the picture markdown unchanged.)
 function cardMarkdown(n: MindNode): string {
-  return n.type === 'image' || n.type === 'query' ? n.body : joinHeading(n.title, n.body);
+  return isQueryCard(n) ? n.body : joinHeading(n.title, n.body, n.titleGap !== false);
 }
 // …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
 // follows it. Still MARKDOWN, fed to the same renderer, which is the whole point — `# Name` folds to a
@@ -877,9 +899,10 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   const foldable = n.type === 'frame' ? hasKids : (hasKids || hasBody);
   if (!foldable) return '';
   // An annotation IS its body (no title row at all), so folding it would leave an empty shell —
-  // it keeps double-click/X but is never invited to. An image/query card is a box whose whole
-  // content is the point, and its corner is already spoken for by the picture/results.
-  if (isAnnotation(n) || isImageCard(n) || isQueryCard(n)) return '';
+  // it keeps double-click/X but is never invited to. A query card is a box whose whole content is the
+  // point, and its corner is already spoken for by the results. An IMAGE card is invited: it folds to
+  // a 40px icon of its own picture (isImageFold), which is a thumbnail rather than an empty shell.
+  if (isAnnotation(n) || isQueryCard(n)) return '';
   // toggleCollapse refuses a locked node, so it must not offer a button that does nothing. Its
   // folded COUNT above is unaffected: that's information, not a control.
   if (isLockedEffective(n)) return '';
@@ -970,8 +993,21 @@ export function labelEl(n: MindNode): HTMLElement | null {
   if (!n.el) return null;
   return isFrameFold(n) ? n.el : (n.el.querySelector(':scope > .title-row') as HTMLElement | null);
 }
-// An image card: a resizable leaf that shows nothing but its one image — no children, no title UI.
-function isImageBox(n: MindNode): boolean { return n.type === 'image' && !n.collapsed; }
+// An image card rendering AS its picture: no padding, both axes authored, aspect-locked resize.
+// isImageCard (core/state.ts) is the content test — untitled, and the whole note is one `![](…)`;
+// this adds the two states where the card shows something ELSE and so goes back to being an ordinary
+// card: FOLDED (it's the 40px icon below) and while its editor is open (it's the markdown, which has
+// to wrap and measure like any text). Both are transient, and neither touches what's on disk.
+// …and the one state where an image card is NOT drawn as its picture: its own editor is open, where
+// the card holds markdown text that has to wrap and measure like any note's. Both halves below read
+// this, so the class, the sizing and the resize handles can't disagree about what's on screen.
+function imageLook(n: MindNode): boolean { return isImageCard(n) && ui.bodyEdit?.id !== n.id; }
+function isImageBox(n: MindNode): boolean { return imageLook(n) && !n.collapsed; }
+// …and folded, an image card is a small square of the picture itself — the icon a folded card with no
+// title would otherwise have nothing to show. IMAGE_FOLD matches FRAME_TAB_H, so a folded image sits
+// on the same metric as a folded frame's tab and a collapsed card's line.
+export const IMAGE_FOLD = 40;
+function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed; }
 // A query card: a resizable leaf with a search field + scrollable results list — no children.
 function isQueryBox(n: MindNode): boolean { return n.type === 'query' && !n.collapsed; }
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
@@ -1030,6 +1066,7 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQ
 // unless a width was authored, so it's measured live off the element rather than assumed.
 export function nodeW(n: MindNode): number {
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
+  if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
   const row = stackRowW(n); if (row != null) return row;             // outline row — derived, not authored
   if (isStack(n)) return n.w ?? STACK_W;
@@ -1040,6 +1077,7 @@ export function nodeW(n: MindNode): number {
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.
 export function nodeH(n: MindNode): number {
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
+  if (isImageFold(n)) return IMAGE_FOLD;
   if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured
   if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   return (n.el && n.el.offsetHeight) || 64;
@@ -1051,7 +1089,7 @@ export function nodeH(n: MindNode): number {
 // 0 (the selection affordances — + and the "add note" bubble — are absolutely positioned and
 // overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
-  if (isBoxNode(n) || isFrameFold(n) || isStack(n)) return nodeH(n);
+  if (isBoxNode(n) || isFrameFold(n) || isStack(n) || isImageFold(n)) return nodeH(n);
   const el = n.el; if (!el) return 64;
   return el.offsetHeight;
 }
@@ -1245,7 +1283,8 @@ function frameContentEl(f: MindNode): HTMLElement {
 // ---------- resize ----------
 // a frame is never narrower than a normal card; its min HEIGHT is bounds, so it carries the tab too
 export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
-export const MIN_IMAGE_W = 60, MIN_IMAGE_H = 60;        // an image card can shrink to a small thumbnail
+// An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
+// (startNodeResize below), so there is no smaller expanded size to clamp at.
 export const MIN_QUERY_W = 200, MIN_QUERY_H = 160;      // a query card keeps room for the search field + a couple of rows
 // The one exception to "a kind's default width is its floor": an annotation shrink-wraps its text
 // (styles.css), so it has no fixed natural width to floor at — it can be narrowed too, down to
@@ -1270,12 +1309,12 @@ function naturalW(n: MindNode): number {
 // floor is NODE_W for a plain card, a stack (STACK_W is NODE_W) and a frame alike, so they share the
 // one fall-through rather than three aliases that had to be kept equal by hand.
 function minWOf(n: MindNode): number {
-  if (isImageBox(n)) return MIN_IMAGE_W;
+  if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
   if (isQueryBox(n)) return MIN_QUERY_W;
   if (isAnnotation(n)) return naturalW(n);
   return NODE_W;
 }
-function minHOf(n: MindNode): number { return isImageBox(n) ? MIN_IMAGE_H : isQueryBox(n) ? MIN_QUERY_H : MIN_FRAME_H; }
+function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) ? IMAGE_FOLD : isQueryBox(n) ? MIN_QUERY_H : MIN_FRAME_H; }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
@@ -1325,9 +1364,12 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   e.stopPropagation(); e.preventDefault();
   // Does this kind author its own HEIGHT, or only a width? A card/annotation measures its height from
   // its content and a stack derives its own from its outline, so for those the resize writes w only.
-  const sizeH = isBoxNode(n);
+  // A FOLDED image card counts as a box here even though isBoxNode says no: its 40px icon is the small
+  // end of its own size range, and scaling it back up is how you unfold it (see `fold` in resize()).
+  const img = isImageBox(n) || isImageFold(n);
+  const sizeH = isBoxNode(n) || img;
   const minW = minWOf(n), minH = minHOf(n);
-  const aspect = isImageBox(n) ? imageAspect(n) : null;   // width/height — locked while dragging an image card
+  const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   const flow = !!frameFlow(n);   // frame-h/frame-v: reflow its children live as the box resizes, not just on release
   // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
@@ -1392,6 +1434,17 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       if (west)  { const w = Math.max(minW, round(right0 - (left0 + lastDx))); left = right0 - w; }
       if (south) { const h = Math.max(minH, round(bottom0 + lastDy - top0));   bottom = top0 + h; }
       if (north) { const h = Math.max(minH, round(bottom0 - (top0 + lastDy))); top = bottom0 - h; }
+    }
+    // An image card FOLDS by being scaled down and unfolds by being scaled up — the third fold
+    // control beside the chip and `X`, and the only one that is also a size. The threshold is the icon
+    // itself: once the SHORT axis is down to IMAGE_FOLD the card is icon-sized, so it becomes one, and
+    // dragging back out past that restores it. Live, so the icon appears and goes under the cursor.
+    // While folded the authored w/h are left ALONE — they're the size it comes back to, whether that's
+    // this same drag reversing or the chip unfolding it tomorrow.
+    if (aspect) {
+      const fold = Math.min(right - left, bottom - top) <= IMAGE_FOLD;
+      if (fold !== n.collapsed) n.collapsed = fold;
+      if (fold) { n.dirty = true; return; }
     }
     n.x = left; n.w = right - left;
     // a width-only kind never gets a y/h written — see sizeH
@@ -2318,7 +2371,7 @@ export function selectNode(rawId: string | null): void {
 // title too: the card is one text field whose first `# ` line IS its name.
 
 // keyboard:
-//  · Space          → new node at the pointer (only when nothing is selected)
+//  · N / ⌘N        → new node at the pointer   (Space: hand-pan; on an image card, open the picture)
 //  · Enter          → add a sibling of the selected node
 //  · Tab            → add a child of the selected node
 //  · F2             → rename the selected node in place (also: double-click its title)
@@ -2367,7 +2420,12 @@ window.addEventListener('keydown', (e) => {
   if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
   if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
-  // Space = hand-tool to pan while held; a quick tap (released without panning) makes a node.
+  // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
+  // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
+  // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).
+  // Both are bound: whichever the browser lets through does the same thing.
+  if (key === 'n' && !e.shiftKey && !e.altKey && !(mod && e.shiftKey)){ e.preventDefault(); newCardAtPointer(); return; }
+  // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
   if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection(); return; }
@@ -2394,11 +2452,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   // image cards have no title/body UI to rename or edit — they're a leaf that shows only the image
-  if (key === 'F2' && state.selId && !isImageCard(state.nodes.get(state.selId))){
+  if (key === 'F2' && state.selId){
     e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
   }
   if (key === 'e' && !mod && state.selId){
-    e.preventDefault(); const n = state.nodes.get(state.selId); if (n && !isImageCard(n) && !isQueryCard(n)) startBodyEdit(n); return;
+    e.preventDefault(); const n = state.nodes.get(state.selId); if (n && !isQueryCard(n)) startBodyEdit(n); return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
   if (key === 'Tab' && state.selId){ e.preventDefault(); addChild(state.selId); return; }
@@ -2416,11 +2474,12 @@ window.addEventListener('keyup', (e) => {
   if (e.key !== ' ') return;
   const wasPan = ui.spaceUsedForPan;
   ui.spaceHeld = false; ui.spaceUsedForPan = false;
-  if (isTypingInField() || wasPan || ui.pan || state.sel.size !== 0) return;
-  if (outlineActive()) return;   // no invisible cards onto the hidden canvas
-  if (ui.lastMouse){         // tap = new card under the cursor (centre when the mouse hasn't moved yet)
-    createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
-  } else createNode();
+  if (isTypingInField() || wasPan || ui.pan) return;
+  // A Space TAP on a lone IMAGE card opens it full-screen — the picture is the whole card, so "look at
+  // this properly" is the obvious thing the key can mean there, and the viewer closes on Space too
+  // (features/image-viewer.ts). Everything else Space used to do on release (making a card) is `N` now.
+  const sole = state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : null;
+  if (sole && isImageCard(sole)) openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
 });
 
 // Ghost-card drag: grab the corner card to spawn a new note that rides the cursor through the same

@@ -6,6 +6,7 @@
 // ============================================================
 import { state, world, setStatus, isBoxType, GRID_STYLES, GRID_SIZES, type MindNode, type LayoutSide } from '../core/state.js';
 import { parseMd, serializeMd, firstLineLabel, fileStem } from '../utils/frontmatter.js';
+import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf, parentOf } from '../utils/model.js';
@@ -69,7 +70,11 @@ importInput.addEventListener('change', async () => {
 });
 export function openImportPicker(): void { importInput.click(); }
 
-const IMG_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+// The image formats this app takes, BY FILENAME — the one list, shared with features/attachments.ts,
+// which needs it for the files an OS drop hands over with no MIME type at all (an .svg dragged out of
+// a file manager is the common one).
+export const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+const IMG_RE = IMAGE_FILE_RE;
 type ImportEntry = { name: string; text?: string; bytes?: Uint8Array };
 export async function importFiles(files: File[]): Promise<void> {
   const entries: ImportEntry[] = [];
@@ -172,11 +177,14 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
   // width from a time when `n.w` also held derived values (a stack outline row's stretched width, for
   // one). Those are all NARROWER than a normal card, and a card/stack can only ever be widened past
-  // its default, so anything under the default is junk from that era: drop it. An annotation is the
-  // one width-only kind that legitimately goes narrower, and it never had a width written back then.
-  const authoredW = (w: number | null | undefined, type: MindNode['type']): number | undefined => {
+  // its default, so anything under the default is junk from that era: drop it. Two kinds of note
+  // legitimately go narrower and are exempt: an annotation (which shrink-wraps its text, and never
+  // had a width written back then), and an IMAGE card — a small picture is a small card, and one
+  // that used to carry `mm_type: image` now loads as an ordinary card (foldTypeLayout), so without
+  // this its authored size would be read as junk from that era and thrown away.
+  const authoredW = (w: number | null | undefined, type: MindNode['type'], isImage: boolean): number | undefined => {
     if (w == null) return undefined;
-    if (isBoxType(type) || type === 'annotation') return w;
+    if (isBoxType(type) || type === 'annotation' || isImage) return w;
     return w >= NODE_W ? w : undefined;
   };
   for (const { rel, parsed } of entries) {
@@ -189,6 +197,9 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     // Deliberately only when the body is EMPTY. A note WITH text and no heading is a legitimately
     // UNTITLED card under this format (it shows its text and no title row, which is the point of
     // allowing it), and promoting its filename to a title would put a name on something nobody named.
+    // Nothing but a picture in the note → this is an IMAGE card (core/state.ts isImageCard reads the
+    // same thing off the live node). Needed here before the node exists, for the width filter below.
+    const imageOnly = !rest.title.trim() && !!soleImage(rest.body);
     const unmigrated = !rest.title.trim() && !rest.body.trim();
     if (unmigrated) rest.title = fileStem(rel);
     const hasRel = (mm.px != null && mm.py != null);
@@ -205,7 +216,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       done: !!mm.done,
       checklist: !!mm.checklist,
       type: mm.type, layout: mm.layout,
-      w: authoredW(mm.w, mm.type),
+      w: authoredW(mm.w, mm.type, imageOnly),
       h: mm.h ?? undefined,
       query: mm.query || undefined,
       side: (mm.side || undefined) as LayoutSide | undefined,
@@ -295,7 +306,13 @@ function safeName(title: string): string {
 // card has no name to be wrong about.
 // The bare slug a node's own text gives it, with no directory and no `.md` — the ONE spelling of that
 // rule, shared with exportZip, which has to name never-saved nodes the same way.
+// An IMAGE card (a card holding nothing but one `![alt](src)`) is named after the PICTURE: its alt
+// text, else the image file's own stem. firstLineLabel would hand back the raw `![](attachments/…)`
+// markup, which slugifies into something no one can read in a folder listing — and the note has no
+// other text to be named from, so this is the one kind of body worth reading structurally.
 function slugStem(n: MindNode): string {
+  const img = soleImage(n.body);
+  if (!n.title.trim() && img) return safeName(img.alt || fileStem(img.src) || 'image');
   return safeName(n.title.trim() || firstLineLabel(n.body));
 }
 // The lowercased filename -> node index the collision test reads. Built ONCE per save rather than

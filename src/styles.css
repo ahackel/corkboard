@@ -895,20 +895,55 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    and win the hit-test, making the image unselectable — regular cards avoid this by being 2). */
 /* overflow:hidden lives on .body (below), NOT on the node itself — the tag row and add-emoji/
    add-note buttons float outside the card's own border (see .node .tag-row / .addnote above) and
-   would otherwise get clipped along with the image. The image's own rounding comes from
-   `border-radius:inherit` on .md-img itself, so nothing relies on the node clipping its content. */
+   would otherwise get clipped along with the image. The image is rounded by its own .body wrapper
+   instead (border-radius:inherit + overflow:hidden, below), so nothing relies on the node clipping. */
 .node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
-.node.image-card .title-row, .node.image-card .progress { display:none; }
+/* The row is EMPTY on an image card (untitled by definition) but must NOT be display:none: it carries
+   the fold chip (.hidden-count lives inside .title-row), which is how the card folds to its icon. Zero
+   height instead, so the picture still starts at the card's top edge — and the chip keeps its -8px
+   corner either way, being positioned against the NODE (an unpositioned row is not its containing
+   block; see the .hidden-count note below). */
+.node.image-card > .title-row { height:0; }
+.node.image-card > .title-row > .title,
+.node.image-card > .title-row > .donebox,
+.node.image-card .progress { display:none; }
+/* FOLDED, an image card is an icon of itself: a 40px square of the picture (main.ts IMAGE_FOLD, which
+   nodeW/nodeH declare and paintNode leaves un-inlined), rather than the empty shell a card with no
+   title folds to. So the body stays visible here — `.node.collapsed .body { display:none }` is (0,3,0)
+   and this is (0,4,0) — and object-fit:cover below crops the square out of any aspect. */
+.node.image-card.collapsed { width:40px; height:40px; }
+/* max-height:none undoes the one-line cap every other collapsed body wants (`.node.collapsed > .body`
+   below): that cap is for TEXT — the first line of a folded note — and here it left the picture
+   letterboxed across the top of the square instead of filling it. With the cap gone the body is back
+   to inset:0 and the img's own width/height:100% + object-fit:cover crop the square out of whatever
+   aspect the picture has, which is what an icon is. */
+.node.image-card.collapsed > .body { display:block; max-height:none; }
+/* The magnifier stays on a folded icon (a thumbnail is exactly when "show me this properly" is worth
+   offering) but has to fit one: 26px at the same 6px inset would cover the whole 40px square. Smaller,
+   and moved to the TOP-LEFT — the other three corners are spoken for on an icon this size, by the
+   unfold chip (top-right, 8px outside) and the add-child + (bottom-centre). */
+.node.image-card.collapsed .img-zoom { top:3px; left:3px; right:auto; width:18px; height:18px; border-radius:5px; }
+.node.image-card.collapsed .img-zoom svg { width:12px; height:12px; }
+/* No tags on the icon, and nothing to add one with: the row hangs off the bottom edge and its
+   add-emoji button is 22px — on a 40px square the two together read as chrome with a picture behind
+   it, rather than a thumbnail. Both come back the moment it unfolds, where there's room for them. */
+.node.image-card.collapsed > .tag-row { display:none !important; }
 .node.image-card .addnote { display:none !important; }
 /* explicit width/height (not just inset:0) — a percentage height on the .md-img descendant only
    resolves against a containing block whose OWN height is set via the `height` property itself,
-   not one merely implied by top+bottom insets (CSS2.1 10.5) */
-.node.image-card > .body { position:absolute; inset:0; width:100%; height:100%; margin:0; overflow:hidden; }
+   not one merely implied by top+bottom insets (CSS2.1 10.5).
+   `border-radius:inherit` HERE (the .body's parent is the node, so it picks up --r-card) plus the
+   overflow:hidden already on it is what rounds the picture off: an image card wears exactly the
+   corner every other card does, with the image clipped to it rather than squaring it off. Putting
+   the inherit on .md-img instead cannot work — its parents are <p>/.img-wrap, which carry no radius
+   of their own, so it inherits a 0 and the picture keeps its corners. */
+.node.image-card > .body { position:absolute; inset:0; width:100%; height:100%; margin:0;
+  overflow:hidden; border-radius:inherit; }
 /* renderBodyHTML wraps a standalone image in a <p>, and imgTag wraps the <img> in .img-wrap —
    both, not .body, are the img's real containing blocks, so the explicit height passes down. */
 .node.image-card > .body > p, .node.image-card > .body > p > .img-wrap { width:100%; height:100%; margin:0; }
-.node.image-card > .body .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; border-radius:inherit; }
+.node.image-card > .body .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; }
 /* image wrapper: anchors the magnifier button over each image; block so it stacks like the img did */
 .img-wrap { position:relative; display:block; }
 /* magnifier button — hidden until the card is selected, then floats top-right over each image */
@@ -930,6 +965,17 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-close { position:fixed; top:16px; right:20px; width:40px; height:40px; border:none; cursor:pointer;
   border-radius:50%; background:rgba(255,255,255,.12); color:#fff; font-size:24px; line-height:1; }
 #imgViewer .iv-close:hover { background:rgba(255,255,255,.24); }
+/* ‹ / › page through the images of every card sharing this one's parent (features/image-viewer.ts).
+   Hidden unless there IS a run: `.iv-paged` is set on open, so a lone picture shows no arrows rather
+   than two dead buttons. Fixed to the viewport edges (not the image) so they don't jump about as
+   pictures of different shapes come and go, and vertically centred against the whole backdrop. */
+#imgViewer .iv-nav { position:fixed; top:50%; transform:translateY(-50%); display:none;
+  width:44px; height:44px; border:none; cursor:pointer; border-radius:50%;
+  background:rgba(255,255,255,.12); color:#fff; font-size:28px; line-height:1; padding:0 0 3px; }
+#imgViewer.iv-paged .iv-nav { display:block; }
+#imgViewer .iv-prev { left:20px; }
+#imgViewer .iv-next { right:20px; }
+#imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
 /* ---------- query card: a resizable box with a search field over a scrollable results list ---------- */
 /* z-index:2, same as an image card (not the frame's 1): a query card is a self-contained leaf
    widget you interact with directly, not a container other cards render inside — see isQueryBox
@@ -1336,7 +1382,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
    would only stretch them into a lozenge. Only a "+N" opts into `.wide` (paintNode, when there really
    are hidden descendants to count) and grows for its digits; the 8px radius keeps its ends round at
    this height either way. `right` pins the RIGHT edge, so growing leftwards never moves the corner. */
-.node .hidden-count { position:absolute; right:-8px; top:-8px;
+.node .hidden-count { position:absolute; right:-8px; top:-8px; z-index:3;
   box-sizing:border-box; width:16px; height:16px; padding:0;
   -webkit-appearance:none; appearance:none; border:none; font-family:inherit;
   background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
@@ -1392,6 +1438,13 @@ body.grabbing .node .tag-add-btn { display:none !important; }
    deep card would otherwise light up the chevron of every ancestor above it at once — only the
    innermost hovered card shows one. */
 .node[data-chip="count"] > .title-row > .hidden-count { display:inline-flex; }
+/* …except on a folded IMAGE card, where the chip is the only thing between you and a clean thumbnail.
+   It earns its place two ways: the card is SELECTED (you're working on it — and it's how you unfold
+   without a keyboard), or the "+N" is actually counting something (`.wide` is set by paintNode exactly
+   when hidden descendants exist). A bare "+" on an unselected icon is neither, so it goes. This is the
+   one per-kind exception to the rule above, and it can be one because it out-specifies the show rule
+   rather than fighting a `:hover`/`.sel` selector — an icon still unfolds by being scaled back up. */
+.node.image-card.collapsed[data-chip="count"]:not(.sel) > .title-row > .hidden-count:not(.wide) { display:none; }
 .node[data-chip="fold"]:hover:not(:has(.node:hover)) > .title-row > .hidden-count,
 .node[data-chip="fold"].sel > .title-row > .hidden-count,
 /* `.sel-join` too — the pair that rings as one shape shows one button: an open TAB carries the

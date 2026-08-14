@@ -14,6 +14,7 @@ import { state, setStatus, isAnnotation, isQueryCard, type MindNode } from '../c
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
+import { linkPaste } from '../utils/markdown.js';
 import { outlineActive, startRowTitleEdit } from './outline.js';
 import { actionTarget, isTabsFrame } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -25,8 +26,9 @@ import { touch, commitStep } from './history.js';
 
 // The text the editor holds: the note with its title back on the front as a heading — exactly the
 // file's own body (utils/frontmatter.ts joinHeading), which is what makes the editor a view of the
-// note rather than a form over two fields.
-const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body);
+// note rather than a form over two fields. `titleGap` rides along for the same reason: delete the
+// blank line under a heading and the editor must not put it back on the next open.
+const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.titleGap !== false);
 
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
@@ -131,8 +133,8 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   }
   const val = (te.el.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // a tab is a single line
   if (!cancel && val){
-    const { title, body } = splitHeading(val);
-    n.title = title; n.body = body;
+    const { title, body, gap } = splitHeading(val);
+    n.title = title; n.body = body; n.titleGap = gap;
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow
@@ -150,6 +152,22 @@ export function endInPlaceEdit(): void { endBodyEdit(); endTitleEdit(); }
 // title is in the textarea and showing it twice would read as two fields. Enter inserts a newline,
 // Esc cancels, blur commits.
 export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+// Paste a URL over selected text and the text becomes a LINK — or, if it already is one, keeps its
+// label and takes the new URL (utils/markdown.ts linkPaste owns that rule). Bound by every editor
+// that holds a note's text: the card's own textarea, the outline's and the mobile sheet's. It writes
+// nothing but the textarea and then dispatches `input`, so each editor's own live path runs — the
+// card's reflow, the outline's write-through — and none of them needs to know this happened.
+// Returns whether it handled the event, so an image paste still gets its turn.
+export function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
+  if (state.readOnly) return false;
+  const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
+  if (!r) return false;
+  e.preventDefault();
+  ta.value = r.text;
+  ta.setSelectionRange(r.start, r.end);
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
 // Where the caret lands: on the card's NAME (selected, so typing replaces it — the old rename's
 // select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
 // which is the one nudge that keeps F2 meaningful there.
@@ -186,7 +204,8 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   ta.addEventListener('input', () => { autosizeBody(ta); onBodyInput(n); });
   ta.addEventListener('keydown', (e) => onBodyKeydown(e, n));
   ta.addEventListener('blur',    () => { if (ui.bodyEdit && ui.bodyEdit.id === n.id) endBodyEdit(); });
-  ta.addEventListener('paste',   onBodyPaste);                 // paste images straight into the note
+  // a URL over a selection links it; anything else falls through to the image paste / the native insert
+  ta.addEventListener('paste',   (e) => { if (!pasteUrlLink(e, ta)) onBodyPaste(e); });
   ta.addEventListener('pointerdown', (e) => e.stopPropagation());   // place the caret, don't drag the card
   ta.focus();
   autosizeBody(ta);              // size to content first so the card's real height is known…
@@ -289,8 +308,8 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   }
   const changed = !cancel && be.ta.value !== be.orig;
   if (changed){
-    const { title, body } = splitHeading(dropEmptyHeading(be.ta.value));
-    n.title = title; n.body = body;
+    const { title, body, gap } = splitHeading(dropEmptyHeading(be.ta.value));
+    n.title = title; n.body = body; n.titleGap = gap;
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change

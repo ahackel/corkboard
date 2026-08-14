@@ -2,7 +2,7 @@
 // Every node is one .md file; ids are ephemeral (minted in mkNode). All create/duplicate paths go
 // through mkNode so the node schema stays in one place. Each mutation schedules a save. Re-parenting
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
-import { state, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, setStatus, isLeafType, isAnnotation, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
@@ -113,6 +113,11 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist,
     type: s.type, layout: s.layout, side: s.side,
     w: s.w, h: s.h,   // a frame/image card's own box size
+    // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
+    // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
+    // visibly on an image card, whose fold is its icon). titleGap rides along with the body it
+    // describes, or the copy's file would gain the blank line the original doesn't have.
+    collapsed: s.collapsed, titleGap: s.titleGap,
   });
   state.nodes.set(copy.id, copy);
   return copy;
@@ -238,7 +243,7 @@ function cutCardText(n: MindNode, start: number, end: number, value: string): st
   const text = value.slice(start, end);
   const rest = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
   const split = splitHeading(rest);
-  n.title = split.title; n.body = split.body;
+  n.title = split.title; n.body = split.body; n.titleGap = split.gap;
   n.dirty = true;
   dropBodyEdit();   // see inline-edit.ts — the editor still shows the pre-cut text
   return text;
@@ -622,28 +627,6 @@ export function deleteSelectionKeepChildren(): void {
   scheduleSave();
   setStatus(`Deleted ${ids.length} card${ids.length===1?'':'s'}, kept children`);
 }
-// Alt-drop an image CARD onto a regular card (features/drag.ts): fold each image card's markdown
-// (its `![alt](path)` body) onto the end of the target card's body as an inline image, then delete
-// the now-redundant image card(s). The referenced attachment file stays on disk — the target body
-// still points at it; only the image card's own .md note is removed. Runs INSIDE the live drag
-// undo step: it touches + mutates only, and the caller (dragPointerUp) commits.
-export function foldImageCardsIntoBody(targetId: string, imageCardIds: Iterable<string>): number {
-  if (state.readOnly) return 0;
-  const target = state.nodes.get(targetId); if (!target) return 0;
-  const cards = [...imageCardIds]
-    .map(id => state.nodes.get(id))
-    .filter((n): n is MindNode => !!n && isImageCard(n));
-  if (!cards.length) return 0;
-  const md = cards.map(c => (c.body || '').trim()).filter(Boolean).join('\n\n');
-  touch(targetId);
-  if (md){
-    target.body = (target.body && target.body.trim()) ? target.body.replace(/\s*$/, '') + '\n\n' + md : md;
-    target.dirty = true;
-    if (ui.bodyEdit && ui.bodyEdit.id === targetId) ui.bodyEdit.ta.value = target.body;   // sync an open editor
-  }
-  deleteNodes(cards.map(c => c.id));
-  return cards.length;
-}
 const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
 // source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it
@@ -669,8 +652,10 @@ export function extractImage(sourceId: string, path: string, alt: string,
     }
     setStatus('Image moved');
   } else {
-    const n = mkNode({ x: target.x, y: target.y, parent: null, title: alt || 'image',
-      body: md, type: 'image', color: 'none', w: target.w, h: target.h });
+    // untitled: the note is the picture and nothing else, which is what makes it render as one
+    // (core/state.ts isImageCard). The alt rides along in the markdown and names the file.
+    const n = mkNode({ x: target.x, y: target.y, parent: null, title: '',
+      body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
     setStatus('Image extracted');

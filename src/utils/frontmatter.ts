@@ -6,7 +6,7 @@
 // rewrite ONLY the app-owned keys (tags/color/mm_*) while preserving everything else —
 // `date`, `category`, `aliases`, custom fields, and the note body — verbatim.
 // ============================================================
-import { state, isBoxType, type MindNode, type NodeType, type NodeLayout, type FmEntry } from '../core/state.js';
+import { state, isBoxType, isImageCard, type MindNode, type NodeType, type NodeLayout, type FmEntry } from '../core/state.js';
 
 // ---------- a note's TITLE is the leading heading of its body ----------
 // `# Notes` on the first non-blank line IS the title, and nothing else is. Not a frontmatter key,
@@ -35,20 +35,29 @@ export function headingOnLine(line: string): { markerLen: number; title: string 
   const m = line.match(/^([^\S\n]*#{1,6}[^\S\n]+)(.*\S)?[^\S\n]*$/);
   return m ? { markerLen: m[1].length, title: (m[2] ?? '').trim() } : null;
 }
-export function splitHeading(text: string): { title: string; body: string } {
+// `gap` is whether a BLANK LINE separated the heading from the note — the one thing about the split
+// that the two fields can't hold, and so the one thing a round-trip would otherwise invent. Write
+// `# Title` with the text on the very next line and it must stay there: joinHeading below reads this
+// back, and MindNode.titleGap carries it between the two. Untitled and body-less notes report the
+// default (true), so putting a title or a body on one later spaces it the ordinary way.
+export function splitHeading(text: string): { title: string; body: string; gap: boolean } {
   const lines = text.split('\n');
   const i = firstTextLine(lines);
-  if (i < 0) return { title: '', body: '' };
+  if (i < 0) return { title: '', body: '', gap: true };
   const h = headingOnLine(lines[i]);
-  if (!h || !h.title) return { title: '', body: text.trim() };
-  return { title: h.title, body: lines.slice(i + 1).join('\n').trim() };
+  if (!h || !h.title) return { title: '', body: text.trim(), gap: true };
+  const rest = lines.slice(i + 1);
+  const body = rest.join('\n').trim();
+  return { title: h.title, body, gap: body ? !rest[0]?.trim() : true };
 }
 // …and back. The inverse of splitHeading, so a load/save round-trip is a no-op: an untitled note is
-// its body alone, and a titled one gets its heading back as the first line.
-export function joinHeading(title: string, body: string): string {
+// its body alone, and a titled one gets its heading back as the first line — over a blank line unless
+// the note is one of the tight ones (`gap: false`). The default is `true` for the callers that build a
+// note rather than re-reading one (a merge, an extract, the clipboard), where spaced is what to write.
+export function joinHeading(title: string, body: string, gap = true): string {
   const t = title.trim(), b = body.trim();
   if (!t) return b;
-  return b ? `# ${t}\n\n${b}` : `# ${t}`;
+  return b ? `# ${t}\n${gap ? '\n' : ''}${b}` : `# ${t}`;
 }
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
 // this, and it survives in two places for that reason: the one-shot migration of a body-less note
@@ -88,6 +97,7 @@ export interface ParsedNote {
   keepStatus: string;
   tags: string[];
   body: string;
+  titleGap: boolean;
   mm: {
     parent: string;
     px: number | null;   // mm_position_x/y — position relative to parent (current fields)
@@ -139,17 +149,22 @@ function fmRemove(entries: FmEntry[], key: string): void {
 }
 
 // Resolve a note's kind + child-arrangement from frontmatter, folding legacy tokens.
-// CURRENT format: `mm_type` (card|frame|image, default card) + `mm_layout` (the arrangement).
+// CURRENT format: `mm_type` (card|frame|stack|annotation|query, default card) + `mm_layout`.
 // LEGACY (no mm_type): a single `mm_layout` token conflated both — split it here so old vaults
 // keep working: none/''→card·inherit, free/line/fan→card·*, two-sided/grid→card·fan,
-// frame(+mm_arrange flow-h/flow-v)→frame·free|horizontal|vertical, frame-h/-v→frame·*, image→image.
+// frame(+mm_arrange flow-h/flow-v)→frame·free|horizontal|vertical, frame-h/-v→frame·*.
+// `image` is folded away too, in BOTH spellings: there is no image kind any more — a card whose
+// whole note is one `![alt](src)` renders as that picture (core/state.ts isImageCard), so an old
+// image note is simply a card and keeps its mm_w/mm_h. The value stops being written on its
+// first save; nothing else in the app has to know the kind ever existed.
 function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayout } {
   const t = fmValue(entries, 'mm_type');
-  if (t === 'frame' || t === 'stack' || t === 'image' || t === 'card' || t === 'annotation' || t === 'query')
+  if (t === 'image') return { type: 'card', layout: 'free' };
+  if (t === 'frame' || t === 'stack' || t === 'card' || t === 'annotation' || t === 'query')
     return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout };
   // legacy: infer both from the combined mm_layout token
   const v = fmValue(entries, 'mm_layout');
-  if (v === 'image') return { type: 'image', layout: 'free' };
+  if (v === 'image') return { type: 'card', layout: 'free' };
   if (v === 'frame' || v === 'frame-h' || v === 'frame-v') {
     let layout: NodeLayout = 'free';
     if (v === 'frame-h') layout = 'horizontal';
@@ -175,7 +190,7 @@ export function parseMd(text: string): ParsedNote {
   const entries = m ? parseFM(m[1]) : [];
   // The TITLE is the body's leading heading (splitHeading above); no heading = an untitled card.
   // The filename is deliberately NOT consulted — it's a derived slug, suffix and all.
-  const { title, body } = splitHeading(m ? m[2] : text);
+  const { title, body, gap } = splitHeading(m ? m[2] : text);
   const num = (v: string): number | null => (v !== '' && !isNaN(+v)) ? +v : null;
   return {
     title,
@@ -186,6 +201,7 @@ export function parseMd(text: string): ParsedNote {
     keepStatus: fmValue(entries, 'status'),
     tags: fmTags(entries),
     body,                                  // already trimmed, and shorn of the title heading
+    titleGap: gap,                         // was there a blank line under the heading (see splitHeading)
     // layout keys — note identity is its filename; parent stored as the PARENT note's path.
     mm: {
       parent: fmValue(entries, 'mm_parent'),
@@ -236,19 +252,23 @@ export function serializeMd(n: MindNode): string {
   if (n.checklist) entries.push({ key:'mm_checklist', lines:['mm_checklist: true'] });
   if (n.type !== 'card') entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
   // Only card/frame carry a layout; omit it when it's the type's default (card→inherit, frame→free).
-  // image/annotation are leaves with no layout, so they never write mm_layout.
+  // annotation/query are leaves with no layout, so they never write mm_layout.
   const layoutDefault = n.type === 'frame' ? 'free' : 'inherit';
   if ((n.type === 'card' || n.type === 'frame') && n.layout !== layoutDefault)
     entries.push({ key:'mm_layout', lines:[`mm_layout: ${n.layout}`] });
   // The AUTHORED width — every kind can carry one (a card/annotation/stack is resizable on this axis
-  // alone). The HEIGHT is box-kinds-only: a card measures its own from its content and a stack derives
-  // its own from its outline, so writing an mm_h for either would freeze a value they recompute anyway.
+  // alone). The HEIGHT belongs to the kinds that own a box, plus the one card that IS one: an IMAGE
+  // card (core/state.ts isImageCard) is its picture, so both its axes are authored and its aspect is
+  // what the resize locks. Any other card measures its height from its content and a stack derives its
+  // own from its outline, so writing an mm_h for either would freeze a value they recompute anyway —
+  // which is also why type-flipping a card out of image mode has to DROP the h (main.ts remeasure).
   if (n.w != null) entries.push({ key:'mm_w', lines:[`mm_w: ${Math.round(n.w)}`] });
-  if (isBoxType(n.type) && n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
+  if ((isBoxType(n.type) || isImageCard(n)) && n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
   if (n.type === 'query' && n.query) entries.push({ key:'mm_query', lines:[`mm_query: ${n.query}`] });
   const fm = entries.flatMap(e => e.lines).join('\n');
   // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse
-  // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing).
-  const body = joinHeading(n.title, n.body);
+  // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing, down to
+  // whether the note's first line sits under a blank one).
+  const body = joinHeading(n.title, n.body, n.titleGap !== false);
   return `---\n${fm}\n---\n` + (body ? '\n' + body + '\n' : '\n');
 }

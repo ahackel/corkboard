@@ -6,7 +6,7 @@ import { state, edgesSvg, togglesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation
 import { isRoot, isHidden, parentOf } from '../utils/model.js';
 import { dropLanding, sideOf, isContainer, stackOf, hostFrame, frameInterior } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { nodeW, nodeH, effectiveColor, colorFill, SWATCH_BG } from '../main.js';
+import { nodeW, nodeH, elTop, effectiveColor, colorFill, SWATCH_BG } from '../main.js';
 import { clamp } from '../utils/num.js';
 
 const EDGE_R = 12;   // corner radius on orthogonal elbows
@@ -182,9 +182,14 @@ export function paintEdges(): void {
       const tint = colorFill(effectiveColor(n)) ?? 'var(--edge)';
       // straight line from the annotation's CENTRE to the CLOSEST point on the parent's bounds
       // (clamp the centre into the parent rect), with the anchor dot at that closest point.
+      // The top edge is the BOX's, not the bounds': a frame's bounds include its folder tab, which is
+      // a separate shape hanging above the box (elTop / FRAME_TAB_DROP), and half of that strip isn't
+      // even drawn — so an annotation sitting above a frame would otherwise land its dot on the tab, or
+      // in the empty gap beside it, instead of on the box it annotates. elTop is 0 for everything else,
+      // a FOLDED frame and a docked tab included: there the tab is all there is, so it IS the body.
       const ax = n.x + nodeW(n)/2, ay = n.y + nodeH(n)/2;
       const bx = clamp(ax, parent.x, parent.x + nodeW(parent));
-      const by = clamp(ay, parent.y, parent.y + nodeH(parent));
+      const by = clamp(ay, elTop(parent, parent.y), parent.y + nodeH(parent));
       const els = `<path class="anno-edge" style="stroke:${tint}" stroke-dasharray="2 6" d="M ${ax} ${ay} L ${bx} ${by}"/>`
         + `<circle class="edge-dot" cx="${bx}" cy="${by}" r="${DOT_R}" fill="${tint}"/>`;
       if (inDragGroup(n.id)) dragged += els; else annos += els;

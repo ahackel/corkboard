@@ -62,9 +62,10 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   `mm_query`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
-  (which also folds legacy spellings). Kinds: card, frame, stack, image, annotation, query.
-- **`n.w` is always AUTHORED; `n.h` only for the 2D box kinds** (frame/image/query) — card, annotation
-  and stack measure or derive their height and never persist it.
+  (which also folds legacy spellings, `image` → `card`). Kinds: card, frame, stack, annotation, query.
+- **`n.w` is always AUTHORED; `n.h` only for frame/query and an IMAGE card** — a card whose note is
+  one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
+  Derived from the text (`isImageCard`), never a kind. Card/annotation/stack measure their height.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
   open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`**; `state.readOnly` and `store.isOpen === false` (demo mode)
@@ -82,14 +83,13 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **The product is "Corkboard"; the document is a "map"/"board".** The old `mindmap` name survives
   only in `utils/legacy-keys.ts`, `openRenamed` (`utils/idb.ts`) and the `mm_*` keys.
 
-## Deep dives (`docs/architecture.md`)
-
-Look the area up by its **bolded lead sentence** there before touching it:
+## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
 - Frames — "A `frame`'s BOUNDS include its title tab" · "A container's two side wrappers are
   LIFECYCLE-managed" · "A frame with `mm_layout: tabs` is a TAB GROUP" · "A frame can be OPENED, and
   then the canvas IS its interior" (scope, crumbs, canvas colour, `detachParentId`).
-- Stacks — "A `stack` is an OUTLINER"; files — "A body-less note is MIGRATED on load".
+- Stacks — "A `stack` is an OUTLINER"; files — "A body-less note is MIGRATED on load" · "A card whose
+  whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "Double-click /
   double-tap OPENS a node" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input".

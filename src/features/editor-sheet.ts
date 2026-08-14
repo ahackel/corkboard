@@ -13,6 +13,7 @@ import { selectNode, remeasure } from '../main.js';
 import { discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
 import { byId } from '../utils/dom.js';
+import { pasteUrlLink } from './inline-edit.js';
 
 const sheet = byId('editorSheet');
 const shTitle = byId<HTMLInputElement>('shTitle');
@@ -73,6 +74,7 @@ export function closeEditorSheet({ cancel = false }: { cancel?: boolean } = {}):
 
 // No live validation any more: an empty title means an untitled card, and a duplicate one is fine —
 // the FILENAME takes the suffix (data/persistence.ts desiredFileFor), not the name you typed.
+shBody.addEventListener('paste', (e) => { pasteUrlLink(e, shBody); });   // URL over a selection → a link
 shDone.addEventListener('click', () => closeEditorSheet());
 shCancel.addEventListener('click', () => closeEditorSheet({ cancel: true }));
 sheet.addEventListener('keydown', (e) => {

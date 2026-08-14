@@ -5,7 +5,7 @@
 import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
-import { store, scheduleSave } from '../data/persistence.js';
+import { store, scheduleSave, IMAGE_FILE_RE } from '../data/persistence.js';
 import { screenToWorld } from '../view/camera.js';
 import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
 import { createNode, centredAt } from './crud.js';
@@ -22,7 +22,10 @@ function imgExt(file: File): string {
   const m = (file.name || '').match(/\.[a-z0-9]+$/i);
   return m ? m[0].toLowerCase() : (IMG_EXT[file.type] || '.png');
 }
-const isImageFile = (f: File): boolean => !!f && !!f.type && f.type.startsWith('image/');
+// …or by NAME when the drop hands us no MIME type, which some file managers do — an .svg dragged out
+// of Finder/Explorer is the usual one, and it would otherwise be silently ignored.
+const isImageFile = (f: File): boolean =>
+  !!f && (( !!f.type && f.type.startsWith('image/')) || IMAGE_FILE_RE.test(f.name || ''));
 // Pull just the image files out of a FileList / array (paste, drop, drag all hand us a mix).
 const imageFiles = (src: FileList | File[] | null | undefined): File[] => [...(src || [])].filter(isImageFile);
 const addedMsg = (n: number): string => `Added ${n} image${n === 1 ? '' : 's'}`;
@@ -44,7 +47,19 @@ async function imageSize(file: File): Promise<{ w: number; h: number }> {
     const { width: w, height: h } = bmp;
     bmp.close();
     if (w > 0 && h > 0) return { w, h };
-  } catch { /* fall through to default */ }
+  } catch { /* fall through to the <img> decode */ }
+  // SVG: createImageBitmap REFUSES an SVG blob (it decodes raster formats), so without this every
+  // vector image landed as a generic IMAGE_W×IMAGE_H box instead of its own shape. An <img> decodes
+  // one happily, and reports the intrinsic size off its width/height or viewBox — falling back, as
+  // the browser does, to 300×150 for an SVG that declares neither. Also covers any raster format the
+  // bitmap decoder happens not to take.
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    await new Promise<void>((ok, fail) => { img.onload = () => ok(); img.onerror = fail; img.src = url; });
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) return { w: img.naturalWidth, h: img.naturalHeight };
+  } catch { /* fall through to the default box */ }
+  finally { URL.revokeObjectURL(url); }
   return { w: IMAGE_W, h: IMAGE_H };
 }
 // Fit a natural image size into a card box: keep the image's aspect ratio, capped to IMAGE_W so a
@@ -126,8 +141,11 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
     const { w, h } = imageCardSize(natural);
     createNode({
       x: p.x - w / 2 + i * 24, y: p.y - h / 2 + i * 24,
-      parent, title: alt, body: `![${alt}](${path})`,
-      type: 'image', color: 'none', w, h, edit: false,
+      // UNTITLED, deliberately: a card whose whole note is one image IS that image (core/state.ts
+      // isImageCard), and a title would both draw a row over the picture and end image mode. The alt
+      // still names the FILE — data/persistence.ts slugStem reads it straight off the markdown.
+      parent, title: '', body: `![${alt}](${path})`,
+      color: 'none', w, h, edit: false,
     });
     i++;
   }
@@ -297,7 +315,8 @@ document.addEventListener('drop', async (e) => {
   const onEditor = !!t.closest?.('.body-edit');
   const cardEl   = t.closest?.('#world [data-id]') as HTMLElement | null;
   const cardId   = cardEl?.dataset.id ?? null;
-  // an image card is a leaf — it can't adopt children or gain a second image in its body
+  // an image card is a card that IS its picture (core/state.ts isImageCard): dropping notes or a
+  // second image ONTO it would end that — so those land beside it, on the canvas, instead
   const cardNode = cardId ? state.nodes.get(cardId) : null;
   const cardIsImage = !!cardNode && isImageCard(cardNode);
   const cardIsFrame = !!cardNode && isFrame(cardNode);

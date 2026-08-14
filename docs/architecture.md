@@ -28,6 +28,14 @@ filename. Three things follow:
   edits, and would mass-rename a vault of heading-less notes on first open. A stale slug costs nothing: an
   untitled card has no name to be wrong about.
 
+**The blank line under a heading is the note's, not the app's** (`titleGap`). Title and body are two
+fields where the file is one text, so the split loses exactly one thing: whether `# Title` was followed
+by a blank line or by the note itself. `splitHeading` reports it, `MindNode.titleGap` carries it and
+`joinHeading` writes it back, which is what makes the pair the exact inverses they claim to be — delete
+that line and it stays deleted, through the editor, the save and the next load. It is NOT a frontmatter
+key: it's implicit in the file, so nothing new is written to disk. Absent means the spaced default,
+which is what the paths that BUILD a note rather than re-read one (a merge, an extract, a paste) get.
+
 **A body-less note is MIGRATED on load, once** (`loadFromDir`): no `# ` heading *and* an empty body means
 the title used to be the filename and nothing in the file says so any more, so the stem becomes the title
 and the note is marked dirty; the next save writes the `# Heading` it should have had and it never fires
@@ -59,7 +67,7 @@ keep that property when touching `parseFM`/`fmSet`/`fmRemove`.
 
 **A node's KIND is `mm_type`; its child ARRANGEMENT is `mm_layout`** — two axes, both resolved by
 `foldTypeLayout`, which also folds legacy spellings so old vaults keep loading. Kinds: `card` (default,
-omitted), `frame`, `stack`, `image`, `annotation`, `query`. Only card and frame carry a layout (card:
+omitted), `frame`, `stack`, `annotation`, `query`. Only card and frame carry a layout (card:
 `inherit`/`free`/`line`/`fan`; frame: `free`/`horizontal`/`vertical`/`tabs`); the rest never write
 `mm_layout`. The pickers in `features/float-bar.ts` are driven by `NODE_TYPES` + `LAYOUTS_BY_TYPE`; a kind
 with an empty layout set hides the layout trigger entirely.
@@ -118,6 +126,12 @@ frame, a folded group's pill. Four knock-ons:
 - **Only a TAB GROUP squares its top-left corner** (`.node.frame.tabs.has-tabs`, mirrored onto the content
   wrapper by `frameContentEl`), so a tab's straight left side meets the box flush. An untabbed frame is
   rounded all round like every other box.
+
+An ANNOTATION pinned to a frame anchors on the BOX, never the tab: its connector runs to the closest point
+on the parent, and that clamp takes its top edge from `elTop` rather than the bounds (`view/edges.ts`) — the
+tab is a separate shape hanging above the box, half the strip beside it isn't drawn at all, and a dot parked
+up there reads as pointing at nothing. `elTop` is 0 for every other kind, a FOLDED frame and a docked tab
+included, where the tab IS the body.
 
 Two more consequences: the tab must stay a single ellipsised line (a wrapping one would make the box's
 position depend on a live measurement — hence the hover tooltip in `paintNode`), and the vertical projection
@@ -240,8 +254,9 @@ last term and re-slotting a tab — a gesture that doesn't change the box at all
 sideways. A docked frame's own `mm_w`/`mm_h` are never touched, which lets it come back out at the size it
 went in at. A group left with no children dissolves. What may become a tab is `canBeTab`: a frame, or a plain
 CARD, which `dockFrames` turns into a frame on the way in (`asFrame`). Other kinds fall through to the
-ordinary drop and land in the box as content — an annotation holds nothing, and a stack/image/query is a box
-whose own shape IS the point.
+ordinary drop and land in the box as content — an annotation holds nothing, and a stack/query is a box whose
+own shape IS the point. An image card goes in as an ordinary card would (`asFrame` makes it a frame, whose
+body is never drawn — so the picture is out of sight while it serves as a tab, and back when it isn't).
 
 ## Open frames (scope)
 
@@ -375,15 +390,67 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 dragging its left/right edge, and `n.w` (→ `mm_w`) is that dragged width and nothing else — never a value a
 layout pass computed. Two axes' worth of handles come off that split (`ensureResizeHandles`, `main.ts`):
 
-- `frame`/`image`/`query` are **2D boxes** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
+- `frame`/`query` are **2D boxes** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
   `isBoxType`). For a **frame** these are its BOUNDS, i.e. they include the title tab: `mm_position_y` is the
   tab's top edge and the box starts `FRAME_TAB_DROP` lower.
+- An **IMAGE card** is the third, and the one that isn't a kind: see below.
 - `card`/`annotation`/`stack` are **width-only** — 2 side zones (`EW_DIRS`), and their height is never
   authored, written inline or persisted: a card/annotation measures it from its content (`nodeH` →
   `offsetHeight`) and a stack derives it from its outline. Minimum width is the kind's own natural width, so a
   card only ever gets *wider*; drag back to it and `n.w` is dropped rather than persisting a redundant `mm_w`.
   An annotation is the exception that can also be narrowed — it shrink-wraps its text, so it has no fixed
   natural width, and it's measured with the authored sizing stripped.
+
+**A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
+in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
+old `mm_type: image` folds to `card` on load (`foldTypeLayout`) and stops being written on the next save,
+so an old vault upgrades itself note by note and keeps its `mm_w`/`mm_h`. What being one buys is a render
+and a geometry, both derived: no padding with the picture flush to the card's corners (`.image-card`), an
+authored HEIGHT as well as a width (the one card `serializeMd` writes `mm_h` for), 8 hit-zones, and an
+**aspect-locked** resize — `imageAspect` reads the loaded image's own ratio, so whichever axis you drag the
+other follows and the picture never distorts or crops. Four things follow:
+- **It's an ordinary card in every other respect** — it takes children, renames (which ends image mode: a
+  heading is text), ⌥-merges into another note, docks as a tab, and ⌥-drags out as its `.md`. That last one
+  is what retired the old image-fold drag (`imageMerge`): an image card is UNTITLED, and `mergeCardsInto`
+  already appends an untitled card's body alone, which for a picture is exactly its `![alt](src)` line.
+- **The mode is the note's text, so it ends when the text does.** `isImageBox` (`main.ts`) adds the two
+  states where the card shows something else and so measures like any card: while its EDITOR is open (that's
+  markdown, which wraps), and while FOLDED. Type a word into the note and the padding and the measured
+  height come back on commit, and `mm_h` stops being written — nothing to migrate, the file says it.
+- **Folded, it's a 40px square of itself** (`isImageFold`, `IMAGE_FOLD` — the `FRAME_TAB_H` metric, so it
+  sits on the same line as a folded frame's tab). A card with no title has nothing else to fold to, and an
+  empty shell is worse than a thumbnail. The picture FILLS that square: `.body` has to override the
+  one-line `max-height` every other collapsed body wants (that cap is for text, and it left the image
+  letterboxed across the top), after which `object-fit:cover` crops the square out of any aspect.
+- **The RESIZE is the third fold control**, beside the chip and `X`, and the only one that is also a size:
+  scale the card down until its SHORT axis reaches `IMAGE_FOLD` and it becomes the icon, scale the icon
+  back up and it's a card again — live, so the icon appears and goes under the cursor mid-drag. Which is
+  why the folded icon keeps its 8 handles, and why an image card's `minWOf`/`minHOf` ARE `IMAGE_FOLD`:
+  there is no smaller expanded size to clamp at, because below that it isn't expanded. What it unfolds to
+  is the last EXPANDED size — the one it had just before the icon took over, not the size it started the
+  drag at: you shrank it deliberately, and the chip should hand back what you shrank it to.
+- **What rides on the icon is what fits on one.** The unfold chip has to be reachable, which is why
+  `.image-card`'s title row is zeroed rather than `display:none` (`.hidden-count` lives inside that row)
+  and why the chip carries a `z-index` at all — the body is absolutely positioned and later in the DOM, so
+  the picture would otherwise cover the very control that folds it. The magnifier stays (a thumbnail is
+  exactly when "show me this properly" is worth offering) but shrinks to 18px in the TOP-LEFT, the corner
+  the chip and the add-child + leave free. The tag row goes entirely: it hangs off the bottom edge with a
+  22px add-emoji button, which on a 40px square reads as chrome with a picture behind it.
+  And the chip itself only shows when it's earning its place: the card is SELECTED, or the `+N` is really
+  counting hidden descendants (`.wide`, set by `paintNode` for exactly that). A bare `+` on an unselected
+  icon is neither, and an icon at rest should be a picture. This is the ONE per-kind exception to "no rule
+  may hide the bubble", and it survives only because it out-specifies the `[data-chip="count"]` show rule
+  instead of fighting a `:hover`/`.sel` one — plus scaling the icon up unfolds it with no chip at all.
+- **It is named after its PICTURE** (`slugStem`, `data/persistence.ts`): the alt text, else the image file's
+  own stem. `firstLineLabel` would slug the raw `![](attachments/…)` markup into something unreadable, and
+  the note has no other text to be named from.
+- **Every format goes down one path**, raster or vector: `attachments.ts` takes anything the browser calls
+  `image/*` — or, when a drop hands over no MIME type at all, anything matching `IMAGE_FILE_RE` (the one
+  list, shared with the importer). SVG needs no special case anywhere EXCEPT its intrinsic size:
+  `createImageBitmap` refuses an SVG blob, so `imageSize` falls back to decoding through an `<img>`, which
+  reports the size off its width/height or viewBox. Without that fallback every vector image landed as a
+  generic `IMAGE_W`×`IMAGE_H` box instead of its own shape — and, being an image card, would then have
+  taken that wrong ratio into its aspect-locked resize.
 
 Widening a width-only node changes its measured height as text re-wraps, so the resize gesture paints *then*
 re-lays-out on every frame (the same paint-before-measure rule as `prepRow`), and any **annotation** attached
@@ -449,7 +516,7 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
   bubble*: `.node[data-chip="fold"]:hover:not(:has(.node:hover))` out-specifies any plain class selector, so a
   rule like `.node.locked > .hidden-count { display:none }` silently loses on hover. Anything that shouldn't
   offer the button is refused in `chipFace` instead — annotations (an annotation IS its body, so folding
-  leaves an empty shell), image/query cards, and **locked** nodes (`toggleCollapse` refuses them, so the
+  leaves an empty shell), query cards, and **locked** nodes (`toggleCollapse` refuses them, so the
   control would do nothing; their folded *count* still shows, being information rather than a control). A
   frame's/stack's own body is never rendered, so only children make one collapsible.
 - **Both faces live in the button permanently** (`nodeEl` bakes the chevron in beside a `.cnt` span) and
@@ -501,6 +568,17 @@ that frame (`detachParentId`). Four things hold it together:
 **A click now only ever SELECTS.** Don't reintroduce a slow-second-click rename timer: it can only race the
 double-click it was invented to lose to.
 
+**Pasting a URL over selected text LINKS it** (`linkPaste` in `utils/markdown.ts`, bound by
+`pasteUrlLink` in every note editor — the card's textarea, the outline's, the mobile sheet's). It is
+the one thing `[label](url)` costs that a rich editor's ⌘K doesn't, and the rule is the render regex
+read backwards, so it can't link text `mdLinks` wouldn't then show as a link. A selection that already
+touches a link keeps its LABEL and takes the new URL — including when the selection is wider than the
+link, since a link inside a label is invalid markdown and rewriting the one that's there is the reading
+that can't produce a broken note. It stands aside (native paste) for an empty selection, a multi-line
+one, a paste that isn't a bare URL, and an image's `![alt](src)`. The handler writes nothing but the
+textarea and then dispatches `input`, so each editor's own live path — the card's reflow, the outline's
+write-through — runs exactly as it does for typing.
+
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;
 adding one is a decision, not a gap. Neither writes a new frontmatter key — a merge is a body edit plus a
@@ -515,9 +593,7 @@ delete, a break is a body edit plus a create.
   shape is the point. Merging INTO an annotation needs its own line (`kidHome`): an annotation is a LEAF
   (`isLeafType`, it never adopts children), so the swallowed cards' children go to the card that annotation is
   PINNED to, or the top level.
-- **⌥ is affordable here because it's the image fold's twin** (`imageMerge`/`foldImageCardsIntoBody`), resolved
-  in the same branch chain and previewed with the same `.drop-merge` dashed outline: the modifier's ordinary
-  meaning (detach to root) applies when there's nothing valid under the cursor, so nothing was displaced —
+- **⌥ is affordable here** because the modifier's ordinary (detach to root) applies when there's nothing valid under the cursor, so nothing was displaced —
   plain drag still reparents, ⇧ clones, ⌘ toggles the selection. The centre/edge zones on a card were already
   spoken for (sibling/child), which is why this needs a modifier at all. One knock-on: `paintDetachPreview` (⌥
   pressed mid-drag) goes through `dragFollow`, so the target's outline appears on the KEYPRESS rather than the
@@ -585,6 +661,25 @@ level, since a status line there would nag on every repeat.
 else. It needs no scope test of its own: `isHidden` already means "on the canvas right now", and
 `setSelectionSet` drops whatever isn't selectable. Guarded by `isTypingInField`, since in a field `⌘A` belongs
 to the field.
+
+**The full-screen viewer PAGES through a card's neighbours** (`features/image-viewer.ts`): ‹ / › and ←/→
+step across every image in the notes that share the opened card's parent — a frame's contents, a branch's
+siblings — in canvas reading order (top-to-bottom, then left-to-right, then each note's own order), wrapping
+at both ends. The run is built from the NOTES, not the rendered DOM, so a FOLDED sibling's pictures are in
+it too (they're no less part of the set for being tucked away), and each path resolves through the same
+per-path cache the cards' own images use (`imageUrl`, `features/images.ts`) — so an image that has never
+been on screen loads once and paging back is free. Two details: the arrows are hidden unless there is a run
+(`.iv-paged` — a lone picture showing two dead buttons is worse than showing none), and the key handler is
+registered in CAPTURE and stops what it handles, so ←/→ never reach `navArrow` underneath and Escape closes
+the viewer WITHOUT also clearing the canvas selection. **SPACE opens and closes it**: on a lone selected
+image card the picture IS the card, so "look at this properly" is what the key can mean there (`openImageAt`,
+`main.ts`, shared with the magnifier button), and it sits ahead of the new-card branch, which only ever ran
+with nothing selected. Space is split across the two key events on purpose — the keydown is swallowed so
+`spaceHeld` can't latch the canvas into hand-pan, and the keyup does the closing, which also stops main.ts's
+own Space keyup from re-opening the viewer on the card that is still selected. **Closing lands you on the
+card you were LOOKING at**, not the one you came in from: page three pictures along, close, and the third
+card is selected, so the next thing you do lands where your eyes already were. Selection only — the camera
+stays put.
 
 ## Colour and zoom
 

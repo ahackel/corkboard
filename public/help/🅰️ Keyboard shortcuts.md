@@ -12,7 +12,8 @@ mm_collapsed: true
 # 🅰️ Keyboard shortcuts
 
 ## Create
-- `Space` — new card at the pointer
+- `N` — new card at the pointer (`⌘N` too, when the browser doesn't claim it for a new window)
+- `Space` — hold to pan; on a selected image card, open it full screen
 - `Tab` — add a child
 - `Enter` — add a sibling
 - `D` — duplicate
