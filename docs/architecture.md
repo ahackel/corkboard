@@ -579,6 +579,36 @@ inline `code` in `**bold**`/`*italic*` — the code span is extracted first, so 
 pans, two fingers pinch-zoom + pan); node drag/reparent uses the per-node pointer handlers in `bindNodeDrag`.
 `#stage`/`.node` set `touch-action:none`.
 
+**The page runs EDGE TO EDGE, and every fixed control adds the safe area back itself.** `index.html`'s
+viewport meta carries `viewport-fit=cover`. Without it iOS lays the whole page out inside the safe area and
+letterboxes the rest: an iPhone in landscape loses a ~50px strip of *canvas* down each side to flat
+background colour (and a notch-height band at the top in standalone/PWA mode, where there's no browser
+chrome covering it). With it `#stage` — `position:fixed; inset:0` — really is the whole screen, which is
+what a canvas wants: the map can be panned under the cutout and nothing is clipped.
+
+The insets then become ours to pay back, and they're paid ONCE, by name: `styles.css` declares
+`--sa-t/--sa-r/--sa-b/--sa-l` at `:root` from `env(safe-area-inset-*)` (with a `0px` fallback, so every
+`calc()` downstream is exact on the devices — all but a handful — that have no cutout at all), and each
+piece of fixed chrome adds the matching one on top of its own 10–12px margin: the two top bars, the four
+corner button stacks, the ghost card, the sketch panel, the docked float bar, the image viewer, the sheets,
+and the two drawers. **Add the term to any new fixed control** — the failure mode is silent on every
+desktop and on an iPad, and only shows up as an untappable button on the one device you didn't test.
+
+Two consequences worth knowing. A *drawer* pays with PADDING, never by moving: `#storeSidebar` grows its
+width by `--sa-l` and pads its rows inward, because a panel that slid inward would leave a strip of canvas
+showing beside it and read as a bug. And a control anchored to a drawer's own edge (`.oc-back`, `.ol-head`)
+takes the inset only in the full-screen phone case, where that edge IS the screen's — hence their
+`max-width:700px` twin rules, written *after* the base rule they override rather than inside the media
+block that owns full-screen mode, since equal-specificity selectors are settled by source order.
+
+Panels placed by SCRIPT can't read those variables: `getComputedStyle` hands a custom property holding an
+`env()` back unresolved. So `utils/dom.ts`'s `safeInsets` measures them off `.safe-probe` — a hidden,
+zero-size element whose *padding* is the four variables, and computed padding is always resolved px. It's
+cached (the float bar re-places itself every frame while it's open) and dropped on `resize`/
+`orientationchange`, the only two events that can change an inset. `placeInViewport` — the one clamp every
+floating panel, popover and context menu ends in — measures its margin from the safe edge rather than
+`window.innerWidth/Height`, which under `cover` now includes the hardware.
+
 **Collapse has FOUR entry points, all funnelling through `toggleCollapse`/`toggleCollapseSelection`:** the
 corner chip, `X`, the ⋯ menu, and the `←`/`→` arrow keys — which unlike the other three are DIRECTIONAL
 rather than toggles. The **chip** is `.hidden-count`: one `<button>` at the node's top-right with two faces —

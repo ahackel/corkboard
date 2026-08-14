@@ -24,7 +24,7 @@ import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } f
 import { canOpen } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
 import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
-import { byId, placeInViewport } from '../utils/dom.js';
+import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
 const bar = byId('floatBar');
@@ -556,7 +556,10 @@ function positionBar(): boolean {
   // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
   // would hang the bar over the tab and shift it when a frame is converted to a card or back.
   let top = r.top - elTop(n, 0) * state.view.k - bh - GAP;
-  if (top < 4) top = r.bottom + GAP;   // not enough room above → flip below the card
+  // …flipping below the card when there isn't room above it. Measured from the SAFE top edge, not
+  // the window's: under `viewport-fit=cover` the first rows of pixels can be behind the status bar
+  // / notch, and a bar that "fits" there would only be clamped back down over its own card.
+  if (top < safeInsets().top + 4) top = r.bottom + GAP;
   placeInViewport(bar, left, top);
   if (activePopover) positionPopover(activePopover.pop, activePopover.anchor);
   return true;

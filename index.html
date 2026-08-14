@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<!-- viewport-fit=cover: WITHOUT it iOS letterboxes the whole layout viewport into the safe area, so
+     an iPhone in landscape loses a ~50px strip of canvas down each side (and a notch-width band at
+     the top in standalone/PWA mode) to flat background colour. With it the page owns every pixel of
+     the screen and the insets become OUR problem instead — styles.css's --sa-t/r/b/l (fed by env())
+     add them back under every piece of fixed chrome, and utils/dom.ts's placeInViewport does the
+     same for the panels that are placed by script. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Corkboard</title>
 <!-- App icon. The favicon is an inline SVG data URI so it also works when index.html is
      opened from a file:// path; the PNG/manifest links (copied from public/) drive the
