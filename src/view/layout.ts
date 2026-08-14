@@ -64,6 +64,11 @@ const LANDING_GAP = 40;   // gap below/beside the hovered card a drag-reparented
 // `afterId` is the explicit insertion anchor when the caller resolved one (`null` = front of
 // the order, `undefined` = default: after `target` in sibling mode, append in child mode).
 export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' | 'sibling' | 'reorder', side: LayoutSide, afterId?: string | null): { x: number; y: number } {
+  // An ANNOTATION lands where you dropped it, full stop. It's a remark placed AGAINST a card at a
+  // spot you chose by dragging — it takes no part in layout and has no side to dock against — so
+  // re-pinning it must change its parent and nothing else. Every other kind gets a landing computed
+  // from the target, which for an annotation would fling it below the card you aimed at.
+  if (isAnnotation(dragged)) return { x: dragged.x, y: dragged.y };
   const governor = mode === 'child' || mode === 'reorder' ? target : parentOf(target) ?? target;
   // Landing inside a stack's outliner: a row is `free` (the stack owns every position), so there's no
   // managed simulation to run — put it one indent under the governing row, below its current subtree.

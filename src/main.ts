@@ -279,9 +279,10 @@ export const isNodeControlAt = (cx: number, cy: number): boolean => !!hitAt(cx, 
 // what a double-click means nearly everywhere else: open the thing for editing. What it opens is
 // decided by WHAT WAS HIT, so one gesture covers every kind:
 //   · the title (a card's title row, a frame's folder tab)  → rename in place
+//   · a STACK's own header text                             → …which for a stack is that same rename
 //   · anywhere else on a card                               → edit its note
 //   · a FRAME's interior                                    → OPEN it (nav/scope.ts)
-//   · any other container's interior (a stack)              → put a new card THERE
+//   · any other container's interior (a stack, below its rows) → put a new card THERE
 // A container has no body of its own to edit, so its interior falls to one of the last two cases: a
 // frame is a folder you can stand in, so the gesture goes in; a stack is an outliner with nowhere to
 // stand, so it keeps the "double-click empty space to make a card" reading the canvas has
@@ -296,14 +297,21 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   if (state.readOnly) { toggleCollapse(n.id); return; }
   // `parentElement === n.el` keeps it to this node's OWN row: .title-row is always a direct child, so
   // a hit inside a DOM-nested child card can't be read as a hit on its host's title.
-  const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
+  // A STACK has no title row at all — its header IS its own rendered text, in its own `.body` above
+  // the rows (see cardMarkdown: `# Name` is a heading there like anywhere else). So a hit on that text
+  // is a hit on the stack's NAME and renames it, rather than appending a row to it — the same reading
+  // a card's title row gets, through the same funnel. Scoped by `parentElement === n.el` for the same
+  // reason: every ROW has a `.body` too, DOM-nested under this one.
+  const hit = hitAt(cx, cy);
+  const onTitle = hit?.closest('.title-row')?.parentElement === n.el
+    || (isStack(n) && hit?.closest('.body')?.parentElement === n.el);
   // startInlineEdit is the single rename funnel: it redirects a tab group to its open tab, an
   // annotation to its body and a query card to its query, and refuses a locked node.
   if (onTitle || n.collapsed) { startInlineEdit(n); return; }
   // A frame's interior OPENS it (nav/scope.ts) — the folder metaphor's own gesture, and the only one
   // that reads as "go in". Putting a card inside it kept Tab, the ⋯ menu and the canvas right-click.
-  // A STACK is a container that can't be opened (it's an outliner, not a box you stand in), so it
-  // falls through to the branch below and still appends a row.
+  // A STACK is a container that can't be opened (it's an outliner, not a box you stand in), so a hit
+  // that missed its header falls through to the branch below and appends a row.
   if (canOpen(actionTarget(n))) { openFrame(n); return; }
   if (isContainer(n)) { addChildIn(n, cx, cy); return; }
   if (isQueryCard(n)) return;   // no note to edit — its title slot IS the query field
@@ -653,7 +661,15 @@ export function paintNode(n: MindNode): void {
   // Resolved once up front, not inside the `else if`: nodeW() would run the same ancestor walk a
   // second time to answer the same question. The earlier branches can't be rows, so they skip it.
   const rowW = isBoxNode(n) || isFrameFold(n) || isStack(n) ? null : stackRowW(n);
-  if (isBoxNode(n)) {
+  if (stackImageRow(n) != null) {
+    // An image card as an outline ROW: the stack gives the width, the picture's ratio the height
+    // (nodeW/nodeH above). Both inline, because `.image-card > .body` is absolutely positioned and so
+    // has no height of its own to measure — and no resize zones, a row's width not being the user's
+    // to drag. Its own mm_w/mm_h stay on the node for when it leaves the stack again.
+    el.style.width = nodeW(n) + 'px';
+    el.style.height = nodeH(n) + 'px';
+    clearResizeHandles(el);
+  } else if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
     // drop, so the box height is the bounds height less it (never re-spell the drop inline).
@@ -1064,7 +1080,20 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQ
 // card keeps whatever width it authored OUTSIDE the stack for when it's dragged back out), and a
 // folded frame's tab shrink-wraps its title. An annotation shrinks to fit its text (styles.css)
 // unless a width was authored, so it's measured live off the element rather than assumed.
+// An image card that is a stack ROW is sized by the STACK, like every other row: the outline owns the
+// width (stackRowW — the stack's own, less its border/padding and one indent per depth), and the
+// picture owns the ratio, so the height follows from the two rather than from the authored box. It's
+// the one kind that would otherwise insist on its own size inside an outline, being the one card that
+// authors a height — a 600px photo dropped into a 240px stack used to hang out of it. The authored
+// w/h are untouched meanwhile, exactly as a plain card's authored width is: drag it back out and it
+// comes out at the size it went in with.
+function stackImageRow(n: MindNode): number | null { return isImageBox(n) ? stackRowW(n) : null; }
+// The ratio the box carries — authored, and aspect-locked to the picture by every resize — falling
+// back to the loaded image for a card that has no height of its own yet.
+function boxAspect(n: MindNode): number { return (n.w && n.h) ? n.w / n.h : imageAspect(n); }
 export function nodeW(n: MindNode): number {
+  const imgRow = stackImageRow(n);
+  if (imgRow != null) return imgRow;
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
   if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
@@ -1076,6 +1105,8 @@ export function nodeW(n: MindNode): number {
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.
 export function nodeH(n: MindNode): number {
+  const imgRow = stackImageRow(n);
+  if (imgRow != null) return Math.max(1, Math.round(imgRow / boxAspect(n)));
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
   if (isImageFold(n)) return IMAGE_FOLD;
   if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured

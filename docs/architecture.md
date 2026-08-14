@@ -127,6 +127,16 @@ frame, a folded group's pill. Four knock-ons:
   wrapper by `frameContentEl`), so a tab's straight left side meets the box flush. An untabbed frame is
   rounded all round like every other box.
 
+**An annotation RE-PINS in one drag, once it's past the rip threshold.** Over its own card it moves
+freely — a remark is positioned by dragging, so passing over a neighbour must not silently hand it over —
+but the distance RIP (`distanceRip`, the same threshold that already previews "about to become a root")
+means the gesture has clearly left the card it belongs to. Past it, a card under the cursor is a re-pin:
+one drag to move a remark from one card to another, where it used to take two (out to the top level, then
+back in). A ROOT annotation is ripped by definition, which is why the two cases now read as one condition.
+It lands exactly where it was dropped — `dropLanding` returns an annotation's own position rather than a
+spot computed off the target, which for a remark would fling it below the card you aimed at — and a LOCKED
+target refuses it, as every other drop does (this branch runs ahead of the shared lock check).
+
 An ANNOTATION pinned to a frame anchors on the BOX, never the tab: its connector runs to the closest point
 on the parent, and that clamp takes its top edge from `elTop` rather than the bounds (`view/edges.ts`) — the
 tab is a separate shape hanging above the box, half the strip beside it isn't drawn at all, and a dot parked
@@ -173,7 +183,12 @@ picks the DEPTH there — so a straight drag only re-slots and nesting takes a d
 - A row's width is **derived, not stored** (`stackRowW`: the stack's width, less border/padding, less one
   `STACK_INDENT` per depth) — deliberately, so it can't collide with the authored `n.w` a card carries in
   from outside. Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it
-  comes back out.
+  comes back out. An IMAGE card is no exception, and needs saying because it's the one card that authors a
+  HEIGHT too: as a row the stack gives it the width and the picture's own ratio gives it the height
+  (`stackImageRow`/`boxAspect`, `main.ts`), so a 600px photo dropped into a 240px stack fits the outline
+  instead of hanging out of it — and comes back out at 600 when dragged clear. It takes the row branch in
+  `paintNode` as well, so it loses its resize handles like any other row (a row's width is the stack's to
+  give), but keeps an inline height, its `.body` being absolutely positioned with none of its own.
 - An EMPTY stack still owes itself an `h`, and it can't be a constant: unlike a frame's single-line tab a
   stack's title WRAPS, so it must be measured (`sizeEmptyStack`, which paints then measures; its height is
   the zero-row reduction of the `node.h` line closing the stack branch — keep the two in step). Both empty

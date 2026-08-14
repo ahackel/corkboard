@@ -885,18 +885,24 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     // set, so every preview stands down and the release falls through to ⌥'s detach.
     if (hovered && canMerge(state.nodes.get(hovered)!)) fuseTarget = hovered;
   } else if (isAnnotation(dragged)) {
-    // A PINNED annotation MOVES FREELY and re-pins to nothing: it's a remark placed against one card, so
-    // dragging it about is how you position it, and passing over a neighbouring card on the way must not
-    // silently hand it to that card. It leaves its own card by ONE route, the distance RIP (see
-    // distanceRip / updateRipState above, which is why an annotation is exempt from the frame-bounds rip
-    // as well) — and that drops it at the top level, from where a second drag can pin it somewhere new.
-    // A ROOT annotation is the opposite case: it's pinned to nothing yet, so landing it on a node is the
-    // only way it could ever acquire a parent. It can't be reordered and never adopts siblings either
-    // way, so there's no sibling/reorder preview — the candidate parent is just highlighted (dashed
-    // ghost outline) in the preview section below.
-    if (hovered && dragged.parent == null) {
+    // A PINNED annotation MOVES FREELY over its own card: it's a remark placed against one card, so
+    // dragging it about is how you position it, and passing over a neighbouring card on the way must
+    // not silently hand it to that card. What frees it is the distance RIP — the same threshold that
+    // already previews "about to become a root" (distanceRip / updateRip above, and why an annotation
+    // is exempt from the frame-bounds rip as well). PAST it, the gesture has clearly left the card it
+    // belongs to, so a card under the cursor is a re-pin: one drag to move a remark from one card to
+    // another, where it used to take two (out to the top level, then back onto the new one). Short of
+    // it, nothing is offered and the drop is a plain reposition.
+    // A ROOT annotation is ripped by definition — it's pinned to nothing, so landing it on a node is
+    // the only way it could ever acquire a parent.
+    // Either way it can't be reordered and never adopts siblings, so there's no sibling/reorder
+    // preview: the candidate parent is just highlighted (dashed ghost outline) below. And it lands
+    // exactly where it was dropped — dropLanding returns an annotation's own position.
+    if (hovered && (dragged.parent == null || distanceRip(dragged))) {
       const hn = state.nodes.get(hovered)!;
-      if (!isAnnotation(hn)) { target = hovered; mode = 'child'; side = hoveredEdge || 'down'; }
+      // Never onto another annotation (it holds nothing), and never onto a LOCKED card — every other
+      // drop refuses one, and this branch runs ahead of the shared lock check below.
+      if (!isAnnotation(hn) && !isLockedEffective(hn)) { target = hovered; mode = 'child'; side = hoveredEdge || 'down'; }
     }
   } else if (hovered && isLockedEffective(state.nodes.get(hovered)!)) {
     // A locked card (or a locked descendant) is never a valid drop target — no child, sibling, or
