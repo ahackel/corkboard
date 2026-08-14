@@ -183,12 +183,18 @@ picks the DEPTH there — so a straight drag only re-slots and nesting takes a d
 - A row's width is **derived, not stored** (`stackRowW`: the stack's width, less border/padding, less one
   `STACK_INDENT` per depth) — deliberately, so it can't collide with the authored `n.w` a card carries in
   from outside. Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it
-  comes back out. An IMAGE card is no exception, and needs saying because it's the one card that authors a
-  HEIGHT too: as a row the stack gives it the width and the picture's own ratio gives it the height
-  (`stackImageRow`/`boxAspect`, `main.ts`), so a 600px photo dropped into a 240px stack fits the outline
-  instead of hanging out of it — and comes back out at 600 when dragged clear. It takes the row branch in
-  `paintNode` as well, so it loses its resize handles like any other row (a row's width is the stack's to
-  give), but keeps an inline height, its `.body` being absolutely positioned with none of its own.
+  comes back out. **The BOX kinds are no exception** — a frame, a query card, an image card — and they need
+  saying because they're the ones that author a size of their own: as a row, the stack gives the width
+  (`stackBoxRow`, `main.ts`), so an 800px frame or a 600px photo dropped into a 420px stack fits the
+  outline instead of hanging out of it, and comes back out at its own width when dragged clear. What each
+  does with the HEIGHT stays its own business: an image row derives it from the picture's ratio
+  (`boxAspect`), a frame/query row keeps the one it authors. Two knock-ons in the same spirit:
+  - **A row offers only the handles it actually authors.** An image row gets none; a frame/query row gets
+    the SOUTH edge alone — dragging the top would move a `y` the outline owns and re-places on the next
+    pass, which reads as the box snapping back.
+  - **A resize must not write a width it was given.** `startNodeResize` wrote `n.x`/`n.w` unconditionally,
+    so a south-edge drag — which moves no horizontal edge at all — still replaced that 800 with the row's
+    400 the moment you made the box taller. It's gated on the same `stackBoxRow` question now.
 - An EMPTY stack still owes itself an `h`, and it can't be a constant: unlike a frame's single-line tab a
   stack's title WRAPS, so it must be measured (`sizeEmptyStack`, which paints then measures; its height is
   the zero-row reduction of the `node.h` line closing the stack branch — keep the two in step). Both empty

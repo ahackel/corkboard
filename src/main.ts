@@ -661,22 +661,19 @@ export function paintNode(n: MindNode): void {
   // Resolved once up front, not inside the `else if`: nodeW() would run the same ancestor walk a
   // second time to answer the same question. The earlier branches can't be rows, so they skip it.
   const rowW = isBoxNode(n) || isFrameFold(n) || isStack(n) ? null : stackRowW(n);
-  if (stackImageRow(n) != null) {
-    // An image card as an outline ROW: the stack gives the width, the picture's ratio the height
-    // (nodeW/nodeH above). Both inline, because `.image-card > .body` is absolutely positioned and so
-    // has no height of its own to measure — and no resize zones, a row's width not being the user's
-    // to drag. Its own mm_w/mm_h stay on the node for when it leaves the stack again.
-    el.style.width = nodeW(n) + 'px';
-    el.style.height = nodeH(n) + 'px';
-    clearResizeHandles(el);
-  } else if (isBoxNode(n)) {
+  if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
     // drop, so the box height is the bounds height less it (never re-spell the drop inline).
     el.style.height = (nodeH(n) - elTop(n, 0)) + 'px';
     // border matches this card's EDGE tint (same colour edges use), falling back to --edge
     el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
-    ensureResizeHandles(n, FRAME_DIRS);
+    // A box that is a stack ROW authors neither its width (the stack's to give) nor, for an image, its
+    // height (the picture's ratio) — so it offers only what's left. For a frame/query row that's the
+    // SOUTH edge alone: dragging the top would move a y the outline owns and re-place on the next
+    // pass, which reads as the box snapping back.
+    if (stackBoxRow(n) != null) { if (isImageBox(n)) clearResizeHandles(el); else ensureResizeHandles(n, S_DIRS); }
+    else ensureResizeHandles(n, FRAME_DIRS);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
   } else if (isFrameFold(n)) {
     // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
@@ -1080,20 +1077,21 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQ
 // card keeps whatever width it authored OUTSIDE the stack for when it's dragged back out), and a
 // folded frame's tab shrink-wraps its title. An annotation shrinks to fit its text (styles.css)
 // unless a width was authored, so it's measured live off the element rather than assumed.
-// An image card that is a stack ROW is sized by the STACK, like every other row: the outline owns the
-// width (stackRowW — the stack's own, less its border/padding and one indent per depth), and the
-// picture owns the ratio, so the height follows from the two rather than from the authored box. It's
-// the one kind that would otherwise insist on its own size inside an outline, being the one card that
-// authors a height — a 600px photo dropped into a 240px stack used to hang out of it. The authored
-// w/h are untouched meanwhile, exactly as a plain card's authored width is: drag it back out and it
-// comes out at the size it went in with.
-function stackImageRow(n: MindNode): number | null { return isImageBox(n) ? stackRowW(n) : null; }
+// A BOX that is a stack ROW is given its width by the STACK, like every other row: the outline owns
+// the width (stackRowW — the stack's own, less its border/padding and one indent per depth), whatever
+// the kind sitting in it. The box kinds are the ones that would otherwise insist on their own, being
+// the ones that author a size — a 600px photo or an 800px frame dropped into a 240px stack used to
+// hang out of it. What each does with the HEIGHT is still its own business: an image card derives it
+// from the picture's ratio (nodeH below), a frame and a query card keep the one they author. The
+// authored w/h are untouched meanwhile, exactly as a plain card's authored width is: drag it back out
+// and it comes out at the size it went in with.
+function stackBoxRow(n: MindNode): number | null { return isBoxNode(n) ? stackRowW(n) : null; }
 // The ratio the box carries — authored, and aspect-locked to the picture by every resize — falling
 // back to the loaded image for a card that has no height of its own yet.
 function boxAspect(n: MindNode): number { return (n.w && n.h) ? n.w / n.h : imageAspect(n); }
 export function nodeW(n: MindNode): number {
-  const imgRow = stackImageRow(n);
-  if (imgRow != null) return imgRow;
+  const rowBox = stackBoxRow(n);
+  if (rowBox != null) return rowBox;
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
   if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
@@ -1105,8 +1103,9 @@ export function nodeW(n: MindNode): number {
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.
 export function nodeH(n: MindNode): number {
-  const imgRow = stackImageRow(n);
-  if (imgRow != null) return Math.max(1, Math.round(imgRow / boxAspect(n)));
+  // …and only an IMAGE row derives its height from that width: the picture's ratio is the whole shape
+  // of the card. A frame/query row keeps its authored height — its box holds content, not a picture.
+  if (isImageBox(n)) { const rowBox = stackBoxRow(n); if (rowBox != null) return Math.max(1, Math.round(rowBox / boxAspect(n))); }
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
   if (isImageFold(n)) return IMAGE_FOLD;
   if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured
@@ -1349,6 +1348,8 @@ function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) 
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
+// …and the bottom edge alone, for a box whose width and position are the stack outline's (see paintNode).
+const S_DIRS = ['s'] as const;
 type FrameDir = typeof FRAME_DIRS[number];
 // …and the width-only set: a card / annotation / stack authors a WIDTH but never a height (its
 // height stays whatever its content measures, or — for a stack — whatever its outline needs), so it
@@ -1399,6 +1400,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   // end of its own size range, and scaling it back up is how you unfold it (see `fold` in resize()).
   const img = isImageBox(n) || isImageFold(n);
   const sizeH = isBoxNode(n) || img;
+  // …and does it author its own WIDTH? A box that is a stack ROW doesn't: the outline gives it that
+  // (stackBoxRow), so writing `right - left` back would quietly replace its authored width with the
+  // row's — the S-handle drag, which changes no horizontal edge at all, would still have flattened an
+  // 800px frame to 400 the moment you made it taller. Its x is the outline's for the same reason.
+  const sizeW = stackBoxRow(n) == null;
   const minW = minWOf(n), minH = minHOf(n);
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   const flow = !!frameFlow(n);   // frame-h/frame-v: reflow its children live as the box resizes, not just on release
@@ -1477,7 +1483,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       if (fold !== n.collapsed) n.collapsed = fold;
       if (fold) { n.dirty = true; return; }
     }
-    n.x = left; n.w = right - left;
+    if (sizeW) { n.x = left; n.w = right - left; }
     // a width-only kind never gets a y/h written — see sizeH
     if (sizeH) { n.y = top; n.h = bottom - top; }
     n.dirty = true;
