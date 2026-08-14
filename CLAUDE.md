@@ -92,7 +92,8 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "Double-click /
   double-tap OPENS a node" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
-  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input".
+  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The page runs EDGE TO EDGE"
+  (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
   fallback, FSA) · "Boot order" · "Help map" · "External-change reload".
 - Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its
