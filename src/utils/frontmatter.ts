@@ -111,6 +111,7 @@ export interface ParsedNote {
     locked: boolean;
     done: boolean;
     checklist: boolean;
+    blank: boolean;      // mm_blank — this note is empty ON PURPOSE (see serializeMd)
     type: NodeType;
     layout: NodeLayout;
     side: string;
@@ -218,6 +219,7 @@ export function parseMd(text: string): ParsedNote {
       locked: fmValue(entries, 'mm_locked') === 'true',
       done: fmValue(entries, 'mm_done') === 'true',
       checklist: fmValue(entries, 'mm_checklist') === 'true',
+      blank: fmValue(entries, 'mm_blank') === 'true',
       ...foldTypeLayout(entries),
       // left | right | up | down | '' (unset — backfilled from position once loaded, see
       // data/persistence.ts). This is the CHILD's own attachment side, not the parent's.
@@ -250,6 +252,15 @@ export function serializeMd(n: MindNode): string {
   if (n.locked) entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
   if (n.done) entries.push({ key:'mm_done', lines:['mm_done: true'] });
   if (n.checklist) entries.push({ key:'mm_checklist', lines:['mm_checklist: true'] });
+  // A note that is blank ON PURPOSE — the user cleared every character out of an existing card, which is
+  // allowed and keeps the card's file, children and position (features/inline-edit.ts endBodyEdit). On
+  // disk that is indistinguishable from a note written before titles moved into the body, whose name WAS
+  // its filename and whose body was empty — and loadFromDir migrates that one by promoting the stem to a
+  // heading, which would put the name the user just deleted straight back. Nothing else on disk can tell
+  // the two apart (mm_position_x predates the title move by a hundred commits, so its presence says
+  // nothing), so the blankness is STATED rather than inferred. Written only while there is nothing else to
+  // write, and dropped again by the stale-mm_* sweep at the top as soon as anything is typed.
+  if (!n.title.trim() && !n.body.trim()) entries.push({ key:'mm_blank', lines:['mm_blank: true'] });
   if (n.type !== 'card') entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
   // Only card/frame carry a layout; omit it when it's the type's default (card→inherit, frame→free).
   // annotation/query are leaves with no layout, so they never write mm_layout.

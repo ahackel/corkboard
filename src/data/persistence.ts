@@ -197,10 +197,13 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     // Deliberately only when the body is EMPTY. A note WITH text and no heading is a legitimately
     // UNTITLED card under this format (it shows its text and no title row, which is the point of
     // allowing it), and promoting its filename to a title would put a name on something nobody named.
+    // And never when the note SAYS it is empty on purpose (`mm_blank`, written by serializeMd for exactly
+    // this): emptying an existing card is an ordinary edit, and this migration used to undo it on the next
+    // load — reading the card's old filename slug back as the title and saving it as a heading.
     // Nothing but a picture in the note → this is an IMAGE card (core/state.ts isImageCard reads the
     // same thing off the live node). Needed here before the node exists, for the width filter below.
     const imageOnly = !rest.title.trim() && !!soleImage(rest.body);
-    const unmigrated = !rest.title.trim() && !rest.body.trim();
+    const unmigrated = !rest.title.trim() && !rest.body.trim() && !mm.blank;
     if (unmigrated) rest.title = fileStem(rel);
     const hasRel = (mm.px != null && mm.py != null);
     const hasLegacy = (mm.x != null && mm.y != null);

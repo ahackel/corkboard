@@ -1,6 +1,7 @@
 /* App styles. Extracted from index.html. Vite bundles this (imported from main.ts) and
    vite-plugin-singlefile inlines it back into dist/index.html, keeping the single-file build. */
 :root {
+  --frame-tab-h:40px;   /* FRAME_TAB_H (main.ts) — the folded stub asserts it when it has no text to fill it */
   /* tells the browser what colour to paint the viewport with BEFORE our own CSS/JS catches up
      (e.g. the newly-exposed strip while dragging the window edge to resize) — without this the
      browser defaults to white, which flashes at the growing edge on a dark theme. */
@@ -848,6 +849,23 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
    ring, no width change, no fill; no landing-ghost card or reparent edge (see drag.ts / edges.ts). */
 .node.frame.drop-target, .node.stack.drop-target { border-style:dashed; border-color:#fff; }
+/* A frame with nothing written on it shows NO TITLE — see paintNode, which sets `no-title` for exactly
+   that case, and elTop/frameInsetY, which then stop reserving the 39px strip its tab would have sat in.
+   The box IS the frame there; its text is written by double-clicking the rim (onFrameRim).
+   NOT display:none, though: the fold CHIP lives inside this row (`> .title-row >` in every one of its
+   selectors), and hiding the row would take the only way to unfold the frame with it — the same trap an
+   image card's zeroed row avoids. So the row goes invisible and collapses onto the BOX's own top edge,
+   where the chip then hangs off the corner exactly as a card's does, and the chip is shown again. */
+.node.frame.no-title > .title-row {
+  visibility:hidden; bottom:auto; top:0; left:0; right:0; height:0; padding:0; max-width:none; }
+.node.frame.no-title > .title-row > .hidden-count { visibility:visible; }
+/* …and FOLDED, the pill keeps its own outline (the element IS the tab) but shows nothing in it. The
+   title still has to hold the 40px open — an empty inline has no line box, and nodeH ASSERTS FRAME_TAB_H
+   for a folded frame, so without this the stub renders 20px tall while the layout reserves 40. */
+.node.frame-folded.no-title { min-height:var(--frame-tab-h); }
+.node.frame-folded.no-title > .title-row { visibility:hidden; }
+.node.frame-folded.no-title > .title-row > .hidden-count { visibility:visible; }
+
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (frame / image card / query card) gets all 8: 4 edge bands inset from the corners, plus 4

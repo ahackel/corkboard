@@ -16,10 +16,10 @@ import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { outlineActive, startRowTitleEdit } from './outline.js';
-import { actionTarget, isTabsFrame } from '../view/layout.js';
+import { actionTarget, isTabsFrame, frameLabelled } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, startQueryEdit, toggleCollapse, relayout, remeasure } from '../main.js';
+import { selectNode, startQueryEdit, toggleCollapse, relayout, remeasure, reframeForTab } from '../main.js';
 import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
 import { extractToChild, discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
@@ -86,6 +86,15 @@ function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}
   const raw = cardEditText(n);
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
+  // The raw text REPLACES the rendered tab, so paintNode's render cache no longer describes what's in
+  // the element — clear the key, or a cancelled (or unchanged) edit leaves the editor's plain text sitting
+  // in the tab: the next paint sees a matching key and skips the re-render. Same reason startCardEdit
+  // clears the body's.
+  delete titleEl.dataset.md;
+  // An UNNAMED frame draws no tab (main.ts frameLabelled) — reveal the row for the duration, or the
+  // editor would open on a display:none element and swallow every keystroke. paintNode keeps it revealed
+  // while ui.titleEdit points here, and hides it again after the commit if nothing was typed.
+  n.el.classList.remove('no-title');
   titleEl.textContent = raw;
   titleEl.setAttribute('contenteditable', 'plaintext-only');
   titleEl.classList.add('editing');
@@ -114,8 +123,10 @@ export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
 // Commit (or cancel) a frame rename. The text is MARKDOWN, so it splits like any card's — `# Name` is a
-// heading on the tab, `Name` is plain text there — and a frame keeps a REQUIRED name, since an empty
-// folder tab is nothing you could grab the box by, so an empty commit falls back to what it had.
+// heading on the tab, `Name` is plain text there — and an EMPTY commit is now accepted: a frame may have
+// no name, in which case it draws no tab at all and its bounds stop reserving one (main.ts frameLabelled
+// / elTop). That used to be refused, back when the tab was the only thing you could grab the box by; the
+// rim carries that job now (onFrameRim), so a nameless frame is a plain box and nothing is stranded.
 // Nothing restores the element's text here: `ui.titleEdit` is nulled first, which lets the paintAll below
 // re-render the tab from the fields — the raw source goes away with the editor.
 export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
@@ -132,9 +143,14 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     return;
   }
   const val = (te.el.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // a tab is a single line
-  if (!cancel && val){
+  if (!cancel){
+    // A frame that gains or loses its TEXT gains or loses its tab with it, and its bounds cover that tab
+    // — so hold the box still across the change (reframeForTab), rather than letting it jump 39px the
+    // first time someone names a frame.
+    const wasLabelled = frameLabelled(n);
     const { title, body, gap } = splitHeading(val);
     n.title = title; n.body = body; n.titleGap = gap;
+    reframeForTab(n, wasLabelled);
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow
@@ -184,15 +200,16 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);
   const bodyEl = n.el.querySelector('.body') as HTMLElement;
   const ta = document.createElement('textarea');
-  // A rename of an UNTITLED card seeds a bare `# ` for the name to be typed into (see caretIn) — the one
-  // nudge that keeps F2 meaningful with no separate title field to put a caret in. `orig` is the SEEDED
-  // text, not the card's, so committing without typing anything still counts as unchanged and writes
-  // nothing; endBodyEdit drops the marker again if it's still empty.
-  const seeded = caret === 'title' ? seedHeading(cardEditText(n)) : cardEditText(n);
-  ta.className = 'body-edit'; ta.spellcheck = false; ta.value = seeded;
+  // The editor opens on the note EXACTLY as it is — a rename of an untitled card used to seed a bare
+  // `# ` for the name to be typed into, and no longer does: putting a marker in a note nobody asked to
+  // name writes markdown the user didn't type, and it had to be swept up again at commit when they
+  // didn't want it. F2 on an untitled card puts the caret at the very start instead (caretIn), which is
+  // where a `# ` would go if that's what they meant.
+  const text = cardEditText(n);
+  ta.className = 'body-edit'; ta.spellcheck = false; ta.value = text;
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
   // than just reverting the edit the way it does for an existing card.
-  ui.bodyEdit = { id:n.id, orig:seeded, el:bodyEl, ta, isNew };
+  ui.bodyEdit = { id:n.id, orig:text, el:bodyEl, ta, isNew };
   n.el.classList.remove('no-body');                            // give the body slot room while editing
   // The textarea REPLACES the rendered note, so the render cache paintNode keys `.body` on is no longer
   // describing what's in there — clear it, or committing an edit that changed nothing would leave the
@@ -210,14 +227,9 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   ta.focus();
   autosizeBody(ta);              // size to content first so the card's real height is known…
   relayout();    // …then reflow siblings around it (not just after a newline)
-  const [from, to] = caretIn(seeded, caret);
+  const [from, to] = caretIn(text, caret);
   ta.setSelectionRange(from, to);
 }
-// Give an untitled card a `# ` to type its name into. Only for a rename — "edit the note" must not put
-// a marker in a note nobody asked to name.
-const SEED = '# ';
-const seedHeading = (text: string): string =>
-  headingOf(text)?.title ? text : SEED + (text ? '\n\n' + text : '');
 // The heading of the FIRST non-blank line, which is the only one that can be a note's title — the
 // format rule itself lives in utils/frontmatter.ts, so seeding, the caret and the strip below all read
 // one regex instead of three that have to be kept in agreement. `at` is the offset of the title's first
@@ -235,12 +247,12 @@ function headingOf(text: string): { at: number; title: string } | null {
 }
 // Where the caret goes. 'title' SELECTS the name so typing replaces it — which is what the old rename
 // editor's select-all did — but only the NAME, not the `# ` that marks it as one, or the first keystroke
-// would demote the card's title to a plain first line. On a just-seeded card there's nothing to select,
-// so the caret sits after the marker.
+// would demote the card's title to a plain first line. An UNTITLED card has no name to select, so the
+// caret goes to the very start of the note — the one spot where typing `# Something` names it.
 function caretIn(text: string, caret: Caret): [number, number] {
   if (caret === 'end') return [text.length, text.length];
   const h = headingOf(text);
-  if (!h) return [SEED.length, SEED.length];
+  if (!h) return [0, 0];
   return [h.at, h.at + h.title.length];
 }
 // "Edit the note" — the same one editor, caret past the name rather than on it. Kept as its own name
@@ -248,16 +260,6 @@ function caretIn(text: string, caret: Caret): [number, number] {
 // redirect).
 export function startBodyEdit(n: MindNode): void {
   startCardEdit(n, { caret: 'end' });
-}
-// A rename seeds `# ` for the name to be typed into (seedHeading). If it's STILL empty at commit — the
-// user typed the note instead, or changed their mind — the bare marker would otherwise survive as the
-// note's first line, since splitHeading rightly refuses to read a marker with nothing after it as a
-// title. So the empty line goes here, at the one place a human's half-finished text becomes a note.
-function dropEmptyHeading(text: string): string {
-  const lines = text.split('\n');
-  const i = firstTextLine(lines);
-  if (i >= 0 && /^#{1,6}$/.test(lines[i].trim())) lines.splice(i, 1);
-  return lines.join('\n').trim();
 }
 // Drop the editor WITHOUT reading the textarea back, because the caller (crud.ts cutBodyRange) has
 // already written the shortened n.body and endBodyEdit would commit the textarea's pre-cut value
@@ -293,11 +295,11 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   be.el.classList.remove('editing');
   if (!n) { commitStep(); return; }
   // A brand-new card committed with NOTHING in it is discarded, exactly as Escape would: it has no
-  // title, no text, and so no name anything could show it under — the third and last way the word
-  // "Untitled" used to reach the screen (the other two: an unmigrated body-less note, seeded from its
-  // filename at load, and nodeLabel's own filename fallback). Clicking away from a card you never typed
+  // title, no text, and so no name anything could show it under. Clicking away from a card you never typed
   // into means you didn't want it, which is what Bear and Apple Notes do with an empty note too. Only
-  // when isNew — emptying an EXISTING card is an edit, and it keeps its file, children and position.
+  // when isNew — emptying an EXISTING card is an edit, and it keeps its file, children and position; that
+  // card reads as "No-title N" in a list (nodeLabel) and stays blank across a reload, which is what
+  // serializeMd's `mm_blank` is for.
   if (be.isNew && !be.ta.value.trim()){
     discardNewCard(n.id);
     return;
@@ -308,7 +310,9 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   }
   const changed = !cancel && be.ta.value !== be.orig;
   if (changed){
-    const { title, body, gap } = splitHeading(dropEmptyHeading(be.ta.value));
+    // No sweeping-up of a bare `# ` first line here either: nothing puts one there but the user now,
+    // and deleting what somebody typed is worse than leaving an empty heading in their note.
+    const { title, body, gap } = splitHeading(be.ta.value);
     n.title = title; n.body = body; n.titleGap = gap;
     n.dirty = true;
   }

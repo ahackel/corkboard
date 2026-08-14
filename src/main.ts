@@ -25,14 +25,14 @@ import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
 import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
 import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim } from './view/camera.js';
-import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
+import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import { openMenu } from './features/context-menu.js';   // also registers the custom right-click menu on the canvas
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
-import { createNode, createDetachedNode, createAnnotationHere, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt, NEW_CARD_H } from './features/crud.js';
+import { createNode, createDetachedNode, createAnnotationHere, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
@@ -53,7 +53,6 @@ import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode, EdgeStyle } from './core/state.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
-import { clamp } from './utils/num.js';
 
 declare global {
   interface Window { __dbg: { readonly state: typeof state; readonly drag: Drag | null }; }
@@ -242,7 +241,9 @@ function nodeEl(n: MindNode): HTMLElement {
     e.stopPropagation();
     // while editing this node, a double-click selects a word — don't take it over
     if (inPlaceEditOn(n.id)) return;
-    if (isNodeControlAt(e.clientX, e.clientY)) return;   // the card's own buttons keep their click
+    // the card's own buttons keep their click — except a FRAME's resize zones, which lie over the rim
+    // this gesture now writes on (onFrameRim / activateNode)
+    if (isNodeControlAt(e.clientX, e.clientY) && !onFrameRim(n, e.clientX, e.clientY)) return;
     e.preventDefault();
     activateNode(n, e.clientX, e.clientY);
   });
@@ -274,6 +275,22 @@ const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge,
 // point is the only reading of "what did they double-click" that survives the capture.
 const hitAt = (cx: number, cy: number): Element | null => document.elementFromPoint(cx, cy);
 export const isNodeControlAt = (cx: number, cy: number): boolean => !!hitAt(cx, cy)?.closest(NODE_CONTROLS);
+// Is this point on a frame's own BORDER rather than in its interior? Measured GEOMETRICALLY, not by
+// what was hit: the content wrapper is click-through, so a hit anywhere inside the box comes back as the
+// frame's own element and can't tell the rim from the middle. The band is the border plus a little
+// tolerance inside, and the reach of the resize zones outside — which is the same strip, and the reason
+// this gesture has to be allowed past the NODE_CONTROLS bail: a double-click means nothing on a resize
+// handle (it acts on a drag), so the rim is free to carry "write on this frame".
+// (spelled as numbers, not off FRAME_BORDER: this sits above that declaration, and it is a TOLERANCE
+// around the border rather than the border itself — 4px of rim plus 4 of slack, 8px of handle outside.)
+const RIM_IN = 8, RIM_OUT = 8;
+export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
+  const el = n.el; if (!el) return false;
+  const r = el.getBoundingClientRect();
+  const k = state.view.k, inB = RIM_IN * k, outB = RIM_OUT * k;
+  if (cx < r.left - outB || cx > r.right + outB || cy < r.top - outB || cy > r.bottom + outB) return false;
+  return cx <= r.left + inB || cx >= r.right - inB || cy <= r.top + inB || cy >= r.bottom - inB;
+}
 // ---------- double-click / double-tap = OPEN this node ----------
 // Folding moved to the corner chip (see the .hidden-count button above), which freed the gesture for
 // what a double-click means nearly everywhere else: open the thing for editing. What it opens is
@@ -297,14 +314,7 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   if (state.readOnly) { toggleCollapse(n.id); return; }
   // `parentElement === n.el` keeps it to this node's OWN row: .title-row is always a direct child, so
   // a hit inside a DOM-nested child card can't be read as a hit on its host's title.
-  // A STACK has no title row at all — its header IS its own rendered text, in its own `.body` above
-  // the rows (see cardMarkdown: `# Name` is a heading there like anywhere else). So a hit on that text
-  // is a hit on the stack's NAME and renames it, rather than appending a row to it — the same reading
-  // a card's title row gets, through the same funnel. Scoped by `parentElement === n.el` for the same
-  // reason: every ROW has a `.body` too, DOM-nested under this one.
-  const hit = hitAt(cx, cy);
-  const onTitle = hit?.closest('.title-row')?.parentElement === n.el
-    || (isStack(n) && hit?.closest('.body')?.parentElement === n.el);
+  const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
   // startInlineEdit is the single rename funnel: it redirects a tab group to its open tab, an
   // annotation to its body and a query card to its query, and refuses a locked node.
   if (onTitle || n.collapsed) { startInlineEdit(n); return; }
@@ -312,25 +322,20 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   // that reads as "go in". Putting a card inside it kept Tab, the ⋯ menu and the canvas right-click.
   // A STACK is a container that can't be opened (it's an outliner, not a box you stand in), so a hit
   // that missed its header falls through to the branch below and appends a row.
+  // A frame's own RIM edits its text — its border, and the resize hit-zones lying over it, which is all
+  // the chrome a frame has that isn't its interior (that OPENS it) or its tab (which an unnamed frame no
+  // longer draws). Works the same whether or not the frame is named, so there's one way to write on a
+  // frame rather than one for each state; the tab keeps its own double-click through the onTitle branch.
+  if (isFrameBox(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
   if (canOpen(actionTarget(n))) { openFrame(n); return; }
-  if (isContainer(n)) { addChildIn(n, cx, cy); return; }
+  // A STACK is the other container, and the gesture means the same thing anywhere on it: EDIT IT. Its
+  // header is its own text (there is no title row to hit), and the rest of the box is its rows, each of
+  // which owns the gesture over itself — so what's left is the stack, and a stack has no place to put a
+  // card "here" anyway (the outline appends; the point means nothing). Adding a row is `Tab`, the ⋯ menu
+  // and the canvas right-click, as it is for a frame.
+  if (isStack(n)) { startInlineEdit(n); return; }
   if (isQueryCard(n)) return;   // no note to edit — its title slot IS the query field
   startBodyEdit(n);
-}
-// Add a card inside a container at the double-clicked point. A stack is an OUTLINER — the point
-// means nothing there, the row just appends — and a flow/tabs frame re-places its children anyway,
-// so the point only really lands in a free frame. Clamped into the interior so a card double-clicked
-// near an edge doesn't hang half out of the box it was aimed at. addChild does the rest: it routes a
-// tab group to its open tab (contentParent), refuses a locked parent, and reveals a folded one.
-function addChildIn(n: MindNode, cx: number, cy: number): void {
-  if (isStack(n)) { addChild(n.id); return; }
-  const PAD = 8;
-  const box = frameInterior(n);
-  const p = centredAt(screenToWorld(cx, cy));   // the same "new card HERE" centring the canvas uses
-  addChild(n.id, {
-    x: clamp(p.x, box.x + PAD, box.x + box.w - NODE_W - PAD),
-    y: clamp(p.y, box.y + PAD, box.y + box.h - NEW_CARD_H - PAD),
-  });
 }
 // A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor. While
 // dragging, preview what that inherited colour is ABOUT TO become, so it doesn't wait for the
@@ -549,7 +554,7 @@ export function paintNode(n: MindNode): void {
   // The raw type, NOT isFrame: that one means "an EXPANDED frame" (it tests !collapsed), so it misses
   // precisely the half that needs this most — every folded frame and every inactive docked tab, which
   // then fell back to var(--ink) and inked a bare outline for a fill that isn't painted.
-  if (n.type === 'frame') el.style.setProperty('--tab-ink', inkFor(behindFill(n)));
+  if (rendersAsFrame(n)) el.style.setProperty('--tab-ink', inkFor(behindFill(n)));
   else el.style.removeProperty('--tab-ink');
   el.className = 'node ' + colorClass(col)
     + (isFrameBox(n) ? ' frame' : '')
@@ -741,7 +746,7 @@ export function paintNode(n: MindNode): void {
     // the same rule while staying a tab. It keeps a `.title` element rather than a body only because its
     // geometry is fixed: FRAME_TAB_H is 40px of padding plus one 20px line box, and its own `.body` is
     // display:none because the box below holds child cards, not a note.
-    if (n.type === 'frame') {
+    if (rendersAsFrame(n)) {
       const md = collapsed ? collapsedMarkdown(label) : cardMarkdown(label);
       const full = nodeLabel(label);
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
@@ -749,15 +754,25 @@ export function paintNode(n: MindNode): void {
       // destroys and rebuilds the tab's child nodes — where nothing about the label has changed. The
       // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
       // on its own, e.g. when the file is renamed) and `md` alone would never notice.
-      const key = md.trim() ? md : ' ' + full;
+      // A DOCKED TAB is the one that may never be blank: it's a handle in a strip of them, and a
+      // nameless one would be nothing to aim at — so it alone keeps the nodeLabel fallback. Any other
+      // frame with no text of its own renders NOTHING here. The fallback is part of the cache key, or a
+      // frame whose text was just cleared would keep its old label: `md` alone can't tell the two apart.
+      const fallback = isDockedTab(n) ? full : '';
+      const key = md.trim() ? md : ' ' + fallback;
       if (titleEl.dataset.md !== key){
         titleEl.dataset.md = key;
-        // A frame is the one kind that may never be blank — the tab is the only thing you can grab the
-        // box by — so with no text at all it falls back to nodeLabel as plain text.
-        titleEl.innerHTML = md.trim() ? renderBodyHTML(md) : esc(full);
+        titleEl.innerHTML = md.trim() ? renderBodyHTML(md) : esc(fallback);
       }
       titleEl.title = full;   // one ellipsised line, so the full name lives in the tooltip
-      el.classList.remove('no-title');
+      // A frame with nothing written on it shows NO TITLE: expanded, that means no tab at all and no
+      // strip reserved for one (elTop/frameInsetY); FOLDED, a bare stub of a pill. Either way its fold
+      // CHIP stays visible (styles.css re-shows it inside the invisible row) — hiding that would leave a
+      // nameless frame with no way to open again. The rim is what you write on (onFrameRim).
+      // Not while its own label editor is open, though: the row can't be invisible and be typed into
+      // (the same reason a folded tab group unfolds before it renames).
+      el.classList.toggle('no-title',
+        !isDockedTab(n) && !frameLabelled(n) && ui.titleEdit?.id !== n.id);
     } else {
       const text = isQueryBox(n) ? ((n.query ?? '').trim() || nodeLabel(n)) : '';
       titleEl.textContent = text;
@@ -909,7 +924,7 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   // a stack's header IS its rendered body these days, so there is something there to fold. Deliberately
   // a test on the KIND and not isContainer/isFrame/isStack: those also carry state (a collapsed frame, a
   // stack demoted to a row inside another stack) that has no bearing on whether the body is drawn.
-  const foldable = n.type === 'frame' ? hasKids : (hasKids || hasBody);
+  const foldable = rendersAsFrame(n) ? hasKids : (hasKids || hasBody);
   if (!foldable) return '';
   // An annotation IS its body (no title row at all), so folding it would leave an empty shell —
   // it keeps double-click/X but is never invited to. A query card is a box whose whole content is the
@@ -958,7 +973,7 @@ export const STACK_GAP = 8;      // vertical gap between stacked children
 // (isFrameFold below), so it has no box at all — and neither does a frame DOCKED as a tab, open or
 // not: the box belongs to its group, which is exactly what docking means. Shared by the geometry
 // helpers below.
-function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.collapsed && !isDockedTab(n); }
+function isFrameBox(n: MindNode): boolean { return isFrame(n) && !isDockedTab(n); }
 // …and the other half: a frame that renders as nothing but its title tab — a small pill at the bounds
 // top (n.y), i.e. exactly where an expanded frame's tab sits, so folding never moves the title. Its
 // element shrink-wraps the title, so its width is measured (nodeW) rather than assumed. TWO ways to
@@ -966,7 +981,13 @@ function isFrameBox(n: MindNode): boolean { return n.type === 'frame' && !n.coll
 // its group's box is what its contents show through, and this tab is the handle that opens it). So a
 // docked tab needs no render mode of its own: open vs closed is just `collapsed`, which already
 // decides whether its contents show, plus a CSS class (see paintNode).
-function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && (!!n.collapsed || isDockedTab(n)); }
+function isFrameFold(n: MindNode): boolean {
+  return n.type === 'frame' && (!!n.collapsed || isDockedTab(n)) && !insideStack(n);
+}
+// …so: does this node draw a frame AT ALL — a box with a tab, or the bare tab? The question three
+// render sites ask, and the one a demoted frame answers NO to: inside a stack it is an outline row,
+// which renders like any other row (its markdown in its body, no tab, no box — see isFrame).
+function rendersAsFrame(n: MindNode): boolean { return isFrameBox(n) || isFrameFold(n); }
 // Whether `n` currently holds its children in a content wrapper of its own (frameContentEl) — the three
 // cases paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from them:
 // an expanded frame BOX, an expanded stack (isStack already excludes collapsed and demoted-to-a-row),
@@ -1171,10 +1192,27 @@ function paintPos(n: MindNode): Pt { return ui.drag?.origins?.get(n.id) ?? n; }
 // (FRAME_TAB_DROP), with the tab itself an absolutely positioned child hanging back up over that gap
 // (styles.css). A FOLDED frame's element IS that tab, so it paints at the bounds top like any card.
 // Takes y separately from n because a mid-drag paint writes the FROZEN origin, not the live position.
-export function elTop(n: MindNode, y: number): number { return isFrameBox(n) ? y + FRAME_TAB_DROP : y; }
+// A frame's bounds cover its tab only while it HAS one, so naming — or un-naming — one changes what its
+// stored y/h mean. Shift them by the tab's height in the opposite direction, so the BOX (the part anyone
+// is looking at, and the part its children sit in) doesn't move when the text crosses that line. Pass
+// what frameLabelled said BEFORE the text changed. Folded is left alone: the pill sits AT n.y, so moving
+// the bounds there would move the thing on screen instead of holding it still.
+export function reframeForTab(n: MindNode, wasLabelled: boolean): void {
+  if (n.type !== 'frame' || n.collapsed) return;
+  const now = frameLabelled(n);
+  if (now === wasLabelled) return;
+  const d = now ? FRAME_TAB_DROP : -FRAME_TAB_DROP;
+  n.y -= d;
+  if (n.h != null) n.h += d;
+}
+export function elTop(n: MindNode, y: number): number {
+  return isFrameBox(n) && frameLabelled(n) ? y + FRAME_TAB_DROP : y;
+}
 // elTop's inverse: the BOUNDS top for an element that paints at y. Only followEdges needs it — it
 // reads back interpolated left/top mid-animation to reproject them into world coordinates.
-function boundsTop(n: MindNode, y: number): number { return isFrameBox(n) ? y - FRAME_TAB_DROP : y; }
+function boundsTop(n: MindNode, y: number): number {
+  return isFrameBox(n) && frameLabelled(n) ? y - FRAME_TAB_DROP : y;
+}
 // Place an element at absolute world coords, expressed relative to its container: #world (or the drag
 // layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so
 // the offset is the host's own inset (the border, plus a frame's title tab — see frameInsetY).

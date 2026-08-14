@@ -40,17 +40,29 @@ which is what the paths that BUILD a note rather than re-read one (a merge, an e
 the title used to be the filename and nothing in the file says so any more, so the stem becomes the title
 and the note is marked dirty; the next save writes the `# Heading` it should have had and it never fires
 again (idempotent). The filename doesn't change, so no `mm_parent` is rewritten. Only when the body is
-EMPTY — a note WITH text and no heading is a legitimately untitled card. **The word "Untitled" should be
-unreachable**, and three things keep it so: this migration, `nodeLabel`'s filename fallback, and
-`endBodyEdit` DISCARDING a brand-new card committed with nothing typed in it (emptying an EXISTING card is
-an ordinary edit and keeps everything).
+EMPTY — a note WITH text and no heading is a legitimately untitled card.
+
+**A note that is blank ON PURPOSE says so, with `mm_blank: true`.** Clearing every character out of an
+existing card is an ordinary edit that keeps its file, children and position — but the file it leaves behind
+looks exactly like the unmigrated note above, so that migration used to read the card's own filename slug
+back as a title and save it as a heading: the name you just deleted, restored on the next load. Nothing else
+on disk separates the two cases (`mm_position_x` predates the title-in-body format by ~100 commits, so its
+presence proves nothing), hence one flag, written by `serializeMd` only while the note has neither title nor
+body and swept away by the stale-`mm_*` pass as soon as anything is typed. `loadFromDir` skips the migration
+when it is set. A blank card is meant to be reachable; only a brand-NEW card committed empty is discarded
+(`endBodyEdit`).
 
 **Where a node's name is SHOWN rather than edited, use `nodeLabel`** (`utils/model.ts`): title, else first
-line, else the filename stem (`fileStem` — where the title lived before this format), else "Untitled". A
-blank row in the outline, in search or on a folder tab is never right, so every display site goes through
-it. `disambiguatedLabel` appends the parent for FLAT lists only (search hits, a query card's results); the
-outline's indentation already says where a row sits. On the canvas only a CONTAINER falls back to it: a card
-showing nothing is the point, but a frame's tab is the only thing you can grab the box by.
+line, else **`No-title N`**. A blank row in the outline, in search or on a folder tab is never right, so
+every display site goes through it. The last resort used to be the filename stem, and deliberately isn't any
+more: a card the user emptied keeps the slug it was named under (the filename is minted once), so the stem
+is precisely the name that card must no longer be called — and a container nobody ever named is
+`Untitled.md` on disk anyway. `N` counts nameless nodes in map order, so it renumbers when one is added or
+filled in; that is safe because nothing stores or matches on this string (a `[[wikilink]]` resolves against
+`n.title` and the filename, `focusByTitle`). `disambiguatedLabel` appends the parent for FLAT lists only
+(search hits, a query card's results); the outline's indentation already says where a row sits. On the canvas
+only a CONTAINER falls back to `nodeLabel`: a card showing nothing is the point, but a frame's tab is the
+only thing you can grab the box by.
 
 **`desiredFileFor`'s collision test is case-INSENSITIVE**, and must stay that way: macOS and Windows collide
 `Notes.md` with `notes.md`, so an exact test would hand two nodes "their own" filename and let the second
@@ -73,6 +85,43 @@ omitted), `frame`, `stack`, `annotation`, `query`. Only card and frame carry a l
 with an empty layout set hides the layout trigger entirely.
 
 ## Frames
+
+**A frame with nothing written on it draws NO TAB** (`frameLabelled` — its own title or note, which is
+what the tab renders), and its bounds stop reserving the strip one would sit in: `elTop` and `frameInsetY`
+add `FRAME_TAB_DROP` only for a labelled frame, so an unnamed frame's bounds ARE its box. An empty folder
+tab is a label that says nothing while costing the box 39px. Four things hold it together:
+- **The RIM writes on a frame.** Double-clicking its border — measured geometrically (`onFrameRim`),
+  since the content wrapper is click-through and a hit anywhere inside comes back as the frame's own
+  element — opens its text editor, whether or not it is named. That is the only chrome a frame has that
+  isn't its interior (which OPENS it) or its tab (which an unnamed one hasn't got), and it means one
+  gesture rather than one per state. The band includes the resize zones lying over that border, which is
+  why this is the one gesture allowed past the `NODE_CONTROLS` bail — a double-click means nothing on a
+  handle, which acts on a drag.
+- **An empty commit is accepted now.** A frame used to keep a REQUIRED name (an empty tab was nothing to
+  grab the box by); the rim carries that job, so clearing a frame's text is an ordinary edit.
+- **Naming or un-naming holds the BOX still** (`reframeForTab`): the bounds gain or lose the tab's height
+  at the top, so `n.y`/`n.h` shift by `FRAME_TAB_DROP` in the opposite direction and nothing on screen —
+  the box, or the children sitting in it — moves. Called from all three editors that write a frame's text
+  (the tab's own, the mobile sheet, the outline's card editor). Folded is left alone: the pill sits AT
+  `n.y`, so moving the bounds there would move the thing on screen instead of holding it still.
+- **FOLDED, it's a bare stub — and the CHIP is what keeps it usable.** No text means no label in the pill
+  either, so the row goes invisible rather than `display:none`: `.hidden-count` lives inside that row, and
+  hiding it would leave a nameless frame with no way to open again (the same trap an image card's zeroed
+  row avoids). Expanded, that invisible row also collapses onto the BOX's top edge, so the chip hangs off
+  the corner the way a card's does instead of floating where the tab used to be. The stub asserts its 40px
+  (`min-height`, `--frame-tab-h`): an empty title has no line box, and `nodeH` reserves `FRAME_TAB_H` for a
+  folded frame regardless. The one frame that keeps the `nodeLabel` fallback is a DOCKED TAB — a handle in
+  a strip of them, where a nameless one would be nothing to aim at. That fallback is part of the render
+  cache key too, or a frame whose text was just cleared would keep its old label: `md` alone can't tell
+  "renders its markdown" from "renders the fallback".
+  While its editor is open the row is revealed regardless (`ui.titleEdit`), or the editor would open on an
+  invisible element and swallow every keystroke.
+
+**A frame INSIDE A STACK isn't a frame at all** — `isFrame` tests `insideStack`, so it renders as an
+outline row like a nested stack does (see the stack section). Three render sites had asked the RAW type and
+so kept drawing a tab for it; they go through `rendersAsFrame` now (`isFrameBox || isFrameFold`), which is
+the same question spelled once: does this node draw a frame at all. The tab machinery is demoted with it —
+`isTabsFrame` is false in a stack, so a group's tabs are ordinary frame children there, i.e. rows.
 
 **A `frame`'s BOUNDS include its title tab.** The title renders as a folder tab above the box's top-left
 corner (`.node.frame > .title-row`, absolutely positioned) and `n.x/n.y/w/h` cover it: `n.y` is the **tab's**
@@ -183,18 +232,24 @@ picks the DEPTH there — so a straight drag only re-slots and nesting takes a d
 - A row's width is **derived, not stored** (`stackRowW`: the stack's width, less border/padding, less one
   `STACK_INDENT` per depth) — deliberately, so it can't collide with the authored `n.w` a card carries in
   from outside. Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it
-  comes back out. **The BOX kinds are no exception** — a frame, a query card, an image card — and they need
-  saying because they're the ones that author a size of their own: as a row, the stack gives the width
-  (`stackBoxRow`, `main.ts`), so an 800px frame or a 600px photo dropped into a 420px stack fits the
-  outline instead of hanging out of it, and comes back out at its own width when dragged clear. What each
-  does with the HEIGHT stays its own business: an image row derives it from the picture's ratio
-  (`boxAspect`), a frame/query row keeps the one it authors. Two knock-ons in the same spirit:
-  - **A row offers only the handles it actually authors.** An image row gets none; a frame/query row gets
-    the SOUTH edge alone — dragging the top would move a `y` the outline owns and re-places on the next
-    pass, which reads as the box snapping back.
+  comes back out. **The LEAF BOXES are no exception** — an image card, a query card — and they need saying
+  because they're the ones that author a size of their own and are NOT demoted (a leaf holds no children,
+  so there's nothing to outline; only containers become rows). As a row the stack gives them the width
+  (`stackBoxRow`, `main.ts`), so a 600px photo dropped into a 420px stack fits the outline instead of
+  hanging out of it, and comes back out at its own width when dragged clear. The HEIGHT stays each kind's
+  own business: an image row derives it from the picture's ratio (`boxAspect`), a query row keeps the one
+  it authors. Two knock-ons in the same spirit:
+  - **A row offers only the handles it actually authors.** An image row gets none; a query row gets the
+    SOUTH edge alone — dragging the top would move a `y` the outline owns and re-places on the next pass,
+    which reads as the box snapping back.
   - **A resize must not write a width it was given.** `startNodeResize` wrote `n.x`/`n.w` unconditionally,
-    so a south-edge drag — which moves no horizontal edge at all — still replaced that 800 with the row's
-    400 the moment you made the box taller. It's gated on the same `stackBoxRow` question now.
+    so a south-edge drag — which moves no horizontal edge at all — still replaced an authored width with
+    the row's the moment you made the box taller. It's gated on the same `stackBoxRow` question now.
+- **No text at the top means no room reserved for it** (`stackHeaderH`): the rows start at the box's own
+  inset. An unnamed stack is a plain column of cards, and an empty strip above the first one reads as a
+  mistake rather than as a title waiting to be typed. `STACK_HEADER` survives as `nodeH`'s pre-render
+  fallback and as the FLOOR under a doubly-empty stack — no rows and no text — where the arithmetic would
+  otherwise leave a ~20px sliver with nothing to grab, select or drop into.
 - An EMPTY stack still owes itself an `h`, and it can't be a constant: unlike a frame's single-line tab a
   stack's title WRAPS, so it must be measured (`sizeEmptyStack`, which paints then measures; its height is
   the zero-row reduction of the `node.h` line closing the stack branch — keep the two in step). Both empty

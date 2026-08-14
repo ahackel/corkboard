@@ -69,8 +69,8 @@ export function startRowTitleEdit(n: MindNode, { isNew = false }: { isNew?: bool
   const r = document.createRange(); r.selectNodeContents(titleEl);   // select-all so typing replaces
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
 }
-// Nothing to validate any more: a title may be EMPTY (an untitled card, which reads as "Untitled" in a
-// row — see nodeLabel) and may be a DUPLICATE (the file takes the suffix, not the name). titleProblem
+// Nothing to validate any more: a title may be EMPTY (an untitled card, which reads as its first line —
+// or as "No-title N" with nothing to read at all — in a row, see nodeLabel) and may be a DUPLICATE (the file takes the suffix, not the name). titleProblem
 // had no rule left to enforce, so the whole live-validation pass, and the `.invalid` styling it drove,
 // went with it.
 function onRowTitleKeydown(e: KeyboardEvent, n: MindNode): void {
@@ -323,7 +323,7 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
   // Derived ONCE for the row: the text plus the three aria-labels below all want it, and on an untitled
   // card it means scanning the note's first line — paid per row, and renderOutline runs from paintAll.
   const label = nodeLabel(n);
-  title.textContent = label;   // an untitled card reads as its first line, else "Untitled""
+  title.textContent = label;   // an untitled card reads as its first line, else "No-title N"
   // No click-to-rename any more — renaming is a ⋯-menu action (see openRowMenu) so a plain press
   // on the card is unambiguously "start a drag", never "start typing". Read-only sessions still
   // tap through to the sheet as a read-only viewer, since that's not an edit.

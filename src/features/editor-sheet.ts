@@ -9,10 +9,11 @@
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { scheduleSave } from '../data/persistence.js';
-import { selectNode, remeasure } from '../main.js';
+import { selectNode, remeasure, reframeForTab } from '../main.js';
 import { discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
 import { byId } from '../utils/dom.js';
+import { frameLabelled } from '../view/layout.js';
 import { pasteUrlLink } from './inline-edit.js';
 
 const sheet = byId('editorSheet');
@@ -63,8 +64,10 @@ export function closeEditorSheet({ cancel = false }: { cancel?: boolean } = {}):
     return;
   }
   if (!cancel) {
+    const wasLabelled = frameLabelled(n);   // a frame's tab (and so its bounds) hangs on having text
     n.title = shTitle.value.replace(/[\r\n]+/g, ' ').trim();   // a title is one line
     n.body = shBody.value;
+    reframeForTab(n, wasLabelled);
     n.dirty = true;
     remeasure();           // content changed height → reflow the canvas
     scheduleSave();

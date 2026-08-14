@@ -2,7 +2,7 @@
 // The tree is DERIVED from each node's `parent` (no stored edge list). These queries
 // walk that live structure in state.nodes.
 import { state, type MindNode } from '../core/state.js';
-import { firstLineLabel, fileStem } from './frontmatter.js';
+import { firstLineLabel } from './frontmatter.js';
 import { scope } from '../nav/scope.js';
 
 export function childrenOf(id: string | null): MindNode[] {
@@ -94,16 +94,32 @@ export function subtreeHasLocked(id: string): boolean {
 // Filenames collide case-insensitively on macOS/Windows, so collision checks compare lowercased.
 // Shared by the rename validator (inline-edit) and the unique-name minter (crud).
 // The name to SHOW for a node ANYWHERE the card itself isn't — the outline, search results, a status
-// line, a wikilink target, the move picker. A card may be untitled (no `# ` heading, see
-// utils/frontmatter.ts splitHeading), and on the canvas that's the point: it shows its text and no
-// title row. But a LIST row can't be blank, so it falls back through what it does have: its first line,
-// then its FILENAME — which is where the title lived before this format, so a note nobody has migrated
-// still reads correctly here. The literal "Untitled" is the end of that chain and should be unreachable
-// in practice: a body-less note is seeded from its filename at load and a never-typed new card is
-// discarded, so only a node with no text and no file yet — one that exists for a few milliseconds
-// mid-create — can reach it. Purely for display: n.title stays '' throughout and nothing here is written.
+// line, the move picker. A card may be untitled (no `# ` heading, see utils/frontmatter.ts splitHeading),
+// and on the canvas that's the point: it shows its text and no title row. But a LIST row can't be blank,
+// so it falls back to its first line, and past that to a NUMBER (below).
+// Purely for display: n.title stays '' throughout and nothing here is written. Nothing MATCHES on this
+// either — a [[wikilink]] resolves against n.title and the filename (main.ts focusByTitle), so a
+// generated label can never be a link target that stops working when the numbering shifts.
 export function nodeLabel(n: MindNode): string {
-  return n.title.trim() || firstLineLabel(n.body) || fileStem(n.file ?? '') || 'Untitled';
+  return n.title.trim() || firstLineLabel(n.body) || namelessLabel(n);
+}
+// Has this node any name OF ITS OWN — the exact condition under which nodeLabel falls through above.
+const nameless = (n: MindNode): boolean => !n.title.trim() && !firstLineLabel(n.body);
+// …and the label for one that hasn't: "No-title 3". Deliberately NOT the filename stem, which is what
+// this used to be. A card the user emptied keeps the slug it was named under (the filename is minted
+// ONCE, data/persistence.ts desiredFileFor), so the stem is the name they just deleted — the one thing a
+// cleared card must not still be called. And a container nobody ever named is `Untitled.md` on disk
+// anyway, so the stem had nothing to offer there either.
+// The number is POSITIONAL — how many nameless nodes come at or before this one in map order (which is
+// load order, i.e. the store's own file order) — so adding or filling in a nameless card renumbers the
+// others. That's the price of inventing a name from nothing rather than persisting one, and it's a price
+// worth paying here: nothing stores or matches on this string, and the alternative is a new frontmatter
+// key holding a number whose only job is to appear in a list. Only ever computed for a node that has
+// nothing to be named off, so the pass costs nothing on an ordinary map.
+function namelessLabel(n: MindNode): string {
+  let i = 0;
+  for (const o of state.nodes.values()){ if (nameless(o)) i++; if (o.id === n.id) break; }
+  return `No-title ${i || 1}`;   // `|| 1`: a node still being created isn't in state.nodes yet
 }
 // …and the label with its PARENT appended, but only where the label alone is ambiguous. Two cards may
 // share a title now, and in a FLAT list (search hits, a query card's results) two identical rows give

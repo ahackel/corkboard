@@ -208,17 +208,25 @@ export function subtreeBox(node: MindNode){
 // out (see features/drag.ts). Its children aren't repositioned by layout (they stay where placed).
 // A COLLAPSED frame folds to an ordinary card (children hidden), so it isn't a frame while folded —
 // its footprint and behaviour revert to a normal card, matching how it renders.
-export function isFrame(node: MindNode): boolean { return node.type === 'frame' && !node.collapsed; }
-// Is there a stack in this node's ancestry, with only card ancestors in between (a frame/image/query
-// re-scopes and stops the search)? Uses the RAW `type` field so it never recurses through isStack.
-// A stack that lives inside another stack is DEMOTED to a plain outline row: the outer stack outlines
-// the whole subtree (all descendant layouts ignored), so a nested stack isn't a box of its own — it's
-// just another indented node. The stack test comes FIRST: a stack ancestor's own type isn't 'card', so
-// checking the re-scope condition before it would bail out before ever spotting the stack.
-function insideStack(node: MindNode): boolean {
+// …and a frame INSIDE A STACK is demoted to a plain outline row, the same way a nested stack is
+// (insideStack below): the outer stack outlines the whole subtree and ignores every descendant's own
+// arrangement, so a frame in there isn't a box either — it's a row, and its children are the rows
+// under it. Its mm_w/mm_h ride along untouched, so it comes back out of the stack as the box it was.
+export function isFrame(node: MindNode): boolean {
+  return node.type === 'frame' && !node.collapsed && !insideStack(node);
+}
+// Is there a stack in this node's ancestry? Then this node is one of its OUTLINE ROWS, whatever kind
+// it is: the outer stack outlines the whole subtree and ignores every descendant's own arrangement, so
+// a nested stack — and, since it reads the same way, a nested FRAME — is not a box of its own but just
+// another indented row. Uses the RAW `type` field so it never recurses through isStack/isFrame.
+// A frame ancestor no longer re-scopes: it can't govern its children's layout while it is itself a row
+// (that's what "the stack owns the whole subtree" means), so the walk goes straight through it. Only a
+// LEAF kind would stop the search, and a leaf never has children to begin with — the guard is there so
+// a future kind that does must decide this question deliberately.
+export function insideStack(node: MindNode): boolean {
   for (let p = parentOf(node); p; p = parentOf(p)) {
     if (p.type === 'stack') return !p.collapsed;      // an expanded stack governs; folded, it hides us anyway
-    if (p.type !== 'card') return false;              // a frame/image/query ancestor re-scopes
+    if (p.type !== 'card' && p.type !== 'frame') return false;
   }
   return false;
 }
@@ -237,7 +245,9 @@ export function isStack(node: MindNode): boolean {
 // box for its children — so the group owns the geometry (x/y/w/h, colour, resize handles, border)
 // and a tab owns only its contents. Keyed on the RAW type + layout rather than isFrame, so
 // collapsing the group can't flip a hosted tab's identity mid-paint (same caution as frameInsetY).
-export function isTabsFrame(node: MindNode): boolean { return node.type === 'frame' && node.layout === 'tabs'; }
+export function isTabsFrame(node: MindNode): boolean {
+  return node.type === 'frame' && node.layout === 'tabs' && !insideStack(node);
+}
 // The group `node` is docked into as a tab, or null. A tab is always a FRAME child of a tabs frame:
 // any other child kind is ordinary content (e.g. a card dropped into the box), never a tab.
 export function tabGroupOf(node: MindNode): MindNode | null {
@@ -245,6 +255,8 @@ export function tabGroupOf(node: MindNode): MindNode | null {
   const p = parentOf(node);
   return p && isTabsFrame(p) ? p : null;
 }
+// (tabGroupOf already returns null inside a stack — a demoted group is no longer a tabs frame — so a
+// tab in there is an ordinary frame child, i.e. a row of the outline like every other descendant.)
 export function isDockedTab(node: MindNode): boolean { return !!tabGroupOf(node); }
 // A group's tabs in strip order (left to right) — stored like any child order, i.e. seeded from the
 // tabs' own positions along the strip (kidsByPosition) and only changed by dragging one.
@@ -378,7 +390,11 @@ function stackHeaderH(stack: MindNode): number {
   const part = (sel: string): number =>
     (el?.querySelector(sel) as HTMLElement | null)?.offsetHeight ?? 0;
   const h = part(':scope > .title-row') + part(':scope > .body');
-  return h ? FRAME_BORDER + STACK_PAD + h + STACK_GAP : STACK_HEADER;
+  // NOTHING written at the top → reserve nothing for it: the rows start at the box's own inset. An
+  // unnamed stack is a plain column of cards, and an empty strip above the first one reads as a
+  // mistake rather than as a title waiting to be typed. (STACK_HEADER survives as nodeH's pre-render
+  // fallback, for a stack that has no measured height yet.)
+  return h ? FRAME_BORDER + STACK_PAD + h + STACK_GAP : FRAME_BORDER + STACK_PAD;
 }
 // Size an EMPTY stack: its own title row, inset equally all round. The height is the zero-row
 // reduction of the `node.h = …` line that closes the stack branch in layoutSubtree (with no rows, cy
@@ -390,7 +406,10 @@ function stackHeaderH(stack: MindNode): number {
 // box by the extra lines. Both empty paths (no children at all / no visible rows) call this.
 function sizeEmptyStack(stack: MindNode): void {
   paintNode(stack);
-  stack.h = stackHeaderH(stack) - STACK_GAP + STACK_PAD + FRAME_BORDER;
+  // …floored at STACK_HEADER for the doubly-empty case — no rows AND no text — where the arithmetic
+  // above would otherwise leave a ~20px sliver with nothing to grab, select or drop into. That's not
+  // the "space reserved above the rows" the header question is about: there are no rows to be above.
+  stack.h = Math.max(STACK_HEADER, stackHeaderH(stack) - STACK_GAP + STACK_PAD + FRAME_BORDER);
 }
 // NOTE — the two loops below call paintNode(k) BEFORE measuring the row, and must keep doing so: a
 // stack is the one place where a card's height depends on layout output, in two ways.
@@ -535,6 +554,12 @@ export function frameInterior(f: MindNode): { x: number; y: number; w: number; h
     h: Math.max(0, nodeH(f) - frameInsetY(f) - FRAME_BORDER),
   };
 }
+// Does this frame have anything to put ON its tab — its own text (title or note, which is what the tab
+// renders, flattened to one line)? A frame that hasn't been named draws NO tab and reserves no strip for
+// one: its bounds ARE its box (elTop / frameInsetY below), because a folder tab with nothing written on
+// it is a label that says nothing while costing the box 39px. Read off the TEXT, so it can't flip under
+// a hosted child mid-paint the way a collapse-state test could.
+export function frameLabelled(f: MindNode): boolean { return !!(f.title.trim() || f.body.trim()); }
 // How far DOWN from a container's BOUNDS top its interior starts — the vertical counterpart of the
 // plain FRAME_BORDER inset used on the other three sides, and the single spelling of it: shared by
 // frameInterior and by everything that projects a hosted child into its host's content wrapper
@@ -542,7 +567,7 @@ export function frameInterior(f: MindNode): { x: number; y: number; w: number; h
 // above the box (FRAME_TAB_DROP, main.ts); a stack has no tab. Keyed on `type`, not isFrame, so a paint
 // landing mid-collapse can't flip the inset under a hosted child.
 export function frameInsetY(f: MindNode): number {
-  return FRAME_BORDER + (f.type === 'frame' ? FRAME_TAB_DROP : 0);
+  return FRAME_BORDER + (f.type === 'frame' && frameLabelled(f) ? FRAME_TAB_DROP : 0);
 }
 // Where a frame's content starts VERTICALLY: one uniform pad below its BOX's top edge (elTop), matching
 // the `ax + FRAME_PAD` the other sides use from the box's outer edge. A nested frame's own tab lives

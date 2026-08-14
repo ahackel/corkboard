@@ -12,12 +12,13 @@
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { scheduleSave } from '../data/persistence.js';
-import { effectiveColor, colorClass, applyColorVars, relayout } from '../main.js';
+import { effectiveColor, colorClass, applyColorVars, relayout, reframeForTab } from '../main.js';
 import { autosizeBody, pasteUrlLink } from './inline-edit.js';
 import { addChild } from './crud.js';
 import { touch, commitStep } from './history.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { isLockedEffective } from '../utils/model.js';
+import { frameLabelled } from '../view/layout.js';
 import { byId } from '../utils/dom.js';
 
 const cardsEl = byId('olCards');
@@ -149,14 +150,20 @@ function cardFor(n: MindNode): HTMLElement {
   // No validation left: a title may be empty (untitled) and may duplicate another (the FILE takes the
   // suffix). What titleProblem used to refuse, desiredFileFor now absorbs.
   title.addEventListener('input', () => {
+    const wasLabelled = frameLabelled(n);   // a frame's tab (and so its bounds) hangs on having text
     n.title = title.value.replace(/[\r\n]+/g, ' ').trim();   // a title is one line
+    reframeForTab(n, wasLabelled);
     n.dirty = true; scheduleSave();
   });
   title.addEventListener('blur', () => { title.value = n.title; endEdit(); });
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); revealNote(); } });
 
   note.addEventListener('focus', () => beginEdit(n));
-  note.addEventListener('input', () => { n.body = note.value; n.dirty = true; autosizeBody(note); scheduleSave(); });
+  note.addEventListener('input', () => {
+    const wasLabelled = frameLabelled(n);
+    n.body = note.value; reframeForTab(n, wasLabelled);
+    n.dirty = true; autosizeBody(note); scheduleSave();
+  });
   note.addEventListener('paste', (e) => { pasteUrlLink(e, note); });   // URL over a selection → a link
 
   note.addEventListener('blur', () => {
