@@ -8,7 +8,9 @@ import { byId } from '../utils/dom.js';
 import { soleImage } from '../utils/markdown.js';
 
 // A node's KIND, orthogonal to how it arranges its children (`layout` below):
-//   · card       — an ordinary titled/bodied node.
+//   · card       — an ordinary titled/bodied node. A card WITH CHILDREN is a container: it outlines
+//                  them inside its own box (view/layout.ts isStack). There is no `stack` kind — having
+//                  children is the whole condition. See docs/spec-edges-and-containment.md.
 //   · frame      — a resizable container box (mm_w/mm_h) that adopts cards dropped inside.
 //   · annotation — a leaf note pinned to its parent: no title, no children, doesn't take part in
 //                  layout, and renders ON TOP of everything (never clipped by a frame's mask). Its
@@ -17,15 +19,15 @@ import { soleImage } from '../utils/markdown.js';
 //                  title/body matches across the whole map; no children, keeps its title UI.
 //                  Search text persisted as mm_query.
 // Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
-export type NodeType = 'card' | 'frame' | 'stack' | 'annotation' | 'query';
+export type NodeType = 'card' | 'frame' | 'annotation' | 'query';
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
-//   · card  → inherit (take the parent's), free (stay where dragged), line (chained), fan (spread).
+//   · card  → none: a card with children OUTLINES them inside its own box, so there is nothing to
+//             choose. `inherit`/`free`/`line`/`fan` survive in the type only to read old notes;
+//             `line`/`fan` placed children BESIDE the parent and are unreachable now.
 //   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
 //             down), vertical (auto-flow columns: top→bottom, wrap right), tabs (its child FRAMES
 //             are docked as tabs: their title tabs flow along the frame's top band and whichever
 //             tab is open borrows the whole box — see isTabsFrame in view/layout.ts).
-//   · stack → none: a stack always outlines its whole subtree (one indented full-width column), so
-//             it offers no arrangement choice and every descendant's own layout is ignored.
 //   · annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
 export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'tabs';
@@ -34,7 +36,6 @@ export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'v
 // it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
 // reads this asks isImageCard beside it (utils/frontmatter.ts serializeMd).
 export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'query';
-export type LayoutSide = 'left' | 'right' | 'up' | 'down';
 export type EdgeStyle = 'straight' | 'orthogonal' | 'bezier';
 export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
 export type GridSize = 0 | 20 | 40 | 80 | 160 | 320;
@@ -77,7 +78,7 @@ export interface MindNode {
   checklist: boolean;              // Trello-style: treat my DIRECT children as a checklist — each
                                     // gets a done checkbox and I show their `n/m` progress. Doesn't
                                     // cascade further down; a child can run its own checklist too.
-  type: NodeType;                  // card | frame | stack | annotation | query (persisted as mm_type)
+  type: NodeType;                  // card | frame | annotation | query (persisted as mm_type)
   layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
   // Resizable box size (world px). `w` is authored by every kind; `h` only by a frame (the box
   // whose interior adopts cards dropped in), a query card (a leaf with a search field over a
@@ -88,10 +89,6 @@ export interface MindNode {
   // type === 'query' only: the search text typed into the card's own search field, matched
   // against every OTHER node's title/body across the whole map. Persisted as mm_query.
   query?: string;
-  // Which of the PARENT's 4 sides this node attaches on. Stored, not derived — set explicitly
-  // by a drop (or copied onto a clone), and backfilled once from position on load/creation if
-  // absent (see view/layout.ts sideOf/deriveSide). Meaningless (and omitted) for a root.
-  side?: LayoutSide;
   title: string;
   color: string;                   // palette key, e.g. 'blue', or '' for none
   keepStatus: string;              // preserved `status:` frontmatter value
@@ -105,7 +102,11 @@ export interface MindNode {
   fmEntries?: FmEntry[];           // original frontmatter, preserved verbatim on save
   dirty: boolean;                  // needs a disk write
   dirtyLayout: boolean;            // needs (re)positioning by applyLayouts
-  kidOrder?: string[];             // stored child order (line/fan layouts); reseeded only on child drag
+  kidOrder?: string[];             // this parent's child ORDER — seeded from position the first time
+                                    // it's needed, spliced by a drag, and persisted to board.json as
+                                    // paths (data/board.ts). Reconciled by orderedKids, which drops
+                                    // unknown ids and appends unlisted children: the stored list is a
+                                    // sort HINT, never a record of membership — mm_parent is that.
   el?: HTMLElement | null;         // the rendered card (added during paint)
   frameContentEl?: HTMLElement | null;   // this frame's overflow:hidden content wrapper (frames only)
   tabStripEl?: HTMLElement | null;       // this tab GROUP's strip: the unclipped band holding its tabs' labels
@@ -128,7 +129,7 @@ export function isImageCard(n: MindNode | null | undefined): boolean {
 export function isAnnotation(n: MindNode | null | undefined): boolean { return n?.type === 'annotation'; }
 // A query card: a resizable leaf with a search field over a scrollable results list (see NodeType above).
 export function isQueryCard(n: MindNode | null | undefined): boolean { return n?.type === 'query'; }
-// Leaf kinds that cannot hold children (annotation + query). Card/frame/stack can — an image card
+// Leaf kinds that cannot hold children (annotation + query). Card/frame can — an image card
 // included, it being an ordinary card wearing a picture.
 export function isLeafType(n: MindNode | null | undefined): boolean {
   return n?.type === 'annotation' || n?.type === 'query';
@@ -136,8 +137,44 @@ export function isLeafType(n: MindNode | null | undefined): boolean {
 
 export interface View { x: number; y: number; k: number; }
 
+// A free EDGE between two nodes — an object the user drew, not a rendering of `parent`.
+// It means nothing structural: it moves nothing, collapses nothing, places no file. Stored (as
+// pure data, not a node) in the vault's board.json — see data/board.ts.
+//
+// Its `id` is PERSISTED, unlike a node's — a node's identity is its file path, and an edge has no
+// file to be identified by. Its ENDPOINTS are node ids at runtime but paths on disk, for exactly
+// the reason `mm_parent` is a path: in-memory ids are minted fresh every load. `fromPath`/`toPath`
+// are the transient carriers between reading the file and resolving them (data/board.ts
+// resolveEdges), mirroring MindNode's `_parentPath`.
+// What each END of an edge WEARS. Two independent caps rather than one three-way direction setting:
+// "an arrow at this end, a dot at that one" is an ordinary thing to want to say, and a single
+// `none|to|both` axis can't say it at all. `dot` is the terminator a diagram uses for "attaches
+// here, no direction implied" — it marks the endpoint without claiming a flow.
+export type EdgeCap = 'none' | 'dot' | 'arrow';
+// Which face of a card an edge is docked to. STORED per endpoint, not derived: an edge that
+// re-picked its nearest face every paint would slide around its cards as they move, and a diagram
+// you arranged would rearrange itself under you. Set when the edge is drawn (the socket you grabbed)
+// or re-routed, backfilled once from geometry for an edge saved before this existed, and otherwise
+// left alone. Same reasoning the old `mm_side` had — the difference is that this one describes a
+// LINE, which is a thing the user drew, rather than a card's place in a tree.
+export type EdgeSide = 'up' | 'down' | 'left' | 'right';
+export interface BoardEdge {
+  id: string;
+  from: string;                    // node id (resolved from fromPath at load)
+  to: string;
+  fromPath?: string;               // transient: the on-disk path, resolved to `from` post-load
+  toPath?: string;
+  fromSide: EdgeSide;              // the face each end is docked to — see EdgeSide above
+  toSide: EdgeSide;
+  color: string;                   // palette key, an authored '#rrggbb', or '' for the default ink
+  dashed: boolean;
+  fromCap: EdgeCap;                // the cap at each end — see EdgeCap above
+  toCap: EdgeCap;
+  label: string;
+}
+
 // A freehand sketch stroke drawn on the canvas. Stored (as pure data, not a node) in the
-// vault's sketch.json — see data/persistence.ts. `pts` are WORLD coordinates, so ink pans /
+// vault's board.json — see data/board.ts. `pts` are WORLD coordinates, so ink pans /
 // zooms with the map for free. Edges/nodes are unaffected; this is a separate ink layer.
 export interface Stroke {
   id: string;
@@ -151,6 +188,10 @@ export interface AppState {
   nodes: Map<string, MindNode>;    // id -> node
   view: View;                      // pan/zoom
   selId: string | null;            // primary selection — drives the single-node editor fields
+  // The selected free EDGES — a SET, like `sel`, so several lines can be restyled in one go. Never
+  // non-empty at the same time as a card selection: an edge and a card can't share the one floating
+  // bar, so selecting either clears the other (features/edge-tools.ts).
+  selEdges: Set<string>;
   sel: Set<string>;                // full selection set (⌘-click / marquee)
   edgeStyle: EdgeStyle;            // restored from localStorage
   gridStyle: GridStyle;            // restored per-map from settings.json — see data/persistence.ts
@@ -159,7 +200,8 @@ export interface AppState {
   // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
   // open frame the canvas wears that frame's fill instead. See main.ts's canvasFill, the one resolver.
   canvasColor: string;
-  strokes: Stroke[];               // freehand sketch layer (loaded from / saved to sketch.json)
+  strokes: Stroke[];               // freehand sketch layer (loaded from / saved to board.json)
+  edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
   readOnly: boolean;               // read-only mode: no saves, no edits; collapse/expand only
@@ -174,11 +216,13 @@ export const state: AppState = {
   view: { x: 80, y: 40, k: 1 },
   selId: null,
   sel: new Set<string>(),
+  selEdges: new Set<string>(),
   edgeStyle: 'orthogonal',
   gridStyle: 'none',
   gridSize: 20,
   canvasColor: '',
   strokes: [],
+  edges: [],
   searchMatch: null,
   searchActiveId: null,
   readOnly: false,
@@ -191,6 +235,8 @@ export const stage = byId('stage');
 // Freehand sketch layer — sits behind the cards (see index.html / styles.css z-index).
 export const sketchSvg = byId<SVGSVGElement>('sketch');
 export const edgesSvg = byId<SVGSVGElement>('edges');
+// The free edges the user drew — see BoardEdge above and view/free-edges.ts.
+export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');
 export const togglesSvg = byId<SVGSVGElement>('toggles');
 // Top overlay for drag-time edges (dragged card's connectors + reparent preview) — see view/edges.ts.
 export const dragEdgesSvg = byId<SVGSVGElement>('dragEdges');

@@ -37,7 +37,7 @@ import gridDotIcon from '../assets/icons/grid-dot.svg?raw';
 import gridMeshIcon from '../assets/icons/grid-mesh.svg?raw';
 import gridLineIcon from '../assets/icons/grid-line.svg?raw';
 import { state, GRID_STYLES, GRID_SIZES, type GridStyle, type GridSize } from '../core/state.js';
-import { scheduleSaveSettings } from '../data/persistence.js';
+import { scheduleSaveBoard } from '../data/board.js';
 import { openMenu } from '../features/context-menu.js';
 import { clamp } from '../utils/num.js';
 
@@ -158,13 +158,13 @@ function cycleGridStyle(): void {
   const i = GRID_STYLES.indexOf(state.gridStyle);
   state.gridStyle = GRID_STYLES[(i + 1) % GRID_STYLES.length];
   refreshGrid();
-  scheduleSaveSettings();
+  scheduleSaveBoard();
 }
 
 function pickGridSize(size: GridSize): void {
   state.gridSize = size;
   refreshGrid();
-  scheduleSaveSettings();
+  scheduleSaveBoard();
 }
 
 // Wires the toolbar buttons. Called once at startup; the initial paint happens once the first

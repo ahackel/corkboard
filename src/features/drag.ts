@@ -6,17 +6,17 @@
 // auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
-import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode, type LayoutSide } from '../core/state.js';
+import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
-import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, sideOf, deriveSide, reorderTarget, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
+import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
 import { paintEdges } from '../view/edges.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, selJoin, relayout, remeasure } from '../main.js';
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -370,7 +370,7 @@ export function bindNodeDrag(n: MindNode): void {
     // origins = the left/top CSS values frozen at drag start; transforms are relative to these
     const origins = new Map(ids.map(id => { const m2 = state.nodes.get(id)!; return [id, { x:m2.x, y:m2.y }] as [string, Pt]; }));
     ui.drag = { n, active:n, multi, sx:e.clientX, sy:e.clientY, cx:e.clientX, cy:e.clientY, start, targets, origins, selRoots,
-             moved:false, dropTarget:null as string | null, dropMode:'child', dropSide:null, dropAfter:undefined, dropLine:null, alt:e.altKey, shift:e.shiftKey, cloned:false, rip:false,
+             moved:false, dropTarget:null as string | null, dropMode:'child', dropAfter:undefined, dropLine:null, alt:e.altKey, shift:e.shiftKey, cloned:false, rip:false,
              meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
              touch: e.pointerType === 'touch',  // higher move threshold for finger taps
              cardMerge: null };
@@ -471,7 +471,7 @@ function dragPointerUp(): void {
         // dropped onto a node? re-parent (the whole multi-selection, if that's what's dragging).
         // Alt+drop on empty canvas? detach to root. Otherwise it's just a move.
         const tgt = drag.dropTarget;
-        const { cloned, targets, alt, shift, clones, dropMode, dropSide, dropAfter, selRoots, cardMerge, dock } = drag;
+        const { cloned, targets, alt, shift, clones, dropMode, dropAfter, selRoots, cardMerge, dock } = drag;
         clearDropTarget();
         hideLandingGhost();
         // Null drag NOW so every paintAll/paintEdges in the commit phase sees no active drag
@@ -524,14 +524,14 @@ function dragPointerUp(): void {
         const effectiveParent = tgtNode
           ? (dropMode === 'sibling' ? tgtNode.parent! : tgt!)
           : null;
-        if (effectiveParent && tgtNode && dropSide) {
+        if (effectiveParent && tgtNode) {
           // land exactly where the drop preview showed (see view/layout.ts dropLanding), and
           // shift the rest of the dragged subtree(s) by the same delta so their relative
           // formation is preserved (a clone keeps where you dropped it, since that's a fresh
           // placement). `act` anchors the snap even for a multi-drag — everyone else keeps
           // their offset from it.
           if (!cloned){
-            const land = dropLanding(act, tgtNode, dropMode, dropSide, dropAfter);
+            const land = dropLanding(act, tgtNode, dropMode, dropAfter);
             const startAct = targets.get(act.id)!;
             const ddx = land.x - startAct.x, ddy = land.y - startAct.y;
             for (const [id, s] of targets){
@@ -542,8 +542,6 @@ function dragPointerUp(): void {
           // group lands as one contiguous, ordered block — sibling mode anchors on the drop
           // target, child mode appends onto the new parent. `act` goes first (it's the one the
           // landing snap above was computed for) when it's actually one of the roots. EVERY
-          // root gets the SAME resolved side — a multi-drop moves the whole group to one side,
-          // not each member wherever its own offset happens to derive to.
           const roots = selRoots.includes(act.id) ? [act.id, ...selRoots.filter(id => id !== act.id)] : selRoots;
           // Anchor the first insertion where the preview showed it: the resolved dropAfter
           // (careful — `null` means "front", it must NOT fall back). Sibling mode without an
@@ -553,10 +551,7 @@ function dragPointerUp(): void {
             dropMode === 'sibling' && dropAfter === undefined ? tgtNode.id : dropAfter;
           let moved = 0;
           for (const rootId of roots){
-            if (reparentOnly(rootId, effectiveParent, afterId)){
-              afterId = rootId; moved++;
-              state.nodes.get(rootId)!.side = dropSide;
-            }
+            if (reparentOnly(rootId, effectiveParent, afterId)){ afterId = rootId; moved++; }
           }
           const parentTitle = state.nodes.get(effectiveParent)?.title ?? 'that card';
           setStatus(dropMode === 'reorder'
@@ -604,18 +599,14 @@ function dragPointerUp(): void {
               // …and "root" means the CURRENT top level: while a frame is open, ripping a card out of
               // a nested frame lands it at the open frame's top level, not on a canvas that can't
               // show it (detachParentId, nav/scope.ts). Either way there's no side and no frame host.
-              r.parent = detachParentId(); r.side = undefined;
+              r.parent = detachParentId();
+              r.dirty = true;                     // mm_parent is in the note — see reparentOnly
               if (wasTab) {
                 if (r.collapsed) { r.collapsed = false; r.dirty = true; }
                 reanchorContents(r, lent!, drag.start.get(r.id) ?? r);
                 emptied.push(rp!.id);
               }
               detached++; if (rOut) leftFrame++;
-            } else if (rp && isManagedLayout(rp)){
-              // A root NOT detached is a plain reposition. For a MANAGED parent (line/fan) refresh its
-              // stored side from the new position (same rule as the load backfill) so its edge/bucket
-              // still tracks visually; a FREE parent never reflows, so its side is just a label — keep it.
-              r.side = deriveSide(rp, r);
             }
           }
           if (detached) setStatus(
@@ -655,7 +646,7 @@ export function startNodeDrag(n: MindNode, clientX: number, clientY: number): vo
   const targets = new Map<string, Pt>([[n.id, { x:n.x, y:n.y }]]);
   const origins = new Map<string, Pt>([[n.id, { x:n.x, y:n.y }]]);
   ui.drag = { n, active:n, multi:false, sx:clientX, sy:clientY, cx:clientX, cy:clientY,
-    start, targets, origins, selRoots:[n.id], moved:true, dropTarget:null, dropMode:'child', dropSide:null, dropAfter:undefined, dropLine:null,
+    start, targets, origins, selRoots:[n.id], moved:true, dropTarget:null, dropMode:'child', dropAfter:undefined, dropLine:null,
     alt:false, shift:false, cloned:false, rip:false, meta:false, touch:false, cardMerge:null };
   if (n.el){ n.el.style.willChange = 'transform'; n.el.classList.add('dragging'); }
   document.body.classList.add('grabbing');
@@ -773,17 +764,12 @@ window.addEventListener('keyup',   (e) => {
 });
 
 // ---------- reconnect (re-parent by drag-and-drop) ----------
-// Half-width/half-height fraction (normalized, so a wide short card doesn't skew toward
-// "always horizontal") that counts as "dropped near the centre" -> sibling-insert mode.
-// Outside that square it's a child-of-this-side drop, attaching on whichever edge the drop
-// point is closest to (edgeFromUV below); the resolved side is stored on ui.drag.dropSide and
-// used for both the ghost preview and the commit, so they can never disagree.
+// Half-width/half-height fraction (normalized, so a wide short card doesn't skew toward one axis)
+// that counts as "dropped near the centre" -> sibling-insert mode. Outside that square it's a
+// child-of-hovered drop. It used to also resolve WHICH SIDE of the card to attach on; there are no
+// sides any more — a child goes inside its parent (docs/spec-edges-and-containment.md) — so the
+// zone now answers one question instead of two.
 const CENTER_FRAC = 0.45;
-
-// Dominant axis + sign of a box-relative offset -> which edge it's closest to.
-function edgeFromUV(u: number, v: number): LayoutSide {
-  return Math.abs(u) >= Math.abs(v) ? (u >= 0 ? 'right' : 'left') : (v >= 0 ? 'down' : 'up');
-}
 
 // The frame whose TAB BAND (tabBandRect: its folder tab, or a group's whole strip) contains this world
 // point — the DOCK zone. Innermost-first, like every other frame hit test here, so nested frames stay
@@ -812,7 +798,6 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const wy = (e.clientY - state.view.y) / state.view.k;
   let hovered: string | null = null;
   let hoveredCenter = false;
-  let hoveredEdge: LayoutSide = 'right';
   // Plain CARDS win over frames: a frame's box encloses its children, so first-hit iteration order
   // would let the container shadow the card actually under the cursor (making reparent-onto-a-card
   // inside a frame unreachable). Among frames, the INNERMOST (deepest-nested) wins, so nested
@@ -837,7 +822,6 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     const u = (wx - (hitNode.x + w/2)) / (w/2);
     const v = (wy - (hitNode.y + h/2)) / (h/2);
     hoveredCenter = Math.max(Math.abs(u), Math.abs(v)) <= CENTER_FRAC;
-    hoveredEdge = edgeFromUV(u, v);
   }
   clearDropTarget();
   const drag = ui.drag;
@@ -852,7 +836,6 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
   let target: string | null = null;
   let mode: 'child' | 'sibling' | 'reorder' = 'child';
-  let side: LayoutSide | null = null;
   let after: string | null | undefined = undefined;   // insertion anchor (sibling/reorder)
   let line: Seg | null = null;   // reorder gap indicator
   let fuseTarget: string | null = null;    // card-merge target card (mergeDrag over a plain card)
@@ -902,7 +885,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       const hn = state.nodes.get(hovered)!;
       // Never onto another annotation (it holds nothing), and never onto a LOCKED card — every other
       // drop refuses one, and this branch runs ahead of the shared lock check below.
-      if (!isAnnotation(hn) && !isLockedEffective(hn)) { target = hovered; mode = 'child'; side = hoveredEdge || 'down'; }
+      if (!isAnnotation(hn) && !isLockedEffective(hn)) { target = hovered; mode = 'child'; }
     }
   } else if (hovered && isLockedEffective(state.nodes.get(hovered)!)) {
     // A locked card (or a locked descendant) is never a valid drop target — no child, sibling, or
@@ -926,14 +909,14 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
         const d = stackDropTarget(stack, dragged, sub);
         const p = state.nodes.get(d.parentId);
         if (p && !isLockedEffective(p)) {
-          target = d.parentId; mode = 'reorder'; side = 'down'; after = d.afterId; line = d.line;
+          target = d.parentId; mode = 'reorder'; after = d.afterId; line = d.line;
         }
       }
     } else if (frameFlow(hoveredNode)) {
       // The FLOW frame's own (empty) area → insert into the flow at the slot under the cursor,
       // previewed with an insertion bar (like line layout). Covers dropping an external card in
       // AND reordering a card already inside.
-      target = hovered; mode = 'child'; side = 'down';
+      target = hovered; mode = 'child';
       ({ afterId: after, line } = flowReorderTarget(hoveredNode, dragged));
     } else if (isFrame(hoveredNode)) {
       // FREE frame: adopt the card wherever it's released inside the box (dropLanding's frame branch).
@@ -946,7 +929,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       // group's box resolves that very tab as the host, and "drop it into itself" is no drop at all.
       // Leaving the target null makes it a plain reposition, with the rip rules deciding the rest.
       if (!sub.has(host.id) && !isLockedEffective(host)) {
-        target = host.id; mode = 'child'; side = 'down';
+        target = host.id; mode = 'child';
         // …and if that tab FLOWS its children, resolve the slot like any other flow frame would
         if (frameFlow(host)) ({ afterId: after, line } = flowReorderTarget(host, dragged));
       }
@@ -958,59 +941,23 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       // gap between them is much narrower than a card's edge zone, so the surrounding-the-centre
       // area must stay flow-insert or the bar would be nearly unreachable during a reorder.
       if (hoveredCenter) {
-        target = hovered; mode = 'child'; side = hoveredEdge;
+        target = hovered; mode = 'child';
       } else {
-        target = pf.id; mode = 'child'; side = 'down';
+        target = pf.id; mode = 'child';
         ({ afterId: after, line } = flowReorderTarget(pf, dragged));
       }
     } else {
-      // Centre zone + hovered card has a parent -> sibling drop (adopt hovered's parent, landing
-      // on the same side hovered already occupies — copy ITS stored side, not the drop point).
+      // Centre zone + hovered card has a parent -> sibling drop: adopt hovered's parent. Where the
+      // card then LANDS is the parent's business — an outlining card slots it as a row (previewed by
+      // the stack branch above, which owns the insertion bar), a free frame leaves it where dropped.
       if (hoveredCenter && hoveredNode.parent) {
         const sibParent = hoveredNode.parent;
-        if (sibParent !== dragged.id && !sub.has(sibParent)) {
-          const parentNode = state.nodes.get(sibParent)!;
-          target = hovered; mode = 'sibling'; side = sideOf(parentNode, hoveredNode);
-          // hovering the near half inserts BEFORE the card, the far half AFTER; the gap line previews
-          // the slot among the new siblings. (Not reached for flow frames — handled above.)
-          ({ afterId: after, line } = reorderTarget(parentNode, dragged, side));
-        }
+        if (sibParent !== dragged.id && !sub.has(sibParent)) { target = hovered; mode = 'sibling'; }
       }
-      // Edge zone (or no valid sibling target) -> child-of-hovered, attaching on whichever side
-      // the drop point sits near. Image/annotation are leaves — they never adopt children, so
-      // they're not valid child-drop targets (sibling-mode above still is).
-      if (!target && !isLeafType(hoveredNode)) {
-        target = hovered; side = hoveredEdge;
-        if (isManagedLayout(hoveredNode) && !frameFlow(hoveredNode))
-          ({ afterId: after, line } = reorderTarget(hoveredNode, dragged, side));
-      }
-    }
-  } else if (drag && drag.selRoots.length === 1 && !drag.alt && dragged.parent) {
-    // No card hovered: if the dragged card is sliding along its OWN parent's line/fan sibling
-    // band, preview the in-parent REORDER — an insertion bar marks the sibling gap the card
-    // would slot into, so "drop it between two siblings" is no longer guesswork. Single-root
-    // drags only (a multi-drag keeps the plain-reposition fallback) and never while Alt
-    // (detach) is held. The `near` gate is what keeps rip-detach reachable: close to the band a
-    // release means "re-slot"; pulled away from it, today's rip behaviour returns.
-    const parent = parentOf(dragged);
-    // A flow frame is box-flowed (no side-based in-parent reorder bar). Sliding its child just
-    // repositions it; the release reseeds the flow order from the dropped positions.
-    // A stack row opts out too: its in-outline slot is previewed by the stack branch above (which
-    // needs the cursor INSIDE the box). Out here the cursor has left the stack, so a release means
-    // "leave the outline" — a side-based reorder bar would both mislead and suppress the detach.
-    // A tab group opts out too: its children are slots in a strip, not a side-based band, so there's
-    // no in-parent reorder bar to draw here (dragging a tab within the strip is resolved separately).
-    if (parent && isManagedLayout(parent) && !frameFlow(parent) && !stackOf(parent) && !isTabsFrame(parent)) {
-      let rt = reorderTarget(parent, dragged);
-      // Far along a wide fan, deriveSide flips to the (usually empty) perpendicular bucket and
-      // the first/last slots become unreachable — retry with the card's STORED side so sliding
-      // to the ends of its own band keeps previewing, while genuine cross-side moves (which
-      // pass the near gate on the derived side's band) still work.
-      if (!rt.near && dragged.side && dragged.side !== rt.side)
-        rt = reorderTarget(parent, dragged, dragged.side);
-      if (rt.near) {
-        target = parent.id; mode = 'reorder'; side = rt.side; after = rt.afterId; line = rt.line;
-      }
+      // Edge zone (or no valid sibling target) -> child-of-hovered. Image/annotation are leaves —
+      // they never adopt children, so they're not valid child-drop targets (sibling-mode above
+      // still is).
+      if (!target && !isLeafType(hoveredNode)) target = hovered;
     }
   }
   // An inheriting card's colour depends on its parent chain (effectiveColor), and while poised
@@ -1020,7 +967,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const colorKey = (t: string | null, m: string): string => (!t || m === 'reorder') ? '' : m + ':' + t;
   const changed = !!drag && colorKey(drag.dropTarget, drag.dropMode) !== colorKey(target, mode);
   const prevLine = drag?.dropLine ?? null;
-  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropSide = side; drag.dropAfter = after; drag.dropLine = line; drag.cardMerge = fuseTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; }
+  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropAfter = after; drag.dropLine = line; drag.cardMerge = fuseTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; }
   if (changed) for (const id of sub) { const m = state.nodes.get(id); if (m) paintNode(m); }
   if (dockTarget) {
     // Dock preview: the target's own box outline goes dashed (.drop-target — "it lands in here", the
@@ -1037,16 +984,16 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     else showLandingGhost(t.x + frameLabelW(t) + TAB_GAP, tabBandRect(t).y, frameLabelW(dragged), FRAME_TAB_H);
   } else if (fuseTarget) {
     // Alt-dragging image card(s) — or plain cards — over a plain card: a dashed outline on the target
-    // is the whole affordance for both, since neither is a reparent (target/side stayed null), so
-    // there's no landing ghost, insertion bar or reparent edge to draw.
+    // is the whole affordance for both, since neither is a reparent (`target` stayed null), so
+    // there's no landing ghost or insertion bar to draw.
     state.nodes.get(fuseTarget)!.el?.classList.add('drop-merge');
     hideLandingGhost();
-  } else if (target && side && isAnnotation(dragged)) {
+  } else if (target && isAnnotation(dragged)) {
     // Annotation reparent: only a dashed ghost-colour outline on the candidate parent — no landing
-    // ghost, no insertion bar, no reparent edge (see edges.ts previewReparent).
+    // ghost and no insertion bar.
     state.nodes.get(target)!.el?.classList.add('anno-drop-target');
     hideLandingGhost();
-  } else if (target && side) {
+  } else if (target) {
     const targetNode = state.nodes.get(target)!;
     // Highlight the target — EXCEPT a flow frame, which shows the insertion bar (below) instead of
     // the frame-outline highlight (like line-layout reorder). For a docked TAB the highlight goes on
@@ -1071,13 +1018,27 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       // Frame drop-in lands the card exactly where it's released, so it's already under the cursor —
       // no ghost needed; the frame's own .drop-target highlight is the affordance.
       hideLandingGhost();
+    } else if (mode === 'child' && targetNode.type === 'card') {
+      // Onto a plain CARD: the drop makes the card an OUTLINER and the dragged card its first row
+      // (isStack — a card with children IS one). So the preview is the insertion bar at the bottom of
+      // the target, the same bar every other row insertion uses, rather than a landing ghost floating
+      // where the card happens to be released: it says WHERE the row will go, and it says the target
+      // is about to hold rows at all. A target that already has rows never reaches here — the stack
+      // branch above owns it, with the bar in the gap the cursor is actually pointing at.
+      showInsertLine(stackFirstRowSeg(targetNode));
     } else {
-      const land = dropLanding(dragged, targetNode, mode, side, after);
+      const land = dropLanding(dragged, targetNode, mode, after);
       showLandingGhost(land.x, land.y, nodeW(dragged), nodeH(dragged));
     }
   } else {
     hideLandingGhost();
   }
+}
+// Where the bar goes for a drop onto a childless card: across the target's bottom edge, inset by the
+// same padding a stack keeps around its rows, so the bar is exactly as wide as the row it stands for.
+function stackFirstRowSeg(n: MindNode): Seg {
+  const y = n.y + nodeH(n);
+  return { x0: n.x + STACK_PAD, y0: y, x1: n.x + nodeW(n) - STACK_PAD, y1: y };
 }
 function clearDropTarget(): void {
   document.querySelectorAll('.node.drop-target, .node.drop-sibling, .node.anno-drop-target, .node.drop-merge')
@@ -1099,6 +1060,11 @@ export function reparentOnly(childId: string, newParentId: string, afterId?: str
   if (isAncestor(childId, newParentId)) return false; // would create a cycle
   touch(childId, child.parent, newParentId);          // pre-images incl. both parents' kidOrder
   child.parent = newParentId;
+  // `mm_parent` lives in the NOTE, so a reparent is a note write — `dirtyLayout` alone (which is what
+  // MOVING a card sets, since its position lives in board.json) would leave the new parent on screen
+  // and nowhere on disk, and the next load would put the card back where its file still says it is.
+  child.dirty = true;
+  // …and the ORDER among siblings is the board's, so both flags, not one.
   child.dirtyLayout = true;
   if (isManagedLayout(newParent))
     newParent.kidOrder = insertedKidOrder(newParent, childId, afterId);

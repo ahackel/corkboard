@@ -1,14 +1,14 @@
 // ---------- freehand sketch layer ----------
 // Draw ink directly on the canvas, independent of the node model. Strokes are world-space
 // polylines rendered into the #sketch SVG (which lives inside #world, so ink pans/zooms with the
-// map) and persisted as one JSON data file — see data/persistence.ts (loadSketch/scheduleSaveSketch).
+// map) and persisted in the board file — see data/board.ts (loadBoard/scheduleSaveBoard).
 // The pointer plumbing is shared with the canvas gesture layer: features/gestures.ts routes a
 // single-pointer press to the draw/erase functions below when `ui.sketchOn` is set, so pinch-zoom
 // and two-finger pan keep working even mid-sketch.
 import { state, sketchSvg, setStatus, type Stroke } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { screenToWorld } from '../view/camera.js';
-import { scheduleSaveSketch } from '../data/persistence.js';
+import { scheduleSaveBoard } from '../data/board.js';
 import { touchStrokes, commitStep } from './history.js';
 import { selectNode } from '../main.js';
 import { byId } from '../utils/dom.js';
@@ -155,19 +155,19 @@ export function sketchUp(): void {
   if (!d) return;
   if (d.tool === 'pen') {
     if (cur) cur.pts = simplify(cur.pts, SIMPLIFY_EPS);   // reduce to a handful of points now the stroke is complete
-    if (cur && cur.pts.length >= 2) { curEl!.setAttribute('d', strokeD(cur.pts)); touchStrokes(); state.strokes.push(cur); commitStep(); scheduleSaveSketch(); }
+    if (cur && cur.pts.length >= 2) { curEl!.setAttribute('d', strokeD(cur.pts)); touchStrokes(); state.strokes.push(cur); commitStep(); scheduleSaveBoard(); }
     else if (curEl) curEl.remove();   // a mere tap / too-short stroke → discard, nothing committed
     cur = null; curEl = null;
   } else {
     commitStep();                     // close the erase step (no-op if nothing was removed)
-    if (erasedAny) { scheduleSaveSketch(); erasedAny = false; }
+    if (erasedAny) { scheduleSaveBoard(); erasedAny = false; }
   }
 }
 // A second finger landed (pinch) or the gesture was cancelled: abandon the in-progress stroke.
 export function sketchCancel(): void {
   if (!ui.sketchDraw) return;
   if (ui.sketchDraw.tool === 'pen') { if (curEl) curEl.remove(); }   // pen never mutated strokes yet — just drop it
-  else { commitStep(); if (erasedAny) scheduleSaveSketch(); }        // eraser already removed strokes live — keep it undoable
+  else { commitStep(); if (erasedAny) scheduleSaveBoard(); }        // eraser already removed strokes live — keep it undoable
   cur = null; curEl = null; erasedAny = false; ui.sketchDraw = null;
 }
 const round = (v: number): number => Math.round(v * 10) / 10;

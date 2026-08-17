@@ -78,14 +78,12 @@ const TYPE_ICONS: Record<NodeType, string> = {
   // something"; the dashed `inherit` layout chip is the only other hollow rect and stays distinct.
   card: SVG_OPEN + '<rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>',
   frame: SVG_OPEN + FOLDER_PATH + '</svg>',
-  stack: SVG_OPEN + '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.5h16"/><rect x="6.5" y="10.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/><rect x="6.5" y="14.5" width="11" height="2.5" rx="1" fill="currentColor" stroke="none"/></svg>',
   annotation: SVG_OPEN + '<path d="M4 4l3.5 3.5" stroke-dasharray="2 2"/><rect x="8" y="8" width="12" height="9" rx="2"/><path d="M10.5 12h7"/></svg>',
   query: SVG_OPEN + '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="10" cy="10" r="3"/><path d="M12.3 12.3l3 3"/></svg>',
 };
 const NODE_TYPES: { key: NodeType; label: string; icon: string }[] = [
   { key:'card',  label:'Card — an ordinary note',                                        icon: TYPE_ICONS.card },
   { key:'frame', label:'Frame — a resizable box; drag cards inside to hold them, out to release', icon: TYPE_ICONS.frame },
-  { key:'stack', label:'Stack — an outline: the whole subtree listed in one indented column, auto-sized', icon: TYPE_ICONS.stack },
   { key:'annotation', label:'Annotation — a title-less note pinned on top of its parent, ignored by layout', icon: TYPE_ICONS.annotation },
   { key:'query', label:'Query — a resizable box with a search field over a scrollable list of matching cards', icon: TYPE_ICONS.query },
 ];
@@ -107,13 +105,11 @@ const LAYOUT_ICONS: Record<Exclude<NodeLayout, 'tabs'>, string> = {
 // How a node of each type arranges its children. The layout popover shows exactly this type's set
 // (image has none — it's a leaf, so its layout chip row is empty and the trigger is hidden).
 const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: string }[]> = {
-  card: [
-    { key:'inherit', label:'Inherit — take the parent’s layout (default)', icon: LAYOUT_ICONS.inherit },
-    { key:'free', label:'Free — children stay where you drag them', icon: LAYOUT_ICONS.free },
-    { key:'line', label:'Line — children chained one after another, each on whichever side it sits on',
-      icon: LAYOUT_ICONS.line },
-    { key:'fan', label:'Fan — children spread out, each to whichever side it’s placed on', icon: LAYOUT_ICONS.fan },
-  ],
+  // A card with children OUTLINES them inside its own box — there is nothing to choose, so its chip
+  // row is empty and the layout trigger hides itself (markChips), same as for the leaf kinds. The
+  // old line/fan/free arrangements placed children BESIDE the parent, which this model has no room
+  // for (docs/spec-edges-and-containment.md).
+  card: [],
   frame: [
     { key:'free', label:'Free — children placed freely inside the box', icon: LAYOUT_ICONS.free },
     { key:'horizontal', label:'Horizontal — cards flow left to right, wrapping down', icon: LAYOUT_ICONS.horizontal },
@@ -124,14 +120,11 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
     // group can't be selected at all (main.ts selTarget) — and markChips hides this whole row for the
     // one group that still can be, the folded pill.
   ],
-  // a stack always outlines its whole subtree — there's nothing to choose, so its chip row is empty
-  // and the layout trigger hides itself (markChips), same as for the leaf kinds
-  stack: [],
   annotation: [],
   query: [],
 };
 // The default layout for a freshly-set type — omitted from frontmatter (see serializeMd).
-const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', stack: 'inherit', annotation: 'free', query: 'free' };
+const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', annotation: 'free', query: 'free' };
 // Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
 // no children it's left as-is, or given the default size when `orDefault` (used when a card first
@@ -581,7 +574,7 @@ function markWheelBusy(): void {
 stage.addEventListener('wheel', markWheelBusy, { passive: true });
 stage.addEventListener('gesturestart', () => { wheelBusy = true; });
 stage.addEventListener('gestureend', () => { wheelBusy = false; });
-function isInteracting(): boolean {
+export function isInteracting(): boolean {
   return !!(ui.drag || ui.pan || ui.pinch || ui.marquee) || inPlaceEditActive() || wheelBusy;
 }
 // ONE placement pass plus its visibility consequence — every caller that moves the bar goes through

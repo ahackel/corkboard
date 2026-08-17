@@ -78,6 +78,9 @@
       <!-- freehand sketch layer: ink drawn on the canvas, always on top of the cards (z-index, see styles.css) -->
       <svg id="sketch"></svg>
       <svg id="edges"></svg>
+      <!-- free edges: the relations the user DREW (board.json), as opposed to #edges' derived
+           parent connectors. Behind the cards like #edges; only its own hit paths take clicks. -->
+      <svg id="freeEdges"></svg>
       <!-- toggles overlay renders ABOVE node divs so collapse dots are always visible -->
       <svg id="toggles"></svg>
       <!-- drag overlay: the dragged card's edges + the reparent preview edge render here,
@@ -163,6 +166,21 @@
     <button id="fbMore" class="fb-icon" title="More actions" aria-label="More actions">
       <span class="ic" data-icon="kebab"></span></button>
   </div>
+  <!-- the selected EDGE's bar (features/edge-bar.ts). Its own bar rather than a mode of #floatBar:
+       that one is anchored to a CARD and keyed on state.sel throughout, and an edge shares none of
+       its controls. Starts closed so it doesn't flash in before the first sync. -->
+  <div id="edgeBar">
+    <button id="ebColor" class="fb-swatch swatch" title="Colour" aria-label="Edge colour"></button>
+    <button id="ebDash" class="fb-icon" title="Solid / dashed" aria-label="Line style"></button>
+    <button id="ebArrows" class="fb-icon" title="Ends — click to choose" aria-label="Line ends"></button>
+    <span class="fb-sep"></span>
+    <button id="ebDelete" class="fb-icon" title="Delete edge (Del)" aria-label="Delete edge"></button>
+  </div>
+  <div id="ebColorPop" class="fb-pop"><div id="ebColors" class="swatches"></div></div>
+  <div id="ebArrowPop" class="fb-pop"><div id="ebArrowChips" class="capcols"></div></div>
+  <!-- the label editor, opened by DOUBLE-CLICKING an edge; positioned over the line's midpoint -->
+  <input id="ebLabelEdit" type="text" spellcheck="false" placeholder="Label…" aria-label="Edge label">
+
   <div id="fbColorPop" class="fb-pop">
     <div id="edColors" class="swatches"></div>
   </div>

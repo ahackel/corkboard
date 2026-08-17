@@ -379,8 +379,49 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
 #gridFine { position:absolute; inset:0; will-change:opacity; }
 svg#sketch { z-index:8; pointer-events:none; }      /* freehand ink ABOVE every card (incl. dragging:6, annotation:7) so ink is never occluded (drawing is handled on #stage) */
 svg#edges { z-index:1; pointer-events:none; }      /* curves behind nodes */
+/* Free edges (the ones the user DREW — view/free-edges.ts) sit in the same band as the derived
+   connectors, behind the cards: a relation is drawn across the map, not over the top of it. The
+   layer takes no pointer events; only .fe-hit does, so a click on the stretch of edge that runs
+   behind a card still belongs to the card. */
+svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
 .node { z-index:2; }                               /* nodes in the middle */
 svg#toggles { z-index:3; pointer-events:none; }    /* toggles on top; group re-enables events */
+/* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
+/* Same weight as an annotation's tether (svg#edges path, stroke-width:4 — .anno-edge takes it from
+   there): every line the app draws on the canvas is the same thickness, so an edge reads as one of
+   the family rather than as a hairline someone forgot to style. */
+svg#freeEdges path.fe { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+/* Selected: the same ring a card wears (--node-sel, 2px around the box) expressed as a line — the
+   edge's own path drawn thicker and solid beneath it. Solid deliberately: a dashed edge's ring has to
+   be continuous or the "outline" reads as just more dashes. */
+svg#freeEdges path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:8;
+  stroke-linecap:round; stroke-linejoin:round; }
+svg#freeEdges path.fe-hit { fill:none; stroke:transparent; pointer-events:stroke; cursor:pointer; }
+/* Open head: stroked, never filled, at the line's own weight so the two read as one drawing. */
+svg#freeEdges path.fe-arrow { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+/* A draft edge (mid-draw) rides the tools overlay so it stays above the cards it's being aimed at —
+   but it is styled as the FINISHED edge, not as a ghost, so these mirror the #freeEdges rules. */
+svg#toggles path.fe { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+svg#toggles path.fe-arrow { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+/* An end DOT rides that overlay too, and for its own reason: it is centred ON the card's border, so
+   drawn with the line (behind the cards) the card eats half of it. An arrowhead has no such problem —
+   its body lies outside the border — so it stays with the line. Never a click target: the line under
+   it is what you grab (path.fe-hit). */
+svg#toggles circle.fe-dot, svg#freeEdges circle.fe-dot { stroke:none; pointer-events:none; }
+/* Hollow rings, not solid dots: a ring reads as a socket to plug into, a dot reads as a button to
+   press. They appear only on a SELECTED card, never on hover — an always-live dot is the one thing
+   Miro's users complain about, because it turns every drag past a shape into a maybe-connector. */
+svg#toggles circle.fe-socket { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8fe); stroke-width:2;
+  pointer-events:auto; cursor:crosshair; }
+svg#toggles circle.fe-socket:hover { fill:var(--accent, #6ea8fe); }
+/* A ring that already carries an edge is filled — same reading as the draw preview's .on port. */
+svg#toggles circle.fe-socket.taken { fill:var(--accent, #6ea8fe); }
+/* The target card's ports during a draw: all four shown hollow, the one about to be taken filled. */
+svg#toggles circle.fe-port { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8fe); stroke-width:2;
+  opacity:.75; pointer-events:none; }
+svg#toggles circle.fe-port.on { fill:var(--accent, #6ea8fe); opacity:1; }
+svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:2;
+  pointer-events:auto; cursor:grab; }
 /* drag overlay: the dragged/preview edges sit above all normal cards & edges (but just under the
    dragged card itself, so the edge still tucks behind its own ghost card the usual way) */
 svg#dragEdges { z-index:4; pointer-events:none; }
@@ -1678,6 +1719,44 @@ body.sketching #floatBar { display:none; }   /* the sketch panel takes the edit 
   touch-action:pan-x pan-y;
 }
 #floatBar.open { opacity:1; pointer-events:auto; }
+/* The EDGE bar wears the same chrome as #floatBar — same shell, same icon buttons — so a selected
+   edge and a selected card offer visibly the same KIND of control strip. It anchors to the midpoint
+   of its curve instead of to a card, and it never docks to the bottom on a narrow screen: an edge
+   has no on-screen "self" to be covered by a docked bar. */
+#edgeBar {
+  position:fixed; z-index:60; display:flex; align-items:center; gap:2px;
+  padding:4px 6px; border-radius:12px;
+  background:var(--bar-bg, #23262c); border:1px solid var(--bar-br, #333940);
+  box-shadow:0 6px 22px rgba(0,0,0,.34);
+  opacity:0; pointer-events:none; transition:opacity .12s ease;
+}
+#edgeBar.open { opacity:1; pointer-events:auto; }
+#edgeBar.hide-interact { opacity:0; pointer-events:none; transition:none; }
+/* :not(.fb-swatch) — the colour chip is a `.swatch`, and `all:unset` here would strip the round
+   face and the --sw background it gets from that shared rule, which is exactly what makes it the
+   same object the card bar shows. */
+#edgeBar button:not(.fb-swatch) { all:unset; display:grid; place-items:center; width:30px; height:30px;
+  border-radius:8px; cursor:pointer; color:var(--fg, #dfe3e8); }
+#edgeBar button:not(.fb-swatch):hover { background:rgba(255,255,255,.08); }
+#edgeBar button.on { background:rgba(255,255,255,.14); }
+/* Sizing ONLY — the round face, hover ring and active ring all come from the shared .swatch rule, so
+   an edge's colour chip is the same object a card's is rather than a lookalike. Same line the card
+   bar carries for its own trigger (#floatBar .fb-swatch). */
+#edgeBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
+/* The in-place label editor: floats over the line's midpoint, sized to its own text. */
+/* `all:unset` FIRST: it resets every property declared before it, `display` included — putting it
+   after the display:none below is what made the field show up on load. */
+#ebLabelEdit { all:unset; position:fixed; z-index:62; display:none; box-sizing:border-box;
+  padding:2px 6px; border-radius:6px; text-align:center; font-size:14px; font-weight:600;
+  background:var(--bar-bg, #23262c); color:var(--fg, #dfe3e8);
+  border:1px solid var(--accent, #6ea8fe); box-shadow:0 4px 14px rgba(0,0,0,.35); }
+#ebLabelEdit.open { display:block; }
+#edgeBar #ebDelete:hover { background:rgba(224,86,79,.22); color:#e0564f; }
+/* The label a curve carries, drawn on the line itself (view/free-edges.ts). A plate behind the text
+   so it stays readable where the curve runs under it. */
+svg#freeEdges .fe-label-plate { fill:var(--bg, #14161a); stroke:none; }
+svg#freeEdges .fe-label { fill:var(--fg, #dfe3e8); font-size:14px; font-weight:600; text-anchor:middle;
+  dominant-baseline:middle; paint-order:stroke; pointer-events:none; }
 /* hides instantly the moment a drag/pan/zoom starts (features/float-bar.ts's follow loop),
    then fades back in via the base transition above once the pointer lifts */
 #floatBar.hide-interact { opacity:0; pointer-events:none; transition:none; }
@@ -1722,34 +1801,23 @@ body.canvas-interacting .addnote { display:none !important; }
    the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
 #floatBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
 
-/* small popover anchored under/over its trigger button (colour / layout pickers) — borderless,
-   same "floating island" style as #toolbar/#floatBar, no shadow either. Explicit height (MUST
-   match #floatBar's own: --bar-btn content + 2×4px padding) rather than one derived from the
-   popover's own content/padding — the colour swatches (22px) and layout chips (--bar-btn, since
-   the latest change) are different scales, so equal CONTENT height doesn't fall out on its own;
-   this pins both popovers, and the bar itself, to one shared height regardless. */
-.fb-pop { position:fixed; top:0; left:0; display:none; z-index:23; padding:0 8px;
-  height:calc(var(--bar-btn) + 8px); align-items:center;
-  background:var(--panel); border-radius:var(--r-full);
+/* small popover anchored under/over its trigger button (colour / layout / arrow pickers) —
+   borderless, same "floating island" style as #toolbar/#floatBar, no shadow either. It sizes to its
+   CONTENT and is a rounded panel rather than a pill: every one of these now holds a column of items
+   or a grid of swatches, so it reads as a menu dropped from its button instead of a second bar
+   sitting beside the first. (--r-full clamps to half the SHORTER side, which on a tall box paints a
+   lozenge; --r-panel is the roundness step that keeps it on the shared scale.) */
+.fb-pop { position:fixed; top:0; left:0; display:none; z-index:23; padding:6px;
+  background:var(--panel); border-radius:var(--r-panel);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
-/* …except the COLOUR popover, which is the one with more content than a single row: the palette on
-   top, the custom picker + recents below. So it opts out of the shared height above and sizes to its
-   own rows. Its swatch row gets
-   an explicit width, which is what makes .swatch-break's wrap land in the right place (a shrink-to-fit
-   flex container resolves a 100% basis against nothing and lays every chip out on one line instead) —
-   13 chips wide, the palette row's own length: inherit + 11 colours + none, at 22px with 6px gaps.
-   Capped to the viewport so a narrow window wraps the palette row instead of running off the edge,
-   which the old fixed height could only clip.
-   The pill radius is halved with it: --r-full clamps to half the box's SHORTER side, which is the pill
-   it's meant to be on a one-row bar but a big lozenge on this taller box. --r-panel is the roundness
-   step nearest half of that (16px against the ~17px the two-row box was painting), so this stays on
-   the shared scale rather than introducing a one-off value. The single-row type/layout popovers keep
-   .fb-pop's own --r-full.
-   The canvas colour picker (#canvasColorPop, features/canvas-color.ts) is the same row of chips in
-   the same box, so it shares both rules rather than restating them. */
-#fbColorPop, #canvasColorPop { height:auto; padding:6px 8px; border-radius:var(--r-panel); }
-#fbColorPop .swatches, #canvasColorPop .swatches { width:min(calc(13 * 22px + 12 * 6px), calc(100vw - 40px)); row-gap:6px; }
+/* The colour pickers wrap at FOUR chips — a small block you take in at a glance, the same shape as
+   the menu of chips beside it, rather than one long strip of thirteen that has to be scanned. The
+   explicit width is what makes both that wrap and .swatch-break's row break land where they should
+   (a shrink-to-fit flex container resolves a 100% basis against nothing and lays every chip out on
+   one line instead). Three popovers, one rule: the card bar's, the edge bar's and the canvas one. */
+#fbColorPop .swatches, #canvasColorPop .swatches, #ebColorPop .swatches {
+  width:calc(4 * 22px + 3 * 6px); row-gap:6px; }
 /* hides instantly while #floatBar itself does (see float-bar.ts's followLoop) — a stale popover
    position mid-pan/drag/zoom would otherwise float away from its (now-moved) trigger button. */
 .fb-pop.hide-interact, .fb-pop-connector.hide-interact { opacity:0; pointer-events:none; transition:none; }
@@ -1797,11 +1865,19 @@ body.canvas-interacting .addnote { display:none !important; }
    the floating bar's own icon buttons (--bar-btn/--bar-icon) — just the selected one reads
    blue/white. Its popover is the same height as the colour popover (and #floatBar itself) via
    .fb-pop's explicit height above, despite the chips being a bigger scale than the swatches. */
-.layoutchips { display:flex; gap:6px; align-items:center; }
-.layoutchip { width:var(--bar-btn); height:var(--bar-btn); cursor:pointer; flex:none;
+/* The two cap pickers side by side: one column for the line's START, one for its END, each a normal
+   column of chips. Two columns rather than one list of nine, because the two ends are two questions. */
+.capcols { display:flex; gap:6px; align-items:flex-start; }
+/* A picker's chips run DOWN, not across: these popovers are menus of alternatives (which kind of
+   card, which layout, which direction), and a column is how a menu of alternatives reads. */
+.layoutchips { display:flex; flex-direction:column; gap:4px; align-items:stretch; }
+/* padding:0 and a non-shrinking icon: a chip is a fixed 32px square with the glyph centred in it,
+   and the generic button padding it would otherwise inherit eats the box from both sides — 32px
+   less 2×12px leaves 8px for a 21px icon, which is what squashed the arrow picker's glyphs. */
+.layoutchip { width:var(--bar-btn); height:var(--bar-btn); cursor:pointer; flex:none; padding:0;
   display:flex; align-items:center; justify-content:center; border-radius:var(--r-full);
   background:transparent; color:var(--muted); border:0; }
-.layoutchip svg { width:var(--bar-icon); height:var(--bar-icon); }
+.layoutchip svg { width:var(--bar-icon); height:var(--bar-icon); flex:none; }
 .layoutchip:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
 .layoutchip.active { color:#fff; background:var(--accent); }
 .layoutchip.disabled { opacity:.35; cursor:default; }

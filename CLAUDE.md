@@ -29,16 +29,14 @@ dependencies, no tests, no lint.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch). Mutate in place, never reassign, so every module shares one interaction state.
 - `utils/` — pure helpers: `markdown.ts`, `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
-  (derived-tree queries: `parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `ink.ts`, `zip.ts`, `idb.ts`,
-  `dom.ts`, `num.ts`.
+  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
-- `data/persistence.ts` — disk orchestration: the active `store` + `useStore`, debounced autosave
-  (`scheduleSave`/`flushSave`), `loadFromDir`, `reloadFromDisk`, zip import/export. Renders no UI.
-- `view/` — `camera.ts`, `layout.ts` (all placement, container predicates, the stack outliner),
-  `edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
-- `nav/` — where you ARE rather than what the map is: `url-state.ts` (the hash), `scope.ts` (the
-  open-frame model).
+- `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
+  `flushSave`, `loadFromDir`, zip import/export) and `board.ts` (the ONE sidecar). Render no UI.
+- `view/` — `camera.ts`, `layout.ts` (all placement, container predicates, the outliner),
+  `edges.ts`, `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
+- `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
   text-drag, attachments, clipboard, search, outline, float-bar, properties, breadcrumbs, history, …
 - `boot.ts` — local-first boot onto the last map, the home/storage screen, the help store.
@@ -50,22 +48,24 @@ dependencies, no tests, no lint.
 Each has a longer "why" in `docs/architecture.md`; read it before changing the code it governs.
 
 - **One `.md` file per node, and the file's PATH is its identity** (`mm_parent` points at it, the hash
-  encodes it). No database, no sidecar. In-memory `id`s are ephemeral — never persist them.
+  encodes it). No database; ONE `board.json` holds ARRANGEMENT, never content. Ids are ephemeral.
 - **A node's TITLE is the leading `# ` line of its body and nothing else** (`splitHeading`/
   `joinHeading`, exact inverses). Not frontmatter, not the filename. No heading means an UNTITLED
   card. The filename is a derived slug, minted ONCE and never re-derived; titles may collide.
-- **Where a name is SHOWN rather than edited, use `nodeLabel`** (title → first line → `No-title N`, never
-  the filename stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
-- **Edges are derived, never stored** — the whole tree is computed from `mm_parent`.
-- **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`, `mm_side`,
+- **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
+  stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
+- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card with children outlines them in
+  its own box; free edges live in `board.json` and mean nothing structural.
+- **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`, `mm_locked`, `mm_done`, `mm_checklist`,
   `mm_query`, `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
-  (which also folds legacy spellings, `image` → `card`). Kinds: card, frame, stack, annotation, query.
+  (folding legacy `image`/`stack` → `card`). Kinds: card, frame, annotation, query — a card with
+  children IS the outliner.
 - **`n.w` is always AUTHORED; `n.h` only for frame/query and an IMAGE card** — a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
-  Derived from the text (`isImageCard`), never a kind. Card/annotation/stack measure their height.
+  Derived from the text (`isImageCard`), never a kind. Card/annotation measure their height.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
   open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`**; `state.readOnly` and `store.isOpen === false` (demo mode)
@@ -88,7 +88,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - Frames — "A `frame`'s BOUNDS include its title tab" · "A container's two side wrappers are
   LIFECYCLE-managed" · "A frame with `mm_layout: tabs` is a TAB GROUP" · "A frame can be OPENED, and
   then the canvas IS its interior" (scope, crumbs, canvas colour, `detachParentId`).
-- Stacks — "A `stack` is an OUTLINER"; files — "A body-less note is MIGRATED on load" · "A note that is
+- Outlines — "A `stack` is an OUTLINER" (now: any card with children); files — "A body-less note is MIGRATED on load" · "A note that is
   blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "Double-click /
   double-tap OPENS a node" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are

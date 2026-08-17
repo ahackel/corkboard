@@ -5,7 +5,7 @@
 // render core (main.ts) and the feature modules split out of it (drag / inline-edit / gestures
 // / attachments). Imported `let` bindings are read-only, hence the holder-object pattern.
 // ============================================================
-import type { MindNode, LayoutSide } from './state.js';
+import type { MindNode, EdgeSide } from './state.js';
 
 export type Pt = { x: number; y: number };
 // World-space line segment (axis-aligned for the insertion indicator).
@@ -26,7 +26,6 @@ export interface Drag {
   moved: boolean; dropTarget: string | null; dropMode: 'child' | 'sibling' | 'reorder';
   // Side the drop resolved to (edge zone -> that edge; centre zone -> the sibling target's own
   // side), set explicitly on every reparented root on commit — see features/drag.ts.
-  dropSide: LayoutSide | null;
   // Insertion anchor for sibling/reorder drops: slot in right after this sibling in the parent's
   // order (`null` = at the front, `undefined` = default — after the hovered card / appended).
   dropAfter: string | null | undefined;
@@ -40,11 +39,11 @@ export interface Drag {
   // Alt-dragging CARD(s)/annotation(s) over another card: the target card's id to fold their notes
   // into on drop (crud.ts mergeCardsInto) instead of reparenting. Set by updateDropTarget, consumed
   // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
-  // dropTarget/dropSide stay null and every other preview stands down.
+  // dropTarget stays null and every other preview stands down.
   cardMerge?: string | null;
   // The frame whose TAB the dragged frame(s) are poised over: releasing DOCKS them there as tabs
   // (features/drag.ts tabZoneAt → crud.ts dockFrames). Its own resolution, not a dropMode, because it
-  // isn't a reparent-with-a-landing: dropTarget/dropSide stay null, so every other preview stands
+  // isn't a reparent-with-a-landing: dropTarget stays null, so every other preview stands
   // down — same shape as cardMerge above.
   dock?: string | null;
   // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
@@ -97,6 +96,18 @@ export const ui = {
   spaceHeld: false,
   spaceUsedForPan: false,
   pinch: null as Pinch | null,                    // active two-finger gesture
+  // A free EDGE being drawn or re-routed, following the pointer. `from` is the fixed end (a socket
+  // on the source card, or the endpoint that isn't being dragged); `to` is the pointer. `edgeId` is
+  // set only when RE-ROUTING an existing edge — a fresh draw has no edge until it lands.
+  // The live dock state of a draw, in two separate parts:
+  //  · hintId  — a card close enough that its four ports are worth SHOWING, so you can see what
+  //              there is to aim at. Generous.
+  //  · overId/overSide — the port actually SNAPPED to, which is tight (a small radius around the
+  //              port itself). Only this one decides where the edge lands; the hint is just an aid.
+  // Keeping them apart is what stopped the line lunging at a card from halfway across the canvas.
+  edgeDraw: null as { from: Pt; to: Pt; sourceId: string; fromSide: EdgeSide;
+                      hintId?: string; overId?: string; overSide?: EdgeSide;
+                      edgeId?: string; end?: 'from' | 'to' } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,
   // ---- in-place card editing (features/inline-edit.ts) ----

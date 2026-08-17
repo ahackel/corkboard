@@ -1,0 +1,343 @@
+// ---------- free-edge rendering ----------
+// The edges the user DREW (core/state.ts BoardEdge), as opposed to view/edges.ts's connectors, which
+// are derived from `parent` and are structure. The two are deliberately different SHAPES so nobody
+// has to be told which is which: a parent connector is a solid, branch-tinted orthogonal elbow that
+// converges on a shared side socket; a free edge is a thin bowed curve with an arrowhead, in its own
+// colour, that meets each card's border wherever the line happens to arrive.
+//
+// This module paints two layers: the curves themselves into #freeEdges (behind the cards, like
+// #edges), and — when an edge or a card is selected — its handles into #toggles, the overlay that
+// sits above the cards so a handle is never buried under one.
+import { state, freeEdgesSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+import { isHidden } from '../utils/model.js';
+import { ui, type Pt } from '../core/ui-state.js';
+import { nodeW, nodeH, colorFill, elTop, canvasSurface } from '../main.js';
+import { inkFor } from '../utils/ink.js';
+import { esc } from '../utils/markdown.js';
+
+// Half-width of the invisible stroke that takes the clicks. Wider than the visible 2px line because
+// a 2px target at 50% zoom is 1 screen pixel — and unlike a card, an edge has no interior to aim at.
+const HIT_W = 18;
+export const HANDLE_R = 7;          // endpoint grab handles, shown while an edge is selected
+export const SOCKET_R = 6;          // the four rings on a selected card you drag a new edge from
+
+// The four points on a card's border a free edge can leave from: the side centres. Same anchors the
+// derived connectors use, which is deliberate — one visual vocabulary for "an edge meets a card here".
+export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
+  const r = portRect(n);
+  return [
+    { side: 'up',    p: { x: r.x + r.w/2, y: r.y } },
+    { side: 'down',  p: { x: r.x + r.w/2, y: r.y + r.h } },
+    { side: 'left',  p: { x: r.x,         y: r.y + r.h/2 } },
+    { side: 'right', p: { x: r.x + r.w,   y: r.y + r.h/2 } },
+  ];
+}
+
+// The rectangle the four ports sit on. A node's bounds, EXCEPT for a frame with a title tab: its
+// bounds include that tab, which is a separate shape hanging above the box (elTop / FRAME_TAB_DROP),
+// so a port on the bounds' top edge would sit up on the tab — or in the empty gap beside it — rather
+// than on the box the edge is pointing at. elTop shifts nothing for everything else, a FOLDED frame
+// and a docked tab included: there the tab IS the body. Same reasoning as the annotation tethers'
+// anchor (view/edges.ts), and the one place the port geometry is spelled — portPoint, socketPoints
+// and nearestSide all read it, so a port, its ring and the side a drop picks can't disagree.
+function portRect(n: MindNode): { x: number; y: number; w: number; h: number } {
+  const top = elTop(n, n.y);
+  return { x: n.x, y: top, w: nodeW(n), h: n.y + nodeH(n) - top };
+}
+
+// The point an edge docks at on one face — the face's CENTRE, the same anchor the socket rings sit
+// on, so a line always meets a card exactly where the ring that made it was.
+export function portPoint(n: MindNode, side: EdgeSide): Pt {
+  const r = portRect(n);
+  if (side === 'up')    return { x: r.x + r.w/2, y: r.y };
+  if (side === 'down')  return { x: r.x + r.w/2, y: r.y + r.h };
+  if (side === 'left')  return { x: r.x,         y: r.y + r.h/2 };
+  return { x: r.x + r.w, y: r.y + r.h/2 };
+}
+const NORMAL: Record<EdgeSide, Pt> = {
+  up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 },
+};
+// Which face of `n` a point is nearest, by the DOMINANT axis of the offset scaled by the card's own
+// proportions — comparing fractions of the card's size rather than raw pixels, so a wide short card
+// doesn't read as "left/right" from everywhere. Used only when a port is being CHOSEN (a drop, a
+// backfill); never to re-derive one that already exists.
+export function nearestSide(n: MindNode, p: Pt): EdgeSide {
+  const r = portRect(n);
+  const w = r.w || 1, h = r.h || 1;
+  const dx = p.x - (r.x + w/2), dy = p.y - (r.y + h/2);
+  return Math.abs(dx) / w >= Math.abs(dy) / h ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+}
+// The two facing ports for a pair of cards, for an edge that hasn't chosen yet (⌘L, or the backfill
+// of an edge stored before ports were).
+export function facingSides(a: MindNode, b: MindNode): { from: EdgeSide; to: EdgeSide } {
+  const ca = { x: a.x + nodeW(a)/2, y: a.y + nodeH(a)/2 };
+  const cb = { x: b.x + nodeW(b)/2, y: b.y + nodeH(b)/2 };
+  const from = nearestSide(a, cb);
+  return { from, to: OPPOSITE[from] };
+}
+export const OPPOSITE: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+
+// How far a line runs straight out of a port before it is allowed to turn. Without it an edge
+// leaving a card's right face could immediately bend back across the card it just left.
+const STUB = 24;
+const CORNER = 10;   // radius of the rounded elbow corners
+
+// polyline → path `d` with rounded corners (quadratic at each interior vertex, clamped to leg length)
+function roundedPath(pts: Pt[], r: number): string {
+  if (pts.length < 3) return pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i], prev = pts[i-1], next = pts[i+1];
+    const toward = (q: Pt, dist: number): Pt => {
+      const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
+      return { x: p.x + dx/L*dist, y: p.y + dy/L*dist };
+    };
+    const e1 = toward(prev, Math.min(r, Math.hypot(p.x-prev.x, p.y-prev.y)/2));
+    const e2 = toward(next, Math.min(r, Math.hypot(p.x-next.x, p.y-next.y)/2));
+    d += ` L ${e1.x} ${e1.y} Q ${p.x} ${p.y} ${e2.x} ${e2.y}`;
+  }
+  const last = pts[pts.length-1];
+  return d + ` L ${last.x} ${last.y}`;
+}
+
+// The route between two docked ports, as a POLYLINE — which is what lets everything downstream agree
+// with the drawing: the arrowheads take their direction from its last/first leg, and the label and
+// the edge bar sit at its midpoint BY ARC LENGTH rather than at some separately-guessed point.
+//
+// Orthogonal is the default and the reason is the ports: once a line leaves a named face it has a
+// direction to respect, and right angles are what make "this leaves the right side and enters the
+// top" legible. `straight`/`bezier` remain available through the toolbar's edge-style button, which
+// used to drive the old branch connectors and would otherwise now do nothing.
+export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: string; pts: Pt[]; mid?: Pt } {
+  const na = NORMAL[aSide], nb = NORMAL[bSide];
+  const a1 = { x: a.x + na.x * STUB, y: a.y + na.y * STUB };
+  const b1 = { x: b.x + nb.x * STUB, y: b.y + nb.y * STUB };
+  if (state.edgeStyle === 'straight') return { d: `M ${a.x} ${a.y} L ${b.x} ${b.y}`, pts: [a, b] };
+  if (state.edgeStyle === 'bezier') {
+    const k = Math.max(40, Math.hypot(b.x - a.x, b.y - a.y) / 2);
+    const c1 = { x: a.x + na.x * k, y: a.y + na.y * k }, c2 = { x: b.x + nb.x * k, y: b.y + nb.y * k };
+    // `pts` is the CONTROL polygon, not the curve — right for the two tangents (its first and last
+    // legs are the tangents at the ends) and wrong for the middle, which is nowhere near where the
+    // curve actually runs. So the midpoint is handed over explicitly: the cubic evaluated at t=.5,
+    // which for a curve this symmetric is its centre. Without it a bezier's label floated off the
+    // line, out in the bay the curve bends away from.
+    const mid = { x: (a.x + 3*c1.x + 3*c2.x + b.x) / 8, y: (a.y + 3*c1.y + 3*c2.y + b.y) / 8 };
+    return { d: `M ${a.x} ${a.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`, pts: [a, a1, b1, b], mid };
+  }
+  // Prefer an L — ONE turn — whenever the two ports can be joined by one: the corner at (b.x, a.y)
+  // or (a.x, b.y) is the only bend, and the line arrives at each port already travelling along that
+  // port's normal. Only possible when the two ports face different AXES (two ports on the same axis
+  // always need a dog-leg), and only when the corner lies far enough AHEAD of both — a leg shorter
+  // than the stub would put the bend right against a card's face, which reads worse than the Z.
+  const horizA = aSide === 'left' || aSide === 'right';
+  const horizB = bSide === 'left' || bSide === 'right';
+  if (horizA !== horizB) {
+    const corner = horizA ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
+    const outA = (corner.x - a.x) * na.x + (corner.y - a.y) * na.y;
+    const intoB = (corner.x - b.x) * nb.x + (corner.y - b.y) * nb.y;
+    if (outA >= STUB && intoB >= STUB) return { d: roundedPath([a, corner, b], CORNER), pts: [a, corner, b] };
+  }
+  // Orthogonal: out along each port's normal, then a single dog-leg between the two stub ends,
+  // turning first along whichever axis the SOURCE port faces.
+  const horiz = horizA;
+  const mid = horiz ? { x: (a1.x + b1.x) / 2, y: 0 } : { x: 0, y: (a1.y + b1.y) / 2 };
+  const pts: Pt[] = horiz
+    ? [a, a1, { x: mid.x, y: a1.y }, { x: mid.x, y: b1.y }, b1, b]
+    : [a, a1, { x: a1.x, y: mid.y }, { x: b1.x, y: mid.y }, b1, b];
+  // Drop any zero-length leg so a straight run doesn't pick up a phantom corner.
+  const clean = pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i-1].x, p.y - pts[i-1].y) > 0.5);
+  return { d: roundedPath(clean, CORNER), pts: clean };
+}
+// The point half way ALONG a polyline, plus the direction of the leg it falls on.
+function midOfPolyline(pts: Pt[]): Pt {
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+  let want = total / 2;
+  for (let i = 1; i < pts.length; i++) {
+    const L = Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    if (want <= L) {
+      const t = L ? want / L : 0;
+      return { x: pts[i-1].x + (pts[i].x - pts[i-1].x) * t, y: pts[i-1].y + (pts[i].y - pts[i-1].y) * t };
+    }
+    want -= L;
+  }
+  return pts[pts.length - 1];
+}
+// Unit direction of the last leg (pointing INTO the target) and of the first (pointing out of the
+// source) — the two arrowheads' orientations.
+function legDir(p: Pt, q: Pt): Pt {
+  const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
+  return { x: dx / L, y: dy / L };
+}
+
+// An OPEN head — two strokes from the tip back to the corners, not a filled triangle: at the line's
+// own weight it looks like the same pen drew it, because it is the same stroke.
+// The two axes are separate on purpose. WIDTH is what makes a head readable at a glance; LENGTH past
+// a certain point just makes it look like a dart. Half as long as it is wide gives a wide, shallow
+// chevron rather than a long thin spike.
+const ARROW_LEN = 9;     // tip → base, along the line
+const ARROW_W = 18;      // corner → corner, across it
+// The line runs ALL THE WAY TO THE TIP. With a filled head it had to stop at the head's centre or it
+// poked out through the point; an open head has no interior to poke out of, and the shaft meeting
+// the tip is what makes the two read as one arrow instead of a line near a chevron.
+function arrowHead(tip: Pt, dir: Pt, ink: string): string {
+  const nx = -dir.y, ny = dir.x;                                 // normal to the direction of travel
+  const bx = tip.x - dir.x * ARROW_LEN, by = tip.y - dir.y * ARROW_LEN;
+  const x1 = bx + nx * ARROW_W * 0.5, y1 = by + ny * ARROW_W * 0.5;
+  const x2 = bx - nx * ARROW_W * 0.5, y2 = by - ny * ARROW_W * 0.5;
+  // One open V: corner → tip → corner, so the join at the tip is a single mitre the renderer rounds
+  // off, rather than two strokes meeting at a seam.
+  return `<path class="fe-arrow" style="stroke:${ink}" d="M ${x1} ${y1} L ${tip.x} ${tip.y} L ${x2} ${y2}"/>`;
+}
+// The other terminator: a filled disc ON the port. It says "this end attaches HERE" without claiming
+// a direction, which is the whole reason it exists beside the arrow. Sized off the arrow's width so
+// the two read as one set.
+const DOT_R = ARROW_W * 0.28;
+function capDot(at: Pt, ink: string): string {
+  return `<circle class="fe-dot" style="fill:${ink}" cx="${at.x}" cy="${at.y}" r="${DOT_R}"/>`;
+}
+// One end's terminator, whichever it wears. `dir` points INTO that end, which is what an arrowhead
+// there needs; a dot ignores it.
+function endCap(cap: EdgeCap, at: Pt, dir: Pt, ink: string): string {
+  return cap === 'arrow' ? arrowHead(at, dir, ink) : cap === 'dot' ? capDot(at, ink) : '';
+}
+
+// The two docked ports of an edge, and the whole geometry around them. One place, so the painter,
+// the label, the bar and the inline editor can never disagree about where the line is.
+export function edgeEnds(e: BoardEdge): { a: Pt; b: Pt; from: MindNode; to: MindNode } | null {
+  const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
+  if (!from || !to) return null;
+  return { a: portPoint(from, e.fromSide), b: portPoint(to, e.toSide), from, to };
+}
+export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt } | null {
+  const ends = edgeEnds(e); if (!ends) return null;
+  const { a, b } = ends;
+  const { d, pts, mid } = routeFor(a, e.fromSide, b, e.toSide);
+  return {
+    a, b, d,
+    // Halfway ALONG the route as it is actually drawn — the polyline's arc-length midpoint for the
+    // straight and orthogonal styles, and whatever the style handed over for one whose path isn't
+    // its polyline. The label, the bar and the inline editor all hang off this one point.
+    mid: mid ?? midOfPolyline(pts),
+    tipTan: legDir(pts[pts.length - 2] ?? a, pts[pts.length - 1] ?? b),
+    tailTan: legDir(pts[1] ?? b, pts[0] ?? a),
+  };
+}
+
+// An edge is drawn only when BOTH ends are visible — the same one gate everything else asks
+// (utils/model.ts isHidden: a collapsed ancestor, or the open-frame scope). An edge whose other end
+// is inside a collapsed branch simply isn't there; nothing counts it, and the hidden-count chip on a
+// card keeps counting CARDS, which is the only thing a reader can go looking for.
+// Whether a node can be a free edge's endpoint at all. An ANNOTATION cannot: it is a note pinned to
+// one card and its single dashed tether to that card (view/edges.ts) is the whole of what it says.
+// Giving it ports as well would offer two different ways to attach the same sticky note, one of them
+// structural and one not — the exact confusion the containment model exists to remove. So an
+// annotation shows no rings, refuses a drop, and any edge already touching one stays hidden.
+export function connectable(id: string): boolean {
+  const n = state.nodes.get(id);
+  return !!n && n.type !== 'annotation';
+}
+export function edgeVisible(e: BoardEdge): boolean {
+  const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
+  // An annotation is never a free edge's endpoint (connectable, just above), so an edge that
+  // touches one is a leftover — from before that rule, or from a card RETYPED into an annotation.
+  // Hiding it is what makes "an annotation has exactly one line, to its parent" true on every map.
+  return !!from && !!to && !isHidden(from) && !isHidden(to)
+      && connectable(from.id) && connectable(to.id);
+}
+
+export function paintFreeEdges(): void {
+  // Filtering hides every line, for the same reason paintEdges does it: dimmed cards are
+  // translucent, so lines behind them read as clutter.
+  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; return; }
+  let svg = '', tools = '';
+  // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
+  // fill exactly as a frame title's is from the surface behind it (main.ts behindFill → inkFor): black
+  // or white, whichever that fill can carry. The theme's own --fg was fine only while the canvas wore
+  // the theme's own --bg; on a coloured map or inside a coloured open frame it was ink chosen against
+  // a surface that isn't there.
+  const plate = canvasSurface(), labelInk = inkFor(plate);
+  // The edge being re-routed is not drawn in its OLD place — the draft below IS that edge, moved.
+  // Showing both made it look as though a second edge were being created.
+  const rerouting = ui.edgeDraw?.edgeId;
+  for (const e of state.edges) {
+    if (e.id === rerouting) continue;
+    if (!edgeVisible(e)) continue;
+    const g = edgeGeometry(e); if (!g) continue;
+    const { a, b, d, mid, tipTan, tailTan } = g;
+    const ink = colorFill(e.color) ?? 'var(--edge)';
+    const sel = state.selEdges.has(e.id);
+    const dash = e.dashed ? ' stroke-dasharray="7 6"' : '';
+    svg += `<path class="fe-hit" data-edge="${e.id}" d="${d}" stroke-width="${HIT_W}"/>`;
+    // The selection ring, in the same language a card's is: the SAME shape, drawn thicker and SOLID
+    // underneath the line itself, so a selected edge reads as outlined rather than merely recoloured
+    // (and a dashed edge still shows a continuous ring through its gaps).
+    if (sel) svg += `<path class="fe-selring" d="${d}"/>`;
+    svg += `<path class="fe" style="stroke:${ink}"${dash} d="${d}"/>`;
+    // A DOT goes to the overlay above the cards, an arrowhead stays down here with the line — see
+    // .fe-dot in styles.css for why the two ends of one edge can be on different layers.
+    const capTo = endCap(e.toCap, b, tipTan, ink), capFrom = endCap(e.fromCap, a, tailTan, ink);
+    if (e.toCap === 'dot') tools += capTo; else svg += capTo;
+    if (e.fromCap === 'dot') tools += capFrom; else svg += capFrom;
+    // The label sits ON the line, at its midpoint BY ARC LENGTH, on a plate so the line running
+    // under it doesn't strike the text through. Width is estimated from the character count rather
+    // than measured: this is one string in an SVG rebuilt on every paint, and a real measurement
+    // would cost a layout flush per edge per frame.
+    if (e.label) {
+      const mx = mid.x, my = mid.y;
+      const w = e.label.length * 8 + 12, h = 19;
+      svg += `<rect class="fe-label-plate" style="fill:${plate}" x="${mx - w/2}" y="${my - h/2}" width="${w}" height="${h}" rx="4"/>`
+           + `<text class="fe-label" style="fill:${labelInk}" x="${mx}" y="${my}">${esc(e.label)}</text>`;
+    }
+    // Handles ride the overlay above the cards so an endpoint sitting on a card's border is still
+    // grabbable — drag one onto another card to re-route, or onto empty canvas to detach. Only when
+    // ONE edge is selected: on a multi-selection they are eight identical dots with no way to tell
+    // which line each belongs to, and the gesture they offer (re-route THIS end) is single-edge by
+    // nature. The ring still marks every selected line.
+    if (sel && state.selEdges.size === 1) {
+      tools += `<circle class="fe-handle" data-handle="from" data-edge="${e.id}" cx="${a.x}" cy="${a.y}" r="${HANDLE_R}"/>`;
+      tools += `<circle class="fe-handle" data-handle="to" data-edge="${e.id}" cx="${b.x}" cy="${b.y}" r="${HANDLE_R}"/>`;
+    }
+  }
+  // The four sockets on the selected card. On SELECTION, never on hover: Miro's always-live dots are
+  // the one thing its users complain about steadily, and a ring that only appears once you've said
+  // which card you mean can't be hit by accident while you're dragging past.
+  const one = state.sel.size === 1 ? state.nodes.get(state.selId ?? '') : null;
+  if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one))
+    for (const { side, p } of socketPoints(one)) {
+      // A ring already carrying an edge is FILLED — the same fill the draw preview uses for the port
+      // it is about to take, and for the same reason: filled means "a line is on this one". So the
+      // card tells you at a glance which of its four faces are already spoken for, which is what you
+      // want to know before you drag a second line off the same side.
+      const taken = state.edges.some(x => edgeVisible(x)
+        && ((x.from === one.id && x.fromSide === side) || (x.to === one.id && x.toSide === side)));
+      tools += `<circle class="fe-socket${taken ? ' taken' : ''}" data-socket="${side}" data-node="${one.id}" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`;
+    }
+  // The edge being drawn right now, following the pointer.
+  if (ui.edgeDraw) {
+    const { from, to, fromSide, hintId, overId, overSide } = ui.edgeDraw;
+    // The nearby card's four ports, so there is something to aim AT. The one the pointer has
+    // actually reached is filled — that, and only that, is where the drop will land.
+    const hint = hintId ? state.nodes.get(hintId) : null;
+    if (hint && !isHidden(hint))
+      for (const { side, p } of socketPoints(hint))
+        tools += `<circle class="fe-port${hintId === overId && side === overSide ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`;
+    // Drawn in the edge's FINAL style, not a ghost: the same stroke, colour, dash and arrowhead the
+    // finished edge will have. A preview in a costume of its own asks the user to translate; this
+    // one simply IS the edge, already where they are putting it.
+    const over = overId ? state.nodes.get(overId) : null;
+    const snapped = over && overSide ? portPoint(over, overSide) : null;
+    const endPt = snapped ?? to;
+    const endSide = (snapped && overSide) ? overSide : OPPOSITE[fromSide];
+    const edge = ui.edgeDraw.edgeId ? state.edges.find(x => x.id === ui.edgeDraw!.edgeId) : null;
+    const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
+    const fromCap = edge ? edge.fromCap : 'none', toCap = edge ? edge.toCap : 'arrow';
+    const { d, pts } = routeFor(from, fromSide, endPt, endSide);
+    tools += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${d}"/>`;
+    // The far end's cap only once it has landed on a port — mid-air there is no end to terminate.
+    if (snapped) tools += endCap(toCap, endPt, legDir(pts[pts.length-2], pts[pts.length-1]), ink);
+    tools += endCap(fromCap, from, legDir(pts[1], pts[0]), ink);
+  }
+  freeEdgesSvg.innerHTML = svg;
+  togglesSvg.innerHTML = tools;
+}

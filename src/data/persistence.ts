@@ -4,13 +4,13 @@
 // elsewhere calls scheduleSave(); a burst coalesces into one write ~400ms later.
 // `store` is the active backend (reassigned by useStore); main holds the open() flows.
 // ============================================================
-import { state, world, setStatus, isBoxType, GRID_STYLES, GRID_SIZES, type MindNode, type LayoutSide } from '../core/state.js';
+import { state, world, setStatus, isBoxType, isAnnotation, type MindNode } from '../core/state.js';
 import { parseMd, serializeMd, firstLineLabel, fileStem } from '../utils/frontmatter.js';
 import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf, parentOf } from '../utils/model.js';
-import { applyLayouts, collapseAtDepth, deriveSide, commitRel } from '../view/layout.js';
+import { applyLayouts, collapseAtDepth, commitRel } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
@@ -23,15 +23,12 @@ import { refreshGrid } from '../view/grid.js';
 import { ui, isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
 import { byId } from '../utils/dom.js';
+import { BOARD_FILE, SKETCH_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge } from './board.js';
 
-// The sketch layer lives beside the notes as one plain JSON data file (Obsidian .canvas-style),
-// not a note — it holds no mm_* / frontmatter, just world-space strokes. Read/written through the
-// same store I/O as everything else (see load/save below).
-export const SKETCH_FILE = 'sketch.json';
-
-// Small per-map view preferences that should travel with the vault (like the sketch layer)
-// rather than live in localStorage (which is per-browser). Currently just the background grid.
-export const SETTINGS_FILE = 'settings.json';
+// Everything that is about the BOARD rather than about a note — the free edges, the ink layer, the
+// per-map view prefs — lives in one board.json beside the notes; see data/board.ts, which owns its
+// I/O and its own debounce. Only the .md walk in the store filters by extension, so that file is
+// invisible to the node model.
 
 // Active backend. Local-first: default to on-device; "Open folder" swaps in fsaStore.
 // `ref` identifies WHICH map is now open (registry entry + what boot() reopens); omit it
@@ -101,9 +98,12 @@ export async function importFiles(files: File[]): Promise<void> {
   }
   for (const e of md)  await store.write(e.name, e.text ?? '');
   for (const e of img) await store.write(e.name, new Blob([e.bytes! as BlobPart]));
-  // carry over the sketch layer if the archive included one (matching the note top-folder strip)
-  const sketch = entries.find(e => e.text != null && (e.name === SKETCH_FILE || e.name === top + SKETCH_FILE));
-  if (sketch?.text != null) await store.write(SKETCH_FILE, sketch.text);
+  // carry over the board file if the archive included one (matching the note top-folder strip),
+  // falling back to the sketch.json an older export would have packed instead
+  for (const name of [BOARD_FILE, SKETCH_FILE]){
+    const f = entries.find(e => e.text != null && (e.name === name || e.name === top + name));
+    if (f?.text != null) await store.write(name, f.text);
+  }
   hideStart();
   await loadFromDir();
   setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}.`);
@@ -136,7 +136,9 @@ export async function exportZip(): Promise<void> {
   }));
   const attached = images.filter(Boolean).length;
   for (const img of images) if (img) files.push(img);
-  if (state.strokes.length) files.push({ name: SKETCH_FILE, data: sketchJSON() });
+  // Always: the board file now carries every node's position and size, so a zip without it would
+  // unpack as a pile of notes with no layout.
+  files.push({ name: BOARD_FILE, data: boardJSON() });
   const zipName = safeName(store.name || 'corkboard') + '.zip';   // the map's name, not a generic one
   downloadBlob(zipBlob(files), zipName);
   setStatus(`Exported ${nodes.length} notes${attached ? ` + ${attached} image${attached === 1 ? '' : 's'}` : ''} → ${zipName}`);
@@ -150,8 +152,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   state.nodes.clear(); state.toDelete = [];
   world.querySelectorAll('[data-id], .frame-content, .tab-strip').forEach(e=>e.remove());
   resetImageCache();   // blob URLs from the previous map (or store) are stale now
-  await loadSketch();  // read the freehand ink layer (sketch.json) for this map, if any
-  await loadSettings(); // read this map's view prefs (settings.json), e.g. the background grid
+  await loadBoard();   // edges + ink layer + view prefs for this map (board.json), if any
   refreshGrid();
 
   // First pass: read every .md and parse it (layout now lives in each note's frontmatter).
@@ -173,6 +174,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // (serializeMd only re-emits mm_position_*, so the first save of any note drops its mm_x/mm_y).
   const relSeed = new Set<string>();
   const legacySeed = new Set<string>();
+  const wasStack = new Set<string>();   // notes that carried the legacy stack kind (flattenLegacyBranches)
   // mm_w is now written for every kind (an authored width), but it USED to be written ungated for a
   // while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
   // width from a time when `n.w` also held derived values (a stack outline row's stretched width, for
@@ -205,26 +207,33 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     const imageOnly = !rest.title.trim() && !!soleImage(rest.body);
     const unmigrated = !rest.title.trim() && !rest.body.trim() && !mm.blank;
     if (unmigrated) rest.title = fileStem(rel);
-    const hasRel = (mm.px != null && mm.py != null);
+    // GEOMETRY comes from board.json first (data/board.ts) and falls back to the note's own mm_*
+    // for a vault written before it moved. Same meaning either way — an offset from the parent —
+    // so the top-down pass below doesn't care which supplied it.
+    const g = boardGeom(rel);
+    const hasBoard = (g?.x != null && g?.y != null);
+    const hasRel = hasBoard || (mm.px != null && mm.py != null);
     const hasLegacy = (mm.x != null && mm.y != null);
     const hasPos = hasRel || hasLegacy;
     const node: MindNode = {
       id: 'n' + (++seq), file:rel, x: 0, y: 0,   // x/y derived from rx/ry in the top-down pass below
-      rx: hasRel ? mm.px! : hasLegacy ? mm.x! : (120 + (placed % 4) * 240),
-      ry: hasRel ? mm.py! : hasLegacy ? mm.y! : (120 + Math.floor(placed / 4) * 200),
+      rx: hasBoard ? g!.x! : (mm.px != null && mm.py != null) ? mm.px! : hasLegacy ? mm.x! : (120 + (placed % 4) * 240),
+      ry: hasBoard ? g!.y! : (mm.px != null && mm.py != null) ? mm.py! : hasLegacy ? mm.y! : (120 + Math.floor(placed / 4) * 200),
       _parentPath: mm.parent || '',                // resolved to an id once all notes are loaded
       parent: null,
-      collapsed: !!mm.collapsed,
+      collapsed: g ? !!g.collapsed : !!mm.collapsed,
       locked: !!mm.locked,
       done: !!mm.done,
       checklist: !!mm.checklist,
       type: mm.type, layout: mm.layout,
-      w: authoredW(mm.w, mm.type, imageOnly),
-      h: mm.h ?? undefined,
+      // authoredW's junk-width filter is for the FRONTMATTER value only — a width in board.json was
+      // written by this build and means exactly what it says.
+      w: g?.w ?? authoredW(mm.w, mm.type, imageOnly),
+      h: g?.h ?? mm.h ?? undefined,
       query: mm.query || undefined,
-      side: (mm.side || undefined) as LayoutSide | undefined,
       ...rest, dirty:unmigrated, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
     };
+    if (mm.wasStack) wasStack.add(node.id);
     if (hasRel) relSeed.add(node.id);
     else if (hasLegacy) legacySeed.add(node.id);
     else placed++;                                  // no saved position → fallback layout
@@ -236,6 +245,8 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     n.parent = n._parentPath ? (byPath.get(n._parentPath) || null) : null;
     delete n._parentPath;
   }
+  resolveEdges(byPath);   // the board's edges hold paths too — same index, same drop-if-missing rule
+  resolveOrder(byPath);   // …and so does each parent's stored child order
   // Settle every rx/ry to parent-relative and derive the working x/y, in one top-down pass so the
   // parent's absolute x/y is already final when we reach a child. relSeed and legacy frame children
   // are already relative; the rest hold an ABSOLUTE seed, so subtract the parent's position.
@@ -251,14 +262,9 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     n.x = pax + n.rx; n.y = pay + n.ry;                   // working absolute coords
     for (const k of kidsOf.get(n.id) ?? []) stack.push(k);
   }
-  // A note with no `mm_side` yet (never dropped, or from before this field existed) gets one
-  // backfilled from its saved position, once, right here — not re-derived on every relayout.
-  for (const n of state.nodes.values()) {
-    if (n.parent && !n.side) {
-      const p = parentOf(n);
-      if (p) n.side = deriveSide(p, n);
-    }
-  }
+  // A map written before containment: its card-to-card links meant "beside", not "inside". Convert
+  // them now that every node has final absolute coordinates to be re-anchored from.
+  const flattened = boardIsLegacy() ? flattenLegacyBranches(wasStack) : 0;
   // advance the runtime id counter past everything we just loaded so new nodes don't collide
   state.idSeq = seq + 1;
   // Auto-collapse a big map ONLY the very first time this folder is opened. After that we
@@ -279,11 +285,80 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   paintAll();
   paintStrokes();      // render the sketch layer over the freshly loaded map
   if (!keepView) fit();
+  // A migration is persisted BOARD FIRST, and awaited: the new edges and the model stamp have to be
+  // on disk before any note loses its mm_parent, or a failed write between the two would drop the
+  // hierarchy AND the edges that replaced it. If the board write throws, the notes are left alone and
+  // the map simply migrates again next time — the conversion is a pure function of what's on disk.
+  if (flattened && !state.readOnly && store.isOpen) {
+    try { await flushBoard(); }
+    catch { setStatus('⚠ Could not write board.json — leaving this map as it was.'); return; }
+    setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to edges — nothing moved.`);
+  }
   // Persist the resolved layout so the saved mm_x/mm_y match what's on screen. Only write when
   // the load actually moved something, so a stable reopen touches no files.
   if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout))
     scheduleSave();
   updateMapTitle();
+}
+// ---------- the containment migration (runs once per map) ----------
+// A map written before containment (board.json missing, or its `model` below BOARD_MODEL) holds
+// card-to-card `mm_parent` links that meant "this card sits BESIDE that one, joined by a branch
+// line". Under containment the same link means "inside it, as an outline row" — so loading such a
+// map unchanged would re-flow it into nested boxes and nothing would be where the user left it.
+//
+// So convert instead: each of those children becomes a TOP-LEVEL card at the absolute position it
+// already renders at, and the branch it used to have becomes a drawn edge. The map looks IDENTICAL
+// on first open; what it loses is collapse on those groups, which the user gets back deliberately by
+// nesting a group again. See docs/spec-edges-and-containment.md.
+//
+// Four things are deliberately NOT flattened, each because flattening it would CHANGE what you see:
+//   · a child of a legacy STACK (or of anything inside one) — it was already drawn inside its parent.
+//   · a child of a FRAME — the frame is a container in both models, and pulling its contents out
+//     would empty the box. A card flattened out of a branch INSIDE a frame re-anchors to that frame,
+//     not to the world, for the same reason.
+//   · anything under a COLLAPSED ancestor — those children are invisible right now, and making them
+//     top-level would pop the whole hidden subtree onto the canvas. Left nested, a collapsed branch
+//     looks exactly as it did, and expanding it simply reveals the new outline.
+//   · an ANNOTATION, which is pinned to its parent rather than laid out beside it.
+// Returns how many branches were converted.
+function flattenLegacyBranches(wasStack: Set<string>): number {
+  // Which nodes were OUTLINED by a legacy stack — the old insideStack, read off `wasStack` because
+  // the kind itself has already folded to `card` by now (utils/frontmatter.ts foldTypeLayout).
+  const outlined = new Set<string>();
+  const wasOutlined = (n: MindNode): boolean => {
+    for (let p = parentOf(n); p; p = parentOf(p)) {
+      if (wasStack.has(p.id)) return true;
+      if (p.type !== 'card' && p.type !== 'frame') return false;
+    }
+    return false;
+  };
+  for (const n of state.nodes.values()) if (wasOutlined(n)) outlined.add(n.id);
+  const collapsedAbove = (n: MindNode): boolean => {
+    for (let p = parentOf(n); p; p = parentOf(p)) if (p.collapsed) return true;
+    return false;
+  };
+  // The container this card should belong to once its branch is cut: the nearest FRAME above it, or
+  // the world. Never a card — that is the whole point of the migration.
+  const containerAbove = (n: MindNode): MindNode | null => {
+    for (let p = parentOf(n); p; p = parentOf(p)) if (p.type === 'frame') return p;
+    return null;
+  };
+  let made = 0;
+  for (const n of [...state.nodes.values()]) {
+    const p = parentOf(n);
+    if (!p || p.type !== 'card') continue;          // roots, and frame children, stay as they are
+    if (isAnnotation(n) || outlined.has(n.id) || collapsedAbove(n)) continue;
+    const host = containerAbove(n);
+    n.parent = host ? host.id : null;
+    // x/y are already absolute and final; re-derive the stored offset against the NEW anchor so the
+    // card writes back exactly where it renders.
+    n.rx = n.x - (host ? host.x : 0);
+    n.ry = n.y - (host ? host.y : 0);
+    n.dirty = true; n.dirtyLayout = true;
+    state.edges.push(makeEdge(p.id, n.id));
+    made++;
+  }
+  return made;
 }
 // Show the open map's name in the home button (:empty hides it until loaded) + the tab title.
 export function updateMapTitle(): void {
@@ -351,9 +426,11 @@ export async function saveAll(): Promise<void> {
   for (const f of state.toDelete) await store.remove(f);
   state.toDelete = [];
 
-  // Layout lives in each note's frontmatter, so any content OR layout change rewrites the file.
+  // CONTENT changes rewrite the note; GEOMETRY changes don't — position, size, collapse and child
+  // order live in board.json now, so `dirtyLayout` alone is not a reason to touch a .md. Moving a
+  // card therefore writes one small JSON file instead of one .md per moved card.
   const needWrite = new Set<string>();
-  for (const n of state.nodes.values()) if (n.dirty || n.dirtyLayout || !n.file) needWrite.add(n.id);
+  for (const n of state.nodes.values()) if (n.dirty || !n.file) needWrite.add(n.id);
 
   // Phase 1 — settle every note's final filename IN MEMORY first. A child records its parent
   // by path (mm_parent), so a renamed parent forces its children to be rewritten, and all
@@ -382,13 +459,14 @@ export async function saveAll(): Promise<void> {
   for (const n of state.nodes.values()) {
     if (!needWrite.has(n.id)) continue;
     await store.write(n.file!, serializeMd(n));
-    n.dirty = false; n.dirtyLayout = false;
+    n.dirty = false;
     written++;
   }
   // Phase 3 — drop files left behind by renames (unless some node now legitimately holds the path).
   for (const old of removals)
     if (![...state.nodes.values()].some(n => n.file === old)) await store.remove(old);
 
+  for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write below carries these
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   paintAll();
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
@@ -400,6 +478,9 @@ let savePromise: Promise<void> | null = null;   // non-null while a save chain i
 export function scheduleSave(): void {
   if (state.readOnly) return;         // read-only mode never writes to disk
   if (!store.isOpen) return;          // demo mode: nothing to write
+  // Geometry lives in board.json, so the two files settle together: every mutation path in the app
+  // ends in scheduleSave(), and a great many of them move something.
+  scheduleSaveBoard();
   setStatus('Saving…');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flushSave, 400);
@@ -424,80 +505,8 @@ export function flushSave(): Promise<void> {
 // completion. MUST be called before retargeting the store at another map/folder — a straggling
 // autosave firing after the switch would write the old map's files into the new one.
 export async function settleSave(): Promise<void> {
-  const sketchPending = sketchTimer != null;
-  clearTimeout(sketchTimer); sketchTimer = undefined;
-  if (sketchPending) await flushSketch();
-  const settingsPending = settingsTimer != null;
-  clearTimeout(settingsTimer); settingsTimer = undefined;
-  if (settingsPending) await flushSettings();
+  if (boardSavePending()) await flushBoard();
   if (saveTimer != null || savePromise) await flushSave();
-}
-
-// ---------- sketch layer (freehand ink) ----------
-// Serialised as one JSON data file (SKETCH_FILE) beside the notes — not a node. It rides the same
-// store I/O; only the .md walk in the store filters by extension, so this file is invisible to the
-// node model. Its own debounce keeps a burst of pen moves from rewriting every note.
-function sketchJSON(): string { return JSON.stringify({ version: 1, strokes: state.strokes }); }
-export async function loadSketch(): Promise<void> {
-  state.strokes = [];
-  try {
-    const blob = store.readBlob ? await store.readBlob(SKETCH_FILE) : null;
-    if (!blob) return;
-    const data = JSON.parse(await blob.text());
-    if (Array.isArray(data?.strokes)) state.strokes = data.strokes;
-  } catch { /* missing or malformed → start with an empty ink layer */ }
-}
-let sketchTimer: number | undefined;
-export function scheduleSaveSketch(): void {
-  if (state.readOnly || !store.isOpen) return;   // read-only / demo mode: never write
-  clearTimeout(sketchTimer);
-  sketchTimer = setTimeout(flushSketch, 400);
-}
-async function flushSketch(): Promise<void> {
-  if (state.readOnly || !store.isOpen) return;
-  try {
-    await store.write(SKETCH_FILE, sketchJSON());
-    state.lastSelfWrite = Date.now();            // so the focus-reload ignores our own write
-  } catch (err) {
-    console.error('Sketch save failed:', err);
-    setStatus('⚠ Sketch save failed: ' + ((err as Error).message || (err as Error).name));
-  }
-}
-
-// ---------- per-map settings (view prefs that travel with the vault, e.g. the background grid) ----------
-function settingsJSON(): string {
-  return JSON.stringify({ version: 1, grid: state.gridStyle, gridSize: state.gridSize, canvasColor: state.canvasColor });
-}
-export async function loadSettings(): Promise<void> {
-  state.gridStyle = 'none';
-  state.gridSize = 20;
-  state.canvasColor = '';
-  try {
-    const blob = store.readBlob ? await store.readBlob(SETTINGS_FILE) : null;
-    if (!blob) return;
-    const data = JSON.parse(await blob.text());
-    if (GRID_STYLES.includes(data?.grid)) state.gridStyle = data.grid;
-    if (GRID_SIZES.includes(data?.gridSize)) state.gridSize = data.gridSize;
-    // Validated the same way a node's own colour is (colorFill resolves a palette key OR a hex, and
-    // nothing else), so a hand-edited settings.json can't paint the canvas an arbitrary CSS value.
-    if (typeof data?.canvasColor === 'string' && colorFill(data.canvasColor)) state.canvasColor = data.canvasColor;
-  } catch { /* missing or malformed → default to no grid */ }
-}
-let settingsTimer: number | undefined;
-export function scheduleSaveSettings(): void {
-  if (state.readOnly || !store.isOpen) return;   // read-only / demo mode: never write
-  clearTimeout(settingsTimer);
-  settingsTimer = setTimeout(flushSettings, 400);
-}
-async function flushSettings(): Promise<void> {
-  if (state.readOnly || !store.isOpen) return;
-  try {
-    await store.write(SETTINGS_FILE, settingsJSON());
-    state.lastSelfWrite = Date.now();            // so the focus-reload ignores our own write
-  } catch (err) {
-    console.error('Settings save failed:', err);
-    setStatus('⚠ Settings save failed: ' + ((err as Error).message || (err as Error).name));
-  }
 }
 
 // ---------- reload on focus ----------

@@ -51,6 +51,7 @@ import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.j
 import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode, EdgeStyle } from './core/state.js';
+import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
 
@@ -1578,7 +1579,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
 }
 export function paintAll(): void {
   for (const n of state.nodes.values()) paintNode(n);
-  paintEdges();
+  paintEdges();   // tethers + free edges (view/edges.ts pairs them)
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
   syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
@@ -1814,8 +1815,8 @@ export function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean)
 // and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
 // that, deliberately — opening a frame is now the primary way to navigate a big map, and clicking
 // (or the outline, which is a real tree widget) covers moving between siblings.
-// They were never geometric and still aren't: a child's side is its own stored mm_side, so a fan
-// branch has children on two sides at once and "left" would stop meaning anything.
+// They were never geometric and still aren't — a child now lives INSIDE its parent, so there is no
+// direction from one to the other for an arrow key to mean.
 // ←/→ are DIRECTIONAL, unlike the chip / X / the ⋯ menu, which all toggle: pressing → twice can't
 // fold what it just unfolded. They act on the WHOLE selection (setCollapsedSelection), like the chip
 // and X do — a fold is something you do to cards, and there's no reason a keyboard fold should reach
@@ -2207,8 +2208,12 @@ export function behindFill(n: MindNode): string {
     // that isn't on screen. Its own colour is on the canvas below anyway (syncCanvasBackground).
     if (isScopeRoot(h)) break;
   }
-  return canvasFill() ?? THEME_BG;
+  return canvasSurface();
 }
+// The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. The
+// end of behindFill's walk, and what a free edge's label plate is painted in — a label is a small
+// patch of the canvas laid over the line, so its ink is measured against exactly this.
+export function canvasSurface(): string { return canvasFill() ?? THEME_BG; }
 // The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
 // leaves it either invisible or harsh. So re-derive --grid-pat from the fill that's really behind it,
 // by the theme's own 55/45 recipe with the fill standing in for --grid and, for --text, the direction
@@ -2342,7 +2347,12 @@ export function selectAll(): void {
 // the ids currently being edited (one or many) — colour/layout/checklist/bg apply to all of them
 export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
 // reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
-export function applySelection(): void { paintAll(); syncFloatBar(); syncUrl(); updateDocumentTitle(); }
+// Selecting a CARD ends any edge selection — the two never coexist (core/state.ts selEdges). Enforced
+// here, at the one funnel every card-selection path runs through, rather than at each of them.
+export function applySelection(): void {
+  if (state.sel.size && state.selEdges.size) clearEdgeSelection();
+  paintAll(); syncFloatBar(); syncUrl(); updateDocumentTitle();
+}
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
 // (see utils/model.ts hasLockedAncestor). Nor can anything outside the frame you're standing in:
 // it isn't on the canvas, so a selection ring would be invisible and every action on it would look
@@ -2481,6 +2491,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 'Escape'){
     e.preventDefault();
     if (typing) { active?.blur?.(); }
+    else if (state.selEdges.size) clearEdgeSelection();
     else if (state.sel.size) selectNode(null);
     return;
   }
@@ -2535,6 +2546,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
   if (key === 'Tab' && state.selId){ e.preventDefault(); addChild(state.selId); return; }
+  if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
+  // ⌘L connects the selected cards (MindNode's shortcut for the same thing). Bare `l` is lock.
+  if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
   if (del && state.sel.size){
     e.preventDefault();
     // ⌥Delete keeps the children, promoting them to the deleted card's parent.
@@ -2632,5 +2646,7 @@ window.addEventListener('keydown', (e) => {
   if (k === 'y' && !isTypingInField()) { e.preventDefault(); redo(); }
 });
 
+
+installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan
 
 boot();   // local-first: open straight into the last map

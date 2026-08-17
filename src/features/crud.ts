@@ -6,13 +6,14 @@ import { state, setStatus, isLeafType, isAnnotation, type MindNode, type NodeTyp
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
-import { applyLayouts, insertedKidOrder, sideOf, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame } from '../view/layout.js';
+import { applyLayouts, insertedKidOrder, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
-import { touch, commitStep, record } from './history.js';
+import { touch, touchEdges, commitStep, record } from './history.js';
+import { scheduleSaveBoard } from '../data/board.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -111,7 +112,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     title: s.title,
     color: s.color,
     tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist,
-    type: s.type, layout: s.layout, side: s.side,
+    type: s.type, layout: s.layout,
     w: s.w, h: s.h,   // a frame/image card's own box size
     // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
     // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
@@ -211,7 +212,6 @@ export function createSibling(refId: string){
     // seed just below the reference; a managed layout re-places it, a free layout keeps it here
     x: ref.x, y: ref.y + nodeH(ref) + 24,
     parent: ref.parent,
-    side: sideOf(parent, ref),                             // same direction as the reference card
   });
   state.nodes.set(n.id, n);
   parent.kidOrder = insertedKidOrder(parent, n.id, ref.id);   // directly after the reference
@@ -343,7 +343,6 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   const card = mkNode({
     x: dest.at.x, y: dest.at.y,
     parent: parent?.id ?? null, title, body,
-    side: parent && parent.id === n.parent ? n.side : undefined,   // a sibling keeps the source's side
   });
   state.nodes.set(card.id, card);
   // Only a real sibling splices the order; a card dropped into a container is slotted by its
@@ -476,7 +475,7 @@ export function dockFrames(target: MindNode, rootIds: string[], afterId?: string
     g = mkNode({
       type: 'frame', layout: 'tabs',
       title: `${nodeLabel(target)} tabs`,
-      parent: target.parent, side: target.side,
+      parent: target.parent,
       x: target.x, y: target.y, w: target.w, h: target.h,
     });
     state.nodes.set(g.id, g);
@@ -485,7 +484,7 @@ export function dockFrames(target: MindNode, rootIds: string[], afterId?: string
     const op = parentOf(target);
     if (op?.kidOrder) op.kidOrder = op.kidOrder.map(id => id === target.id ? g!.id : id);
     // …and the target becomes its first tab. Its contents don't move: the group's box is its old box.
-    target.parent = g.id; target.side = undefined; target.dirty = true; target.dirtyLayout = true;
+    target.parent = g.id; target.dirty = true; target.dirtyLayout = true;
   }
   for (const f of frames) {
     if (isAncestor(f.id, g.id)) continue;   // would dock a group into its own descendant
@@ -493,7 +492,7 @@ export function dockFrames(target: MindNode, rootIds: string[], afterId?: string
     const home = homes?.get(f.id) ?? { x: f.x, y: f.y };
     const was = interiorAtHome(f, home);    // the box its contents were in before the gesture
     touch(f.id, f.parent, g.id);            // pre-images incl. both parents' kidOrder
-    f.parent = g.id; f.side = undefined; f.dirty = true; f.dirtyLayout = true;
+    f.parent = g.id; f.dirty = true; f.dirtyLayout = true;
     reanchorContents(f, was, home);         // …and the one the group lends it now
   }
   // Slot the dropped frames in where the preview said they'd go: right after `afterId` (`null` = the
@@ -535,13 +534,24 @@ export function dissolveEmptyTabGroups(ids: Iterable<string | null | undefined>)
 // Forget a set of node ids: drop them from state, remove their DOM cards, and queue
 // their files for deletion on the next save. Callers pass the full subtree(s) to remove.
 function deleteNodes(ids: Iterable<string>): void {
-  touch(...ids);   // single choke point: every removal's before-image lands in the step
-  for (const id of ids){
+  const gone = new Set(ids);
+  touch(...gone);   // single choke point: every removal's before-image lands in the step
+  for (const id of gone){
     const n = state.nodes.get(id); if (!n) continue;
     // …including its container wrappers: a frame's clipping wrapper and a tab group's strip are hung
     // off the node, not marked with its data-id, so nothing else would ever reach them again.
     state.nodes.delete(id); n.el?.remove(); n.frameContentEl?.remove(); n.tabStripEl?.remove();
     if (n.file) state.toDelete.push(n.file);
+  }
+  // Prune the free edges that pointed at any of them. An edge with a missing end is already
+  // invisible (edgeVisible) and unsaveable (serializeEdge drops it), so leaving it would only make
+  // it linger in memory until the next save quietly ate it — and, worse, an UNDO would then restore
+  // the card with no edge attached. Pruning here, inside the same step, is what lets one ⌘Z bring
+  // back the card AND the edges that ran to it.
+  if (state.edges.some(e => gone.has(e.from) || gone.has(e.to))) {
+    touchEdges();
+    state.edges = state.edges.filter(e => !gone.has(e.from) && !gone.has(e.to));
+    scheduleSaveBoard();
   }
 }
 export function deleteNode(id: string): void {

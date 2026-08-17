@@ -15,7 +15,7 @@ import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode 
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, parentOf, ancestors } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
-import { orderedKids, sideOf, deriveSide, orderAxisIsX } from '../view/layout.js';
+import { orderedKids } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
@@ -496,36 +496,16 @@ function shiftWhole(n: MindNode, dx: number, dy: number): void {
     if (m) { m.x += dx; m.y += dy; m.dirtyLayout = true; }
   }
 }
-// A subtree's extent along one axis (visibility-independent, unlike subtreeBox).
-function extentAlong(n: MindNode, axisX: boolean): { min: number; max: number } {
-  let min = Infinity, max = -Infinity;
-  for (const id of subtreeIds(n.id)) {
-    const m = state.nodes.get(id); if (!m) continue;
-    const a = axisX ? m.x : m.y;
-    min = Math.min(min, a);
-    max = Math.max(max, a + (axisX ? nodeW(m) : nodeH(m)));
-  }
-  return { min, max };
-}
-// Commit a new order for one side bucket: updates the stored kidOrder (what a visible line/fan
-// relayout packs by) AND re-packs the bucket's subtrees sequentially along the ordering axis.
-// kidOrder is never saved, so the next load re-derives order from positions (kidsByPosition
-// sorts by subtree-box midpoint) — sequential non-overlapping packing is the one arrangement
-// that's guaranteed to re-derive to exactly this order, whatever the subtree sizes.
-function reorderBucket(parent: MindNode, sibs: MindNode[], newOrder: MindNode[], axisX: boolean): void {
-  touch(parent.id, ...sibs.flatMap(s => subtreeIds(s.id)));   // pre-images incl. kidOrder
-  const inBucket = new Set(newOrder.map(s => s.id));
+// Put `parent`'s children into `newOrder` and let the layout follow. It used to also PACK their
+// positions along a side's axis, because order was encoded in position and would otherwise be
+// re-derived away on the next load. Order is stored now (kidOrder → board.json), and a card's
+// children are outline rows the outliner places itself, so the splice is the whole job.
+function reorderSiblings(parent: MindNode, newOrder: MindNode[]): void {
+  touch(parent.id, ...newOrder.flatMap(s => subtreeIds(s.id)));   // pre-images incl. kidOrder
+  const inSet = new Set(newOrder.map(s => s.id));
   const queue = [...newOrder];
   parent.kidOrder = orderedKids(parent, childrenOf(parent.id))
-    .map(k => (inBucket.has(k.id) ? queue.shift()!.id : k.id));
-  const GAP = 12;   // matches layout.ts LAYOUT_CHAIN
-  const extent = new Map(newOrder.map(s => [s.id, extentAlong(s, axisX)]));   // one subtree walk each
-  let cur = Math.min(...sibs.map(s => (extent.get(s.id) ?? extentAlong(s, axisX)).min));
-  for (const s of newOrder) {
-    const e = extent.get(s.id)!;
-    shiftWhole(s, axisX ? cur - e.min : 0, axisX ? 0 : cur - e.min);
-    cur += (e.max - e.min) + GAP;
-  }
+    .map(k => (inSet.has(k.id) ? queue.shift()!.id : k.id));
   relayout(); scheduleSave(); commitStep();
 }
 
@@ -714,14 +694,14 @@ function seedUnderParent(child: MindNode, parent: MindNode, reveal = true): bool
 // it where the outline says it went.
 function makeRoot(n: MindNode, dy = 0): void {
   touch(n.id, n.parent);
-  n.parent = detachParentId(); n.side = undefined; n.dirtyLayout = true;
+  n.parent = detachParentId(); n.dirty = true; n.dirtyLayout = true;   // mm_parent is in the note
   shiftWhole(n, 0, dy);
   relayout(); scheduleSave(); commitStep();
 }
 
 // Apply a drop: nest under a card (same path as the Move-to picker), or slot before/after a
 // reference row under that row's parent — reparenting first when the parent differs, then
-// committing the order via reorderBucket (one undo step for the whole gesture).
+// committing the order via reorderSiblings (one undo step for the whole gesture).
 function commitRowDrop(n: MindNode, drop: RowDrop): boolean {
   if (drop.kind === 'child') {
     if (drop.target.id === n.parent) return false;   // already that card's child
@@ -737,16 +717,14 @@ function commitRowDrop(n: MindNode, drop: RowDrop): boolean {
   if (parent.id !== n.parent) {
     if (!seedUnderParent(n, parent)) return false;
   } else {
-    touch(n.id, parent.id);   // pre-image before the side change below
+    touch(n.id, parent.id);   // pre-image before the reorder below
   }
-  const side = sideOf(parent, ref);
-  n.side = side;   // same side bucket as the reference row
-  const sibs = orderedKids(parent, childrenOf(parent.id)).filter(k => sideOf(parent, k) === side);
+  const sibs = orderedKids(parent, childrenOf(parent.id));
   const others = sibs.filter(s => s.id !== n.id);
   const idx = others.findIndex(s => s.id === ref.id);
   const newOrder = others.slice();
   newOrder.splice(drop.kind === 'before' ? idx : idx + 1, 0, n);
-  reorderBucket(parent, sibs, newOrder, orderAxisIsX(parent, side));
+  reorderSiblings(parent, newOrder);
   setStatus(`Moved “${nodeLabel(n)}” ${drop.kind} “${nodeLabel(ref)}”`);
   return true;
 }
@@ -835,13 +813,9 @@ function moveTo(src: MindNode, target: MindNode | null, reveal = true): void {
   if (state.readOnly) return;
   if (target) {
     if (!seedUnderParent(src, target, reveal)) return;
-    const side = deriveSide(target, src);
-    src.side = side;
-    // Slot it LAST in its new side bucket and pack the positions accordingly — the seed spot
-    // alone would re-derive to a different (usually first) place on the next load.
-    const sibs = orderedKids(target, childrenOf(target.id)).filter(k => sideOf(target, k) === side);
-    const others = sibs.filter(s => s.id !== src.id);
-    reorderBucket(target, sibs, [...others, src], orderAxisIsX(target, side));   // packs + saves + commits
+    // Slot it LAST among its new siblings.
+    const others = orderedKids(target, childrenOf(target.id)).filter(s => s.id !== src.id);
+    reorderSiblings(target, [...others, src]);   // relayouts + saves + commits
     setStatus(`Moved “${nodeLabel(src)}” → “${nodeLabel(target)}”`);
   } else {
     makeRoot(src);

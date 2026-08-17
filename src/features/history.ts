@@ -6,12 +6,14 @@
 // gesture boundary calls commitStep() — pointer-up for drags, end-of-edit for inline editing,
 // record() for one-shot ops. A step whose before/after images are identical is discarded, so
 // plain clicks, cancelled drags and unchanged edits never pollute the history.
-import { state, stage, setStatus, type MindNode, type Stroke } from '../core/state.js';
+import { state, stage, setStatus, type MindNode, type Stroke, type BoardEdge } from '../core/state.js';
 import { frameBox } from '../view/camera.js';
-import { scheduleSave, scheduleSaveSketch, scheduleSaveSettings } from '../data/persistence.js';
+import { scheduleSave } from '../data/persistence.js';
+import { scheduleSaveBoard } from '../data/board.js';
 import { setSelectionSet, popScopeFor, nodeW, nodeH, remeasure } from '../main.js';
 import { paintStrokes } from './sketch.js';
 import { endInPlaceEdit } from './inline-edit.js';
+import { syncEdgeBar } from './edge-bar.js';
 import { isScopeRoot } from '../nav/scope.js';
 import { byId } from '../utils/dom.js';
 
@@ -26,14 +28,21 @@ import { byId } from '../utils/dom.js';
 type NodeSnap = Omit<MindNode, 'id' | 'el' | 'frameContentEl' | 'tabStripEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
 type Images = Map<string, NodeSnap | null>;      // null = the node does not exist
 // A step captures node before/after images and, where an op changed something that isn't a node:
-// the whole strokes array (a sketch gesture, see touchStrokes) and the map's canvas colour (see
-// touchCanvas). One unified timeline covers all three — ⌘Z after recolouring the canvas has to put
-// the colour back wherever you were standing, and inside an open frame that same gesture edits a
-// NODE, so the two halves of one button must land in the same history.
+// the whole strokes array (a sketch gesture, see touchStrokes), the map's canvas colour (see
+// touchCanvas), and the whole EDGE list (see touchEdges). One unified timeline covers all four —
+// ⌘Z after recolouring the canvas has to put the colour back wherever you were standing, and inside
+// an open frame that same gesture edits a NODE, so the two halves of one button must land in the
+// same history. Deleting a CARD is the case that makes edges part of it rather than a timeline of
+// their own: it removes the card AND every edge touching it, and one ⌘Z has to bring back both.
+//
+// Edges are snapshotted WHOLESALE rather than per-edge. There are few of them, they're small, and
+// the alternative — keyed before/after images like nodes — buys nothing here: an edge has no
+// identity problem to solve (its id is persisted) and no resurrect-vs-update distinction to make.
 interface Step {
   before: Images; after: Images;
   strokes?: { before: Stroke[]; after: Stroke[] };
   canvas?: { before: string; after: string };
+  edges?: { before: BoardEdge[]; after: BoardEdge[] };
 }
 
 const MAX_STEPS = 100;
@@ -42,16 +51,19 @@ const redoStack: Step[] = [];
 let pending: Images | null = null;
 let pendingStrokes: Stroke[] | null = null;      // strokes before-image for the open step, if a sketch op touched it
 let pendingCanvas: string | null = null;         // canvas-colour before-image for the open step, if one was picked
+let pendingEdges: BoardEdge[] | null = null;     // edge-list before-image for the open step, if an edge op touched it
 
 const cloneStrokes = (s: Stroke[]): Stroke[] => structuredClone(s);
 const sameStrokes = (a: Stroke[], b: Stroke[]): boolean => JSON.stringify(a) === JSON.stringify(b);
+const cloneEdges = (e: BoardEdge[]): BoardEdge[] => structuredClone(e);
+const sameEdges = (a: BoardEdge[], b: BoardEdge[]): boolean => JSON.stringify(a) === JSON.stringify(b);
 
 // Fixed key order (so JSON-compare in commitStep is reliable) + deep copies of the arrays.
 function snap(n: MindNode): NodeSnap {
   return {
     file: n.file, x: n.x, y: n.y, parent: n.parent,
     collapsed: n.collapsed, locked: n.locked, done: n.done, checklist: n.checklist,
-    type: n.type, layout: n.layout, side: n.side, w: n.w, h: n.h,
+    type: n.type, layout: n.layout, w: n.w, h: n.h,
     title: n.title, color: n.color, keepStatus: n.keepStatus,
     tags: [...n.tags], body: n.body, titleGap: n.titleGap,
     fmEntries: n.fmEntries?.map(e => ({ key: e.key, lines: [...e.lines] })),
@@ -87,11 +99,19 @@ export function touchCanvas(): void {
   if (state.readOnly) return;
   if (pendingCanvas === null) pendingCanvas = state.canvasColor;
 }
+// Remember the edge list before changing it — drawing, deleting, re-routing or restyling an edge,
+// and the pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
+// no-op in read-only mode, like the rest.
+export function touchEdges(): void {
+  if (state.readOnly) return;
+  if (!pendingEdges) pendingEdges = cloneEdges(state.edges);
+}
 // Close the pending step: capture after-images, drop untouched-in-practice nodes, and push.
 export function commitStep(): void {
   const before = pending; pending = null;
   const strokesBefore = pendingStrokes; pendingStrokes = null;
   const canvasBefore = pendingCanvas; pendingCanvas = null;
+  const edgesBefore = pendingEdges; pendingEdges = null;
   const step: Step = { before: new Map(), after: new Map() };
   if (before) for (const [id, b] of before) {
     const n = state.nodes.get(id);
@@ -103,7 +123,9 @@ export function commitStep(): void {
     step.strokes = { before: strokesBefore, after: cloneStrokes(state.strokes) };
   if (canvasBefore !== null && canvasBefore !== state.canvasColor)
     step.canvas = { before: canvasBefore, after: state.canvasColor };
-  if (!step.before.size && !step.strokes && !step.canvas) return;    // nothing actually changed
+  if (edgesBefore && !sameEdges(edgesBefore, state.edges))
+    step.edges = { before: edgesBefore, after: cloneEdges(state.edges) };
+  if (!step.before.size && !step.strokes && !step.canvas && !step.edges) return;   // nothing changed
   undoStack.push(step);
   if (undoStack.length > MAX_STEPS) undoStack.shift();
   redoStack.length = 0;
@@ -118,7 +140,8 @@ export function record(ids: Iterable<string | null | undefined>, fn: () => void)
   if (owner) commitStep();
 }
 export function clearHistory(): void {
-  undoStack.length = 0; redoStack.length = 0; pending = null; pendingStrokes = null; pendingCanvas = null;
+  undoStack.length = 0; redoStack.length = 0;
+  pending = null; pendingStrokes = null; pendingCanvas = null; pendingEdges = null;
   updateUndoButtons();
 }
 
@@ -157,12 +180,21 @@ function frameIfOffscreen(ids: string[]): void {
   }
   if (maxX < 0 || minX > r.width || maxY < 0 || minY > r.height) frameBox(nodes);
 }
-function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string | undefined, label: string): void {
+function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string | undefined,
+                   edges: BoardEdge[] | undefined, label: string): void {
   applyImages(images);
-  if (strokes) { state.strokes = cloneStrokes(strokes); paintStrokes(); scheduleSaveSketch(); }
+  // Edges go back BEFORE the paint below, like the canvas colour: paintAll paints the free-edge
+  // layer, so restoring them here means one pass rather than two. A selected edge the step removed
+  // stops resolving, which is what closes its bar (features/edge-bar.ts syncEdgeBar).
+  if (edges) {
+    state.edges = cloneEdges(edges);
+    for (const id of [...state.selEdges]) if (!state.edges.some(e => e.id === id)) state.selEdges.delete(id);
+    scheduleSaveBoard();
+  }
+  if (strokes) { state.strokes = cloneStrokes(strokes); paintStrokes(); scheduleSaveBoard(); }
   // Restored BEFORE the paint below: syncCanvasBackground runs off paintAll, so the canvas repaints
   // in the same pass everything else does rather than needing a second one.
-  if (canvas !== undefined) { state.canvasColor = canvas; scheduleSaveSettings(); }
+  if (canvas !== undefined) { state.canvasColor = canvas; scheduleSaveBoard(); }
   // paint first so resurrected cards have real DOM heights, then lay out, then commit
   remeasure();
   const ids = [...images.keys()].filter(id => state.nodes.has(id));
@@ -178,6 +210,7 @@ function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string
   if (first) popScopeFor(first);
   setSelectionSet(ids);
   frameIfOffscreen(ids);
+  syncEdgeBar();      // the selected edge may have moved, changed, or gone
   scheduleSave();
   setStatus(label);
 }
@@ -188,7 +221,7 @@ export function undo(): void {
   const step = undoStack.pop();
   if (!step) { setStatus('Nothing to undo'); return; }
   redoStack.push(step);
-  applyStep(step.before, step.strokes?.before, step.canvas?.before, 'Undo');
+  applyStep(step.before, step.strokes?.before, step.canvas?.before, step.edges?.before, 'Undo');
   updateUndoButtons();
 }
 export function redo(): void {
@@ -198,7 +231,7 @@ export function redo(): void {
   const step = redoStack.pop();
   if (!step) { setStatus('Nothing to redo'); return; }
   undoStack.push(step);
-  applyStep(step.after, step.strokes?.after, step.canvas?.after, 'Redo');
+  applyStep(step.after, step.strokes?.after, step.canvas?.after, step.edges?.after, 'Redo');
   updateUndoButtons();
 }
 

@@ -1,13 +1,14 @@
-// ---------- node layout: per-node free/line/fan ----------
-// Computes node x/y. applyLayouts re-flows every node per
-// its own type/layout after any change. The node itself stays put — only its children (and
-// their subtrees) move. A child's SIDE (left/right/up/down) is STORED (MindNode.side, mm_side
-// in frontmatter) — set explicitly by a drop, or backfilled once from position (see sideOf/
-// deriveSide below) on load or first use, but never re-derived afterward. That avoids a fan's
-// own placement (spreading same-side siblings wide) ever flipping a child's side purely as a
-// side effect of laying it out. layoutH/NODE_W/subtreeIds come from main (render + tree
-// helpers) — a runtime-only cycle.
-import { state, isAnnotation, isLeafType, type MindNode, type LayoutSide } from '../core/state.js';
+// ---------- node layout ----------
+// Computes node x/y. applyLayouts re-flows every node per its own type/layout after any change. The
+// node itself stays put — only its children (and their subtrees) move.
+//
+// Children go INSIDE their parent, never beside it: a card with children is an OUTLINER (isStack)
+// and a frame is a box. The four SIDES a child used to attach on, the mm_side that stored which one,
+// and the line/fan arrangements that placed children around a parent all went with that change —
+// see docs/spec-edges-and-containment.md.
+//
+// layoutH/NODE_W/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
+import { state, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
@@ -21,18 +22,19 @@ import { clamp } from '../utils/num.js';
 // persisted form from the working form; it's the only bridge, called just before every save
 // (saveAll / exportZip). Load does the reverse — see data/persistence.ts loadFromDir.
 // A node's persisted position is an OFFSET from its parent, so moving the PARENT restales every
-// child's file even though nothing about the child moved on screen — dragging a frame's west edge
-// (which shifts the frame's own x), or undoing such a resize, leaves each child's mm_position_x on
-// disk describing the OLD offset. saveAll only writes nodes flagged dirty, so those files were
-// silently skipped and the next load placed the children at the stale offset. Catching it here, in
-// the one bridge every save goes through, covers every mover (resize, undo/redo, layout, drag)
-// instead of asking each of them to remember. Compared ROUNDED, since that's what serializeMd
-// writes — raw float noise would otherwise mark every node dirty on every save.
+// child's stored position even though nothing about the child moved on screen — dragging a frame's
+// west edge (which shifts the frame's own x), or undoing such a resize, leaves each child's saved
+// offset describing the OLD one. Catching it here, in the one bridge every save goes through, covers
+// every mover (resize, undo/redo, layout, drag) instead of asking each of them to remember. Compared
+// ROUNDED, since that's the precision the board file stores — raw float noise would otherwise flag
+// every node on every save.
+// It flags `dirtyLayout`, NOT `dirty`: a position is board.json's business now (data/board.ts), and
+// marking the NOTE dirty here would rewrite a .md on every drag to change nothing in it.
 export function commitRel(): void {
   for (const n of state.nodes.values()) {
     const p = parentOf(n);
     const rx = n.x - (p ? p.x : 0), ry = n.y - (p ? p.y : 0);
-    if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) n.dirty = true;
+    if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) n.dirtyLayout = true;
     n.rx = rx; n.ry = ry;
   }
 }
@@ -63,7 +65,7 @@ const LANDING_GAP = 40;   // gap below/beside the hovered card a drag-reparented
 // line/fan governor (the caller checks), so it always takes the simulation path below.
 // `afterId` is the explicit insertion anchor when the caller resolved one (`null` = front of
 // the order, `undefined` = default: after `target` in sibling mode, append in child mode).
-export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' | 'sibling' | 'reorder', side: LayoutSide, afterId?: string | null): { x: number; y: number } {
+export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' | 'sibling' | 'reorder', afterId?: string | null): { x: number; y: number } {
   // An ANNOTATION lands where you dropped it, full stop. It's a remark placed AGAINST a card at a
   // spot you chose by dragging — it takes no part in layout and has no side to dock against — so
   // re-pinning it must change its parent and nothing else. Every other kind gets a landing computed
@@ -87,19 +89,11 @@ export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' |
     const rel = (v: number, o: number): number => Math.round((v - o) / g) * g + o;
     return { x: rel(dragged.x, box.x), y: rel(dragged.y, box.y) };
   }
-  if (!isManagedLayout(governor)) {
-    // Nudge the cross-axis in child mode (a fresh attachment, offset from target) but keep it
-    // aligned with target in sibling mode (it's slotting into target's own spot). `side` is the
-    // side of TARGET the card is docking against — same geometry regardless of which side that is.
-    const nudge = mode === 'child' ? LANDING_GAP : 0;
-    switch (side) {
-      case 'up':    return { x: target.x + nudge, y: target.y - nodeH(dragged) - LANDING_GAP };
-      case 'left':  return { x: target.x - nodeW(dragged) - LANDING_GAP, y: target.y + nudge };
-      case 'right': return { x: target.x + nodeW(target) + LANDING_GAP, y: target.y + nudge };
-      default:      return { x: target.x + nudge, y: target.y + nodeH(target) + LANDING_GAP };
-    }
-  }
-  return simulateLanding(dragged, governor, side, afterId !== undefined ? afterId : (mode === 'sibling' ? target.id : undefined));
+  // Anything else is a CARD adopting a child, and a card with children OUTLINES them — so there is
+  // no geometric shortcut left to take: simulate, and let the outliner say where the row lands. (The
+  // governor may still be childless at this instant, which is exactly why the estimate can't be made
+  // here: it only becomes a container once the dry run hands it the dragged card.)
+  return simulateLanding(dragged, governor, afterId !== undefined ? afterId : (mode === 'sibling' ? target.id : undefined));
 }
 
 // The order `governor`'s children would have if `draggedId` were inserted right after `afterId`
@@ -117,13 +111,11 @@ export function insertedKidOrder(governor: MindNode, draggedId: string, afterId?
   return order;
 }
 
-// Dry-run a reparent of `dragged` onto `governor` (inserted right after `afterId`, if given) with
-// `side` set (so bucketing sees the drop's resolved side, not whatever `dragged` had before): re-
-// parent, run the real layoutSubtree(), capture dragged's resulting position, then put every
+// Dry-run a reparent of `dragged` onto `governor` (inserted right after `afterId`, if given):
+// reparent, run the real layoutSubtree(), capture dragged's resulting position, then put every
 // touched node/field back exactly as found.
-function simulateLanding(dragged: MindNode, governor: MindNode, side: LayoutSide, afterId?: string | null): { x: number; y: number } {
+function simulateLanding(dragged: MindNode, governor: MindNode, afterId?: string | null): { x: number; y: number } {
   const prevParent = dragged.parent;
-  const prevSide = dragged.side;
   const prevKidOrder = governor.kidOrder ? [...governor.kidOrder] : undefined;
   const snapIds = new Set<string>();
   for (const k of childrenOf(governor.id)) if (k.id !== dragged.id) for (const id of subtreeIds(k.id)) snapIds.add(id);
@@ -134,12 +126,10 @@ function simulateLanding(dragged: MindNode, governor: MindNode, side: LayoutSide
 
   governor.kidOrder = insertedKidOrder(governor, dragged.id, afterId);
   dragged.parent = governor.id;
-  dragged.side = side;
   layoutSubtree(governor);
   const land = { x: dragged.x, y: dragged.y };
 
   dragged.parent = prevParent;
-  dragged.side = prevSide;
   governor.kidOrder = prevKidOrder;
   for (const [id, p] of snap) { const n = state.nodes.get(id); if (n) { n.x = p.x; n.y = p.y; } }
   return land;
@@ -152,21 +142,19 @@ function simulateLanding(dragged: MindNode, governor: MindNode, side: LayoutSide
 //   · fan  — children spread ACROSS the direction at one distance (the classic mindmap branch)
 // `layoutDir` (left/right/top/bottom) picks the side. Line/fan nodes OWN their children's
 // positions, so layout re-runs after every structural or drag change (there's no manual Tidy).
-const LAYOUT_MAIN  = 60;   // gap between a card and its children along the growth axis
 const LAYOUT_CROSS = 22;   // gap between FANNED sibling subtrees (spread across the side)
 // gap between CHAINED sibling subtrees (a line along the direction) — must clear a card's own
 // tag row, which floats OUTSIDE the card's border and overhangs ~11px past its bottom edge (see
 // .node .tag-row in styles.css): anything tighter and the next chained card's opaque background
 // paints over the previous card's tag pills/add-emoji button, hiding them even though they're
 // still very much in the DOM and clickable.
-const LAYOUT_CHAIN = 22;
 // Both are multiples of GRID_SNAP so flowed content stays grid-aligned: the frame's own x/y/w/h
 // are already grid multiples (position/resize snap), and every child's w/h is too (NODE_W=200,
 // heights rounded up to the grid in main.ts's snapCardHeights) — so keeping these constants (and
 // the flow gap below) grid multiples means every computed cx/cy stays on the grid, with no
 // runtime rounding needed.
 const FRAME_PAD = 20;       // inset from a frame's border to its content area (flow arrange)
-const FRAME_FLOW_GAP = 20;  // gap between flowed children — GRID_SNAP, not the line/fan LAYOUT_CHAIN
+const FRAME_FLOW_GAP = 20;  // gap between flowed children (GRID_SNAP)
 // Cross-axis tolerance for clustering a flow frame's children into rows/columns when (re)seeding
 // order from raw position (kidsByPosition) — roughly half a default card's row pitch (40 height +
 // 20 gap), so a genuinely different row/column always exceeds it while hand-placed jitter within
@@ -225,19 +213,31 @@ export function isFrame(node: MindNode): boolean {
 // a future kind that does must decide this question deliberately.
 export function insideStack(node: MindNode): boolean {
   for (let p = parentOf(node); p; p = parentOf(p)) {
-    if (p.type === 'stack') return !p.collapsed;      // an expanded stack governs; folded, it hides us anyway
-    if (p.type !== 'card' && p.type !== 'frame') return false;
+    // The first CARD ancestor outlines us — a card with children IS an outline, so being a card's
+    // child is the whole test. hasRows guards the one case where it isn't trivially true: an
+    // ANNOTATION child, which floats on top of its parent rather than stacking into it, and so
+    // doesn't make its parent an outline (see hasRows).
+    if (p.type === 'card') return !p.collapsed && hasRows(p);
+    if (p.type !== 'frame') return false;
   }
   return false;
 }
-// A STACK: a node kind that frames its whole subtree as an OUTLINER (one full-width column, each
-// level indented) inside an auto-sized, non-resizable box. Like a frame, it's a CONTAINER — its
-// descendants live in its coordinate space, clip to its interior, and detach by leaving its bounds.
-// A COLLAPSED stack folds to an ordinary card (children hidden), so it isn't a container while folded.
-// A stack INSIDE another stack is demoted (insideStack) to a plain outline row — the outer stack owns
-// the whole subtree and ignores every descendant's own arrangement.
+// Does this node have children that OUTLINE — i.e. any child that isn't an annotation? An annotation
+// is pinned on top of its parent and takes no part in layout, so a card whose only child is one is
+// still a plain card, not a container.
+export function hasRows(node: MindNode): boolean {
+  return childrenOf(node.id).some(k => !isAnnotation(k));
+}
+// A CARD WITH CHILDREN frames its whole subtree as an OUTLINER (one full-width column, each level
+// indented) inside an auto-sized, non-resizable box. This is what replaced the branch line: a child
+// is INSIDE its parent, never beside it, so you can see what belongs to what without a connector.
+// There is no `stack` KIND any more — having children is the whole condition (docs/spec-edges-and-
+// containment.md). Like a frame it's a CONTAINER: its descendants live in its coordinate space, clip
+// to its interior, and detach by leaving its bounds. A COLLAPSED one folds to an ordinary card
+// (children hidden), so it isn't a container while folded. One INSIDE another is demoted
+// (insideStack) to a plain outline row — the outermost owns the whole subtree.
 export function isStack(node: MindNode): boolean {
-  return node.type === 'stack' && !node.collapsed && !insideStack(node);
+  return node.type === 'card' && !node.collapsed && !insideStack(node) && hasRows(node);
 }
 // ---------- tab groups: a frame whose child FRAMES are docked as tabs ----------
 // A TABS frame (mm_layout: tabs): its child frames aren't content, they're TABS. Their title tabs
@@ -673,41 +673,6 @@ export function stackOf(node: MindNode): MindNode | null {
   const h = hostFrame(node);
   return h && isStack(h) ? h : null;
 }
-// Which of the parent's 4 sides a child sits on, computed FRESH from its current position —
-// dominant axis of the offset between the two centers, SCALED by the parent's own aspect ratio
-// (a card is wide and short) rather than compared as raw pixels: a `fan` spreads same-side
-// siblings wide across the cross axis, so a couple of siblings alone would put more raw pixels
-// between a "down" child and its parent horizontally than vertically, misreading it as
-// "left"/"right" purely from being laid out. Scaling each axis by the parent's own width/height
-// first (comparing fractions of the parent's own size, not absolute px) gives a lot more
-// headroom before a wide fan spuriously flips side. Used to BACKFILL `child.side` when it's
-// unset (see sideOf) and to refresh it after a plain reposition with no explicit drop target.
-export function deriveSide(parent: MindNode, child: MindNode): LayoutSide {
-  const dx = (child.x + nodeW(child)/2) - (parent.x + nodeW(parent)/2);
-  const dy = (child.y + nodeH(child)/2) - (parent.y + nodeH(parent)/2);
-  const w = nodeW(parent) || 1, h = nodeH(parent) || 1;
-  return Math.abs(dx) / w >= Math.abs(dy) / h ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
-}
-// A child's side, from the STORED field — backfilling (and caching) it via deriveSide the
-// first time it's asked for a child that doesn't have one yet (a legacy note with no mm_side,
-// or a freshly created child). Once set, a plain relayout never changes it — only an explicit
-// drop (or a reposition with no drop target — see drag.ts) does. Shared by layout grouping/
-// ordering and edge-exit-border selection (edges.ts).
-export function sideOf(parent: MindNode, child: MindNode): LayoutSide {
-  return child.side ?? (child.side = deriveSide(parent, child));
-}
-const SIDE_RANK: Record<LayoutSide, number> = { right: 0, down: 1, left: 2, up: 3 };
-// Sibling order: group by each child's own derived side, then by the coordinate that side's
-// layout treats as "along" (fan → cross axis, line → the growth axis). Ties break by filename
-// so the seeded order is deterministic across reloads (folder iteration order is not stable).
-// Whether ordering along `side` under this layout reads the X coordinate (else Y): a fan orders
-// along the CROSS axis of the side, a line along the growth axis. Shared by the position sort
-// below and the live reorder-anchor computation (reorderTarget).
-// Exported: the outline view packs reordered siblings along this same axis (features/outline.ts).
-export function orderAxisIsX(node: MindNode, side: LayoutSide): boolean {
-  const horiz = side === 'left' || side === 'right';
-  return effectiveLayout(node).type === 'fan' ? !horiz : horiz;
-}
 function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
   const tie = (n: MindNode) => n.file || n.title || n.id;
   const cmpTie = (a: MindNode, b: MindNode) => (tie(a) < tie(b) ? -1 : tie(a) > tie(b) ? 1 : 0);
@@ -757,16 +722,13 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
       .sort((a, b) => (a.band - b.band) || (along(a.k) - along(b.k)) || cmpTie(a.k, b.k))
       .map(x => x.k.id);
   }
-  // Sort by the SUBTREE box's midpoint, not the card's own corner — a sibling with a big
-  // subtree visually occupies its whole box, so that's the order the user perceives. Grouped by
-  // each child's stored side, then by the coordinate that side's layout treats as "along".
-  const coord = (k: MindNode): number => {
-    const useX = orderAxisIsX(node, sideOf(node, k));
-    const m = midXY(k);
-    return useX ? m.x : m.y;
-  };
+  // Everything else — a FREE frame's children, which sit wherever they were dropped. Reading order
+  // (top to bottom, then left to right) off the SUBTREE box's midpoint, not the card's own corner: a
+  // sibling with a big subtree visually occupies its whole box, so that is the order a reader
+  // perceives. This is what the four side buckets collapsed to once children moved INSIDE their
+  // parent — with no sides left to group by, position in reading order is the only honest seed.
   return kids.slice()
-    .sort((a,b) => (SIDE_RANK[sideOf(node,a)] - SIDE_RANK[sideOf(node,b)]) || (coord(a)-coord(b)) || cmpTie(a, b))
+    .sort((a,b) => (midXY(a).y - midXY(b).y) || (midXY(a).x - midXY(b).x) || cmpTie(a, b))
     .map(k => k.id);
 }
 // A parent's child order is STORED (in memory) and only changes when a child is directly
@@ -782,68 +744,6 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
   node.kidOrder = order;
   const rank = new Map(order.map((id,i)=>[id,i]));
   return kids.slice().sort((a,b)=>rank.get(a.id)! - rank.get(b.id)!);
-}
-// Turn a live drag position into an insertion anchor among `parent`'s children: which side the
-// dragged card is on right now (or `forcedSide`, e.g. the hovered sibling's stored side for a
-// centre-zone drop) and which same-side sibling it should slot in AFTER (`null` = before them
-// all). Compares the dragged CARD's midpoint against each sibling's SUBTREE-box midpoint along
-// the side's ordering axis, so "between two siblings" means between their visible boxes — the
-// order the user perceives — not between the cards' top-left corners. Stored bucket order equals
-// visual order along the increasing coordinate on all four sides for both fan and line (lineSide
-// reverses left/up iteration precisely to guarantee that), so no mapping is needed. The single
-// source of the anchor for both the insertion-line preview and the drop commit.
-//
-// `line` is the world-space segment for the insertion indicator: it sits in the CURRENT gap
-// between the two adjacent siblings' subtree boxes (perpendicular to the ordering axis, spanning
-// the neighbours' cards) — i.e. relative to where the siblings are NOW, not where the post-drop
-// layout would put things. `null` when there's no same-side sibling to slot against.
-//
-// `near` is the engage gate: whether the dragged card is close enough to the sibling band that a
-// release should mean "re-slot" rather than rip/free-move. Between two neighbours the along-axis
-// position is correct by construction (that's how afterId was picked), so only the CROSS-axis
-// distance to the gap matters; past the first/last sibling the along-axis distance is bounded
-// too, so pulling away off the end of the row/column still rips as before.
-export function reorderTarget(parent: MindNode, dragged: MindNode, forcedSide?: LayoutSide): { side: LayoutSide; afterId: string | null; line: Seg | null; near: boolean } {
-  const side = forcedSide ?? deriveSide(parent, dragged);
-  const kids = childrenOf(parent.id).filter(k => !isHidden(k) && k.id !== dragged.id);
-  const sibs = orderedKids(parent, kids).filter(k => sideOf(parent, k) === side);
-  const useX = orderAxisIsX(parent, side);
-  const mid = useX ? dragged.x + nodeW(dragged) / 2 : dragged.y + nodeH(dragged) / 2;
-  let afterId: string | null = null;
-  let idx = -1;   // index of the `afterId` sibling in sibs
-  for (const s of sibs) {
-    const b = subtreeBox(s);
-    if ((useX ? (b.x0 + b.x1) / 2 : (b.y0 + b.y1) / 2) <= mid) { afterId = s.id; idx++; }
-    else break;
-  }
-  // The gap the card would slot into: between `prev` (the afterId sibling) and `next` — either
-  // may be missing at the ends of the row/column, where the line sits just beyond the last box.
-  const prev = idx >= 0 ? sibs[idx] : null, next = sibs[idx + 1] ?? null;
-  let line: Seg | null = null;
-  let near = false;
-  if (prev || next) {
-    const pb = prev ? subtreeBox(prev) : null, nb = next ? subtreeBox(next) : null;
-    const END = LAYOUT_CHAIN;   // half-gap-ish offset past the first/last sibling's box
-    if (useX) {
-      const x = pb && nb ? (pb.x1 + nb.x0) / 2 : pb ? pb.x1 + END : nb!.x0 - END;
-      const y0 = Math.min(prev?.y ?? Infinity, next?.y ?? Infinity);
-      const y1 = Math.max(prev ? prev.y + nodeH(prev) : -Infinity, next ? next.y + nodeH(next) : -Infinity);
-      line = { x0: x, y0, x1: x, y1 };
-      const crossMid = dragged.y + nodeH(dragged) / 2;
-      near = crossMid > y0 - (nodeH(dragged) + LANDING_GAP) && crossMid < y1 + (nodeH(dragged) + LANDING_GAP)
-          && (!!(prev && next) || Math.abs(mid - x) < nodeW(dragged));
-    } else {
-      const y = pb && nb ? (pb.y1 + nb.y0) / 2 : pb ? pb.y1 + END : nb!.y0 - END;
-      const x0 = Math.min(prev?.x ?? Infinity, next?.x ?? Infinity);
-      const x1 = Math.max(prev ? prev.x + nodeW(prev) : -Infinity, next ? next.x + nodeW(next) : -Infinity);
-      line = { x0, y0: y, x1, y1: y };
-      const crossMid = dragged.x + nodeW(dragged) / 2;
-      const tol = nodeW(dragged);
-      near = crossMid > x0 - tol && crossMid < x1 + tol
-          && (!!(prev && next) || Math.abs(mid - y) < nodeH(dragged) + LANDING_GAP);
-    }
-  }
-  return { side, afterId, line, near };
 }
 // Where a card dragged inside a FLOW frame would be inserted: the sibling it lands AFTER in the flow
 // reading order (`null` = front), plus the insertion bar to draw. flow-h reads row-major and draws a
@@ -1035,55 +935,9 @@ function layoutSubtree(node: MindNode): void {
     return;
   }
 
-  // FAN a set of children to ONE side: every child the same distance out, spread along the
-  // cross axis and centred on the parent. Called once per occupied side (up to 4).
-  const fanSide = (ids: MindNode[], sd: string) => {
-    const hz = sd === 'left' || sd === 'right';
-    const cross = ids.map(k => { const b=boxOf.get(k.id)!; return hz ? (b.y1-b.y0) : (b.x1-b.x0); });
-    const total = cross.reduce((s,v)=>s+v,0) + LAYOUT_CROSS*Math.max(0, ids.length-1);
-    let cur = (hz ? ay + layoutH(node)/2 : ax + nodeW(node)/2) - total/2;
-    ids.forEach((k,i)=>{
-      const b = boxOf.get(k.id)!; let dx=0, dy=0;
-      if (hz){ dx = sd==='right' ? (ax+nodeW(node)+LAYOUT_MAIN - b.x0) : (ax-LAYOUT_MAIN - b.x1); dy = cur - b.y0; }
-      else   { dy = sd==='down'  ? (ay+layoutH(node)+LAYOUT_MAIN - b.y0) : (ay-LAYOUT_MAIN - b.y1); dx = cur - b.x0; }
-      shiftSubtree(k, dx, dy); cur += cross[i] + LAYOUT_CROSS;
-    });
-  };
-  // LINE a set of children to ONE side: chained one after another ALONG the side, centred on
-  // the cross axis. Called once per occupied side (up to 4). The chain grows in the side's
-  // sign, so for left/up we walk the order in REVERSE — that way the first child in stored
-  // order ends up at the visual top/left, not nearest the parent. (Otherwise dragging a child
-  // to the top snaps it to the bottom.)
-  const lineSide = (ids: MindNode[], sd: string) => {
-    const hz = sd === 'left' || sd === 'right';
-    let cur = hz ? (sd==='right' ? ax+nodeW(node)+LAYOUT_MAIN : ax-LAYOUT_MAIN)
-                 : (sd==='down'  ? ay+layoutH(node)+LAYOUT_MAIN : ay-LAYOUT_MAIN);
-    const seq = (sd==='left' || sd==='up') ? ids.slice().reverse() : ids;
-    seq.forEach((k)=>{
-      const b = boxOf.get(k.id)!; let dx=0, dy=0;
-      if (hz){
-        const w = b.x1 - b.x0;
-        dx = sd==='right' ? (cur - b.x0) : (cur - b.x1);
-        dy = (ay + layoutH(node)/2) - (k.y + layoutH(k)/2);   // centre child on the parent's y
-        cur += sd==='right' ? (w+LAYOUT_CHAIN) : -(w+LAYOUT_CHAIN);
-      } else {
-        const h = b.y1 - b.y0;
-        dy = sd==='down' ? (cur - b.y0) : (cur - b.y1);
-        dx = (ax + nodeW(node)/2) - (k.x + nodeW(k)/2);   // centre child on the parent's x
-        cur += sd==='down' ? (h+LAYOUT_CHAIN) : -(h+LAYOUT_CHAIN);
-      }
-      shiftSubtree(k, dx, dy);
-    });
-  };
-  // Each child sits on whichever of the parent's 4 sides is STORED on it (see sideOf). Group
-  // the stored order into up to 4 side-buckets, then lay out each occupied bucket independently
-  // (generalizes the old two-sided balance to up to 4 sides).
-  const buckets: Record<LayoutSide, MindNode[]> = { right: [], left: [], down: [], up: [] };
-  for (const k of sorted) buckets[sideOf(node, k)].push(k);
-  const place = type === 'fan' ? fanSide : lineSide;
-  for (const side of ['right', 'left', 'down', 'up'] as const) {
-    if (buckets[side].length) place(buckets[side], side);
-  }
+  // Nothing else places children: a card OUTLINES them (the stack branch above), a frame flows or
+  // leaves them free, and the four side-buckets that line/fan used to fill went with `mm_side` when
+  // children moved INSIDE their parent (docs/spec-edges-and-containment.md).
 }
 
 // Re-apply every node's layout across the whole forest. Free nodes keep their manual

@@ -17,9 +17,11 @@
 import { state, setStatus } from '../core/state.js';
 import { nodeLabel, isLockedEffective } from '../utils/model.js';
 import { record, touchCanvas, commitStep } from './history.js';
-import { scheduleSave, scheduleSaveSettings } from '../data/persistence.js';
+import { scheduleSave } from '../data/persistence.js';
+import { scheduleSaveBoard } from '../data/board.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
+import { paintFreeEdges } from '../view/free-edges.js';
 import { paintAll, colorFill, canvasOwner, syncCanvasBackground } from '../main.js';
 import { placeInViewport } from '../utils/dom.js';
 
@@ -54,10 +56,13 @@ function applyColor(color: string): void {
   else state.canvasColor = color;
 }
 // Repainting a frame means repainting the cards that INHERIT from it, so the whole scope. The map's
-// own colour reaches nothing but the background, so it skips paintAll entirely — which matters on the
-// live drag below, where this runs once per pointer move over the native colour sheet.
+// own colour reaches the background — and the free edges' LABELS, whose ink is derived from the fill
+// they sit on (view/free-edges.ts, main.ts canvasSurface), so a label left unpainted keeps ink chosen
+// against the colour the canvas used to be. Still not paintAll: those two are the whole of what a map
+// colour touches, and this runs once per pointer move over the native colour sheet.
 function repaint(): void {
-  if (canvasOwner()) paintAll(); else syncCanvasBackground();
+  if (canvasOwner()) paintAll();
+  else { syncCanvasBackground(); paintFreeEdges(); }
 }
 function setColor(color: string): void {
   if (state.readOnly) { setStatus('Read-only — can’t recolour the canvas'); return; }
@@ -72,7 +77,7 @@ function setColor(color: string): void {
     applyColor(color);
     commitStep();
     repaint();
-    scheduleSaveSettings();
+    scheduleSaveBoard();
   }
   // The COMMIT path only (a chip click, or the native sheet's `change`) — applyColor also runs per
   // `input` event during a live drag, and remembering there would bury the real picks under a drag's

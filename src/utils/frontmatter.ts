@@ -6,7 +6,7 @@
 // rewrite ONLY the app-owned keys (tags/color/mm_*) while preserving everything else —
 // `date`, `category`, `aliases`, custom fields, and the note body — verbatim.
 // ============================================================
-import { state, isBoxType, isImageCard, type MindNode, type NodeType, type NodeLayout, type FmEntry } from '../core/state.js';
+import { state, type MindNode, type NodeType, type NodeLayout, type FmEntry } from '../core/state.js';
 
 // ---------- a note's TITLE is the leading heading of its body ----------
 // `# Notes` on the first non-blank line IS the title, and nothing else is. Not a frontmatter key,
@@ -114,7 +114,12 @@ export interface ParsedNote {
     blank: boolean;      // mm_blank — this note is empty ON PURPOSE (see serializeMd)
     type: NodeType;
     layout: NodeLayout;
-    side: string;
+    // This note used to be a STACK (`mm_type: stack`, or the older `mm_layout: stack`). It folds to
+    // a plain card, which outlines its children anyway — but the flatten migration needs to tell the
+    // two apart: a stack's children were already INSIDE it and must stay nested, while a plain card's
+    // children sat BESIDE it and become top-level cards joined by edges (data/persistence.ts
+    // flattenLegacyBranches). Meaningless once a map has been migrated.
+    wasStack: boolean;
   };
 }
 
@@ -150,7 +155,7 @@ function fmRemove(entries: FmEntry[], key: string): void {
 }
 
 // Resolve a note's kind + child-arrangement from frontmatter, folding legacy tokens.
-// CURRENT format: `mm_type` (card|frame|stack|annotation|query, default card) + `mm_layout`.
+// CURRENT format: `mm_type` (card|frame|annotation|query, default card) + `mm_layout`.
 // LEGACY (no mm_type): a single `mm_layout` token conflated both — split it here so old vaults
 // keep working: none/''→card·inherit, free/line/fan→card·*, two-sided/grid→card·fan,
 // frame(+mm_arrange flow-h/flow-v)→frame·free|horizontal|vertical, frame-h/-v→frame·*.
@@ -158,14 +163,17 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // whole note is one `![alt](src)` renders as that picture (core/state.ts isImageCard), so an old
 // image note is simply a card and keeps its mm_w/mm_h. The value stops being written on its
 // first save; nothing else in the app has to know the kind ever existed.
-function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayout } {
+// `stack` folds away the same way, and for the same reason: a card with children IS an outline now
+// (view/layout.ts isStack), so the kind said nothing the child list didn't already say.
+function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayout; wasStack: boolean } {
   const t = fmValue(entries, 'mm_type');
-  if (t === 'image') return { type: 'card', layout: 'free' };
-  if (t === 'frame' || t === 'stack' || t === 'card' || t === 'annotation' || t === 'query')
-    return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout };
+  if (t === 'image') return { type: 'card', layout: 'free', wasStack: false };
+  if (t === 'stack') return { type: 'card', layout: 'inherit', wasStack: true };
+  if (t === 'frame' || t === 'card' || t === 'annotation' || t === 'query')
+    return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout, wasStack: false };
   // legacy: infer both from the combined mm_layout token
   const v = fmValue(entries, 'mm_layout');
-  if (v === 'image') return { type: 'card', layout: 'free' };
+  if (v === 'image') return { type: 'card', layout: 'free', wasStack: false };
   if (v === 'frame' || v === 'frame-h' || v === 'frame-v') {
     let layout: NodeLayout = 'free';
     if (v === 'frame-h') layout = 'horizontal';
@@ -175,15 +183,16 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
       if (a === 'flow-h') layout = 'horizontal';
       else if (a === 'flow-v') layout = 'vertical';
     }
-    return { type: 'frame', layout };
+    return { type: 'frame', layout, wasStack: false };
   }
-  if (v === 'two-sided' || v === 'grid') return { type: 'card', layout: 'fan' };
-  // stack used to be a card LAYOUT before it became a node type — fold the old spelling over.
-  if (v === 'stack') return { type: 'stack', layout: 'inherit' };
+  if (v === 'two-sided' || v === 'grid') return { type: 'card', layout: 'fan', wasStack: false };
+  // stack was a card LAYOUT, then a node type; both fold to a plain card, which outlines its
+  // children on its own now.
+  if (v === 'stack') return { type: 'card', layout: 'inherit', wasStack: true };
   // A card omits mm_type (card is the default), so a card's `mm_layout` is read HERE, not via the
   // mm_type branch above — every card layout value must be listed or it silently reverts to inherit.
-  if (v === 'free' || v === 'line' || v === 'fan') return { type: 'card', layout: v };
-  return { type: 'card', layout: 'inherit' };
+  if (v === 'free' || v === 'line' || v === 'fan') return { type: 'card', layout: v, wasStack: false };
+  return { type: 'card', layout: 'inherit', wasStack: false };
 }
 
 export function parseMd(text: string): ParsedNote {
@@ -221,9 +230,6 @@ export function parseMd(text: string): ParsedNote {
       checklist: fmValue(entries, 'mm_checklist') === 'true',
       blank: fmValue(entries, 'mm_blank') === 'true',
       ...foldTypeLayout(entries),
-      // left | right | up | down | '' (unset — backfilled from position once loaded, see
-      // data/persistence.ts). This is the CHILD's own attachment side, not the parent's.
-      side: fmValue(entries, 'mm_side'),
     },
   };
 }
@@ -243,12 +249,12 @@ export function serializeMd(n: MindNode): string {
   if (!fmEntry(entries, 'date')) entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
   const parentNode = n.parent ? state.nodes.get(n.parent) ?? null : null;
   if (parentNode) entries.push({ key:'mm_parent', lines:[`mm_parent: ${parentNode.file}`] });
-  if (parentNode && n.side) entries.push({ key:'mm_side', lines:[`mm_side: ${n.side}`] });
-  // rx/ry is the parent-relative persisted form (see MindNode in core/state.ts); commitRel() has
-  // refreshed it from x/y before we get here (saveAll / exportZip).
-  entries.push({ key:'mm_position_x', lines:[`mm_position_x: ${Math.round(n.rx)}`] });
-  entries.push({ key:'mm_position_y', lines:[`mm_position_y: ${Math.round(n.ry)}`] });
-  if (n.collapsed) entries.push({ key:'mm_collapsed', lines:['mm_collapsed: true'] });
+  // GEOMETRY IS NOT WRITTEN HERE any more — position, size and collapse live in board.json
+  // (data/board.ts), which is what "frontmatter describes the NOTE, board.json describes the BOARD's
+  // arrangement of it" means in practice. mm_position_x/y, mm_w/mm_h and mm_collapsed are still READ
+  // (parseMd) so an older vault opens unchanged, and the stale-mm_* sweep at the top drops them from
+  // each note the first time it is rewritten. `mm_parent` above is the deliberate exception: it is
+  // what keeps the folder self-describing if the board file is ever lost.
   if (n.locked) entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
   if (n.done) entries.push({ key:'mm_done', lines:['mm_done: true'] });
   if (n.checklist) entries.push({ key:'mm_checklist', lines:['mm_checklist: true'] });
@@ -267,14 +273,6 @@ export function serializeMd(n: MindNode): string {
   const layoutDefault = n.type === 'frame' ? 'free' : 'inherit';
   if ((n.type === 'card' || n.type === 'frame') && n.layout !== layoutDefault)
     entries.push({ key:'mm_layout', lines:[`mm_layout: ${n.layout}`] });
-  // The AUTHORED width — every kind can carry one (a card/annotation/stack is resizable on this axis
-  // alone). The HEIGHT belongs to the kinds that own a box, plus the one card that IS one: an IMAGE
-  // card (core/state.ts isImageCard) is its picture, so both its axes are authored and its aspect is
-  // what the resize locks. Any other card measures its height from its content and a stack derives its
-  // own from its outline, so writing an mm_h for either would freeze a value they recompute anyway —
-  // which is also why type-flipping a card out of image mode has to DROP the h (main.ts remeasure).
-  if (n.w != null) entries.push({ key:'mm_w', lines:[`mm_w: ${Math.round(n.w)}`] });
-  if ((isBoxType(n.type) || isImageCard(n)) && n.h != null) entries.push({ key:'mm_h', lines:[`mm_h: ${Math.round(n.h)}`] });
   if (n.type === 'query' && n.query) entries.push({ key:'mm_query', lines:[`mm_query: ${n.query}`] });
   const fm = entries.flatMap(e => e.lines).join('\n');
   // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse
