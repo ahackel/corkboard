@@ -385,20 +385,22 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
      2     every .node                — the cards themselves
      3     a card's own chrome        — tag row, add-note bubble, hidden-count chip, resize handles
      4     a frame's TAB              — its title tab, lock badge, the open docked tab: still the card
-     5     an annotation              — a note pinned ON TOP of the cards, so above all of the above
-     6     the port overlay (#toggles)— sockets and endpoint handles: above every CARD, so a port shows
+     5     the port overlay (#toggles)— sockets and endpoint handles: above every CARD, so a port shows
                                         on whatever it is fitted to — and under the lines (see below)
-     7     EVERY LINE THE APP DRAWS   — free edges (#freeEdges) and annotation tethers (#dragEdges)
+     6     EVERY LINE THE APP DRAWS   — free edges (#freeEdges) and annotation tethers (#dragEdges)
+     7     an annotation              — a note laid ON TOP of the map: above the cards AND the lines
      8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
      9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
     10     freehand ink (#sketch)     — never occluded by anything on the canvas
-   EDGES ABOVE CARDS (7 > 5) is the rule that shapes the middle of the ladder: a line is the thing the
+   EDGES ABOVE CARDS (6 > 4) is the rule that shapes the middle of the ladder: a line is the thing the
    reader is following, and one that dives under a card in its path loses them at exactly the moment
-   they were tracing it. Everything a line may NOT cover sits above it, and all of that is a GHOST —
-   the previews and the cards in hand, which say what a drop is about to do and would be unreadable
-   with resting lines drawn over them.
-   …and a PORT sits between the two (6): above the cards, because it belongs to the card it is fitted
-   to, but UNDER its edges, because a line docked to a port ends AT it — with the ring on top, it
+   they were tracing it. So what sits ABOVE the lines is only what a line may not cover: the drag
+   ghosts and the cards in hand, which say what a drop is about to do and would be unreadable with
+   resting lines drawn over them — and the ANNOTATIONS, which are not part of the map's own drawing
+   at all but remarks laid over the top of it, the way a note stuck on a printed plan covers whatever
+   it lands on.
+   …and a PORT sits under the lines (5): above the cards, because it belongs to the card it is fitted
+   to, but under its edges, because a line docked to a port ends AT it — with the ring on top, it
    covered the last pixels of its own line and the edge read as stopping short of the card. */
 svg#sketch { z-index:10; pointer-events:none; }     /* ink above every card AND every line — the top of the ladder */
 svg#edges { z-index:1; pointer-events:none; }      /* nothing paints here any more — view/edges.ts puts the tethers on #dragEdges */
@@ -406,7 +408,7 @@ svg#edges { z-index:1; pointer-events:none; }      /* nothing paints here any mo
    band, ABOVE the cards: they are the same kind of thing to a reader, and both are lines to be
    followed. The layer takes NO pointer events at all: the clicks belong to the hit layer below the
    cards (next rule), which is what keeps a line drawn over a card from swallowing that card's press. */
-svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:7; pointer-events:none; }
+svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:6; pointer-events:none; }
 /* …and the CLICK targets for those same edges, on their own layer BEHIND the cards (1). An edge's hit
    stroke is 18 world px wide (HIT_W in view/free-edges.ts), so over a card it would swallow that
    card's press — a card would stop being draggable in a band either side of every line crossing it.
@@ -418,7 +420,7 @@ svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1
    layer, so a ring shows on whatever it is fitted to — a frame's tab, an annotation — but UNDER the
    lines, so an edge docked to a port runs all the way onto it instead of ending at a ring drawn over
    the top of it. The layer takes no events; the rings and handles re-enable their own. */
-svg#toggles { z-index:6; pointer-events:none; }
+svg#toggles { z-index:5; pointer-events:none; }
 /* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
 /* Same weight as an annotation's tether (svg#edges path, stroke-width:4 — .anno-edge takes it from
    there): every line the app draws on the canvas is the same thickness, so an edge reads as one of
@@ -454,7 +456,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   pointer-events:auto; cursor:grab; }
 /* The annotation tethers (view/edges.ts paints them here, not into #edges). Same band as the free
    edges: both are lines the reader follows, so both sit above the cards and below the drag ghosts. */
-svg#dragEdges { z-index:7; pointer-events:none; }
+svg#dragEdges { z-index:6; pointer-events:none; }
 svg#edges path, svg#dragEdges path { fill:none; stroke:var(--edge); stroke-width:4;
   stroke-linejoin:round; stroke-linecap:round; }
 /* ghost edges (rip-about-to-detach / reparent-preview, both dashed) always match the 2px dashed
@@ -1165,13 +1167,13 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.query-card .query-empty { padding:5px 7px; font-size:12px; opacity:.65; }
 /* resize handles: the shared `.node > .fh-*` hit-zones above cover this card too */
 /* ---------- annotation: a title-less note pinned ON TOP of its parent ---------- */
-/* Above every CARD layer (a card, its chrome, a frame's tab) — it is pinned on top of the card it
-   remarks on, so nothing that is a card may cover it — and, placed directly under #world rather than
-   in a frame's overflow:hidden wrapper (main.ts paintNode), never clipped by a frame mask either. The
-   lines and the drag ghosts above it do cover it: an annotation is still one of the things a line runs
-   across, and a card in hand floats over the whole canvas. No title row; just the body. Looks like a
-   card otherwise (its own colour, never inherited). */
-.node.annotation { z-index:5; min-height:32px; width:fit-content; max-width:280px; }
+/* Above every card layer (a card, its chrome, a frame's tab) AND above every line: an annotation is
+   not part of the map's drawing, it is a remark laid on top of it, so nothing the map draws — a card,
+   a tether, an edge crossing the spot — may cover it. Placed directly under #world rather than in a
+   frame's overflow:hidden wrapper (main.ts paintNode), so a frame mask never clips it either. Only the
+   drag band is higher: a card in hand floats over the whole canvas. No title row; just the body. Looks
+   like a card otherwise (its own colour, never inherited). */
+.node.annotation { z-index:7; min-height:32px; width:fit-content; max-width:280px; }
 .node.annotation .title-row { display:none; }
 .node.annotation.no-body > .body { min-height:1em; min-width:2em; }   /* stay clickable while empty */
 /* .node .body's overflow-wrap:anywhere (below) is fine on a fixed-width card, but on a
