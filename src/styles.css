@@ -377,15 +377,48 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
-svg#sketch { z-index:8; pointer-events:none; }      /* freehand ink ABOVE every card (incl. dragging:6, annotation:7) so ink is never occluded (drawing is handled on #stage) */
-svg#edges { z-index:1; pointer-events:none; }      /* curves behind nodes */
-/* Free edges (the ones the user DREW — view/free-edges.ts) sit in the same band as the derived
-   connectors, behind the cards: a relation is drawn across the map, not over the top of it. The
-   layer takes no pointer events; only .fe-hit does, so a click on the stretch of edge that runs
-   behind a card still belongs to the card. */
-svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
-.node { z-index:2; }                               /* nodes in the middle */
-svg#toggles { z-index:3; pointer-events:none; }    /* toggles on top; group re-enables events */
+/* ---------- THE LAYER LADDER inside #world — the one place it is spelled ----------
+   Read it top to bottom before adding a z-index anywhere in this file; every rule below that carries
+   one points back here rather than restating the ordering.
+     auto  a frame/stack BOX          — under the cards it holds (and not a stacking context, so the
+                                        parts of a frame that must lift can)
+     2     every .node                — the cards themselves
+     3     a card's own chrome        — tag row, add-note bubble, hidden-count chip, resize handles
+     4     a frame's TAB              — its title tab, lock badge, the open docked tab: still the card
+     5     an annotation              — a note pinned ON TOP of the cards, so above all of the above
+     6     the port overlay (#toggles)— sockets and endpoint handles: above every CARD, so a port shows
+                                        on whatever it is fitted to — and under the lines (see below)
+     7     EVERY LINE THE APP DRAWS   — free edges (#freeEdges) and annotation tethers (#dragEdges)
+     8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
+     9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
+    10     freehand ink (#sketch)     — never occluded by anything on the canvas
+   EDGES ABOVE CARDS (7 > 5) is the rule that shapes the middle of the ladder: a line is the thing the
+   reader is following, and one that dives under a card in its path loses them at exactly the moment
+   they were tracing it. Everything a line may NOT cover sits above it, and all of that is a GHOST —
+   the previews and the cards in hand, which say what a drop is about to do and would be unreadable
+   with resting lines drawn over them.
+   …and a PORT sits between the two (6): above the cards, because it belongs to the card it is fitted
+   to, but UNDER its edges, because a line docked to a port ends AT it — with the ring on top, it
+   covered the last pixels of its own line and the edge read as stopping short of the card. */
+svg#sketch { z-index:10; pointer-events:none; }     /* ink above every card AND every line — the top of the ladder */
+svg#edges { z-index:1; pointer-events:none; }      /* nothing paints here any more — view/edges.ts puts the tethers on #dragEdges */
+/* The free edges (the ones the user DREW — view/free-edges.ts) and the annotation tethers share ONE
+   band, ABOVE the cards: they are the same kind of thing to a reader, and both are lines to be
+   followed. The layer takes NO pointer events at all: the clicks belong to the hit layer below the
+   cards (next rule), which is what keeps a line drawn over a card from swallowing that card's press. */
+svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:7; pointer-events:none; }
+/* …and the CLICK targets for those same edges, on their own layer BEHIND the cards (1). An edge's hit
+   stroke is 18 world px wide (HIT_W in view/free-edges.ts), so over a card it would swallow that
+   card's press — a card would stop being draggable in a band either side of every line crossing it.
+   Split in two, the line is visible over the card and the card still owns the pixels: exactly the
+   behaviour from when the whole layer sat behind them. */
+svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
+.node { z-index:2; }                               /* the cards */
+/* The port overlay (view/free-edges.ts: sockets, endpoint handles, the live draw): above every CARD
+   layer, so a ring shows on whatever it is fitted to — a frame's tab, an annotation — but UNDER the
+   lines, so an edge docked to a port runs all the way onto it instead of ending at a ring drawn over
+   the top of it. The layer takes no events; the rings and handles re-enable their own. */
+svg#toggles { z-index:6; pointer-events:none; }
 /* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
 /* Same weight as an annotation's tether (svg#edges path, stroke-width:4 — .anno-edge takes it from
    there): every line the app draws on the canvas is the same thickness, so an edge reads as one of
@@ -396,18 +429,15 @@ svg#freeEdges path.fe { fill:none; stroke-width:4; stroke-linecap:round; stroke-
    be continuous or the "outline" reads as just more dashes. */
 svg#freeEdges path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:8;
   stroke-linecap:round; stroke-linejoin:round; }
-svg#freeEdges path.fe-hit { fill:none; stroke:transparent; pointer-events:stroke; cursor:pointer; }
+svg#freeEdgeHits path.fe-hit { fill:none; stroke:transparent; pointer-events:stroke; cursor:pointer; }
 /* Open head: stroked, never filled, at the line's own weight so the two read as one drawing. */
 svg#freeEdges path.fe-arrow { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
-/* A draft edge (mid-draw) rides the tools overlay so it stays above the cards it's being aimed at —
-   but it is styled as the FINISHED edge, not as a ghost, so these mirror the #freeEdges rules. */
-svg#toggles path.fe { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
-svg#toggles path.fe-arrow { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
-/* An end DOT rides that overlay too, and for its own reason: it is centred ON the card's border, so
-   drawn with the line (behind the cards) the card eats half of it. An arrowhead has no such problem —
-   its body lies outside the border — so it stays with the line. Never a click target: the line under
-   it is what you grab (path.fe-hit). */
-svg#toggles circle.fe-dot, svg#freeEdges circle.fe-dot { stroke:none; pointer-events:none; }
+/* A draft edge (mid-draw) is painted onto the LINE layer with the finished ones — it IS an edge, and
+   it is styled as the finished one rather than as a ghost, so the rules above already cover it. */
+/* An end DOT is centred ON the card's border, which used to mean the card ate half of it while the
+   lines ran behind the cards; above them, both caps simply ride with their line. Never a click target:
+   the line under it is what you grab (path.fe-hit, on the layer below the cards). */
+svg#freeEdges circle.fe-dot { stroke:none; pointer-events:none; }
 /* Hollow rings, not solid dots: a ring reads as a socket to plug into, a dot reads as a button to
    press. They appear only on a SELECTED card, never on hover — an always-live dot is the one thing
    Miro's users complain about, because it turns every drag past a shape into a maybe-connector. */
@@ -422,9 +452,9 @@ svg#toggles circle.fe-port { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8
 svg#toggles circle.fe-port.on { fill:var(--accent, #6ea8fe); opacity:1; }
 svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:2;
   pointer-events:auto; cursor:grab; }
-/* drag overlay: the dragged/preview edges sit above all normal cards & edges (but just under the
-   dragged card itself, so the edge still tucks behind its own ghost card the usual way) */
-svg#dragEdges { z-index:4; pointer-events:none; }
+/* The annotation tethers (view/edges.ts paints them here, not into #edges). Same band as the free
+   edges: both are lines the reader follows, so both sit above the cards and below the drag ghosts. */
+svg#dragEdges { z-index:7; pointer-events:none; }
 svg#edges path, svg#dragEdges path { fill:none; stroke:var(--edge); stroke-width:4;
   stroke-linejoin:round; stroke-linecap:round; }
 /* ghost edges (rip-about-to-detach / reparent-preview, both dashed) always match the 2px dashed
@@ -572,13 +602,13 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    …and its ink follows the TITLE's rather than the box's (--tab-ink, see the tab rule below): it hangs
    off the tab, outside the box, so it's on the same surface the title is and its "colour inherited from
    the card so it always matches the title text" promise above only holds if it's measured there too. */
-.node.frame > .lock-badge { left:-12px; top:-51px; z-index:5; color:var(--tab-ink, var(--ink)); }
+.node.frame > .lock-badge { left:-12px; top:-51px; z-index:4; color:var(--tab-ink, var(--ink)); }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
-/* z-index:auto paints it BELOW the edges layer (svg#edges z-index:1) AND below normal cards
-   (z-index:2) — a positioned `auto` element paints in the same step as z-index:0, in tree order.
-   Below edges so a COLOURED frame's opaque fill never covers the connector curves drawn among its
-   descendants (the edges live in the global #edges SVG, not inside the frame); below cards so the
-   cards it holds render inside it. Its children aren't DOM-descendants of this box — they live in
+/* z-index:auto paints it BELOW every line and below normal cards (z-index:2) — a positioned `auto`
+   element paints in the same step as z-index:0, in tree order.
+   Below the lines so a COLOURED frame's opaque fill never covers the edges drawn among its descendants
+   (they live in the global SVG layers, not inside the frame); below cards so the cards it holds render
+   inside it. Its children aren't DOM-descendants of this box — they live in
    the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't hide them.
    `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is
    what lets its own title tab (below) lift above the edges/cards that would otherwise cover it.
@@ -661,7 +691,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
      (any non-integer canvas zoom). Nothing overlaps anything now, but this is also the 39px that leaves
      the tab inside FRAME_TAB_H — so it stays, and the title doesn't move. */
   position:absolute; left:-4px; bottom:calc(100% + 3px);
-  z-index:5;                    /* over #edges (1), cards (2), #dragEdges (4); under .dragging (6) */
+  z-index:4;                    /* the frame's tab band — over the box and over cards; see the ladder */
   max-width:calc(100% + 8px); align-items:center;
   /* padding is a normal card's own (see FRAME_TAB_H above) — it's what makes the label's text metric
      line up with a collapsed card's, and half of the 40px. No border-radius: with no fill there's no
@@ -741,7 +771,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    hangs in, above the box (main.ts tabStripEl positions and sizes it; view/layout.ts tabStripRect owns
    the geometry). It has to live OUTSIDE the group's .frame-content wrapper, which clips to the
    interior — the band sits above that, so a tab placed in there would be clipped away entirely. Same
-   z-index as a frame's own tab, for the same reason: over #edges (1) and cards (2). Tabs are
+   z-index as a frame's own tab, for the same reason: over the box and over cards. Tabs are
    positioned inside it in world coordinates by the layout pass, like any other node. */
 /* No z-index of its own — so it isn't a stacking context, and each tab can place itself relative to the
    BOX instead: main.ts tabStripEl keeps the strip right before the box in tree order, so an inactive tab
@@ -832,9 +862,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    one folder, this one in front, holding the box below. Filled BEHIND its border rather than instead of
    it (see above), both in --frame-stroke, so the two rasterize as one shape and the tab keeps the same
    box as its neighbours. Its ink is var(--ink), like the 62% sheets behind it.
-   z-index over the box, over #edges (1) and the cards (2) — the same z-index a frame's own title tab
-   takes, and for the same reasons. */
-.node.frame-folded.docked.tab-active { z-index:5;
+   z-index over the box and over the cards — the same tab band a frame's own title tab takes, and for
+   the same reasons (see the ladder at the top of this file). */
+.node.frame-folded.docked.tab-active { z-index:4;
   background:var(--frame-stroke, var(--edge)); color:var(--ink); }
 /* A group with tabs shows NO tab of its own: it would sit in the same band, look exactly like a tab,
    and read as one — two docked frames must show two tabs, not three. So the strip starts at the box's
@@ -884,7 +914,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    app already uses for #world, just re-rooted here, so nested frames/grandchildren clip for free
    too. No z-index (so it never creates its own stacking context — descendants still compete for
    z-order directly against everything outside it, e.g. a dragged card still floats above all via
-   .dragging's z-index:6); pointer-events:none so clicking the frame's empty interior still reaches
+   .dragging's z-index:9); pointer-events:none so clicking the frame's empty interior still reaches
    the frame's own element underneath instead of this invisible wrapper. */
 /* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
 .frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
@@ -1135,11 +1165,13 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.query-card .query-empty { padding:5px 7px; font-size:12px; opacity:.65; }
 /* resize handles: the shared `.node > .fh-*` hit-zones above cover this card too */
 /* ---------- annotation: a title-less note pinned ON TOP of its parent ---------- */
-/* z-index above every other #world child (cards:2, frames:1, edges:1, toggles:3, dragEdges:4,
-   a dragged card:6) so it never sits behind anything and — placed directly under #world, never in
-   a frame's overflow:hidden wrapper (main.ts paintNode) — is never clipped by a frame mask. No
-   title row; just the body. Looks like a card otherwise (its own colour, never inherited). */
-.node.annotation { z-index:7; min-height:32px; width:fit-content; max-width:280px; }
+/* Above every CARD layer (a card, its chrome, a frame's tab) — it is pinned on top of the card it
+   remarks on, so nothing that is a card may cover it — and, placed directly under #world rather than
+   in a frame's overflow:hidden wrapper (main.ts paintNode), never clipped by a frame mask either. The
+   lines and the drag ghosts above it do cover it: an annotation is still one of the things a line runs
+   across, and a card in hand floats over the whole canvas. No title row; just the body. Looks like a
+   card otherwise (its own colour, never inherited). */
+.node.annotation { z-index:5; min-height:32px; width:fit-content; max-width:280px; }
 .node.annotation .title-row { display:none; }
 .node.annotation.no-body > .body { min-height:1em; min-width:2em; }   /* stay clickable while empty */
 /* .node .body's overflow-wrap:anywhere (below) is fine on a fixed-width card, but on a
@@ -1164,20 +1196,20 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* while editing a title/body/query in place, drop the card's selection ring so only the editor's
    own outline shows */
 .node.sel:has(.title.editing), .node.sel:has(.body.editing), .node.sel:has(.title-row.query-editing) { box-shadow:none; }
-/* the dragged card (and its subtree) floats above every other card — including the
-   landing ghost / insert bar (z-index:5). Translucency is applied to the whole #dragLayer as
-   ONE group (below), not per card, so overlapping dragged items don't shine through each other. */
-.node.dragging { z-index:6; }
+/* the dragged card (and its subtree) floats above every other card, above every line, and above the
+   landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
+   (below), not per card, so overlapping dragged items don't shine through each other. */
+.node.dragging { z-index:9; }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
    .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
    raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
    dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
-   the rest of the canvas, because #dragLayer (below) is itself a z-index:6 stacking context. */
+   the rest of the canvas, because #dragLayer (below) is itself a z-index:9 stacking context. */
 .node.frame.dragging, .node.stack.dragging { z-index:auto; }
 /* the group-opacity layer: while dragging, main.ts moves the dragged cards AND their connectors
    (dragLayerEdges, kept first so it sits behind the cards) in here. Opacity on the layer composites
    the whole set once — you see the canvas below, but the items never show through one another. */
-#dragLayer { position:absolute; top:0; left:0; z-index:6; opacity:.75; pointer-events:none; }
+#dragLayer { position:absolute; top:0; left:0; z-index:9; opacity:.75; pointer-events:none; }
 #dragLayer > .node, #dragLayer > .frame-content { pointer-events:auto; }
 #dragLayerEdges { position:absolute; top:0; left:0; overflow:visible; pointer-events:none; }
 #dragLayerEdges path { fill:none; stroke:var(--edge); stroke-width:4; stroke-linejoin:round; stroke-linecap:round; }
@@ -1204,13 +1236,14 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    affordance (no reorder/reparent ghost is possible while merging an image in). Same look. */
 .node.anno-drop-target, .node.drop-merge { outline:2px dashed var(--node-sel); outline-offset:3px; border-radius:var(--r-card); }
 /* landing-spot preview: where the dragged card will actually land once dropped onto a
-   valid reparent target — above resting cards (z-index:5) but below the dragged ones (6) */
-.node.landing-ghost { pointer-events:none; transition:none; z-index:5; }
+   valid reparent target — above the resting cards AND the lines drawn over them (the ghost band, 8),
+   below the cards actually in hand (9) */
+.node.landing-ghost { pointer-events:none; transition:none; z-index:8; }
 /* in-parent reorder indicator: a bar in the gap between the two siblings the dragged card
    would slot between (horizontal for a vertical stack, vertical for a horizontal spread).
    White and dashed to match the reparent ghost's border; the dash gradient runs along the
    bar's long axis, set inline per orientation — see features/drag.ts showInsertLine */
-.insert-line { position:absolute; pointer-events:none; z-index:5; }
+.insert-line { position:absolute; pointer-events:none; z-index:8; }
 /* break long words / URLs and clip anything that still overflows the card horizontally */
 /* A card's title IS the leading `# ` line of its note, so it must LOOK like one: this metric is shared
    verbatim with `.node .body h1` below (the same heading, rendered by renderBodyHTML when it appears
@@ -1314,7 +1347,10 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body > :last-child  { margin-bottom:0; }
 .node .body ul, .node .body ol,
 .node .body blockquote, .node .body pre { margin:.3em 0; }
-.node .body p { margin:.3em 0 .75em; }   /* a little breathing room after each paragraph */
+/* The ONLY gap between two paragraphs: .75em of a 12px/1.4 body is 9px, half a line. It has to come
+   from here, because the renderer collapses any run of blank lines in the note into one paragraph
+   break (utils/markdown.ts) — the file's Returns don't set the spacing, this does. */
+.node .body p { margin:.3em 0 .75em; }
 /* h2–h6 only. h1 is deliberately NOT in this group: it's the card's own name (the leading `# ` line) and
    takes the shared heading metric instead — see the rule below. It USED to be listed here, and because
    this rule sits after the shared one with the same specificity, it silently won: every card's h1 came
@@ -1338,7 +1374,13 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    li.task's negative margin cancels that indent (its checkbox stands in for the marker, hence
    list-style:none) and has to move with it, or task rows step right when the padding grows. */
 .node .body ul,.node .body ol { padding-left:1.5em; }
-.node .body li { margin:.1em 0; }
+/* Half a line between items (.5em of a 12px/1.4 body ≈ 6px; adjacent items' margins collapse, so
+   that IS the gap). Each bullet is a paragraph of its own and often a WRAPPING one, and at .1em the
+   gap between two items was smaller than the gap between two wrapped lines of the SAME item — so a
+   list read as one block of text with stray dots in it. Half a line is the least that puts the item
+   boundary above the line boundary; a whole blank line would match the markdown source but makes a
+   five-bullet card twice as tall. On the item, so every list kind gets it: bullets, ordered, tasks. */
+.node .body li { margin:.5em 0; }
 .node .body li.task { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:.4em; }
 .node .body li.task .taskbox,
 /* Both states are TRANSLUCENT, so a checkbox reads as a dent in the card rather than a chip
@@ -1705,7 +1747,7 @@ body.sketching #floatBar { display:none; }   /* the sketch panel takes the edit 
   content:""; position:absolute; inset:0; margin:auto; border-radius:50%;
   width:var(--d); height:var(--d); background:var(--text); }
 /* rubber-band marquee drawn over the canvas while drag-selecting */
-#marquee { position:absolute; display:none; z-index:5; pointer-events:none;
+#marquee { position:absolute; display:none; z-index:8; pointer-events:none;   /* the ghost band: a pending selection, over the lines */
   border:1px dotted var(--accent); background:color-mix(in srgb, var(--accent) 15%, transparent); }
 
 /* ---- floating selection bar: a compact pill of icon buttons anchored next to the selected

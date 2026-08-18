@@ -225,13 +225,24 @@ export function renderBodyHTML(md: string | null | undefined): string {
       while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*\d+\.\s+/, ''));
       html += `<ol>${items.map(it => `<li>${mdInline(it)}</li>`).join('')}</ol>`; continue;
     }
-    // text run: gather until the next block. Every blank line is KEPT and rendered as an empty
-    // line (like Obsidian) — including blanks right before/after a list or other block. A run
-    // that's only blank lines (a gap between two blocks) becomes that many empty lines.
-    const para: string[] = [];
-    while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) para.push(lines[i++]);
-    if (para.some(l => l.trim())) html += `<p>${para.map(mdInline).join('<br>')}</p>`;
-    else html += '<br>'.repeat(para.length);
+    // Text run: gather until the next block, then split it into PARAGRAPHS on blank lines — one <p>
+    // per group of non-blank lines, and A RUN OF BLANK LINES IS ONE BREAK however many lines it is.
+    // The gap between two paragraphs is then CSS's to give (`.node .body p`'s bottom margin, half a
+    // line), not the file's: how many times someone hit Return is not a layout instruction, and a
+    // note that grew four blank lines while it was being edited shouldn't render four empty lines on
+    // the card. Same reading Obsidian's reading view gives it. A run that is ONLY blank lines — the
+    // gap between two blocks — emits nothing at all, since both blocks carry their own margins.
+    // Within a paragraph a single newline still breaks the line (<br>), which is the one place the
+    // author's Return is taken literally, and the behaviour every card on every existing map has.
+    const run: string[] = [];
+    while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) run.push(lines[i++]);
+    let para: string[] = [];
+    const flushPara = (): void => {
+      if (para.length) html += `<p>${para.map(mdInline).join('<br>')}</p>`;
+      para = [];
+    };
+    for (const l of run) { if (l.trim()) para.push(l); else flushPara(); }
+    flushPara();
   }
   return html;
 }

@@ -5,11 +5,17 @@
 // converges on a shared side socket; a free edge is a thin bowed curve with an arrowhead, in its own
 // colour, that meets each card's border wherever the line happens to arrive.
 //
-// This module paints two layers: the curves themselves into #freeEdges (behind the cards, like
-// #edges), and — when an edge or a card is selected — its handles into #toggles, the overlay that
-// sits above the cards so a handle is never buried under one.
-import { state, freeEdgesSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+// This module paints three layers, and which is which is the whole of how an edge behaves:
+//   · #freeEdges — the curves, ABOVE the cards: a line is something the reader follows, and one that
+//     dives under a card in its path loses them exactly where they were tracing it;
+//   · #freeEdgeHits — the same curves as invisible 18px CLICK targets, BEHIND the cards, so the
+//     stretch of a line that crosses a card is still the card's to press (see HIT_W);
+//   · #toggles — the ports and endpoint handles, BETWEEN the two: above every card, so a ring shows on
+//     whatever it is fitted to, and under the lines, so an edge runs onto its port rather than ending
+//     at the ring drawn over it.
+import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
+import { isStack, insideStack, isDockedTab } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { nodeW, nodeH, colorFill, elTop, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
@@ -17,23 +23,65 @@ import { esc } from '../utils/markdown.js';
 
 // Half-width of the invisible stroke that takes the clicks. Wider than the visible 2px line because
 // a 2px target at 50% zoom is 1 screen pixel — and unlike a card, an edge has no interior to aim at.
+// It rides its own layer BEHIND the cards for that reason: 18 world px of invisible stroke drawn OVER
+// a card would take that card's own press wherever a line crossed it.
 const HIT_W = 18;
 export const HANDLE_R = 7;          // endpoint grab handles, shown while an edge is selected
 export const SOCKET_R = 6;          // the four rings on a selected card you drag a new edge from
 
-// The four points on a card's border a free edge can leave from: the side centres. Same anchors the
-// derived connectors use, which is deliberate — one visual vocabulary for "an edge meets a card here".
-export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
-  const r = portRect(n);
-  return [
-    { side: 'up',    p: { x: r.x + r.w/2, y: r.y } },
-    { side: 'down',  p: { x: r.x + r.w/2, y: r.y + r.h } },
-    { side: 'left',  p: { x: r.x,         y: r.y + r.h/2 } },
-    { side: 'right', p: { x: r.x + r.w,   y: r.y + r.h/2 } },
-  ];
+// WHICH faces a given node offers, and the ONE place that question is answered — socketPoints (the
+// rings), portPoint (where a line docks) and nearestSide (what a drop picks) all read it, so a ring,
+// its line and the side chosen for it can never disagree. Not every kind carries all four: a shape
+// whose own layout already speaks along one axis keeps only the faces that don't contradict it.
+//   · a DOCKED TAB is a label in a strip, with its siblings pressed against it left and right and its
+//     own box below — the top of the pill is the only face that is free to be pointed at;
+//   · an OUTLINE ROW is a full-width band in a column, stacked directly on the rows above and below,
+//     so up/down would leave a port buried in the neighbouring row: it takes left and right;
+//   · a STACK, being that column, is entered and left along it — top and bottom.
+// Everything else keeps the full set.
+const ALL_SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
+export function portSides(n: MindNode): EdgeSide[] {
+  if (isDockedTab(n)) return ['up'];
+  if (insideStack(n)) return ['left', 'right'];
+  if (isStack(n)) return ['up', 'down'];
+  return ALL_SIDES;
+}
+// The face an edge stored on `side` actually docks to NOW. A node's kind (and so its port set) can
+// change under an edge that was already drawn — dock a frame as a tab, drop a card into an outline —
+// and this keeps every line on a face that still exists rather than on the memory of one: the stored
+// side if it survives, else its opposite, else whatever the node does offer. Nothing is written back;
+// the edge keeps the side it was drawn with and comes back with it if the node leaves the container.
+export function resolveSide(n: MindNode, side: EdgeSide): EdgeSide {
+  const sides = portSides(n);
+  if (sides.includes(side)) return side;
+  return sides.includes(OPPOSITE[side]) ? OPPOSITE[side] : sides[0];
 }
 
-// The rectangle the four ports sit on. A node's bounds, EXCEPT for a frame with a title tab: its
+// The points on a card's border a free edge can leave from: the centre of each face it offers. Same
+// anchors the derived connectors use, which is deliberate — one visual vocabulary for "an edge meets
+// a card here".
+export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
+  return portSides(n).map(side => ({ side, p: portPoint(n, side) }));
+}
+
+// How far OUTSIDE a node's bounds the SELECTION RING's centre line runs — the line a port must sit on,
+// since the ring is what the user reads as the card's edge (the port is a fitting ON that rim, and one
+// drawn a ring-width inside it looks like it missed). Every ring in styles.css is 2px wide and drawn
+// OUTSIDE the border box, so its centre is half its width out:
+//   · `.node.sel` — box-shadow 0 0 0 2px, i.e. the band [0,2] outside → +1, and that's every card,
+//     every frame BOX and a folded frame's pill;
+//   · an OPEN docked tab — its own ::before ring, inset -4px with a 2px border → the band [4,6] → +5;
+//   · a CLOSED docked tab — the same ::before at inset -2px → the band [2,4] → +3.
+// A frame's own title tab has a ring of its own too (inset -2px), but no port sits on it: a frame's
+// ports are on its BOX (portRect below drops the tab from the rect), whose ring is the plain +1.
+const RING_MID = 1;
+function ringMid(n: MindNode): number {
+  if (isDockedTab(n)) return n.collapsed ? 3 : 5;
+  return RING_MID;
+}
+
+// The rectangle the ports sit on: the selection ring's centre line, all the way round (ringMid). Or,
+// put the other way, a node's bounds grown by half a ring — EXCEPT for a frame with a title tab: its
 // bounds include that tab, which is a separate shape hanging above the box (elTop / FRAME_TAB_DROP),
 // so a port on the bounds' top edge would sit up on the tab — or in the empty gap beside it — rather
 // than on the box the edge is pointing at. elTop shifts nothing for everything else, a FOLDED frame
@@ -42,13 +90,15 @@ export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
 // and nearestSide all read it, so a port, its ring and the side a drop picks can't disagree.
 function portRect(n: MindNode): { x: number; y: number; w: number; h: number } {
   const top = elTop(n, n.y);
-  return { x: n.x, y: top, w: nodeW(n), h: n.y + nodeH(n) - top };
+  const m = ringMid(n);
+  return { x: n.x - m, y: top - m, w: nodeW(n) + 2*m, h: (n.y + nodeH(n) - top) + 2*m };
 }
 
 // The point an edge docks at on one face — the face's CENTRE, the same anchor the socket rings sit
 // on, so a line always meets a card exactly where the ring that made it was.
 export function portPoint(n: MindNode, side: EdgeSide): Pt {
   const r = portRect(n);
+  side = resolveSide(n, side);
   if (side === 'up')    return { x: r.x + r.w/2, y: r.y };
   if (side === 'down')  return { x: r.x + r.w/2, y: r.y + r.h };
   if (side === 'left')  return { x: r.x,         y: r.y + r.h/2 };
@@ -65,7 +115,10 @@ export function nearestSide(n: MindNode, p: Pt): EdgeSide {
   const r = portRect(n);
   const w = r.w || 1, h = r.h || 1;
   const dx = p.x - (r.x + w/2), dy = p.y - (r.y + h/2);
-  return Math.abs(dx) / w >= Math.abs(dy) / h ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+  const want: EdgeSide = Math.abs(dx) / w >= Math.abs(dy) / h ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+  // …then onto a face this node actually offers: the nearest side of a card that has only two is one
+  // of those two, never the one the geometry alone would have picked.
+  return resolveSide(n, want);
 }
 // The two facing ports for a pair of cards, for an edge that hasn't chosen yet (⌘L, or the backfill
 // of an edge stored before ports were).
@@ -73,7 +126,10 @@ export function facingSides(a: MindNode, b: MindNode): { from: EdgeSide; to: Edg
   const ca = { x: a.x + nodeW(a)/2, y: a.y + nodeH(a)/2 };
   const cb = { x: b.x + nodeW(b)/2, y: b.y + nodeH(b)/2 };
   const from = nearestSide(a, cb);
-  return { from, to: OPPOSITE[from] };
+  // The facing port, except on a card that doesn't offer it (portSides) — there the line takes the
+  // face of `b` that points back at `a` instead, which is the same intent expressed in what it has.
+  const to = resolveSide(b, OPPOSITE[from]);
+  return { from, to };
 }
 export const OPPOSITE: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 
@@ -249,8 +305,8 @@ export function edgeVisible(e: BoardEdge): boolean {
 export function paintFreeEdges(): void {
   // Filtering hides every line, for the same reason paintEdges does it: dimmed cards are
   // translucent, so lines behind them read as clutter.
-  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; return; }
-  let svg = '', tools = '';
+  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; return; }
+  let svg = '', hits = '', tools = '';
   // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
   // fill exactly as a frame title's is from the surface behind it (main.ts behindFill → inkFor): black
   // or white, whichever that fill can carry. The theme's own --fg was fine only while the canvas wore
@@ -268,17 +324,18 @@ export function paintFreeEdges(): void {
     const ink = colorFill(e.color) ?? 'var(--edge)';
     const sel = state.selEdges.has(e.id);
     const dash = e.dashed ? ' stroke-dasharray="7 6"' : '';
-    svg += `<path class="fe-hit" data-edge="${e.id}" d="${d}" stroke-width="${HIT_W}"/>`;
+    hits += `<path class="fe-hit" data-edge="${e.id}" d="${d}" stroke-width="${HIT_W}"/>`;
     // The selection ring, in the same language a card's is: the SAME shape, drawn thicker and SOLID
     // underneath the line itself, so a selected edge reads as outlined rather than merely recoloured
     // (and a dashed edge still shows a continuous ring through its gaps).
     if (sel) svg += `<path class="fe-selring" d="${d}"/>`;
     svg += `<path class="fe" style="stroke:${ink}"${dash} d="${d}"/>`;
-    // A DOT goes to the overlay above the cards, an arrowhead stays down here with the line — see
-    // .fe-dot in styles.css for why the two ends of one edge can be on different layers.
+    // Both terminators go with the line. A DOT used to be lifted onto the overlay above the cards,
+    // because it is centred ON a card's border and a line drawn BEHIND the cards had half of every dot
+    // eaten by the card it landed on. The line is above the cards now, so the whole edge — shaft, head
+    // and dot — is one drawing on one layer again.
     const capTo = endCap(e.toCap, b, tipTan, ink), capFrom = endCap(e.fromCap, a, tailTan, ink);
-    if (e.toCap === 'dot') tools += capTo; else svg += capTo;
-    if (e.fromCap === 'dot') tools += capFrom; else svg += capFrom;
+    svg += capTo + capFrom;
     // The label sits ON the line, at its midpoint BY ARC LENGTH, on a plate so the line running
     // under it doesn't strike the text through. Width is estimated from the character count rather
     // than measured: this is one string in an SVG rebuilt on every paint, and a real measurement
@@ -309,8 +366,11 @@ export function paintFreeEdges(): void {
       // it is about to take, and for the same reason: filled means "a line is on this one". So the
       // card tells you at a glance which of its four faces are already spoken for, which is what you
       // want to know before you drag a second line off the same side.
+      // Against the side each edge RESOLVES to (resolveSide), not the one on disk: on a card whose
+      // port set has shrunk, several stored sides fold onto one ring, and that ring is taken.
       const taken = state.edges.some(x => edgeVisible(x)
-        && ((x.from === one.id && x.fromSide === side) || (x.to === one.id && x.toSide === side)));
+        && ((x.from === one.id && resolveSide(one, x.fromSide) === side)
+         || (x.to === one.id && resolveSide(one, x.toSide) === side)));
       tools += `<circle class="fe-socket${taken ? ' taken' : ''}" data-socket="${side}" data-node="${one.id}" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`;
     }
   // The edge being drawn right now, following the pointer.
@@ -332,12 +392,15 @@ export function paintFreeEdges(): void {
     const edge = ui.edgeDraw.edgeId ? state.edges.find(x => x.id === ui.edgeDraw!.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
     const fromCap = edge ? edge.fromCap : 'none', toCap = edge ? edge.toCap : 'arrow';
+    // The draft goes on the LINE layer, not the port overlay: it is a line, and drawing it a layer
+    // down would put the edge you are making underneath the edges that are already there.
     const { d, pts } = routeFor(from, fromSide, endPt, endSide);
-    tools += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${d}"/>`;
+    svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${d}"/>`;
     // The far end's cap only once it has landed on a port — mid-air there is no end to terminate.
-    if (snapped) tools += endCap(toCap, endPt, legDir(pts[pts.length-2], pts[pts.length-1]), ink);
-    tools += endCap(fromCap, from, legDir(pts[1], pts[0]), ink);
+    if (snapped) svg += endCap(toCap, endPt, legDir(pts[pts.length-2], pts[pts.length-1]), ink);
+    svg += endCap(fromCap, from, legDir(pts[1], pts[0]), ink);
   }
   freeEdgesSvg.innerHTML = svg;
+  freeEdgeHitsSvg.innerHTML = hits;
   togglesSvg.innerHTML = tools;
 }

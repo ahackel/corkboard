@@ -237,6 +237,9 @@ export const sketchSvg = byId<SVGSVGElement>('sketch');
 export const edgesSvg = byId<SVGSVGElement>('edges');
 // The free edges the user drew — see BoardEdge above and view/free-edges.ts.
 export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');
+// …and the layer BEHIND the cards that holds nothing but those edges' click targets — see index.html
+// and view/free-edges.ts for why the two halves of one edge live on opposite sides of the cards.
+export const freeEdgeHitsSvg = byId<SVGSVGElement>('freeEdgeHits');
 export const togglesSvg = byId<SVGSVGElement>('toggles');
 // Top overlay for drag-time edges (dragged card's connectors + reparent preview) — see view/edges.ts.
 export const dragEdgesSvg = byId<SVGSVGElement>('dragEdges');

@@ -79,7 +79,13 @@
       <svg id="sketch"></svg>
       <svg id="edges"></svg>
       <!-- free edges: the relations the user DREW (board.json), as opposed to #edges' derived
-           parent connectors. Behind the cards like #edges; only its own hit paths take clicks. -->
+           parent connectors. The lines are drawn ABOVE the cards (see the layer ladder in
+           styles.css) — a line is followed, so it may not dive under a card in its path.
+           Their invisible CLICK targets are a second layer, kept BEHIND the cards: an edge's hit
+           stroke is 18px wide (HIT_W), and over a card that band would swallow the card's own
+           press. So the stretch of a line that crosses a card is visible there but belongs to the
+           card, exactly as it did when the whole layer sat behind them. -->
+      <svg id="freeEdgeHits"></svg>
       <svg id="freeEdges"></svg>
       <!-- toggles overlay renders ABOVE node divs so collapse dots are always visible -->
       <svg id="toggles"></svg>
