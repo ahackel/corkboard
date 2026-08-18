@@ -36,7 +36,6 @@ export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'v
 // it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
 // reads this asks isImageCard beside it (utils/frontmatter.ts serializeMd).
 export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'query';
-export type EdgeStyle = 'straight' | 'orthogonal' | 'bezier';
 export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
 export type GridSize = 0 | 20 | 40 | 80 | 160 | 320;
 // The grid button's cycle order (least ink → most) and the size picker's choices, kept here beside
@@ -193,7 +192,6 @@ export interface AppState {
   // bar, so selecting either clears the other (features/edge-tools.ts).
   selEdges: Set<string>;
   sel: Set<string>;                // full selection set (⌘-click / marquee)
-  edgeStyle: EdgeStyle;            // restored from localStorage
   gridStyle: GridStyle;            // restored per-map from settings.json — see data/persistence.ts
   gridSize: GridSize;               // pattern cell size in world px — restored per-map from settings.json
   // The MAP's own canvas colour — a colour VALUE like a node's (a palette key or an authored hex,
@@ -217,7 +215,6 @@ export const state: AppState = {
   selId: null,
   sel: new Set<string>(),
   selEdges: new Set<string>(),
-  edgeStyle: 'orthogonal',
   gridStyle: 'none',
   gridSize: 20,
   canvasColor: '',

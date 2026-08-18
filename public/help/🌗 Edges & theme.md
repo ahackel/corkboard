@@ -10,6 +10,5 @@ mm_collapsed: true
 
 # 🌗 Edges & theme
 
-- **Edge style:** cycle the connector look (bezier / orthogonal / straight) from the toolbar. Your choice is remembered.
 - **Theme:** toggle **light / dark** in the toolbar; it's saved for next time.
 - Both are visual only — they never change your notes.

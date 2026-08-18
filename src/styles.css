@@ -2093,7 +2093,7 @@ body.outline #floatBar { display:none !important; }
 @media (max-width: 700px) {
   /* nothing to act on behind a full-screen outline — hide the canvas toolbar + its chrome too */
   body.outline #toolbar, body.outline #stage, body.outline #ghostCard, body.outline #ghostHint,
-  body.outline #fitBtn, body.outline #edgeBtn { display:none !important; }
+  body.outline #fitBtn { display:none !important; }
   /* fill the whole screen and inset the content from the top instead of parking the panel below
      the header — so cards scroll UP UNDER the floating home / + buttons (iOS-style) rather than
      being clipped at a fixed top edge. */

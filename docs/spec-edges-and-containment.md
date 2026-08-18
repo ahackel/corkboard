@@ -87,11 +87,12 @@ never re-derived: an edge that re-picked its nearest face on every paint would s
 as they move, and a diagram you arranged would rearrange itself under you. Move a card and the line
 follows its ports; to change one, drag that endpoint.
 
-**Orthogonal is the default route.** Once a line leaves a NAMED face it has a direction to respect,
+**There is ONE route shape.** Once a line leaves a NAMED face it has a direction to respect,
 and right angles are what make "this leaves the right side and enters the top" legible. It runs a
 short stub straight out of each port before it is allowed to turn, so an edge never bends back across
-the card it just left. The toolbar's existing edge-style button (straight / orthogonal / bezier) drives
-this — it used to route the old branch connectors and would otherwise now do nothing.
+the card it just left. The corners are drawn generously round (a cubic arc at each bend, clamped to
+half the shorter leg), so the route stays orthogonal in what it SAYS while looking organic. There is
+no style picker: one shape everywhere is what keeps a map's lines reading as one hand.
 
 **Editing an edge:** selecting it shows both endpoint handles — drag either onto another card to
 re-route, or off onto empty canvas to detach. **Double-click the line to label it in place**, in a

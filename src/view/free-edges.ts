@@ -135,22 +135,29 @@ export const OPPOSITE: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', le
 
 // How far a line runs straight out of a port before it is allowed to turn. Without it an edge
 // leaving a card's right face could immediately bend back across the card it just left.
-const STUB = 24;
-const CORNER = 10;   // radius of the rounded elbow corners
+const STUB = 28;
+const CORNER = 44;   // how round an elbow gets — clamped per corner to half its shortest leg
 
-// polyline → path `d` with rounded corners (quadratic at each interior vertex, clamped to leg length)
+// polyline → path `d` with ROUND corners: a cubic at each interior vertex whose handles sit 55% of
+// the way back toward the vertex, which is what makes the bend read as an arc rather than the flat
+// pinch a quadratic gives. One radius per corner (the smaller of the two legs' halves), so the curve
+// comes in and leaves at the same distance — an asymmetric pair kinks.
 function roundedPath(pts: Pt[], r: number): string {
   if (pts.length < 3) return pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
+  const K = 0.55;
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 1; i < pts.length - 1; i++) {
     const p = pts[i], prev = pts[i-1], next = pts[i+1];
-    const toward = (q: Pt, dist: number): Pt => {
+    const lp = Math.hypot(p.x-prev.x, p.y-prev.y), ln = Math.hypot(p.x-next.x, p.y-next.y);
+    const rad = Math.min(r, lp/2, ln/2);
+    const toward = (q: Pt): Pt => {
       const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
-      return { x: p.x + dx/L*dist, y: p.y + dy/L*dist };
+      return { x: p.x + dx/L*rad, y: p.y + dy/L*rad };
     };
-    const e1 = toward(prev, Math.min(r, Math.hypot(p.x-prev.x, p.y-prev.y)/2));
-    const e2 = toward(next, Math.min(r, Math.hypot(p.x-next.x, p.y-next.y)/2));
-    d += ` L ${e1.x} ${e1.y} Q ${p.x} ${p.y} ${e2.x} ${e2.y}`;
+    const e1 = toward(prev), e2 = toward(next);
+    const h1 = { x: e1.x + (p.x - e1.x) * K, y: e1.y + (p.y - e1.y) * K };
+    const h2 = { x: e2.x + (p.x - e2.x) * K, y: e2.y + (p.y - e2.y) * K };
+    d += ` L ${e1.x} ${e1.y} C ${h1.x} ${h1.y} ${h2.x} ${h2.y} ${e2.x} ${e2.y}`;
   }
   const last = pts[pts.length-1];
   return d + ` L ${last.x} ${last.y}`;
@@ -160,26 +167,14 @@ function roundedPath(pts: Pt[], r: number): string {
 // with the drawing: the arrowheads take their direction from its last/first leg, and the label and
 // the edge bar sit at its midpoint BY ARC LENGTH rather than at some separately-guessed point.
 //
-// Orthogonal is the default and the reason is the ports: once a line leaves a named face it has a
+// There is ONE shape, and the reason is the ports: once a line leaves a named face it has a
 // direction to respect, and right angles are what make "this leaves the right side and enters the
-// top" legible. `straight`/`bezier` remain available through the toolbar's edge-style button, which
-// used to drive the old branch connectors and would otherwise now do nothing.
+// top" legible. The corners are drawn generously round, so the route stays orthogonal in what it
+// SAYS while looking hand-drawn rather than plotted.
 export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: string; pts: Pt[]; mid?: Pt } {
   const na = NORMAL[aSide], nb = NORMAL[bSide];
   const a1 = { x: a.x + na.x * STUB, y: a.y + na.y * STUB };
   const b1 = { x: b.x + nb.x * STUB, y: b.y + nb.y * STUB };
-  if (state.edgeStyle === 'straight') return { d: `M ${a.x} ${a.y} L ${b.x} ${b.y}`, pts: [a, b] };
-  if (state.edgeStyle === 'bezier') {
-    const k = Math.max(40, Math.hypot(b.x - a.x, b.y - a.y) / 2);
-    const c1 = { x: a.x + na.x * k, y: a.y + na.y * k }, c2 = { x: b.x + nb.x * k, y: b.y + nb.y * k };
-    // `pts` is the CONTROL polygon, not the curve — right for the two tangents (its first and last
-    // legs are the tangents at the ends) and wrong for the middle, which is nowhere near where the
-    // curve actually runs. So the midpoint is handed over explicitly: the cubic evaluated at t=.5,
-    // which for a curve this symmetric is its centre. Without it a bezier's label floated off the
-    // line, out in the bay the curve bends away from.
-    const mid = { x: (a.x + 3*c1.x + 3*c2.x + b.x) / 8, y: (a.y + 3*c1.y + 3*c2.y + b.y) / 8 };
-    return { d: `M ${a.x} ${a.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${b.x} ${b.y}`, pts: [a, a1, b1, b], mid };
-  }
   // Prefer an L — ONE turn — whenever the two ports can be joined by one: the corner at (b.x, a.y)
   // or (a.x, b.y) is the only bend, and the line arrives at each port already travelling along that
   // port's normal. Only possible when the two ports face different AXES (two ports on the same axis
@@ -193,16 +188,37 @@ export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: s
     const intoB = (corner.x - b.x) * nb.x + (corner.y - b.y) * nb.y;
     if (outA >= STUB && intoB >= STUB) return { d: roundedPath([a, corner, b], CORNER), pts: [a, corner, b] };
   }
-  // Orthogonal: out along each port's normal, then a single dog-leg between the two stub ends,
-  // turning first along whichever axis the SOURCE port faces.
-  const horiz = horizA;
-  const mid = horiz ? { x: (a1.x + b1.x) / 2, y: 0 } : { x: 0, y: (a1.y + b1.y) / 2 };
-  const pts: Pt[] = horiz
-    ? [a, a1, { x: mid.x, y: a1.y }, { x: mid.x, y: b1.y }, b1, b]
-    : [a, a1, { x: a1.x, y: mid.y }, { x: b1.x, y: mid.y }, b1, b];
-  // Drop any zero-length leg so a straight run doesn't pick up a phantom corner.
-  const clean = pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i-1].x, p.y - pts[i-1].y) > 0.5);
+  // Otherwise the two stub ends have to be joined, and there is more than one way to do it. Every
+  // candidate below leaves `a` along its normal and enters `b` along its own, so they differ only in
+  // the corridor between — but most of them DOUBLE BACK for some pair of ports, and a line that
+  // turns 180° onto itself reads as broken however prettily the corner is rounded. So: list them
+  // best-looking first, and take the first one that never reverses. The last two run the corridor
+  // clear PAST both stubs, which is the only shape that works for two ports facing the same way on
+  // the same line — every shorter route there has to come back on itself.
+  const mx = (a1.x + b1.x) / 2, my = (a1.y + b1.y) / 2;
+  const outx = a1.x < b1.x ? Math.min(a1.x, b1.x) - STUB : Math.max(a1.x, b1.x) + STUB;
+  const outy = a1.y < b1.y ? Math.min(a1.y, b1.y) - STUB : Math.max(a1.y, b1.y) + STUB;
+  const zx = (x: number): Pt[] => [a, a1, { x, y: a1.y }, { x, y: b1.y }, b1, b];
+  const zy = (y: number): Pt[] => [a, a1, { x: a1.x, y }, { x: b1.x, y }, b1, b];
+  const candidates: Pt[][] = horizA
+    ? [zx(mx), [a, a1, { x: b1.x, y: a1.y }, b1, b], zy(my), [a, a1, { x: a1.x, y: b1.y }, b1, b], zx(outx), zy(outy)]
+    : [zy(my), [a, a1, { x: a1.x, y: b1.y }, b1, b], zx(mx), [a, a1, { x: b1.x, y: a1.y }, b1, b], zy(outy), zx(outx)];
+  const clean = candidates.map(dedupe).find(noReversal) ?? dedupe(candidates[candidates.length - 1]);
   return { d: roundedPath(clean, CORNER), pts: clean };
+}
+// Drop any zero-length leg, so a straight run doesn't pick up a phantom corner — and so the
+// reversal test below sees the route's real turns rather than a degenerate vertex.
+function dedupe(pts: Pt[]): Pt[] {
+  return pts.filter((p, i) => i === 0 || Math.hypot(p.x - pts[i-1].x, p.y - pts[i-1].y) > 0.5);
+}
+// Does the polyline ever turn back on itself? Anything past a right angle counts: at exactly 90° the
+// dot of two consecutive leg directions is 0, and only a fold makes it negative.
+function noReversal(pts: Pt[]): boolean {
+  for (let i = 2; i < pts.length; i++) {
+    const d1 = legDir(pts[i-2], pts[i-1]), d2 = legDir(pts[i-1], pts[i]);
+    if (d1.x * d2.x + d1.y * d2.y < -0.01) return false;
+  }
+  return true;
 }
 // The point half way ALONG a polyline, plus the direction of the leg it falls on.
 function midOfPolyline(pts: Pt[]): Pt {
@@ -271,9 +287,8 @@ export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; mid: Pt; 
   const { d, pts, mid } = routeFor(a, e.fromSide, b, e.toSide);
   return {
     a, b, d,
-    // Halfway ALONG the route as it is actually drawn — the polyline's arc-length midpoint for the
-    // straight and orthogonal styles, and whatever the style handed over for one whose path isn't
-    // its polyline. The label, the bar and the inline editor all hang off this one point.
+    // Halfway ALONG the route as it is actually drawn — the polyline's arc-length midpoint. The
+    // label, the bar and the inline editor all hang off this one point.
     mid: mid ?? midOfPolyline(pts),
     tipTan: legDir(pts[pts.length - 2] ?? a, pts[pts.length - 1] ?? b),
     tailTan: legDir(pts[1] ?? b, pts[0] ?? a),

@@ -21,9 +21,6 @@ import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, i
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
-import edgeStraightIcon from './assets/icons/edge-straight.svg?raw';
-import edgeOrthogonalIcon from './assets/icons/edge-orthogonal.svg?raw';
-import edgeBezierIcon from './assets/icons/edge-bezier.svg?raw';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim } from './view/camera.js';
 import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
@@ -50,7 +47,7 @@ import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
 import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
-import type { MindNode, EdgeStyle } from './core/state.js';
+import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
@@ -1696,31 +1693,6 @@ function animateReflow(before: Map<string, Pt>): void {
   setTimeout(() => { if (tok !== ui.animToken) return; for (const m of visible) m.el && m.el.classList.remove('lt-anim'); paintEdges(); }, DUR + 60);
 }
 
-// ---------- edge style (straight / orthogonal / bezier), persisted ----------
-const EDGE_KEY = 'corkboard.edgeStyle';
-const EDGE_STYLES: EdgeStyle[] = ['orthogonal', 'bezier', 'straight'];
-const EDGE_ICONS: Record<EdgeStyle, string> = { straight: edgeStraightIcon, orthogonal: edgeOrthogonalIcon, bezier: edgeBezierIcon };
-// The toolbar button shows the ACTIVE style's icon (not a generic one); clicking cycles.
-function updateEdgeIcon(): void {
-  const span = document.querySelector('#edgeBtn .ic');
-  if (span) span.innerHTML = EDGE_ICONS[state.edgeStyle];
-  byId('edgeBtn').title = `Edge style: ${state.edgeStyle} — click to cycle`;
-}
-function initEdgeStyle(): void {
-  let saved: string | null = null;
-  try { saved = localStorage.getItem(EDGE_KEY); } catch {}
-  if (saved && (EDGE_STYLES as string[]).includes(saved)) state.edgeStyle = saved as EdgeStyle;
-  updateEdgeIcon();
-}
-function cycleEdgeStyle(): void {
-  const i = EDGE_STYLES.indexOf(state.edgeStyle);
-  state.edgeStyle = EDGE_STYLES[(i + 1) % EDGE_STYLES.length];
-  try { localStorage.setItem(EDGE_KEY, state.edgeStyle); } catch {}
-  updateEdgeIcon();
-  paintEdges();
-  setStatus(`Edge style: ${state.edgeStyle}`);
-}
-initEdgeStyle();
 
 // Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
 // children, folds them (and everything below) too. A leaf with a body can fold its body alone.
@@ -2626,7 +2598,6 @@ window.addEventListener('keyup', (e) => {
   });
 }
 byId('fitBtn').onclick = focusOrFit;
-byId('edgeBtn').onclick = cycleEdgeStyle;
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
 byId('helpBtn').onclick = openHelpTab;  // same as F1 — opens the help map in a new tab
 

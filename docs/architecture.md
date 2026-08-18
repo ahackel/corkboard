@@ -889,7 +889,7 @@ being zoomed out is when you most need to know which frame you're standing in.
 ## State and naming
 
 **The mutable `state` (`core/state.ts`) is the MAP:** `nodes` (id → node), `view` (`{x,y,k}`), selection (`selId`
-+ `sel` Set), `edgeStyle`, `readOnly`, `canvasColor`, the grid settings, … Every field is either the notes
++ `sel` Set), `readOnly`, `canvasColor`, the grid settings, … Every field is either the notes
 themselves or something mirrored to disk/localStorage and restored on load. The render pipeline is `paintNode` /
 `paintEdges` / `paintAll`; DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG. The open-frame
 scope is deliberately **not** in here (it lives in `nav/scope.ts`): a scope is where you're STANDING, never
