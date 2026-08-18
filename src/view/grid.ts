@@ -44,7 +44,6 @@ import { clamp } from '../utils/num.js';
 const GRID_ICONS: Record<GridStyle, string> = { none: gridOffIcon, dot: gridDotIcon, mesh: gridMeshIcon, line: gridLineIcon };
 
 let gridBtn: HTMLElement | null = null;
-let gridSizeBtn: HTMLElement | null = null;
 const gridEl = document.getElementById('grid');
 const gridFineEl = document.getElementById('gridFine');
 
@@ -145,43 +144,51 @@ export function paintGrid(): void {
   gridEl.style.transform = `translate(${off(state.view.x)}px,${off(state.view.y)}px)`;
 }
 
-// Reflects state.gridStyle/gridSize onto the toolbar buttons (icon + title/label) and repaints the
-// layer. Called after a fresh map load (settings.json may have just changed it) and each toggle/pick.
+// Reflects state.gridStyle/gridSize onto the ONE grid button (its face is the live style) and
+// repaints the layer. Called after a fresh map load (settings.json may have just changed it) and
+// after each pick.
 export function refreshGrid(): void {
-  if (gridBtn) { gridBtn.innerHTML = GRID_ICONS[state.gridStyle]; gridBtn.title = `Background grid: ${state.gridStyle} — click to cycle`; }
-  if (gridSizeBtn) { gridSizeBtn.textContent = String(state.gridSize); gridSizeBtn.title = `Grid size: ${state.gridSize} — click to choose`; }
+  if (gridBtn) {
+    gridBtn.innerHTML = GRID_ICONS[state.gridStyle];
+    gridBtn.title = `Background grid: ${STYLE_LABELS[state.gridStyle]}, ${sizeLabel(state.gridSize)}`;
+  }
   painted = '';   // force a rebuild — the style may have changed, not just the step
   paintGrid();
 }
 
-function cycleGridStyle(): void {
-  const i = GRID_STYLES.indexOf(state.gridStyle);
-  state.gridStyle = GRID_STYLES[(i + 1) % GRID_STYLES.length];
+// Both axes in ONE menu off ONE button. It used to be two corner circles — a cycle-through-styles
+// button beside a size picker — which spent two slots of chrome on one idea, and left the style you
+// wanted up to three taps away. A menu names every choice and marks the live one.
+const STYLE_LABELS: Record<GridStyle, string> = { none: 'Off', dot: 'Dots', mesh: 'Mesh', line: 'Lines' };
+const sizeLabel = (size: GridSize): string => size ? `${size} px` : 'No snap';
+const tick = (on: boolean): string => on ? '✓ ' : '\u2007 ';   // figure space, so labels line up either way
+
+function openGridMenu(): void {
+  const r = gridBtn!.getBoundingClientRect();
+  // sy is clamped to fit above the viewport bottom (see openMenuAt in context-menu.ts), so passing
+  // the button's own top edge naturally pushes the menu up from this bottom-corner button.
+  openMenu([
+    ...GRID_STYLES.map(style => ({
+      label: tick(style === state.gridStyle) + STYLE_LABELS[style],
+      run: () => set({ gridStyle: style }),
+    })),
+    'sep' as const,
+    ...GRID_SIZES.map(size => ({
+      label: tick(size === state.gridSize) + sizeLabel(size),
+      run: () => set({ gridSize: size }),
+    })),
+  ], r.left, r.top);
+}
+
+function set(patch: { gridStyle?: GridStyle; gridSize?: GridSize }): void {
+  Object.assign(state, patch);
   refreshGrid();
   scheduleSaveBoard();
 }
 
-function pickGridSize(size: GridSize): void {
-  state.gridSize = size;
-  refreshGrid();
-  scheduleSaveBoard();
-}
-
-// Wires the toolbar buttons. Called once at startup; the initial paint happens once the first
-// map's settings.json has loaded (loadFromDir calls refreshGrid()).
+// Wires the grid button. Called once at startup; the initial paint happens once the first map's
+// settings.json has loaded (loadFromDir calls refreshGrid()).
 export function setupGrid(): void {
   gridBtn = document.getElementById('gridBtn');
-  if (gridBtn) gridBtn.onclick = cycleGridStyle;
-  gridSizeBtn = document.getElementById('gridSizeBtn');
-  if (gridSizeBtn){
-    gridSizeBtn.onclick = (e) => {
-      e.stopPropagation();
-      const r = gridSizeBtn!.getBoundingClientRect();
-      // sy is clamped to fit above the viewport bottom (see openMenuAt in context-menu.ts), so
-      // passing the button's own top edge naturally pushes the menu up from this bottom-corner button.
-      openMenu(GRID_SIZES.map(size => ({
-        label: String(size), run: () => pickGridSize(size),
-      })), r.left, r.top);
-    };
-  }
+  if (gridBtn) gridBtn.onclick = (e) => { e.stopPropagation(); openGridMenu(); };
 }

@@ -395,7 +395,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   `hasAuthoredColor` test applies only to the frame half — `canvasColor` is authored by definition, and `''`
   means the theme's background.
 - **The canvas-colour BUTTON edits whichever of those two you're standing on** (`#canvasColorBtn`, one slot
-  left of `#gridSizeBtn`; `features/canvas-color.ts`). At the top level it writes `state.canvasColor`; inside
+  left of `#gridBtn`; `features/canvas-color.ts`). At the top level it writes `state.canvasColor`; inside
   an open frame it writes that FRAME's `n.color` — the same field the float bar would write if the frame were
   selected, so nothing new exists for the case. It reads `canvasOwner` too, so the chip on its face shows the
   value it would overwrite. Four things to respect: the chips are `properties.ts`'s row, not a copy
@@ -590,7 +590,7 @@ The insets then become ours to pay back, and they're paid ONCE, by name: `styles
 `--sa-t/--sa-r/--sa-b/--sa-l` at `:root` from `env(safe-area-inset-*)` (with a `0px` fallback, so every
 `calc()` downstream is exact on the devices — all but a handful — that have no cutout at all), and each
 piece of fixed chrome adds the matching one on top of its own 10–12px margin: the two top bars, the four
-corner button stacks, the ghost card, the sketch bar, the docked float bar, the image viewer, the sheets,
+corner buttons, the ghost card, the sketch bar, the docked float bar, the image viewer, the sheets,
 and the two drawers. **Add the term to any new fixed control** — the failure mode is silent on every
 desktop and on an iPad, and only shows up as an untappable button on the one device you didn't test.
 

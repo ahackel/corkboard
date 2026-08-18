@@ -37,7 +37,7 @@ import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
-import { toggleSketchMode } from './features/sketch.js';   // also registers the sketch toolbar wiring
+import { toggleSketchMode, setSketchMode } from './features/sketch.js';   // also registers the sketch toolbar wiring
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
 import { commitStep, record, touch, undo, redo, updateUndoButtons } from './features/history.js';
 import { hydrateImages } from './features/images.js';
@@ -2463,6 +2463,10 @@ window.addEventListener('keydown', (e) => {
   if (key === 'Escape'){
     e.preventDefault();
     if (typing) { active?.blur?.(); }
+    // Sketch mode owns the top bar while it lasts, so Esc leaves it the way it leaves search —
+    // ahead of the selection cases below, which have nothing to clear here (entering sketch mode
+    // deselects, and cards stay locked throughout).
+    else if (ui.sketchOn) setSketchMode(false);
     else if (state.selEdges.size) clearEdgeSelection();
     else if (state.sel.size) selectNode(null);
     return;

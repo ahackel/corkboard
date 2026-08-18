@@ -212,6 +212,7 @@ function init(): void {
   buildControls();
   markTool(); markColor(); markWidth();
   byId('sketchBtn').addEventListener('click', toggleSketchMode);
+  byId('sketchDone').addEventListener('click', () => setSketchMode(false));
   byId('sketchPen').addEventListener('click', () => setTool('pen'));
   byId('sketchEraser').addEventListener('click', () => setTool('eraser'));
 }
