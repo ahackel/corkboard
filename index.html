@@ -249,26 +249,19 @@
         <path d="M8 2 Q 20 22 12 42"/><path d="M12 42l-6-6M12 42l7-4"/></svg>
     </span></button>
 
-  <!-- sketch sidebar: replaces the edit panel while sketch mode is on (populated by features/sketch.ts) -->
-  <div id="sketchPanel">
-    <div class="sk-title">Sketch</div>
-    <div class="fgroup">
-      <label>Tool</label>
-      <div class="sk-tools">
-        <button id="sketchPen" title="Pen — draw" aria-label="Pen">
-          <span class="ic" data-icon="sketch"></span> Pen</button>
-        <button id="sketchEraser" title="Eraser — remove a whole stroke" aria-label="Eraser">
-          <span class="ic" data-icon="eraser"></span> Erase</button>
-      </div>
-    </div>
-    <div class="fgroup">
-      <label>Colour</label>
-      <div id="sketchColors" class="sketch-dots colors"></div>
-    </div>
-    <div class="fgroup">
-      <label>Width</label>
-      <div id="sketchWidths" class="sketch-dots widths"></div>
-    </div>
+  <!-- sketch bar: a bottom-centre pill of pen / eraser / colours / widths, shown only while sketch
+       mode is on (populated by features/sketch.ts). Same chrome as #floatBar — which hides itself in
+       that mode — so the ink tools read as the same KIND of control strip as the card tools. Every
+       choice is one tap, no popovers: while drawing you swap colour and width constantly. -->
+  <div id="sketchBar">
+    <button id="sketchPen" class="fb-icon" title="Pen — draw" aria-label="Pen">
+      <span class="ic" data-icon="sketch"></span></button>
+    <button id="sketchEraser" class="fb-icon" title="Eraser — remove a whole stroke" aria-label="Eraser">
+      <span class="ic" data-icon="eraser"></span></button>
+    <span class="fb-sep"></span>
+    <div id="sketchColors" class="sketch-dots colors"></div>
+    <span class="fb-sep"></span>
+    <div id="sketchWidths" class="sketch-dots widths"></div>
   </div>
 
   <!-- ghost card in the corner — drag it onto the canvas to create a new card -->

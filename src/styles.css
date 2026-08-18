@@ -1681,16 +1681,32 @@ body.readonly #canvasColorBtn { display:none; }
 /* override #toolbar button svg (15×15) so the in-button help arrow keeps its real size */
 #helpHint .hint-arrow { width:24px; height:46px; }
 
-/* sketch sidebar — a fixed right-hand panel, shown only in sketch mode (the floating edit bar
-   hides itself in that mode instead — see features/sketch.ts) */
-#sketchPanel {
-  position:fixed; top:calc(50px + var(--sa-t)); right:calc(10px + var(--sa-r)); width:240px; z-index:15;
-  max-height:calc(100vh - 60px - var(--sa-t) - var(--sa-b)); overflow:auto;
-  background:var(--panel); border-radius:var(--r-panel); padding:12px;
-  flex-direction:column; gap:12px; display:none;
+/* sketch bar — the ink tools, shown only in sketch mode (the floating edit bar hides itself in that
+   mode instead — see features/sketch.ts). Same pill chrome and the same .fb-icon buttons as
+   #floatBar, so a card's controls and the pen's read as one kind of thing; it just anchors to the
+   BOTTOM CENTRE of the screen instead of to a card, since ink has no selection to sit beside — and
+   that keeps it clear of the corner button stacks and of the hand drawing on the canvas.
+   It wraps rather than switching layout on a narrow screen: every colour and width is one tap, and
+   on a phone that row becomes two. */
+#sketchBar {
+  position:fixed; z-index:20; bottom:calc(12px + var(--sa-b)); left:50%; transform:translateX(-50%);
+  max-width:calc(100vw - 24px - var(--sa-l) - var(--sa-r));
+  display:none; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px; padding:6px;
+  /* Deliberately OFF the --r-* scale, and it earns the exception by doing two jobs with one value:
+     on one row the bar is 44px tall, so 26px clamps to half the shorter side and paints a true PILL
+     (same face as #floatBar); once it wraps to two rows on a phone it stays a 26px rounded rect
+     instead of the lozenge --r-full would give a tall box. */
+  background:var(--panel); border-radius:26px;
+  touch-action:pan-x pan-y;
 }
-body.sketching #sketchPanel { display:flex; }
-body.sketching #floatBar { display:none; }   /* the sketch panel takes the edit bar's place */
+body.sketching #sketchBar { display:flex; }
+body.sketching #floatBar { display:none; }   /* the sketch bar takes the edit bar's place */
+/* sizing only, as #floatBar does for its own row — the faces come from .fb-icon */
+#sketchBar button.fb-icon {
+  flex:none; width:var(--bar-btn); height:var(--bar-btn); padding:0; display:flex;
+  align-items:center; justify-content:center; border-radius:var(--r-full); border:0; cursor:pointer;
+}
+#sketchBar button.fb-icon.active { color:#fff; background:var(--accent); }
 /* emoji tag picker popover (features/emoji-picker.ts): a Slack-reaction-style grid of recent +
    curated + vault-wide emoji, opened off whichever ".tag-add-btn" triggered it — the selected
    card's own bottom-left button on the canvas (main.ts), or the outline properties sheet's tag row
@@ -1723,20 +1739,7 @@ body.sketching #floatBar { display:none; }   /* the sketch panel takes the edit 
   font-size:13px; line-height:1; display:inline-flex; align-items:center; justify-content:center;
 }
 .tag-add-btn:hover { border-color:var(--accent); color:var(--text); }
-#sketchPanel .sk-title { font-size:16px; font-weight:600; color:var(--text);
-  padding-bottom:8px; border-bottom:1px solid var(--grid); }
-#sketchPanel .fgroup { display:flex; flex-direction:column; gap:6px; }
-#sketchPanel label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
-.sk-tools { display:flex; gap:6px; }
-.sk-tools button {
-  flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px;
-  height:34px; padding:0; border-radius:var(--r-full); font-size:12px;
-  background:var(--node-border); border:1px solid var(--node-border); color:var(--muted); cursor:pointer;
-}
-.sk-tools button svg { width:16px; height:16px; display:block; }
-.sk-tools button:hover { color:var(--text); }
-.sk-tools button.active { color:#fff; background:var(--accent); border-color:var(--accent); }
-/* colour & width pickers — round dots (plain buttons in the sidebar, so no #toolbar override) */
+/* colour & width pickers — round dots (plain buttons in the bar, so no #toolbar override) */
 .sketch-dots { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .sketch-dots .dot {
   width:22px; height:22px; min-width:0; border-radius:50%; cursor:pointer; flex:none; box-sizing:border-box;
@@ -1882,7 +1885,7 @@ body.canvas-interacting .addnote { display:none !important; }
    DEFINITE width to resolve against — see #fbColorPop's .swatches below; in the outline's branch
    sheet the row is block-width already. */
 .swatch-break { flex:0 0 100%; height:0; margin:0; }
-/* fixed size so colour chips match the sketch sidebar's colour dots (.sketch-dots .dot) exactly */
+/* fixed size so colour chips match the sketch bar's colour dots (.sketch-dots .dot) exactly */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
   border:0; background:var(--sw); }
 .swatch:hover  { box-shadow:0 0 0 2px color-mix(in srgb, var(--text) 45%, transparent); }
@@ -2032,12 +2035,6 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    position math here and lets this block own left/top/bottom; frameBox also treats the docked
    bar as a bottom obstruction instead of a right one — see view/camera.ts). */
 @media (max-width: 700px) {
-  #sketchPanel {
-    top:auto; bottom:0; left:calc(10px + var(--sa-l)); right:calc(10px + var(--sa-r)); width:auto;
-    max-height:55vh;
-    border-radius:var(--r-panel) var(--r-panel) 0 0;
-    padding-bottom:calc(12px + var(--sa-b));
-  }
   #floatBar {
     top:auto; bottom:0; left:calc(10px + var(--sa-l)); right:calc(10px + var(--sa-r)); width:auto; justify-content:center;
     border-radius:var(--r-panel) var(--r-panel) 0 0;

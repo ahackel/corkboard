@@ -177,7 +177,7 @@ export function setSketchMode(on: boolean): void {
   ui.sketchOn = on;
   if (!on) sketchCancel();
   else selectNode(null);   // cards are locked in sketch mode — clear any selection
-  document.body.classList.toggle('sketching', on);     // opens #sketchPanel, locks .node pointer-events (styles.css)
+  document.body.classList.toggle('sketching', on);     // opens #sketchBar, locks .node pointer-events (styles.css)
   byId('sketchBtn').classList.toggle('active', on);
   setStatus(on ? 'Sketch mode — draw on the canvas' : 'Sketch mode off');
 }
@@ -190,12 +190,12 @@ function markTool(): void {
 function setTool(t: 'pen' | 'eraser'): void { tool = t; try { localStorage.setItem(TOOL_KEY, t); } catch {} markTool(); }
 
 function buildControls(): void {
-  const colorsEl = byId('sketchColors'); colorsEl.classList.add('colors');
+  const colorsEl = byId('sketchColors');
   colorsEl.innerHTML = COLORS.map(c => `<button class="dot" data-color="${c}" title="${c}" style="--sw:${c}"></button>`).join('');
   colorsEl.querySelectorAll<HTMLElement>('.dot').forEach(dot =>
     dot.addEventListener('click', () => { color = dot.dataset.color!; try { localStorage.setItem(COLOR_KEY, color); } catch {} setTool('pen'); markColor(); }));
 
-  const widthsEl = byId('sketchWidths'); widthsEl.classList.add('widths');
+  const widthsEl = byId('sketchWidths');
   widthsEl.innerHTML = WIDTHS.map(w => `<button class="dot" data-w="${w}" title="${w}px" style="--d:${Math.min(14, w + 3)}px"></button>`).join('');
   widthsEl.querySelectorAll<HTMLElement>('.dot').forEach(dot =>
     dot.addEventListener('click', () => { width = +dot.dataset.w!; try { localStorage.setItem(WIDTH_KEY, String(width)); } catch {} setTool('pen'); markWidth(); }));

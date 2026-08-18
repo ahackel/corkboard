@@ -590,7 +590,7 @@ The insets then become ours to pay back, and they're paid ONCE, by name: `styles
 `--sa-t/--sa-r/--sa-b/--sa-l` at `:root` from `env(safe-area-inset-*)` (with a `0px` fallback, so every
 `calc()` downstream is exact on the devices — all but a handful — that have no cutout at all), and each
 piece of fixed chrome adds the matching one on top of its own 10–12px margin: the two top bars, the four
-corner button stacks, the ghost card, the sketch panel, the docked float bar, the image viewer, the sheets,
+corner button stacks, the ghost card, the sketch bar, the docked float bar, the image viewer, the sheets,
 and the two drawers. **Add the term to any new fixed control** — the failure mode is silent on every
 desktop and on an iPad, and only shows up as an untappable button on the one device you didn't test.
 
