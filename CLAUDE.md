@@ -50,8 +50,8 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **One `.md` file per node, and the file's PATH is its identity** (`mm_parent` points at it, the hash
   encodes it). No database; ONE `board.json` holds ARRANGEMENT, never content. Ids are ephemeral.
 - **A node's TITLE is the leading `# ` line of its body and nothing else** (`splitHeading`/
-  `joinHeading`, exact inverses). Not frontmatter, not the filename. No heading means an UNTITLED
-  card. The filename is a derived slug, minted ONCE and never re-derived; titles may collide.
+  `joinHeading`, exact inverses). Not frontmatter, not the filename; no heading = an UNTITLED card. The
+  filename is a slug TRACKING that text: re-derived each save, renamed on edit-commit, suffixed `Notes 2.md`.
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
 - **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card with children outlines them in

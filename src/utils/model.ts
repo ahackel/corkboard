@@ -106,10 +106,10 @@ export function nodeLabel(n: MindNode): string {
 // Has this node any name OF ITS OWN — the exact condition under which nodeLabel falls through above.
 const nameless = (n: MindNode): boolean => !n.title.trim() && !firstLineLabel(n.body);
 // …and the label for one that hasn't: "No-title 3". Deliberately NOT the filename stem, which is what
-// this used to be. A card the user emptied keeps the slug it was named under (the filename is minted
-// ONCE, data/persistence.ts desiredFileFor), so the stem is the name they just deleted — the one thing a
-// cleared card must not still be called. And a container nobody ever named is `Untitled.md` on disk
-// anyway, so the stem had nothing to offer there either.
+// this used to be. A card the user emptied keeps the slug it was named under (data/persistence.ts
+// desiredFileFor renames nothing when there is nothing to name off), so the stem is the name they just
+// deleted — the one thing a cleared card must not still be called. And a container nobody ever named
+// is `Untitled.md` on disk anyway, so the stem had nothing to offer there either.
 // The number is POSITIONAL — how many nameless nodes come at or before this one in map order (which is
 // load order, i.e. the store's own file order) — so adding or filling in a nameless card renumbers the
 // others. That's the price of inventing a name from nothing rather than persisting one, and it's a price

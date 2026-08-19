@@ -23,10 +23,28 @@ filename. Three things follow:
   the test is `#{1,6}` and nothing else. `firstLineLabel` (same file) additionally strips bullets, quotes and
   list numbers, which is right when minting a name for something unnamed (an untitled card's slug, the
   text-drag ghost's caption) and wrong here: a note beginning `- milk` is a list, not a card titled "milk".
-- **A slug is minted ONCE and never re-derived.** A card is one text field whose first line is edited
-  constantly, so re-deriving would rename the file — and rewrite every child's `mm_parent` — on ordinary
-  edits, and would mass-rename a vault of heading-less notes on first open. A stale slug costs nothing: an
-  untitled card has no name to be wrong about.
+- **The slug TRACKS the note's text** (`slugStem`/`desiredFileFor`, `data/persistence.ts`). Every save
+  re-derives it, so a file always reads as the name the card shows: its `# ` heading, else its first
+  line, else — for an image card — its picture. It used to be minted ONCE and left to go stale, on the
+  argument that an untitled card has no name to be wrong about. That argument was wrong about the
+  ORDINARY card: every card is born empty and the autosave 400ms later names it off nothing, so it got
+  `safeName('')` — `Untitled.md`, `Untitled 2.md`, … from the collision suffix — and the text typed a
+  second later never reached the filename. A vault filled up with `Untitled 47.md`.
+- **Tracking is paid for in renames, and everything holding a path follows one.** A rename rewrites the
+  children's `mm_parent` (`saveAll` phase 1, which is why every path must be final before anything is
+  serialized) and re-points the inbound PATH-form `[[wikilinks]]` (phase 1b, `retargetWikilinks`, alias
+  half kept verbatim). Title-form links need no fixup: re-slugging a file never changes a title.
+- **It is not a rename per keystroke.** While any of the four editors holds the note's text the name is
+  FROZEN (`ui-state.ts frozenFileNodeId`), so the rename lands once, when the edit session commits —
+  never as `M.md`, `Ma.md`, `Mag.md`. That freeze is what makes tracking affordable at all.
+- **A collision takes a NUMBER, and the note keeps its name** — `Notes.md`, `Notes 2.md`, both titled
+  "Notes". The test is case-INSENSITIVE, since that is how the filesystem collides; `taken()` excludes
+  the asking node, so a card already holding `Notes 2.md` keeps it rather than churning every save.
+- **Nothing to be named off = keep the name you have.** `stem === 'Untitled'` (safeName's empty-string
+  fallback) means no heading, no text, no picture: there is nothing to track, so `desiredFileFor`
+  returns the current name. Two things fall out of that one line — a still-empty `Untitled 7.md` doesn't
+  renumber as its neighbours come and go, and a card the user CLEARED keeps the slug it was named
+  under, which is what `utils/model.ts namelessLabel` leans on when it refuses to show the stem.
 
 **The blank line under a heading is the note's, not the app's** (`titleGap`). Title and body are two
 fields where the file is one text, so the split loses exactly one thing: whether `# Title` was followed
@@ -55,7 +73,8 @@ when it is set. A blank card is meant to be reachable; only a brand-NEW card com
 **Where a node's name is SHOWN rather than edited, use `nodeLabel`** (`utils/model.ts`): title, else first
 line, else **`No-title N`**. A blank row in the outline, in search or on a folder tab is never right, so
 every display site goes through it. The last resort used to be the filename stem, and deliberately isn't any
-more: a card the user emptied keeps the slug it was named under (the filename is minted once), so the stem
+more: a card the user emptied keeps the slug it was named under (`desiredFileFor` renames nothing when
+there is nothing to name off), so the stem
 is precisely the name that card must no longer be called — and a container nobody ever named is
 `Untitled.md` on disk anyway. `N` counts nameless nodes in map order, so it renumbers when one is added or
 filled in; that is safe because nothing stores or matches on this string (a `[[wikilink]]` resolves against

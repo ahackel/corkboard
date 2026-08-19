@@ -376,12 +376,14 @@ function safeName(title: string): string {
 // name without that suffix ever being read back as part of the title. Which is what lets two cards
 // share a title: `Notes.md` and `Notes 2.md`, both titled "Notes".
 //
-// An UNTITLED card has no name to slug, so it gets one off its first line — minted ONCE and never
-// re-derived. Two reasons it can't track the text the way a title does: the first line of a note is
-// edited constantly (a card's whole text is one field now), so re-deriving would rename the file, and
-// its children's mm_parent with it, on every edit; and re-deriving would mass-rename a vault whose
-// notes don't carry their titles as headings yet. A slug that goes stale costs nothing — an untitled
-// card has no name to be wrong about.
+// The slug TRACKS the text: it is re-derived on every save, so a card's filename always reads as the
+// name the card shows — its heading, else its first line. It used to be minted once and left to go
+// stale, which meant an ordinary card (untitled, its text edited into shape after it was created) kept
+// whatever name it had at its very first autosave — `Untitled 12.md` for life. Tracking costs a rename
+// per edit that changes the first line, and the two things that record a path follow it: the children's
+// mm_parent (saveAll phase 1) and the inbound [[wikilinks]] (phase 1b). It is not a rename PER
+// KEYSTROKE, though: while any editor holds the note's text the name is frozen (ui-state.ts
+// frozenFileNodeId), so the rename lands once, when the edit session commits.
 // The bare slug a node's own text gives it, with no directory and no `.md` — the ONE spelling of that
 // rule, shared with exportZip, which has to name never-saved nodes the same way.
 // An IMAGE card (a card holding nothing but one `![alt](src)`) is named after the PICTURE: its alt
@@ -404,9 +406,13 @@ function filesInUse(): Map<string, string> {
 }
 function desiredFileFor(n: MindNode, inUse: Map<string, string>): string {
   const dir = n.file ? n.file.slice(0, n.file.lastIndexOf('/')+1) : '';
-  const title = n.title.trim();
-  if (!title && n.file) return n.file;              // untitled and already named: keep the slug
   const stem = slugStem(n);
+  // Nothing in the note to be named off — `Untitled` is safeName's fallback for an empty string, so
+  // this is a card with no heading, no text and no picture. Keep the name it already has: there is
+  // nothing to track, and renaming it would only renumber it as its neighbours come and go. A card the
+  // user just CLEARED therefore keeps the slug it was named under, which utils/model.ts namelessLabel
+  // leans on — the stem is the name they deleted, so nothing shows it to them again.
+  if (stem === 'Untitled' && n.file) return n.file;
   let rel = dir + stem + '.md';
   // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since
   // that's how the filesystem collides on macOS/Windows: "Notes" and "notes" are one file there, so
@@ -418,6 +424,30 @@ function desiredFileFor(n: MindNode, inUse: Map<string, string>): string {
   let i = 2;
   while (taken(rel)) rel = dir + stem + ' ' + (i++) + '.md';
   return rel;
+}
+// Re-point the PATH-form [[wikilinks]] that name a file phase 1 just renamed, so a link written
+// before the rename still resolves after it (utils/model.ts resolveWikilink matches a target against
+// the node's path, `.md` optional). Only the path form moves: a `[[Title]]` names the title, which
+// re-slugging a file never touches — and the keys here are whole paths, so a bare title can only
+// collide with one by BEING that path, which resolveWikilink already reads path-first anyway.
+// The alias half is carried through verbatim: `[[Untitled 7|see this]]` keeps the words the reader sees.
+// Returns the ids whose body changed, for phase 2 to write.
+function retargetWikilinks(renames: Map<string, string>): string[] {
+  if (!renames.size) return [];
+  const dropMd = (path: string): string => path.replace(/\.md$/i, '');
+  const to = new Map<string, string>();   // old path, no `.md`, lowercased -> new path, no `.md`
+  for (const [from, into] of renames) to.set(dropMd(from).toLowerCase(), dropMd(into));
+  const touched: string[] = [];
+  for (const n of state.nodes.values()) {
+    // Same shape as the renderer's wikilink arm (utils/markdown.ts mdInline).
+    const body = n.body.replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, (m, target: string, alias?: string) => {
+      const into = to.get(dropMd(target.trim()).toLowerCase());
+      return into ? `[[${into}${alias ?? ''}]]` : m;
+    });
+    if (body === n.body) continue;
+    n.body = body; n.dirty = true; touched.push(n.id);
+  }
+  return touched;
 }
 export async function saveAll(): Promise<void> {
   if (state.readOnly) return;        // read-only mode never writes to disk
@@ -436,6 +466,7 @@ export async function saveAll(): Promise<void> {
   // by path (mm_parent), so a renamed parent forces its children to be rewritten, and all
   // parent paths must be final before we serialize anyone.
   const removals: string[] = [];
+  const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
   // Kept in step with n.file below, so a name this loop has already handed out is seen as taken by
   // the nodes after it — the live `state.nodes` scan this replaced got that for free.
   const inUse = filesInUse();
@@ -446,6 +477,7 @@ export async function saveAll(): Promise<void> {
     const target = frozen ?? desiredFileFor(n, inUse);
     if (n.file && n.file !== target) {
       removals.push(n.file);                       // old file to delete once the rename is written
+      renames.set(n.file, target);
       for (const c of childrenOf(n.id)) needWrite.add(c.id);
     }
     if (n.file !== target) needWrite.add(n.id);    // brand-new node, or a rename
@@ -453,6 +485,10 @@ export async function saveAll(): Promise<void> {
     n.file = target;                               // adopt the final name
     inUse.set(target.toLowerCase(), n.id);
   }
+
+  // Phase 1b — a rename drags its INBOUND links along, for the same reason it rewrites its children's
+  // mm_parent: a path recorded elsewhere in the vault must not outlive the path it records.
+  for (const id of retargetWikilinks(renames)) needWrite.add(id);
 
   // Phase 2 — write everything that changed, now that all paths are final.
   let written = 0;
