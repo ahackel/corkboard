@@ -10,10 +10,10 @@ import { applyLayouts, insertedKidOrder, isTabsFrame, isDockedTab, canBeTab, tab
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
-import { scheduleSaveBoard } from '../data/board.js';
+import { gcJunctions, scheduleSaveBoard } from '../data/board.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -37,7 +37,11 @@ export const NEW_CARD_H = 64;
 // canvas double-click, the canvas ⋯ menu, Space, a dropped file, a card double-clicked into a
 // container) lands the card under the pointer rather than hanging down-right of it, so the default
 // card's size is written once instead of once per gesture.
-export function centredAt(p: Pt): Pt { return { x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }; }
+// Where a card goes when it is placed AT a point — the pointer, usually. Centred on that point and then
+// put on the grid (main.ts snapPt), which is the one funnel every interactive create runs through: the
+// canvas double-click, Space/N, both "New card here" menus, a dropped image, a dragged-out selection. A
+// card the user positions is on the grid whether it was placed or dragged there.
+export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }); }
 // Make a new UNCONNECTED node (parent:null) at the viewport centre (or a given spot).
 interface CreateOpts {
   x?: number; y?: number; parent?: string | null; title?: string; color?: string;
@@ -124,7 +128,12 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
   return copy;
 }
 // A duplicate sits directly below the original, clear of it.
-function copyNode(s: MindNode): MindNode { return cloneNodeAt(s, s.x, s.y + nodeH(s) + 24); }
+// A duplicate sits one card-height below its source — snapped, since that height is MEASURED and would
+// otherwise put the copy a few px off the grid its source is on.
+function copyNode(s: MindNode): MindNode {
+  const at = snapPt({ x: s.x, y: s.y + nodeH(s) + 24 });
+  return cloneNodeAt(s, at.x, at.y);
+}
 // Duplicate every selected card (or just the one). Each copy keeps its source's parent, so it
 // stays connected. One card → open its rename like a fresh node; many → select the new copies.
 // `edit:false` skips the rename (outline duplicate just drops the copy into the list, selected —
@@ -551,6 +560,8 @@ function deleteNodes(ids: Iterable<string>): void {
   if (state.edges.some(e => gone.has(e.from) || gone.has(e.to))) {
     touchEdges();
     state.edges = state.edges.filter(e => !gone.has(e.from) && !gone.has(e.to));
+    // A junction those edges met at may now have nothing ending at it. Same step, same ⌘Z.
+    gcJunctions();
     scheduleSaveBoard();
   }
 }

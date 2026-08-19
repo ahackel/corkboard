@@ -51,6 +51,7 @@ import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
+import { snapTo } from './utils/num.js';
 
 declare global {
   interface Window { __dbg: { readonly state: typeof state; readonly drag: Drag | null }; }
@@ -939,6 +940,10 @@ export const NODE_W = 200;
 // own cell size (state.gridSize, view/grid.ts); 0 (grid off) disables snapping rather than
 // collapsing every position to the origin.
 export function gridSnap(): number { return state.gridSize || 1; }
+// A POINT on the grid — the same rounding a dragged card gets, for the places that PLACE a card rather
+// than drag it: a new card at the pointer, a duplicate, a paste, an image dropped or pulled out of a
+// note. Anything the user positions ends up on the grid, however it got there.
+export function snapPt(p: Pt): Pt { const g = gridSnap(); return { x: snapTo(p.x, g), y: snapTo(p.y, g) }; }
 export const FRAME_BORDER = 4;   // must match .node.frame's CSS `border` width (styles.css)
 // Height of a frame's title TAB — the folder tab attached above the box's top-left corner
 // (styles.css `.node.frame > .title-row`). Must match the CSS (10px padding + 20px line-height + 10px
@@ -1471,9 +1476,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   for (const t of annos) touch(t.a.id);   // one undo step covers the box AND the annotations it carried
   let lastDx = 0, lastDy = 0;
   let subtreeRAF: number | null = null;
-  const identity = (v: number): number => v;
   const g = gridSnap();
-  const snap = (v: number): number => Math.round(v / g) * g;
+  // The grid on the SIZE — the same snap a dragged card and a dragged junction get (utils/num.ts), live
+  // on every move, so the box steps between grid sizes under the pointer instead of taking one up at
+  // the end. One snapping rule for everything the pointer moves.
+  const snap = (v: number): number => snapTo(v, g);
   // Apply the current drag delta, keeping the non-dragged edges fixed. We snap the SIZE (not the
   // edges) to the grid so a box's w/h are always multiples of the snap — the moving edge derives
   // from the fixed opposite edge minus the snapped size. Free (unsnapped) while dragging; snapped
@@ -1526,7 +1533,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   };
   const move = (ev: PointerEvent): void => {
     lastDx = (ev.clientX - sx) / state.view.k; lastDy = (ev.clientY - sy) / state.view.k;
-    resize(identity);
+    resize(snap);
     paintNode(n);        // paint FIRST: shiftAnnos reads back the re-wrapped height for a bottom latch
     shiftAnnos();
     paintEdges();
@@ -1558,7 +1565,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
-    resize(snap);   // snap to the grid on release, like a dropped card
+    resize(snap);   // the final delta; the size was already on the grid throughout
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
     // a redundant mm_w on every card the user so much as nudges. For an annotation that also restores
     // its shrink-to-fit sizing, which an explicit width would otherwise pin forever.

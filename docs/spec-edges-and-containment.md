@@ -87,6 +87,16 @@ never re-derived: an edge that re-picked its nearest face on every paint would s
 as they move, and a diagram you arranged would rearrange itself under you. Move a card and the line
 follows its ports; to change one, drag that endpoint.
 
+**A stub is capped at half the room it has.** A line runs straight out of each port before it may turn
+(`STUB`, 28px), but a fixed stub longer than the gap it has to cross makes the two stub ends overshoot
+each other — and then every candidate route doubles back, the no-reversal search falls through to its
+last resort, and a SHORT edge comes out as a rectangular loop out and around. `stubFor` caps each end's
+stub at half the distance the other end lies ahead of it: at exactly half, two ports facing each other
+meet in the middle and the route collapses to the straight line it always wanted to be. An end that the
+other one sits BEHIND keeps the full stub — it has to come out and go round, and it cannot overshoot.
+The one-turn L test measures against the same capped stubs, or a short edge would be refused the single
+bend it wants and sent back to the dog-leg.
+
 **There is ONE route shape.** Once a line leaves a NAMED face it has a direction to respect,
 and right angles are what make "this leaves the right side and enters the top" legible. It runs a
 short stub straight out of each port before it is allowed to turn, so an edge never bends back across
@@ -94,8 +104,76 @@ the card it just left. The corners are drawn generously round (a cubic arc at ea
 half the shorter leg), so the route stays orthogonal in what it SAYS while looking organic. There is
 no style picker: one shape everywhere is what keeps a map's lines reading as one hand.
 
+**Drop an end ON a line and it SPLITS: that is a JUNCTION.** Three lines can meet somewhere that isn't
+a card, and the place they meet is a `Junction` (core/state.ts): an id and a world position in
+`board.json`, beside the edges — never a node, because it holds no content and so wants no `.md` file
+and no place in the hierarchy. It is the ONE way one comes into being, and it explains where the third
+line comes from: the target edge becomes two edges meeting at the new point (`splitEdgeAt`), the first
+half keeping the original's id, label and far cap, the second carrying its colour, dash and other cap.
+Dropping on an existing dot (`junctionSnapAt`) joins it instead of splitting anything, so a fourth and
+fifth line meet at the same point rather than at points a pixel apart.
+
+A junction can only ever be created ON the grid: the drop point is projected onto the line and then snapped
+(`junctionPoint`, view/free-edges.ts — ONE answer, so the preview and the commit cannot disagree). It
+therefore does not land on the line's old path, and does not need to: both halves re-route through the point
+the moment it exists. If a junction already sits at that grid position the drop meets THAT one rather than
+stacking a second dot on it.
+
+While the end is being dragged over a line, the preview shows a GHOST of the dot at exactly the grid point
+the drop would use — hollow and dashed. That answers "what will this do?" with a picture of the thing it is
+about to make; marking the target LINE instead only said which line, and said it by making a second line
+look selected.
+
+**Only the SPLIT clears terminators, and only at the cut.** The two halves a split leaves would otherwise
+grow a head each in the middle of what the reader sees as one line, so `splitEdgeAt` sets the head's `toCap`
+and the tail's `fromCap` to `none` — as an EDIT to those edges, not as a paint-time exception, so the caps
+on disk stay the truth about what is drawn and the edge bar can put one back. Every OTHER line keeps its
+caps wherever its end lands, junction included: an end meeting a point is still that line's end, and its
+arrow is what says which way it runs. A merge inherits the far end's cap, so a dissolved junction gives back
+a properly terminated line.
+
+**A junction is a BRANCH — three lines or more — and anything less DISSOLVES.** `gcJunctions`
+(data/board.ts) is where that invariant lives, and it runs after every detachment, every undo, and once
+before each save:
+
+- **two** ends left — the point is merely somewhere a line passes through, so `mergeThrough` puts the two
+  halves back together into the one line they were before the split. The survivor keeps its id, colour,
+  dash and label, and takes over the far end, port and cap of the one it absorbs. This is what happens when
+  you pull the third line off a branch or delete it: the dot goes away by itself and leaves a line, not a
+  kink. A merge that would join something to ITSELF drops both halves instead.
+- **one or none** — nothing to merge, and an edge cannot keep an end on a point that is not there, so the
+  leftover line goes with the dot.
+
+Looped, since either outcome can strand the junction at the far end of what it just changed. A board that
+arrives ill-formed (hand-edited, or written by an older build) heals on load.
+
+**There is nothing else you can DO to a junction, deliberately.** It cannot be selected, it has no
+properties and there is no command to delete it: pull one of its lines off (or delete that line) and the
+point dissolves itself into the remaining two. A selection kind, a Delete branch and a right-click removal
+all existed for a while and all came out again — with the dissolve rule in place they were three ways to ask
+for something the model already does on its own. A dot is a thing you MOVE, and that is all.
+
+**Dragging the dot moves it and every line follows** — that is why a junction is one shared entity with an
+id rather than coordinates copied onto each end — and the drag is snapped to the grid exactly as a dragged
+card is (`snapTo`, utils/num.ts — see the quantising note in architecture.md): rounded on every move, so the
+dot is always on a grid position, which is the same grid its creation was constrained to.
+
+**An end dropped on nothing is thrown away.** A re-route that reached no card, no junction and no line
+deletes its edge — the gesture for discarding one. What guards it: a release must have travelled
+`MIN_DRAG_PX` to count at all, so a twitch on a handle is a press and changes nothing, and Esc or a
+cancelled pointer aborts a draw outright (both used to commit it).
+
 **Editing an edge:** selecting it shows both endpoint handles — drag either onto another card to
-re-route, or off onto empty canvas to detach. **Double-click the line to label it in place**, in a
+re-route, onto another LINE to split it and meet there, onto an existing junction to join it, or off
+onto empty canvas to throw the edge away.
+
+**The draft IS the edge, terminators included.** While a drag is live the preview carries the same stroke,
+colour, dash AND caps the finished line will have, at both ends and wherever the pointer currently is —
+nothing is withheld for being mid-air, because the draft's job is to show the edge, not to promise a
+landing. One subtlety it has to get right: the draft is drawn from the end that is STAYING to the end being
+dragged, so dragging the `from` end runs the edge BACKWARDS (the anchor is its `to`). The caps are read in
+draft order for that reason; reading them in edge order is what used to put the arrowhead on the wrong end
+for that half of the gesture. **Double-click the line to label it in place**, in a
 field over the line's own midpoint: the same gesture that opens a card's text, and the caret lands
 where the result will appear rather than in a bar off to one side. Its menu is deliberately small:
 **colour · solid/dashed · direction · delete.** Direction is an explicit three-way picker (none /

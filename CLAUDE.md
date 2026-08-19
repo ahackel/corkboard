@@ -55,7 +55,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
 - **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card with children outlines them in
-  its own box; free edges live in `board.json` and mean nothing structural.
+  its own box; free edges live in `board.json`, may end at a junction POINT, and mean nothing structural.
 - **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`, `mm_locked`, `mm_done`, `mm_checklist`,
   `mm_query`, `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
@@ -92,7 +92,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "Double-click /
   double-tap OPENS a node" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
-  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The page runs EDGE TO EDGE"
+  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
   fallback, FSA) · "Boot order" · "Help map" · "External-change reload".

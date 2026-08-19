@@ -10,7 +10,7 @@ import { isFrame } from '../view/layout.js';
 import { isLockedEffective } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
 import { extractImage } from './crud.js';
-import { IMAGE_W, IMAGE_H } from '../main.js';
+import { IMAGE_W, IMAGE_H, snapPt } from '../main.js';
 
 // True while an image-extract gesture is live. A card is natively `draggable` (⌥-drag exports it
 // as a .md file, see clipboard.ts bindCardFileDrag) — that native dragstart would otherwise hijack
@@ -77,7 +77,11 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
     cleanup();
     if (!moved) return;                                   // a plain Alt-click on the image: no change
     if (t) extractImage(source.id, path, alt, { toCardId: t.id });
-    else { const p = screenToWorld(ev.clientX, ev.clientY); extractImage(source.id, path, alt, { x: p.x - cardW / 2, y: p.y - cardH / 2, w: cardW, h: cardH }); }
+    else {
+      const p = screenToWorld(ev.clientX, ev.clientY);
+      const at = snapPt({ x: p.x - cardW / 2, y: p.y - cardH / 2 });   // on the grid, like any placed card
+      extractImage(source.id, path, alt, { x: at.x, y: at.y, w: cardW, h: cardH });
+    }
   };
   const onCancel = (): void => { cleanup(); };            // interrupted (tab switch, etc.): leave the card as-is
   const onKey = (ev: KeyboardEvent): void => { if (ev.key === 'Escape') cleanup(); };

@@ -105,8 +105,18 @@ export const ui = {
   //  · overId/overSide — the port actually SNAPPED to, which is tight (a small radius around the
   //              port itself). Only this one decides where the edge lands; the hint is just an aid.
   // Keeping them apart is what stopped the line lunging at a card from halfway across the canvas.
-  edgeDraw: null as { from: Pt; to: Pt; sourceId: string; fromSide: EdgeSide;
+  //  · overJunction — an existing meeting point the pointer has reached, snapped to exactly as a port
+  //              is: dropping there makes several lines meet at the one point.
+  //  · overEdge / overEdgeAt — another EDGE the pointer is on, which a drop SPLITS, and the exact point
+  //              it would be split at (already projected onto that line and put on the grid). Stored
+  //              rather than recomputed, so the ghost, the draft's own end and the drop all use the ONE
+  //              point — and the route it was projected from is not re-derived three times a frame.
+  //              Released over none of the three, a drop lands nothing at all: "mid-air" needs no state.
+  //  · grabbedAt — where the pointer went down, in world units. A drop only counts if it travelled
+  //              (features/edge-tools.ts MIN_DRAG_PX): a twitch on a socket or a handle is a click.
+  edgeDraw: null as { from: Pt; to: Pt; sourceId: string; fromSide: EdgeSide; grabbedAt: Pt;
                       hintId?: string; overId?: string; overSide?: EdgeSide;
+                      overJunction?: string; overEdge?: string; overEdgeAt?: Pt;
                       edgeId?: string; end?: 'from' | 'to' } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,

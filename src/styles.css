@@ -455,6 +455,23 @@ svg#toggles circle.fe-port { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8
 svg#toggles circle.fe-port.on { fill:var(--accent, #6ea8fe); opacity:1; }
 svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:2;
   pointer-events:auto; cursor:grab; }
+/* A JUNCTION: where lines meet away from any card (core/state.ts Junction). A SOLID dot in the line
+   ink, deliberately the opposite reading to the hollow socket rings above — this is not a socket to
+   plug into, it is a piece of the drawing, the same mark a schematic puts where wires join. Drawn
+   always, not only on selection: it is the only thing showing that those ends are one point.
+   The transparent stroke is the HIT AREA — it makes a 6px dot a fingertip-sized target without
+   painting a 20px blob (SVG hit-testing counts the stroke, and a transparent one still counts). */
+svg#toggles circle.fe-junction { fill:var(--edge); stroke:transparent; stroke-width:14;
+  pointer-events:auto; cursor:grab; }
+svg#toggles circle.fe-junction:hover { fill:var(--accent, #6ea8fe); }
+body.readonly svg#toggles circle.fe-junction { cursor:default; }   /* nothing to drag there */
+/* The GHOST shown while an end is being dragged over a line: where the junction WOULD be inserted.
+   Hollow and dashed — it isn't there yet, and the difference from the solid dots is the whole point. */
+svg#toggles circle.fe-junction.ghost { fill:none; stroke:var(--accent, #6ea8fe); stroke-width:2;
+  stroke-dasharray:3 3; pointer-events:none; }
+/* …and filled with the accent while a dragged end is about to land on it — the same "this is the one"
+   cue .fe-socket.taken and the preview's .fe-port.on carry. */
+svg#toggles circle.fe-junction.on { fill:var(--accent, #6ea8fe); }
 /* The annotation tethers (view/edges.ts paints them here, not into #edges). Same band as the free
    edges: both are lines the reader follows, so both sit above the cards and below the drag ghosts. */
 svg#dragEdges { z-index:6; pointer-events:none; }

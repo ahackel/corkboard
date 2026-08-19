@@ -6,7 +6,7 @@
 // gesture boundary calls commitStep() — pointer-up for drags, end-of-edit for inline editing,
 // record() for one-shot ops. A step whose before/after images are identical is discarded, so
 // plain clicks, cancelled drags and unchanged edits never pollute the history.
-import { state, stage, setStatus, type MindNode, type Stroke, type BoardEdge } from '../core/state.js';
+import { state, stage, setStatus, type MindNode, type Stroke, type BoardEdge, type Junction } from '../core/state.js';
 import { frameBox } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { scheduleSaveBoard } from '../data/board.js';
@@ -42,8 +42,13 @@ interface Step {
   before: Images; after: Images;
   strokes?: { before: Stroke[]; after: Stroke[] };
   canvas?: { before: string; after: string };
-  edges?: { before: BoardEdge[]; after: BoardEdge[] };
+  edges?: { before: EdgeGraph; after: EdgeGraph };
 }
+// The edges AND the junctions they meet at, snapshotted together as one thing — which is what they
+// are: a junction exists only as the point some edges share (core/state.ts Junction), so restoring
+// one list without the other would leave lines ending nowhere, or a dot with nothing at it. Moving a
+// junction touches only the second half, which is why the comparison below has to see both.
+type EdgeGraph = { edges: BoardEdge[]; junctions: Junction[] };
 
 const MAX_STEPS = 100;
 const undoStack: Step[] = [];
@@ -51,12 +56,13 @@ const redoStack: Step[] = [];
 let pending: Images | null = null;
 let pendingStrokes: Stroke[] | null = null;      // strokes before-image for the open step, if a sketch op touched it
 let pendingCanvas: string | null = null;         // canvas-colour before-image for the open step, if one was picked
-let pendingEdges: BoardEdge[] | null = null;     // edge-list before-image for the open step, if an edge op touched it
+let pendingEdges: EdgeGraph | null = null;       // edge-graph before-image for the open step, if an edge op touched it
 
 const cloneStrokes = (s: Stroke[]): Stroke[] => structuredClone(s);
 const sameStrokes = (a: Stroke[], b: Stroke[]): boolean => JSON.stringify(a) === JSON.stringify(b);
-const cloneEdges = (e: BoardEdge[]): BoardEdge[] => structuredClone(e);
-const sameEdges = (a: BoardEdge[], b: BoardEdge[]): boolean => JSON.stringify(a) === JSON.stringify(b);
+const cloneGraph = (g: EdgeGraph): EdgeGraph => structuredClone(g);
+const sameGraph = (a: EdgeGraph, b: EdgeGraph): boolean => JSON.stringify(a) === JSON.stringify(b);
+const liveGraph = (): EdgeGraph => ({ edges: state.edges, junctions: state.junctions });
 
 // Fixed key order (so JSON-compare in commitStep is reliable) + deep copies of the arrays.
 function snap(n: MindNode): NodeSnap {
@@ -99,12 +105,12 @@ export function touchCanvas(): void {
   if (state.readOnly) return;
   if (pendingCanvas === null) pendingCanvas = state.canvasColor;
 }
-// Remember the edge list before changing it — drawing, deleting, re-routing or restyling an edge,
-// and the pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
+// Remember the edge graph before changing it — drawing, deleting, re-routing, restyling or MOVING a
+// junction, and the pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
 // no-op in read-only mode, like the rest.
 export function touchEdges(): void {
   if (state.readOnly) return;
-  if (!pendingEdges) pendingEdges = cloneEdges(state.edges);
+  if (!pendingEdges) pendingEdges = cloneGraph(liveGraph());
 }
 // Close the pending step: capture after-images, drop untouched-in-practice nodes, and push.
 export function commitStep(): void {
@@ -123,8 +129,8 @@ export function commitStep(): void {
     step.strokes = { before: strokesBefore, after: cloneStrokes(state.strokes) };
   if (canvasBefore !== null && canvasBefore !== state.canvasColor)
     step.canvas = { before: canvasBefore, after: state.canvasColor };
-  if (edgesBefore && !sameEdges(edgesBefore, state.edges))
-    step.edges = { before: edgesBefore, after: cloneEdges(state.edges) };
+  if (edgesBefore && !sameGraph(edgesBefore, liveGraph()))
+    step.edges = { before: edgesBefore, after: cloneGraph(liveGraph()) };
   if (!step.before.size && !step.strokes && !step.canvas && !step.edges) return;   // nothing changed
   undoStack.push(step);
   if (undoStack.length > MAX_STEPS) undoStack.shift();
@@ -181,13 +187,14 @@ function frameIfOffscreen(ids: string[]): void {
   if (maxX < 0 || minX > r.width || maxY < 0 || minY > r.height) frameBox(nodes);
 }
 function applyStep(images: Images, strokes: Stroke[] | undefined, canvas: string | undefined,
-                   edges: BoardEdge[] | undefined, label: string): void {
+                   edges: EdgeGraph | undefined, label: string): void {
   applyImages(images);
   // Edges go back BEFORE the paint below, like the canvas colour: paintAll paints the free-edge
   // layer, so restoring them here means one pass rather than two. A selected edge the step removed
   // stops resolving, which is what closes its bar (features/edge-bar.ts syncEdgeBar).
   if (edges) {
-    state.edges = cloneEdges(edges);
+    const g = cloneGraph(edges);
+    state.edges = g.edges; state.junctions = g.junctions;
     for (const id of [...state.selEdges]) if (!state.edges.some(e => e.id === id)) state.selEdges.delete(id);
     scheduleSaveBoard();
   }

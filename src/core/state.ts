@@ -172,6 +172,20 @@ export interface BoardEdge {
   label: string;
 }
 
+// A JUNCTION: a point on the canvas an edge can end at instead of a card, so several lines can meet
+// somewhere that isn't a node. Deliberately NOT a node — it holds no content, so it gets no .md file
+// and no place in the hierarchy; it is pure ARRANGEMENT and lives in board.json beside the edges,
+// like the ink layer does. It exists only for as long as it is a BRANCH: one appears when an edge end is
+// dropped ON another line (splitting it), and dissolves the moment fewer than three lines meet there —
+// two are merged back into one line (gcJunctions in data/board.ts). Ids are board-local and persisted,
+// like an edge's — a node's are ephemeral
+// because a node has a FILE to be identified by, and a junction has nothing but this id.
+export interface Junction {
+  id: string;
+  x: number;                       // world coordinates, like a stroke's points
+  y: number;
+}
+
 // A freehand sketch stroke drawn on the canvas. Stored (as pure data, not a node) in the
 // vault's board.json — see data/board.ts. `pts` are WORLD coordinates, so ink pans /
 // zooms with the map for free. Edges/nodes are unaffected; this is a separate ink layer.
@@ -200,6 +214,7 @@ export interface AppState {
   canvasColor: string;
   strokes: Stroke[];               // freehand sketch layer (loaded from / saved to board.json)
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
+  junctions: Junction[];           // the points where edges meet away from any card — see Junction above
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
   readOnly: boolean;               // read-only mode: no saves, no edits; collapse/expand only
@@ -220,6 +235,7 @@ export const state: AppState = {
   canvasColor: '',
   strokes: [],
   edges: [],
+  junctions: [],
   searchMatch: null,
   searchActiveId: null,
   readOnly: false,

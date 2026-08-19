@@ -12,6 +12,7 @@ import { state, isAnnotation, isLeafType, type MindNode } from '../core/state.js
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
+import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
 
@@ -86,7 +87,7 @@ export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' |
   if (isFrame(governor)) {
     const g = gridSnap();
     const box = containerBox(governor);
-    const rel = (v: number, o: number): number => Math.round((v - o) / g) * g + o;
+    const rel = (v: number, o: number): number => snapTo(v - o, g) + o;
     return { x: rel(dragged.x, box.x), y: rel(dragged.y, box.y) };
   }
   // Anything else is a CARD adopting a child, and a card with children OUTLINES them — so there is

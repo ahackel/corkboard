@@ -14,6 +14,7 @@ import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
 import { paintEdges } from '../view/edges.js';
+import { snapTo } from '../utils/num.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
@@ -147,10 +148,32 @@ function updateRip(drag: Drag): void {
   for (const id of subtreeIds(act.id)) { const m = state.nodes.get(id); if (m) paintNode(m); }
 }
 
+// The drag delta with the GRID applied (utils/num.ts snapTo): the ANCHOR card's own position is what
+// lands on the grid, and the correction it needs is applied to every card in the drag — so a
+// multi-selection keeps its internal spacing exactly and moves as one piece. A card inside a frame or a
+// stack snaps relative to that box's own corner, because that is the coordinate space its position
+// lives in. Live, every move: the card is always ON a grid position and steps to the next as the
+// pointer crosses the halfway line, so what you are looking at is always what a release would keep.
+function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
+  // `active`, not `n`: with Shift held the drag switches to a CLONE of the card (applyDragClone), and
+  // `drag.targets` is re-keyed to the clones — so keying this off the original found nothing, fell back
+  // to the raw delta, and a Shift-drag was the one drag that ignored the grid. `active` is also what the
+  // drop's own reparent path treats as the representative, so both ends of the gesture agree.
+  const act = drag.active;
+  const s = drag.targets.get(act.id);
+  if (!s) return { x: dx, y: dy };
+  const fp = parentOf(act);
+  const inBox = !!(fp && isContainer(fp));
+  const ax = inBox ? fp!.x : 0, ay = inBox ? fp!.y : 0;
+  const g = gridSnap();
+  return { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
+}
+
 // Move every dragged card to start + (dx,dy) in world space, mirroring it with a compositor-only
 // transform (left/top stay frozen at the card's origin). Shared by the pointermove, auto-pan, and
 // modifier-follow paths — all three apply the same offset to drag.targets.
 function applyDragTransform(drag: Drag, dx: number, dy: number): void {
+  ({ x: dx, y: dy } = snappedDelta(drag, dx, dy));
   for (const [id, s] of drag.targets){
     const m = state.nodes.get(id); if (!m) continue;
     m.x = s.x + dx; m.y = s.y + dy; m.dirtyLayout = true;
@@ -560,20 +583,9 @@ function dragPointerUp(): void {
               ? `Re-parented ${moved} cards -> "${parentTitle}"`
               : `Re-parented "${nodeLabel(act)}" -> "${parentTitle}"`);
         } else {
-          // snap onto the grid: align the dragged node, shift the rest of its subtree by the same
-          // delta so relative layout is preserved. A card inside a frame snaps RELATIVE to the
-          // frame's origin (its children live in the frame's coordinate space); anyone else snaps
-          // to the world grid.
-          const fp = parentOf(act);
-          const inFrame = !!(fp && isContainer(fp));   // frame OR stack: snap relative to the box origin
-          const ax = inFrame ? fp!.x : 0, ay = inFrame ? fp!.y : 0;
-          const g = gridSnap();
-          const ddx = (Math.round((act.x - ax) / g) * g + ax) - act.x;
-          const ddy = (Math.round((act.y - ay) / g) * g + ay) - act.y;
-          for (const id of targets.keys()){
-            const m = state.nodes.get(id); if (!m) continue;
-            m.x += ddx; m.y += ddy; m.dirtyLayout = true;
-          }
+          // Nothing to snap here: snappedDelta quantised every move of the drag, so the cards are
+          // already on the grid and a release changes nothing about where they sit. (A drop that
+          // RE-PARENTS is the other branch above, and places its cards itself.)
           // Resolve each dragged ROOT this gesture pulls off its parent — a whole multi-selection
           // detaches together, not just the anchor. A root inside a frame detaches ONLY by leaving
           // that frame's box (its centre outside the rectangle) — never by distance or Alt while

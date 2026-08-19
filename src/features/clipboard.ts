@@ -28,7 +28,7 @@ import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { screenToWorld } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
-import { setSelectionSet, selectedIds, subtreeIds, remeasure } from '../main.js';
+import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or
@@ -124,9 +124,11 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const byName = new Map(cards.map(c => [c.name, c]));
   const isPayloadRoot = (c: { p: ParsedNote }): boolean => !c.p.mm.parent || !byName.has(c.p.mm.parent);
   // anchor the payload roots' top-left at the target point (+ a nudge off the source)
-  const target = (at.sx != null && at.sy != null)
+  // On the grid (main.ts snapPt), like every other card the user places: the payload keeps its own
+  // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
+  const target = snapPt((at.sx != null && at.sy != null)
     ? screenToWorld(at.sx, at.sy)
-    : screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+    : screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
   let ax = Infinity, ay = Infinity;
   for (const c of cards) if (isPayloadRoot(c) && c.p.mm.x != null && c.p.mm.y != null){
     ax = Math.min(ax, c.p.mm.x); ay = Math.min(ay, c.p.mm.y);

@@ -13,11 +13,13 @@
 //   · #toggles — the ports and endpoint handles, BETWEEN the two: above every card, so a ring shows on
 //     whatever it is fitted to, and under the lines, so an edge runs onto its port rather than ending
 //     at the ring drawn over it.
-import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type Junction, type MindNode } from '../core/state.js';
+import { junctionOf } from '../data/board.js';
+import { clamp } from '../utils/num.js';
 import { isHidden } from '../utils/model.js';
 import { isStack, insideStack, isDockedTab } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { nodeW, nodeH, colorFill, elTop, canvasSurface } from '../main.js';
+import { nodeW, nodeH, colorFill, elTop, canvasSurface, snapPt } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
 
@@ -25,7 +27,7 @@ import { esc } from '../utils/markdown.js';
 // a 2px target at 50% zoom is 1 screen pixel — and unlike a card, an edge has no interior to aim at.
 // It rides its own layer BEHIND the cards for that reason: 18 world px of invisible stroke drawn OVER
 // a card would take that card's own press wherever a line crossed it.
-const HIT_W = 18;
+export const HIT_W = 18;
 export const HANDLE_R = 7;          // endpoint grab handles, shown while an edge is selected
 export const SOCKET_R = 6;          // the four rings on a selected card you drag a new edge from
 
@@ -136,6 +138,18 @@ export const OPPOSITE: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', le
 // How far a line runs straight out of a port before it is allowed to turn. Without it an edge
 // leaving a card's right face could immediately bend back across the card it just left.
 const STUB = 28;
+// …but only when there IS that much room. A fixed stub longer than the gap it has to cross makes the
+// two stub ends overshoot each other, and then EVERY candidate route below doubles back — so the
+// no-reversal search fell through to its last resort, which sends the line out and around in a
+// rectangular detour. That is the loop a short edge used to turn into. Half the distance the other end
+// lies AHEAD of this one is the most a stub may take: at exactly half, two ports facing each other
+// meet in the middle and the route collapses to the straight line it always wanted to be. An end the
+// other one sits behind keeps the full stub — it has to come out and go round, and there is no
+// overshoot to cause.
+function stubFor(from: Pt, normal: Pt, other: Pt): number {
+  const ahead = (other.x - from.x) * normal.x + (other.y - from.y) * normal.y;
+  return ahead > 0 ? Math.min(STUB, ahead / 2) : STUB;
+}
 const CORNER = 44;   // how round an elbow gets — clamped per corner to half its shortest leg
 
 // polyline → path `d` with ROUND corners: a cubic at each interior vertex whose handles sit 55% of
@@ -173,8 +187,9 @@ function roundedPath(pts: Pt[], r: number): string {
 // SAYS while looking hand-drawn rather than plotted.
 export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: string; pts: Pt[]; mid?: Pt } {
   const na = NORMAL[aSide], nb = NORMAL[bSide];
-  const a1 = { x: a.x + na.x * STUB, y: a.y + na.y * STUB };
-  const b1 = { x: b.x + nb.x * STUB, y: b.y + nb.y * STUB };
+  const sa = stubFor(a, na, b), sb = stubFor(b, nb, a);
+  const a1 = { x: a.x + na.x * sa, y: a.y + na.y * sa };
+  const b1 = { x: b.x + nb.x * sb, y: b.y + nb.y * sb };
   // Prefer an L — ONE turn — whenever the two ports can be joined by one: the corner at (b.x, a.y)
   // or (a.x, b.y) is the only bend, and the line arrives at each port already travelling along that
   // port's normal. Only possible when the two ports face different AXES (two ports on the same axis
@@ -186,7 +201,7 @@ export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: s
     const corner = horizA ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
     const outA = (corner.x - a.x) * na.x + (corner.y - a.y) * na.y;
     const intoB = (corner.x - b.x) * nb.x + (corner.y - b.y) * nb.y;
-    if (outA >= STUB && intoB >= STUB) return { d: roundedPath([a, corner, b], CORNER), pts: [a, corner, b] };
+    if (outA >= sa && intoB >= sb) return { d: roundedPath([a, corner, b], CORNER), pts: [a, corner, b] };
   }
   // Otherwise the two stub ends have to be joined, and there is more than one way to do it. Every
   // candidate below leaves `a` along its normal and enters `b` along its own, so they differ only in
@@ -274,19 +289,74 @@ function endCap(cap: EdgeCap, at: Pt, dir: Pt, ink: string): string {
   return cap === 'arrow' ? arrowHead(at, dir, ink) : cap === 'dot' ? capDot(at, ink) : '';
 }
 
-// The two docked ports of an edge, and the whole geometry around them. One place, so the painter,
-// the label, the bar and the inline editor can never disagree about where the line is.
-export function edgeEnds(e: BoardEdge): { a: Pt; b: Pt; from: MindNode; to: MindNode } | null {
-  const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
-  if (!from || !to) return null;
-  return { a: portPoint(from, e.fromSide), b: portPoint(to, e.toSide), from, to };
+// The nearest point ON a polyline to p, and how far away it is. Used to ask "is the pointer on this
+// edge?" and, when it is, to put the junction exactly ON the line rather than wherever inside the hit
+// band the pointer happened to be — a dot a few px off its own line reads as a mistake.
+export function nearestOnPolyline(pts: Pt[], p: Pt): { d: number; at: Pt } {
+  let best = { d: Infinity, at: pts[0] ?? p };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i+1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx*dx + dy*dy;
+    const t = len2 ? clamp(((p.x - a.x)*dx + (p.y - a.y)*dy) / len2, 0, 1) : 0;
+    const at = { x: a.x + t*dx, y: a.y + t*dy };
+    const d = Math.hypot(p.x - at.x, p.y - at.y);
+    if (d < best.d) best = { d, at };
+  }
+  return best;
 }
-export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt } | null {
+
+// ---------- endpoints: a card's port, or a JUNCTION ----------
+// An edge end holds an id, and that id names either a node or a junction (core/state.ts Junction).
+// These three are the whole of the difference, and every consumer goes through them rather than
+// reaching for state.nodes: a junction has no rect, no faces and no file, so a line docks AT it
+// rather than on a face of it.
+// What an endpoint id names: a node, a junction, or nothing. THE one place the duality is decided —
+// nodes FIRST, because state.nodes is a Map and the vast majority of ends are cards, where the junction
+// list would otherwise be scanned end to end for every one of them, several times per edge per paint.
+type End = { n: MindNode; j?: undefined } | { j: Junction; n?: undefined };
+export function endOf(id: string): End | null {
+  const n = state.nodes.get(id);
+  if (n) return { n };
+  const j = junctionOf(id);
+  return j ? { j } : null;
+}
+// Where the end sits. A port is the centre of the face the edge stored; a junction IS the point.
+export function endPoint(id: string, side: EdgeSide): Pt | null {
+  const e = endOf(id);
+  return !e ? null : e.j ? { x: e.j.x, y: e.j.y } : portPoint(e.n, side);
+}
+// Which direction the route leaves that end by. A card's is STORED (core/state.ts EdgeSide) so the
+// line keeps the face it was drawn on; a junction's is derived from where the other end is, every
+// paint. Nothing slides when it changes: the dock point is the point either way, and only the
+// direction of the first STUB depends on it — so a bare dot always sends its line the sensible way
+// round as the far end moves, rather than remembering a face it doesn't have.
+export function endSide(id: string, stored: EdgeSide, other: Pt): EdgeSide {
+  const e = endOf(id);
+  if (!e) return stored;
+  return e.j ? sideToward({ x: e.j.x, y: e.j.y }, other) : resolveSide(e.n, stored);
+}
+// The dominant axis from one point to another, as a face.
+function sideToward(from: Pt, to: Pt): EdgeSide {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'right' : 'left') : (dy >= 0 ? 'down' : 'up');
+}
+
+// Both ends of an edge and the whole geometry around them. ONE place, so the painter, the label, the
+// bar and the inline editor can never disagree about where the line is — or about what it ends on.
+function edgeEnds(e: BoardEdge): { a: Pt; b: Pt; aSide: EdgeSide; bSide: EdgeSide } | null {
+  // The POINTS first: neither depends on the other end, so this terminates even when both ends are
+  // junctions (whose sides do).
+  const a = endPoint(e.from, e.fromSide), b = endPoint(e.to, e.toSide);
+  if (!a || !b) return null;
+  return { a, b, aSide: endSide(e.from, e.fromSide, b), bSide: endSide(e.to, e.toSide, a) };
+}
+export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; pts: Pt[]; mid: Pt; tipTan: Pt; tailTan: Pt } | null {
   const ends = edgeEnds(e); if (!ends) return null;
-  const { a, b } = ends;
-  const { d, pts, mid } = routeFor(a, e.fromSide, b, e.toSide);
+  const { a, b, aSide, bSide } = ends;
+  const { d, pts, mid } = routeFor(a, aSide, b, bSide);
   return {
-    a, b, d,
+    a, b, d, pts,
     // Halfway ALONG the route as it is actually drawn — the polyline's arc-length midpoint. The
     // label, the bar and the inline editor all hang off this one point.
     mid: mid ?? midOfPolyline(pts),
@@ -305,22 +375,37 @@ export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; mid: Pt; 
 // structural and one not — the exact confusion the containment model exists to remove. So an
 // annotation shows no rings, refuses a drop, and any edge already touching one stays hidden.
 export function connectable(id: string): boolean {
-  const n = state.nodes.get(id);
-  return !!n && n.type !== 'annotation';
+  const e = endOf(id);
+  return !!e && (!!e.j || e.n.type !== 'annotation');   // a meeting point is nothing BUT somewhere to end
+}
+// Whether a junction is on screen — DERIVED from the edges', not a second gate of its own: a point is
+// only ever the place some lines meet, so it is visible exactly while one of them is (a collapsed
+// ancestor or the open-frame scope can hide all three, and an orphan dot with no lines would still have
+// been grabbable). Also what the drop's own snapper asks, so the targets are exactly the painted set.
+export function junctionShown(id: string): boolean {
+  return state.edges.some(e => (e.from === id || e.to === id) && edgeVisible(e));
 }
 export function edgeVisible(e: BoardEdge): boolean {
-  const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
   // An annotation is never a free edge's endpoint (connectable, just above), so an edge that
   // touches one is a leftover — from before that rule, or from a card RETYPED into an annotation.
   // Hiding it is what makes "an annotation has exactly one line, to its parent" true on every map.
-  return !!from && !!to && !isHidden(from) && !isHidden(to)
-      && connectable(from.id) && connectable(to.id);
+  // A JUNCTION end passes on its own: it exists or it doesn't (there is no fold to be inside of, and
+  // the open-frame scope is about cards). Resolved ONCE per end — asking endOf and then connectable
+  // would put the same id through the same lookup twice.
+  const shown = (id: string): boolean => {
+    const x = endOf(id);
+    return !!x && (!!x.j || (!isHidden(x.n) && x.n.type !== 'annotation'));
+  };
+  return shown(e.from) && shown(e.to);
 }
 
 export function paintFreeEdges(): void {
   // Filtering hides every line, for the same reason paintEdges does it: dimmed cards are
   // translucent, so lines behind them read as clutter.
-  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; return; }
+  // …and with them the overlay: it carries the junction dots now, and a dot left hanging over a
+  // filtered canvas would be the one piece of an edge still showing (the sockets and handles it also
+  // holds were already stale here for the same reason).
+  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
   let svg = '', hits = '', tools = '';
   // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
   // fill exactly as a frame title's is from the surface behind it (main.ts behindFill → inkFor): black
@@ -401,21 +486,60 @@ export function paintFreeEdges(): void {
     // finished edge will have. A preview in a costume of its own asks the user to translate; this
     // one simply IS the edge, already where they are putting it.
     const over = overId ? state.nodes.get(overId) : null;
-    const snapped = over && overSide ? portPoint(over, overSide) : null;
+    // Snapped to a card's port or to an existing junction. Released in mid-air the line lands nothing at
+    // all (features/edge-tools.ts finishDraw), so the draft simply follows the pointer there.
+    const overJ = ui.edgeDraw.overJunction ? junctionOf(ui.edgeDraw.overJunction) : null;
+    // …or an EDGE, which a drop splits at the point stored with it (already projected onto that line and
+    // put on the grid by edgeSnapAt) — so the draft ends, and the ghost sits, exactly where the junction
+    // is about to be, with no route re-derived to find out.
+    const onEdge = ui.edgeDraw.overEdgeAt ?? null;
+    const snapped = overJ ? { x: overJ.x, y: overJ.y }
+                  : onEdge ?? (over && overSide ? portPoint(over, overSide) : null);
     const endPt = snapped ?? to;
-    const endSide = (snapped && overSide) ? overSide : OPPOSITE[fromSide];
+    const endFace = (overJ || onEdge) ? sideToward(endPt, from) : (snapped && overSide) ? overSide : OPPOSITE[fromSide];
+    // A GHOST of the junction, exactly where the drop would insert it — the answer to "what will
+    // this do?" in the shape of the thing it is about to make. Marking the whole target line instead
+    // said only WHICH line, and said it by making a second line look selected.
     const edge = ui.edgeDraw.edgeId ? state.edges.find(x => x.id === ui.edgeDraw!.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
-    const fromCap = edge ? edge.fromCap : 'none', toCap = edge ? edge.toCap : 'arrow';
+    // The caps, on the ends they actually belong to. The draft is drawn from the end that is STAYING
+    // to the end being dragged, so when the FROM end is the one moving, the draft runs the edge
+    // backwards: the anchor is the edge's `to` and the pointer is its `from`. Reading the caps in
+    // draft order rather than edge order is what used to put the arrowhead on the wrong end for
+    // exactly that half of the gesture. A brand-new edge has makeEdge's own defaults, since that is
+    // what the drop is about to create.
+    const movingFrom = ui.edgeDraw.end === 'from';
+    const anchorCap: EdgeCap = edge ? (movingFrom ? edge.toCap : edge.fromCap) : 'none';
+    const movingCap: EdgeCap = edge ? (movingFrom ? edge.fromCap : edge.toCap) : 'arrow';
     // The draft goes on the LINE layer, not the port overlay: it is a line, and drawing it a layer
     // down would put the edge you are making underneath the edges that are already there.
-    const { d, pts } = routeFor(from, fromSide, endPt, endSide);
+    const { d, pts } = routeFor(from, fromSide, endPt, endFace);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${d}"/>`;
-    // The far end's cap only once it has landed on a port — mid-air there is no end to terminate.
-    if (snapped) svg += endCap(toCap, endPt, legDir(pts[pts.length-2], pts[pts.length-1]), ink);
-    svg += endCap(fromCap, from, legDir(pts[1], pts[0]), ink);
+    // BOTH terminators, always — the draft is the edge, so it wears the ends the finished edge will
+    // wear, wherever the pointer currently is. (Landing on a junction no longer strips them: only a
+    // SPLIT does that, and only to the halves of the line being split — see splitEdgeAt.)
+    svg += endCap(movingCap, endPt, legDir(pts[pts.length-2], pts[pts.length-1]), ink);
+    svg += endCap(anchorCap, from, legDir(pts[1], pts[0]), ink);
+    if (onEdge) tools += `<circle class="fe-junction ghost" cx="${onEdge.x}" cy="${onEdge.y}" r="${SOCKET_R}"/>`;
+  }
+  // The meeting points, on the same overlay the ports and handles ride: above every card, so a dot
+  // sitting over one is still grabbable, and under the lines, so the edges run ONTO it rather than
+  // stopping at a ring drawn over them. Always drawn, unlike a card's sockets — a junction is an
+  // object in its own right, not an affordance that appears once you've said which card you mean,
+  // and it is the only thing marking where those lines meet. The transparent stroke (styles.css) is
+  // what makes a 6px dot a fingertip-sized target without drawing a 20px blob.
+  //
+  // FIRST in the overlay, so it sits UNDER the endpoint handles: an end docked to a junction puts a
+  // handle at the same point as the dot, and there the handle has to win — dragging it is how you take
+  // that one line off the junction, while the dot underneath moves all of them at once. With no edge
+  // selected there is no handle and the dot is what you grab.
+  let dots = '';
+  for (const j of state.junctions) {
+    if (!junctionShown(j.id)) continue;
+    const hot = ui.edgeDraw?.overJunction === j.id;
+    dots += `<circle class="fe-junction${hot ? ' on' : ''}" data-junction="${j.id}" cx="${j.x}" cy="${j.y}" r="${SOCKET_R}"/>`;
   }
   freeEdgesSvg.innerHTML = svg;
   freeEdgeHitsSvg.innerHTML = hits;
-  togglesSvg.innerHTML = tools;
+  togglesSvg.innerHTML = dots + tools;
 }

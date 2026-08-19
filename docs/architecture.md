@@ -579,6 +579,37 @@ inline `code` in `**bold**`/`*italic*` — the code span is extracted first, so 
 pans, two fingers pinch-zoom + pan); node drag/reparent uses the per-node pointer handlers in `bindNodeDrag`.
 `#stage`/`.node` set `touch-action:none`.
 
+**The grid QUANTISES, and it is one rule for everything the pointer moves.** `snapTo` (utils/num.ts) is
+the whole of it: a dragged card, a resized frame or image card and a dragged junction dot are rounded to
+the nearest grid multiple on EVERY move, so each of them is always sitting exactly on a grid position and
+steps to the next as the pointer crosses the halfway line. Nothing is corrected at release, because
+nothing is ever off the grid to correct. A card in a frame or stack snaps relative to THAT box's corner,
+since that is the space its position lives in, and a multi-selection is corrected by the anchor's own
+offset, so the group keeps its internal spacing and moves as one piece.
+
+Where it is applied, which is everywhere the USER decides a position — not just the drags. `snapPt`
+(main.ts, beside `gridSnap`) is the placement half: a new card at the pointer and everything that routes
+through `centredAt` (the canvas double-click, Space/N, both "New card here" menus, a dropped image, a
+dragged-out selection), a duplicate (whose offset is a MEASURED card height, so it landed off-grid), a
+paste (the anchor its payload lines up on), and an image pulled out of a note. What is deliberately left
+unsnapped: a freehand sketch stroke (it is ink, not a position), and the point where a line is split —
+that one is snapped at creation but has to be able to sit anywhere along its edge afterwards. A Shift
+drag was the one gesture that slipped through: it swaps the drag to a CLONE (`applyDragClone` re-keys
+`drag.targets`), so a delta snapped for the original card found nothing and fell back to the raw pointer
+delta — `snappedDelta` keys off `drag.active` for that reason.
+
+An eased pull toward the grid — a magnet, the value sliding toward the nearest line in proportion to how
+close it was — was built and then removed, and the reason is worth keeping. Any pull is a GAP between the
+pointer and the thing being dragged; closing that gap means the object travels faster than the pointer for
+a while, and the object stops being pinned to the cursor. Tuned weak it was no magnet at all (a pixel or
+two on a 20px grid); tuned strong it overtook the pointer by 3× and read as sticking and lurching; and
+either way the object was somewhere the pointer was not. Quantising has the offset be a plain constant
+inside the current cell instead, which reads as "this is snapped" rather than as lag — and it is what
+every tool with a grid does, from PCB editors ("the logical cursor snaps from one grid point to the
+next") to level editors. The cost is honest and expected: with `GRID_SIZES` running to 320px, a coarse
+grid makes a card jump a long way at a time. That is what a coarse grid IS; the escape is the `No snap`
+grid size (`gridSnap` returns 1, and every call site above becomes a no-op), not a softer snap.
+
 **The page runs EDGE TO EDGE, and every fixed control adds the safe area back itself.** `index.html`'s
 viewport meta carries `viewport-fit=cover`. Without it iOS lays the whole page out inside the safe area and
 letterboxes the rest: an iPhone in landscape loses a ~50px strip of *canvas* down each side to flat
