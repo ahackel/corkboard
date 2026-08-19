@@ -185,7 +185,33 @@ function roundedPath(pts: Pt[], r: number): string {
 // direction to respect, and right angles are what make "this leaves the right side and enters the
 // top" legible. The corners are drawn generously round, so the route stays orthogonal in what it
 // SAYS while looking hand-drawn rather than plotted.
-export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: string; pts: Pt[]; mid?: Pt } {
+// An ARROW-tipped end stops half a line-width short of its port. The head is stroked, not filled, with
+// a round join (styles.css path.fe-arrow), so the paint reaches STROKE_W/2 beyond the geometric tip —
+// land that tip ON a card's rim and the head's point is 2 world px INSIDE the card, merging with the
+// border it is supposed to be pointing at. Pulling the whole end back by exactly that overshoot puts
+// the painted tip on the rim instead. Only an arrow: a `dot` is meant to sit centred on the border, and
+// a bare end has no overshoot to pay for.
+const STROKE_W = 4;                  // must match path.fe / path.fe-arrow in styles.css
+export const ARROW_INSET = STROKE_W / 2;
+// Pull the polyline's end at `i` back toward its neighbour by `by`, leaving the rest of the route alone.
+// Skipped when that leg is too short to give the room — better a merged tip than a leg that flips.
+function trimEnd(pts: Pt[], i: number, by: number): void {
+  if (!by) return;
+  const j = i === 0 ? 1 : i - 1;
+  const p = pts[i], q = pts[j];
+  const len = Math.hypot(q.x - p.x, q.y - p.y);
+  if (len <= by * 1.5) return;
+  pts[i] = { x: p.x + (q.x - p.x) / len * by, y: p.y + (q.y - p.y) / len * by };
+}
+export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide,
+                         trimA = 0, trimB = 0): { d: string; pts: Pt[]; mid?: Pt } {
+  // ONE exit, so the trims and the path-building happen once however the route was chosen.
+  const done = (pts: Pt[]): { d: string; pts: Pt[] } => {
+    const out = pts.slice();
+    trimEnd(out, 0, trimA);
+    trimEnd(out, out.length - 1, trimB);
+    return { d: roundedPath(out, CORNER), pts: out };
+  };
   const na = NORMAL[aSide], nb = NORMAL[bSide];
   const sa = stubFor(a, na, b), sb = stubFor(b, nb, a);
   const a1 = { x: a.x + na.x * sa, y: a.y + na.y * sa };
@@ -201,7 +227,7 @@ export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: s
     const corner = horizA ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
     const outA = (corner.x - a.x) * na.x + (corner.y - a.y) * na.y;
     const intoB = (corner.x - b.x) * nb.x + (corner.y - b.y) * nb.y;
-    if (outA >= sa && intoB >= sb) return { d: roundedPath([a, corner, b], CORNER), pts: [a, corner, b] };
+    if (outA >= sa && intoB >= sb) return done([a, corner, b]);
   }
   // Otherwise the two stub ends have to be joined, and there is more than one way to do it. Every
   // candidate below leaves `a` along its normal and enters `b` along its own, so they differ only in
@@ -219,7 +245,7 @@ export function routeFor(a: Pt, aSide: EdgeSide, b: Pt, bSide: EdgeSide): { d: s
     ? [zx(mx), [a, a1, { x: b1.x, y: a1.y }, b1, b], zy(my), [a, a1, { x: a1.x, y: b1.y }, b1, b], zx(outx), zy(outy)]
     : [zy(my), [a, a1, { x: a1.x, y: b1.y }, b1, b], zx(mx), [a, a1, { x: b1.x, y: a1.y }, b1, b], zy(outy), zx(outx)];
   const clean = candidates.map(dedupe).find(noReversal) ?? dedupe(candidates[candidates.length - 1]);
-  return { d: roundedPath(clean, CORNER), pts: clean };
+  return done(clean);
 }
 // Drop any zero-length leg, so a straight run doesn't pick up a phantom corner — and so the
 // reversal test below sees the route's real turns rather than a degenerate vertex.
@@ -354,9 +380,12 @@ function edgeEnds(e: BoardEdge): { a: Pt; b: Pt; aSide: EdgeSide; bSide: EdgeSid
 export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; pts: Pt[]; mid: Pt; tipTan: Pt; tailTan: Pt } | null {
   const ends = edgeEnds(e); if (!ends) return null;
   const { a, b, aSide, bSide } = ends;
-  const { d, pts, mid } = routeFor(a, aSide, b, bSide);
+  const { d, pts, mid } = routeFor(a, aSide, b, bSide,
+    e.fromCap === 'arrow' ? ARROW_INSET : 0, e.toCap === 'arrow' ? ARROW_INSET : 0);
+  // a/b come back off the ROUTE, not from the ports, so the head, the shaft and the endpoint handle all
+  // sit at the same trimmed point rather than the head alone stepping back off the end of its own line.
   return {
-    a, b, d, pts,
+    a: pts[0] ?? a, b: pts[pts.length - 1] ?? b, d, pts,
     // Halfway ALONG the route as it is actually drawn — the polyline's arc-length midpoint. The
     // label, the bar and the inline editor all hang off this one point.
     mid: mid ?? midOfPolyline(pts),
@@ -497,9 +526,6 @@ export function paintFreeEdges(): void {
                   : onEdge ?? (over && overSide ? portPoint(over, overSide) : null);
     const endPt = snapped ?? to;
     const endFace = (overJ || onEdge) ? sideToward(endPt, from) : (snapped && overSide) ? overSide : OPPOSITE[fromSide];
-    // A GHOST of the junction, exactly where the drop would insert it — the answer to "what will
-    // this do?" in the shape of the thing it is about to make. Marking the whole target line instead
-    // said only WHICH line, and said it by making a second line look selected.
     const edge = ui.edgeDraw.edgeId ? state.edges.find(x => x.id === ui.edgeDraw!.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
     // The caps, on the ends they actually belong to. The draft is drawn from the end that is STAYING
@@ -513,13 +539,19 @@ export function paintFreeEdges(): void {
     const movingCap: EdgeCap = edge ? (movingFrom ? edge.fromCap : edge.toCap) : 'arrow';
     // The draft goes on the LINE layer, not the port overlay: it is a line, and drawing it a layer
     // down would put the edge you are making underneath the edges that are already there.
-    const { d, pts } = routeFor(from, fromSide, endPt, endFace);
+    // …trimmed at whichever ends carry an arrow, exactly as a finished edge is (ARROW_INSET), so the
+    // draft's head sits where the committed one's will.
+    const { d, pts } = routeFor(from, fromSide, endPt, endFace,
+      anchorCap === 'arrow' ? ARROW_INSET : 0, movingCap === 'arrow' ? ARROW_INSET : 0);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${d}"/>`;
     // BOTH terminators, always — the draft is the edge, so it wears the ends the finished edge will
     // wear, wherever the pointer currently is. (Landing on a junction no longer strips them: only a
     // SPLIT does that, and only to the halves of the line being split — see splitEdgeAt.)
-    svg += endCap(movingCap, endPt, legDir(pts[pts.length-2], pts[pts.length-1]), ink);
-    svg += endCap(anchorCap, from, legDir(pts[1], pts[0]), ink);
+    svg += endCap(movingCap, pts[pts.length-1], legDir(pts[pts.length-2], pts[pts.length-1]), ink);
+    svg += endCap(anchorCap, pts[0], legDir(pts[1], pts[0]), ink);
+    // A GHOST of the junction, exactly where the drop would insert it — the answer to "what will this
+    // do?" in the shape of the thing it is about to make. Marking the whole target LINE instead said
+    // only which line, and said it by making a second line look selected.
     if (onEdge) tools += `<circle class="fe-junction ghost" cx="${onEdge.x}" cy="${onEdge.y}" r="${SOCKET_R}"/>`;
   }
   // The meeting points, on the same overlay the ports and handles ride: above every card, so a dot

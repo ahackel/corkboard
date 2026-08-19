@@ -97,6 +97,15 @@ other one sits BEHIND keeps the full stub — it has to come out and go round, a
 The one-turn L test measures against the same capped stubs, or a short edge would be refused the single
 bend it wants and sent back to the dog-leg.
 
+**An arrow-tipped end stops half a line-width short of its port.** The head is stroked and never filled,
+with a round join, so the paint reaches `STROKE_W/2` past the geometric tip: land that tip on a card's rim
+and the point of the arrow is 2 world px INSIDE the card, merging into the border it is pointing at.
+`routeFor` takes a trim per end and `edgeGeometry` asks for it wherever the cap is an arrow (`ARROW_INSET`),
+so the painted tip lands ON the rim. The whole END moves, not just the head — `a`/`b` come back off the
+trimmed route, so shaft, head and endpoint handle stay at one point. A `dot` is untrimmed on purpose (it is
+meant to sit centred on the border) and a bare end has no overshoot to pay for. The draft mid-drag is
+trimmed the same way, so nothing shifts on release.
+
 **There is ONE route shape.** Once a line leaves a NAMED face it has a direction to respect,
 and right angles are what make "this leaves the right side and enters the top" legible. It runs a
 short stub straight out of each port before it is allowed to turn, so an edge never bends back across
