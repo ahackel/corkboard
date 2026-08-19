@@ -163,6 +163,11 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   const s = drag.targets.get(act.id);
   if (!s) return { x: dx, y: dy };
   const fp = parentOf(act);
+  // …and no grid AT ALL for a card whose position is CALCULATED — a stack row, a flow frame's child, a
+  // docked tab (isManagedLayout, view/layout.ts). It has no authored x/y for the grid to land on: the
+  // governor recomputes both in the next layout pass, and the gesture is a REORDER, so snapping only
+  // fights the pointer on the way to a drop that ignores the result.
+  if (fp && isManagedLayout(fp)) return { x: dx, y: dy };
   const inBox = !!(fp && isContainer(fp));
   const ax = inBox ? fp!.x : 0, ay = inBox ? fp!.y : 0;
   const g = gridSnap();
@@ -444,6 +449,12 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   // the frame bounds until the next drop-target change, masking it while it's dragged out.
   if (drag.moved && !wasMoved)
     for (const id of drag.targets.keys()) { const m = state.nodes.get(id); if (m) paintNode(m); }
+  // Below the threshold this gesture is still a CLICK, and a click never moves anything. It used to
+  // fall through to applyDragTransform anyway, which snaps (snappedDelta) — so one pixel of jitter
+  // while selecting a card was enough to land it on the next grid position and leave it there, since
+  // the pointerup below only selects when `!drag.moved` and restores no position. Selecting is not a
+  // placement: nothing may write x/y until the pointer has actually gone somewhere.
+  if (!drag.moved) return;
   applyDragClone();   // Shift held -> leave a clone & drag the copy; Shift released -> undo it
   // Update world-space positions immediately (cheap) — visual render is deferred to rAF so that
   // multiple pointermove events arriving within one display frame collapse into a single paint.
