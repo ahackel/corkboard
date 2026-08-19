@@ -16,9 +16,10 @@
 import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type Junction, type MindNode } from '../core/state.js';
 import { junctionOf } from '../data/board.js';
 import { clamp } from '../utils/num.js';
-import { isHidden } from '../utils/model.js';
+import { isHidden, resolveWikilink } from '../utils/model.js';
 import { isStack, insideStack, isDockedTab } from './layout.js';
 import { ui, type Pt } from '../core/ui-state.js';
+import { screenToWorld } from './camera.js';
 import { nodeW, nodeH, colorFill, elTop, canvasSurface, snapPt } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
@@ -428,6 +429,48 @@ export function edgeVisible(e: BoardEdge): boolean {
   return shown(e.from) && shown(e.to);
 }
 
+// ---------- the links a card holds, drawn ----------
+// A selected card's [[wikilinks]] ARE relations, and while that card is selected they are shown as
+// lines. They are not drawn edges: nothing stores them (they live in the note's text, which is the
+// only record there is), nothing selects them, and they vanish with the selection — so they wear a
+// deliberately different pen from every other line on the canvas, white and dotted, with a DOT on the
+// link and an ARROW on the card it names.
+// They start ON THE LINK TEXT rather than on a port, which is the whole reason this reads: a card
+// with four links gets four lines you can tell apart, each leaving the words that made it. That
+// position exists only in the DOM — an inline run has no model geometry — so it is read off the
+// rendered anchor and brought back into world coords. Only ever for ONE card, the selected one, so
+// this is one layout read per paint rather than a flush per edge.
+const LINK_INK = '#fff';
+function linkEdges(n: MindNode): string {
+  const links = n.el?.querySelectorAll<HTMLElement>('a.wikilink');
+  if (!links?.length) return '';
+  let out = '';
+  for (const a of links) {
+    const target = resolveWikilink(a.dataset.target ?? '')[0];
+    if (!target || target.id === n.id || isHidden(target) || !connectable(target.id)) continue;
+    const r = a.getBoundingClientRect();
+    if (!r.width) continue;
+    const p1 = screenToWorld(r.left, r.top), p2 = screenToWorld(r.right, r.bottom);
+    // The link's own box in world coords. Clamped into the card's, so a link scrolled out of a
+    // clipped preview can't anchor its dot in the empty canvas beside the card.
+    const y = clamp((p1.y + p2.y) / 2, elTop(n, n.y), n.y + nodeH(n));
+    const toRight = target.x + nodeW(target)/2 >= (p1.x + p2.x) / 2;
+    // The line — dot and all — starts on the card's RIM, at the link's own HEIGHT. Never at the link
+    // itself: inside the card it would run along the rest of that line of text and strike it out. The
+    // height is what pairs the two, and it is enough: a card with four links sends four lines off it
+    // at four different heights, each leaving level with the words that made it.
+    const from = { x: toRight ? n.x + nodeW(n) : n.x, y };
+    const fromSide: EdgeSide = toRight ? 'right' : 'left';
+    const toSide = nearestSide(target, from);
+    const { d, pts } = routeFor(from, fromSide, portPoint(target, toSide), toSide, 0, ARROW_INSET);
+    const tip = pts[pts.length-1];
+    out += `<path class="fe" style="stroke:${LINK_INK}" stroke-dasharray="1 7" d="${d}"/>`
+         + endCap('arrow', tip, legDir(pts[pts.length-2], tip), LINK_INK)
+         + capDot(from, LINK_INK);
+  }
+  return out;
+}
+
 export function paintFreeEdges(): void {
   // Filtering hides every line, for the same reason paintEdges does it: dimmed cards are
   // translucent, so lines behind them read as clutter.
@@ -489,6 +532,8 @@ export function paintFreeEdges(): void {
   // the one thing its users complain about steadily, and a ring that only appears once you've said
   // which card you mean can't be hit by accident while you're dragging past.
   const one = state.sel.size === 1 ? state.nodes.get(state.selId ?? '') : null;
+  // The selected card's own links, on the line layer with every other line.
+  if (one && !isHidden(one)) svg += linkEdges(one);
   if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one))
     for (const { side, p } of socketPoints(one)) {
       // A ring already carrying an edge is FILLED — the same fill the draw preview uses for the port

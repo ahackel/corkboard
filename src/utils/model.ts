@@ -151,3 +151,19 @@ export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
   for (const p of ancestors(n)) if (p.id === maybeAncestorId) return true;
   return false;
 }
+
+// ---------- what a [[wikilink]] names ----------
+// The PATH form first (the node's file, with `.md` optional — the one name guaranteed unique), else
+// every card whose TITLE matches; in map order, so the first hit is the one a click goes to. Two
+// callers share it, and that is the point: main.ts's jump, and the link lines a selected card draws
+// (view/free-edges.ts). A line that pointed somewhere the click doesn't go would be a lie.
+export function resolveWikilink(name: string): MindNode[] {
+  const t = name.trim().toLowerCase();
+  if (!t) return [];
+  const nodes = [...state.nodes.values()];
+  const byFile = nodes.filter(n => {
+    const f = (n.file ?? '').toLowerCase();
+    return f === t || f === t + '.md';
+  });
+  return byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
+}

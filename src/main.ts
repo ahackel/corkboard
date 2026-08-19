@@ -16,7 +16,7 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { renderBodyHTML, esc } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, disambiguatedLabel, duplicateLabels, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked, parentOf, ancestors } from './utils/model.js';
+import { childrenOf, isHidden, nodeLabel, disambiguatedLabel, duplicateLabels, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked, parentOf, ancestors, resolveWikilink } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
@@ -1922,14 +1922,7 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
 // file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
 // there rather than in some new syntax.
 function focusByTitle(title: string): void {
-  const t = title.trim().toLowerCase();
-  const nodes = [...state.nodes.values()];
-  // The path form first: with the `.md` optional, so both `[[Notes 2]]` and `[[Notes 2.md]]` land.
-  const byFile = nodes.filter(n => {
-    const f = (n.file ?? '').toLowerCase();
-    return f === t || f === t + '.md';
-  });
-  const hits = byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
+  const hits = resolveWikilink(title);
   const target = hits[0];
   if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
   popScopeFor(target);
