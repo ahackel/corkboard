@@ -2450,8 +2450,10 @@ body.sheet-open #editorSheet { display:flex; }
    derived ink, its markdown, its links and its own editor all arrive for free, and its children are
    ordinary child cards you can drag and edit. Only its LOOK is CSS: the width is DERIVED in
    `nodeW` (nav/scope.ts readingWidth) so the layout pass and the outline rows inside agree with it,
-   and the camera is pinned by clampReadingView (view/camera.ts) so the strip sits centred at 1:1 and
-   the only movement left on the canvas is vertical — which IS the scroll.
+   and the camera is pinned by clampReadingView (view/camera.ts) so the card sits centred at 1:1 —
+   with no vertical movement at all while it fits on screen, and bounded vertical panning (which IS
+   the scroll) once it doesn't. Its HEIGHT is its content's, exactly as on the board: a note two lines
+   long is a card two lines tall, centred, rather than an empty full-height slab.
 
    Deliberately NOT position:fixed. The card stays in world space, so screen and world coordinates
    still line up and every hit-test — dragging a row, dropping one, the marquee — keeps working
@@ -2461,8 +2463,6 @@ body.sheet-open #editorSheet { display:flex; }
    in the same pass, so a two-selector rule would miss the first paint of an open and apply on the
    second. The class is only ever on the open card, so the body class adds nothing here. */
 .node.reading-root {
-  min-height:100dvh;                /* full screen even for a two-line note */
-  border-radius:0;
   --h1-size:24px; --h1-lh:28.8px;   /* reading size, via the same variables `.node .body h1` reads */
   padding:calc(var(--pad-y) + 4px) 22px; }
 .node.reading-root > .body { font-size:15px; line-height:1.65; }

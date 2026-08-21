@@ -13,7 +13,7 @@
 import { state, edgesSvg, dragEdgesSvg, dragLayerEdges, isAnnotation, type MindNode } from '../core/state.js';
 import { isHidden, parentOf } from '../utils/model.js';
 import { ui } from '../core/ui-state.js';
-import { nodeW, nodeH, elTop, effectiveColor, colorFill } from '../main.js';
+import { readingShiftX, nodeW, nodeH, elTop, effectiveColor, colorFill } from '../main.js';
 import { clamp } from '../utils/num.js';
 import { paintFreeEdges } from './free-edges.js';
 
@@ -54,7 +54,10 @@ function paintTethers(): void {
     // even drawn — so an annotation sitting above a frame would otherwise land its dot on the tab, or
     // in the empty gap beside it, instead of on the box it annotates. elTop is 0 for everything else,
     // a FOLDED frame and a docked tab included: there the tab is all there is, so it IS the body.
-    const ax = n.x + nodeW(n)/2, ay = n.y + nodeH(n)/2;
+    // readingShiftX: while a card is open its margin notes are pulled inside the window (a derived x,
+    // never written), so the tether has to leave from where the note is PAINTED, not from its
+    // authored position — otherwise the line runs off the screen. Identity at every other time.
+    const ax = readingShiftX(n, n.x) + nodeW(n)/2, ay = n.y + nodeH(n)/2;
     const bx = clamp(ax, parent.x, parent.x + nodeW(parent));
     const by = clamp(ay, elTop(parent, parent.y), parent.y + nodeH(parent));
     const els = `<path class="anno-edge" style="stroke:${tint}" stroke-dasharray="2 6" d="M ${ax} ${ay} L ${bx} ${by}"/>`

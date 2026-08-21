@@ -5,7 +5,7 @@ import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { scopeActive, scopeRootNode, readingWidth } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { nodeW, nodeH } from '../main.js';
+import { nodeW, nodeH, elTop } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
@@ -60,11 +60,21 @@ const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; 
 // clamp constrains all of them instead of a guard per gesture. It must write the MODEL and not just
 // the transform: `screenToWorld` reads `state.view`, and a paint at k=1 over hit-tests at some other
 // k is how a click lands on the wrong card.
+// Room left for the floating chrome: the crumb bar and the toolbar at the top, a little air at the
+// bottom. Only consulted for a card TALLER than the window — one that fits is simply centred.
+const READ_PAD_TOP = 56, READ_PAD_BOTTOM = 24;
 function clampReadingView(): void {
   const root = scopeRootNode();
   if (!root || root.type !== 'card') return;
   state.view.k = 1;                                             // no zoom: reading size is reading size
   state.view.x = (window.innerWidth - readingWidth()) / 2 - root.x;   // centred, horizontally immovable
+  // …and vertically: CENTRED while the whole card is on screen, which also means it cannot be
+  // scrolled at all (there is nothing off-screen to scroll to, and a page that drifts under a
+  // scroll gesture it doesn't need reads as broken). Once it outgrows the window, y is the one free
+  // axis — that IS the scroll — but bounded, so neither end can be panned off into empty canvas.
+  const top = elTop(root, root.y), h = nodeH(root), vh = window.innerHeight;
+  if (h + READ_PAD_TOP + READ_PAD_BOTTOM <= vh) { state.view.y = (vh - h) / 2 - top; return; }
+  state.view.y = clamp(state.view.y, (vh - READ_PAD_BOTTOM) - (top + h), READ_PAD_TOP - top);
 }
 export function applyView(): void {
   clampReadingView();

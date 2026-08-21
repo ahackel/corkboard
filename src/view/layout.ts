@@ -11,7 +11,7 @@
 import { state, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
-import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
+import { isScopeRoot, boxIsViewport, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
@@ -306,7 +306,7 @@ export function containerBox(f: MindNode): { x: number; y: number; w: number; h:
   // contents the whole window instead of a rectangle on the canvas. A DERIVED override: f.w/f.h are
   // neither read nor written here, which is what lets the frame come back out at its authored size.
   // Checked before the docked branch, or an open TAB would keep the interior its group lent it.
-  if (isScopeRoot(f)) return scopeRect();
+  if (boxIsViewport(f)) return scopeRect();
   const g = tabGroupOf(f);
   if (g) return frameInterior(g);
   return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
@@ -507,7 +507,7 @@ export function hostFrame(node: MindNode): MindNode | null {
   // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode. That's what
   // makes "the frame's box isn't there any more" true of the DOM and not just of the paint — and
   // edges.ts shares this walk, so their connectors stop clipping to it in step.
-  return h && isScopeRoot(h) ? null : h;
+  return h && boxIsViewport(h) ? null : h;
 }
 // …and the same walk WITHOUT that exception: the nearest container ancestor by TREE, wherever the
 // node's element actually ended up. The two questions were one until a frame could be OPENED, and
@@ -538,7 +538,7 @@ export function frameInterior(f: MindNode): { x: number; y: number; w: number; h
   // The OPEN frame's interior IS the viewport, with no border and no tab to inset from. Spelled here
   // as well as in containerBox because a non-docked frame doesn't route through it — this function is
   // the one every hosted child, wrapper and edge clip-path reads.
-  if (isScopeRoot(f)) return scopeRect();
+  if (boxIsViewport(f)) return scopeRect();
   // A DOCKED TAB draws no box of its own — its group lends it the whole interior, which is the point
   // of docking (one box, several tabs). It reserves room at the top only when it is ITSELF a group:
   // a top-level group's strip hangs in the band above its box, but a docked one has nothing above it,
@@ -582,7 +582,7 @@ export function frameInsetY(f: MindNode): number {
 // silently report a 64px frame. elTop is the one place that needs the exception.)
 function frameContentTop(frame: MindNode): number {
   const box = containerBox(frame);
-  return ((isDockedTab(frame) || isScopeRoot(frame)) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
+  return ((isDockedTab(frame) || boxIsViewport(frame)) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
 }
 // Is `child`'s centre inside `frame`'s OUTER box? The single source of truth for "a frame child is
 // still in its frame" — the trigger drag.ts uses in BOTH the rip PREVIEW (updateRip) and the detach
@@ -594,7 +594,7 @@ function frameContentTop(frame: MindNode): number {
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {
   // The OPEN frame's interior is the whole canvas, so its children can never be ripped out of it —
   // there is nowhere visible to rip them TO. One guard, so the preview and the commit still agree.
-  if (isScopeRoot(frame)) return true;
+  if (boxIsViewport(frame)) return true;
   const cx = child.x + nodeW(child)/2, cy = child.y + nodeH(child)/2;
   const b = containerBox(frame);
   return cx >= b.x && cx <= b.x + b.w

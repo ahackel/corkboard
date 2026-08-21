@@ -53,6 +53,14 @@ export function isReadingRoot(n: MindNode): boolean {
 // inside it and the layout pass all agree — `stackRowW` derives from `nodeW(stack)`) and by the camera
 // clamp that keeps it centred. A DERIVED width: `n.w` on disk is never touched, so a card opened,
 // read and left comes back out at exactly the width it was authored at.
+// "Is this the open node whose BOX became the viewport" — the question every branch in the layout
+// pass was really asking when it tested isScopeRoot. True for a frame, whose interior IS the window,
+// and false for a read CARD, which is an ordinary box on the canvas that merely happens to be the
+// thing you are standing in. Its children are hosted, clipped, laid out and ripped out of it exactly
+// as they are on the board, so every one of those branches has to see it as a normal container.
+export function boxIsViewport(n: MindNode): boolean {
+  return isScopeRoot(n) && !isReadingRoot(n);
+}
 export const READING_W = 680;
 export function readingWidth(): number { return Math.min(READING_W, window.innerWidth); }
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }

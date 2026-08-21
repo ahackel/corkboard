@@ -21,7 +21,7 @@ import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, i
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim } from './view/camera.js';
+import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView } from './view/camera.js';
 import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
@@ -52,7 +52,7 @@ import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
-import { snapTo } from './utils/num.js';
+import { snapTo, clamp } from './utils/num.js';
 
 declare global {
   interface Window { __dbg: { readonly state: typeof state; readonly drag: Drag | null }; }
@@ -1200,7 +1200,36 @@ function dragRoot(): HTMLElement { return (ui.drag && ui.drag.moved) ? dragLayer
 // live-basis give the same host-relative offset, since host and child shift by the very same delta.
 // `?? n` rather than `?? {x: n.x, y: n.y}`: a MindNode already IS a Pt structurally, and this runs
 // 2-4× per node per repaint — the object literal was pure allocation on the paint path.
-function paintPos(n: MindNode): Pt { return ui.drag?.origins?.get(n.id) ?? n; }
+function paintPos(n: MindNode): Pt {
+  const p = ui.drag?.origins?.get(n.id) ?? n;
+  const x = readingShiftX(n, p.x);
+  return x === p.x ? p : { x, y: p.y };
+}
+// An ANNOTATION pulled inside the window while a card is open, and NOTHING ELSE — identity for every
+// other node and whenever nothing is open, so this costs one type test on the paint path.
+//
+// A card opens at a fixed reading width in the middle of the screen; its margin notes were placed
+// against its width on the BOARD, so a note that sat comfortably beside a 900px card is off the side
+// of a 680px one. Their x is therefore DERIVED here rather than moved: `mm_position_x` on disk is
+// untouched, so leaving the card puts every note back exactly where it was authored — the same
+// contract opening a frame keeps ("opening and leaving move NOTHING").
+// Exported because `view/edges.ts` draws the tether from the note to its parent and has to start it
+// where the note is actually painted, or the line would point off the screen at a card that isn't
+// there. Hit-testing still uses the authored x, so a marquee reaches a shifted note by its board
+// position — the one seam this leaves, and much the lesser evil against writing positions to disk.
+const READING_ANNO_PAD = 12;
+export function readingShiftX(n: MindNode, x: number): number {
+  if (!isAnnotation(n)) return x;
+  const root = scopeRootNode();
+  if (!root || root.type !== 'card') return x;
+  // The window's own edges, in WORLD coordinates — derived from where clampReadingView puts the strip
+  // rather than from state.view.x, so a paint that happens before (or during) the camera glide clamps
+  // against the same window the camera is about to show. The two would otherwise disagree for a frame.
+  const vw = window.innerWidth;
+  const lo = root.x - (vw - readingWidth()) / 2 + READING_ANNO_PAD;
+  const hi = lo + vw - nodeW(n) - 2 * READING_ANNO_PAD;
+  return hi < lo ? lo : clamp(x, lo, hi);
+}
 // Where a node's ELEMENT paints, given a bounds-top y: the SINGLE authority for the tab drop. The same
 // y for everything except a frame BOX, whose element is the box alone — one tab BELOW the bounds top
 // (FRAME_TAB_DROP), with the tab itself an absolutely positioned child hanging back up over that gap
@@ -2248,6 +2277,11 @@ function syncScopeChrome(): void {
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
 window.addEventListener('resize', () => {
   if (!scopeActive()) return;
+  // An open CARD's width IS the window's (readingWidth), and so is its centring — so a resize has to
+  // re-run the layout, not just re-snapshot the rect: the box, its outline rows and the camera clamp
+  // all read the new width. Immediate rather than debounced, because a strip that lags 200ms behind
+  // the window edge while you drag it is the one thing you're looking at.
+  if (readingActive()) { relayout(); applyView(); return; }
   clearTimeout(scopeResizeTimer);
   scopeResizeTimer = setTimeout(refreshScopeRect, 200);
 });

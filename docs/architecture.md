@@ -527,6 +527,26 @@ text at all.
   `canOpen` from silently stealing the edit gesture. `⤢` lives on the float bar because that is the only
   action surface identical on desktop and touch (it docks to the bottom on coarse pointers); its test
   (`canOpenSelection`) also drops it on the card you are already inside, which `openFrame` would refuse.
+- **`containerBox`/`frameInterior` and friends must NOT see it as a viewport.** Five branches in the layout
+  pass tested `isScopeRoot` when what they meant was "the open node whose BOX became the window":
+  `containerBox`, `frameInterior`, `containerHost` (the open frame hosts nothing), `frameContentTop` and
+  `centreInFrame`. A read card is an ordinary box on the canvas, so all five now ask `boxIsViewport`
+  (`nav/scope.ts`) instead. Getting this wrong is what made the box come out at its authored width while
+  its outline rows were sized from the derived one — the rows overflowed the card they belong to.
+- **Vertically CENTRED while it fits, bounded scroll when it doesn't.** `clampReadingView` pins `y` outright
+  while the whole card is on screen — so it cannot be scrolled at all, because a page that drifts under a
+  gesture it doesn't need reads as broken — and clamps it between the two ends once the card outgrows the
+  window, leaving `READ_PAD_TOP` clear of the crumb bar and the toolbar. The height itself is the content's,
+  exactly as on the board: a two-line note is a two-line card, not an empty full-height slab.
+- **A resize re-runs the LAYOUT, not just the camera.** `readingWidth()` follows the window, so the box, its
+  rows and the centring all change with it — the resize handler calls `relayout()` + `applyView()`
+  immediately for a read card rather than debouncing `refreshScopeRect` the way an open frame does.
+- **Annotations are pulled inside the window, derived** (`readingShiftX`). A margin note placed against a
+  900px card on the board is off the side of a 680px strip. Its x is shifted at PAINT time only —
+  `mm_position_x` is untouched, so leaving puts every note back where it was authored. Computed from the
+  strip's world position rather than from `state.view.x`, so a paint during the opening glide clamps against
+  the same window the camera is about to show. `view/edges.ts` reads the same function for the tether's
+  start, or the line would point off-screen; hit-testing still uses the authored x, which is the one seam.
 - **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
