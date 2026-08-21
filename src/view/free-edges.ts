@@ -18,6 +18,7 @@ import { junctionOf } from '../data/board.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, resolveWikilink } from '../utils/model.js';
 import { isStack, insideStack, isDockedTab } from './layout.js';
+import { isReadingRoot } from '../nav/scope.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
 import { nodeW, nodeH, colorFill, elTop, canvasSurface, snapPt } from '../main.js';
@@ -406,7 +407,13 @@ export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; pts: Pt[]
 // annotation shows no rings, refuses a drop, and any edge already touching one stays hidden.
 export function connectable(id: string): boolean {
   const e = endOf(id);
-  return !!e && (!!e.j || e.n.type !== 'annotation');   // a meeting point is nothing BUT somewhere to end
+  if (!e) return false;
+  if (e.j) return true;                                 // a meeting point is nothing BUT somewhere to end
+  // An OPEN card is the other end of the same argument: everything outside it is out of scope and off
+  // the canvas, so there is nothing left to draw a line TO. Four rings offering a connection the canvas
+  // can't complete is worse than no rings — and this being the shared gate means the drop refuses it in
+  // the same breath, so nothing can be dragged onto it either.
+  return e.n.type !== 'annotation' && !isReadingRoot(e.n);
 }
 // Whether a junction is on screen — DERIVED from the edges', not a second gate of its own: a point is
 // only ever the place some lines meet, so it is visible exactly while one of them is (a collapsed

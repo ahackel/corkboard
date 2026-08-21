@@ -584,6 +584,12 @@ text at all.
   than to nothing: the same rule `behindFill` already states for containers ("what's behind an uncoloured
   container is whatever is behind IT"). Without that, going into a card on a teal board turned the board
   grey and coming out turned it teal again — and the identical discard applied to an uncoloured open FRAME.
+- **It offers no edge PORTS while it's open** (`connectable` in `view/free-edges.ts`). Everything outside it
+  is out of scope and off the canvas, so there is nothing left to draw a line to — four rings offering a
+  connection the canvas can't complete are worse than no rings. Added to `connectable` rather than beside it
+  because that is the shared gate: the rings and the DROP refuse together, so nothing can be dragged onto the
+  open card either. `edgeVisible` keeps its own inlined copy of the rule on purpose (one lookup per end), so
+  this doesn't touch which edges are drawn — an edge to the open card is already hidden by its far end.
 - **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
