@@ -2131,14 +2131,30 @@ export function openFrame(target: MindNode | undefined): void {
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.
-export function exitScope(): void { goToScopeDepth(scope.stack.length - 1); }
+export function exitScope(): void {
+  // Leave the level you're standing in — AND every SYNTHESIZED level beneath it. A level with no
+  // `back` is one nobody stepped through (setScopeStack): opening a card that lives three frames deep
+  // pushes those frames as crumbs, and leaving one at a time would walk you out through folders you
+  // were never in. Coming out of a card therefore lands you where you were when you went into it,
+  // which is what "close" means. A level you DID open by hand keeps its own back and stops the walk,
+  // so `open A → open B → leave` still lands in A exactly as before.
+  let d = scope.stack.length - 1;
+  while (d > 0 && scope.stack[d - 1]!.back === null) d--;
+  goToScopeDepth(d);
+}
 // Leave the level AT `depth`, landing in the one above it — so depth 0 is "back to the whole map".
 // A crumb click is exactly this, which is why the crumbs need no logic of their own.
 export function goToScopeDepth(depth: number): void {
   if (depth < 0 || depth >= scope.stack.length) return;   // ↓ at the top level: silently inert
   const leaving = scope.stack[depth]!;
   const upId = depth > 0 ? scope.stack[depth - 1]!.rootId : null;
-  applyScope(upId ? state.nodes.get(upId) ?? null : null, { restore: leaving.back, exiting: true });
+  // Several levels can be left at once — exitScope pops the synthesized ones, a crumb click jumps out
+  // of many. The camera to glide back to belongs to the OUTERMOST level being left, or, when that one
+  // was synthesized and never recorded a camera, to the innermost that did: that is the state the user
+  // was actually in before the whole excursion.
+  let back = leaving.back;
+  for (let i = scope.stack.length - 1; i > depth && !back; i--) back = scope.stack[i]!.back;
+  applyScope(upId ? state.nodes.get(upId) ?? null : null, { restore: back, exiting: true });
 }
 // Restore the scope a URL hash asked for (nav/url-state.ts). No fit: the hash carries its own camera
 // and must win. The hash is AUTHORITATIVE, so a path that's absent, gone, or no longer a frame all
@@ -2200,11 +2216,15 @@ function hasAuthoredColor(n: MindNode): boolean {
 // writes can't become two different things.
 export function canvasOwner(): MindNode | null {
   const open = scopeRootNode();
-  // An open CARD is drawn ON the canvas rather than replaced by it, so it is not the canvas's owner:
-  // tinting the background with the very colour the strip is painting would hide the card in it. The
-  // canvas behind a strip is still the MAP, which is also what the colour picker should be writing.
-  if (open && open.type === 'card') return null;
-  return open ? actionTarget(open) : null;   // a tab group's colour is its open tab's
+  if (!open) return null;
+  // An open CARD is drawn ON the canvas rather than replaced by it, so it is not its own backdrop —
+  // tinting the background with the very colour the card is painting would hide it in it. What is
+  // behind it is where it SITS: its parent, resolved (canvasFill goes through effectiveColor, so an
+  // uncoloured parent keeps walking up), which is what makes opening a card inside a blue frame still
+  // look like being inside that frame. A root-level card has no parent, so the map's own colour shows
+  // — exactly what was behind the card before it was opened.
+  if (open.type === 'card') { const p = parentOf(open); return p ? actionTarget(p) : null; }
+  return actionTarget(open);   // a tab group's colour is its open tab's
 }
 // The fill actually behind the cards right now — the one input both the background and the grid ink
 // are derived from. null = none, and the theme's own background shows through as before.

@@ -392,6 +392,13 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 - **Double-click is the way IN and the way OUT.** A frame's interior opens it; the empty canvas — which, once
   you're inside, is that same interior — leaves it (`features/gestures.ts`). At the top level there's nowhere
   to leave to, so the canvas keeps its "new card here". The crumb path and `↓` are the other ways out.
+- **Leaving pops every SYNTHESIZED level under you, not one crumb at a time.** A level with no `back` is
+  one nobody stepped through (`setScopeStack` records a back only on the level you newly enter), so opening
+  something three frames deep pushes those frames as crumbs — and leaving one at a time would walk you out
+  through folders you were never in. `exitScope` therefore walks down past them, and `goToScopeDepth`
+  restores the back of the outermost level being left or, when that one was synthesized, the innermost that
+  recorded one: the state the user was actually in before the whole excursion. `open A → open B → leave`
+  still lands in A, because A kept its own back and stops the walk.
 - **The path is ONE pill, and the map name is its first segment** (`features/breadcrumbs.ts` + `#homeBar`) —
   `#toolbar`'s pattern, one `--panel` capsule of borderless items, so going into a frame ADDS segments rather
   than swapping loose text for chrome. Segments carry no folder glyph (the `›` separators already say it's a
@@ -557,6 +564,12 @@ text at all.
   inside a frame removes it from the DOM: the box vanishes while its rows, hosted by the card itself and so
   still visible, stay behind. A root-level card has no host anyway, which is exactly why this only shows up
   once the card is nested — and why it survived a first round of testing.
+- **The canvas behind it wears its PARENT's resolved colour** (`canvasOwner` returns `parentOf(open)` for a
+  read card). Not its own — the backdrop would then be the very colour the card is painting and the card
+  would vanish into it — and not the map's either, because what is behind a card is where it SITS: opening
+  one inside a blue frame should still look like being inside that frame. Resolved, since `canvasFill` goes
+  through `effectiveColor`, so an uncoloured parent keeps walking up. A root-level card has no parent, so the
+  map's own colour shows — exactly what was behind the card before it was opened.
 - **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
