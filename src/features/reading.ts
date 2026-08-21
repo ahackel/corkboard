@@ -1,76 +1,49 @@
 // ---------- reading view: an OPENED card IS its note ----------
 // The other half of "you can open things". Opening a FRAME makes its interior the canvas
-// (nav/scope.ts); opening a CARD makes its NOTE the window — the whole text, at reading width and
-// reading size, scrolling like a page instead of being panned like a very tall card.
+// (nav/scope.ts); opening a CARD keeps the card itself and draws it as one full-height strip, so the
+// whole note is readable and scrolls like a page instead of being panned like a very tall card.
 //
-// Deliberately NOT a panel beside the canvas. It is a scope LEVEL: one entry on the same stack, one
-// crumb, ↓ / a crumb click to leave, the file path in the hash so back/forward and reload work. That
-// is what keeps it one app — there is never a page and a canvas showing the same note at once, you
-// simply went somewhere. (Scrintal does the same thing: a card "goes full screen to focus".)
+// There is no second view here, and that is the entire point of the module being this small. It is
+// THE CARD: the same element paintNode already paints, with its own colour, ink, markdown, links,
+// task boxes and — on a double-click — its own editor. All this file does is name the state; the
+// strip's geometry is `.node.reading-root` in styles.css, and staying on the canvas at all is the one
+// exception isReadingRoot spells in nav/scope.ts.
 //
-// The renderer is the CARD's: `.node .body`'s whole markdown cascade, borrowed by wearing `.node`,
-// with four variables restated for reading size. The editor is the card's too (startCardEditIn), so
-// a note edited here and the same note edited on the canvas are the same code, the same undo step
-// and the same file rename.
-import { state, type MindNode } from '../core/state.js';
-import { ui } from '../core/ui-state.js';
-import { scopeRootNode } from '../nav/scope.js';
-import { renderBodyHTML } from '../utils/markdown.js';
-import { isLockedEffective } from '../utils/model.js';
-import { cardMarkdown, focusByTitle, openFrame, selectedIds } from '../main.js';
-import { hydrateImages } from './images.js';
-import { startCardEditIn } from './inline-edit.js';
+// It is also a scope LEVEL, not a panel: one entry on the same stack, one crumb, ↓ / a crumb / Esc to
+// leave, the file path in the same `open=` hash term — so back/forward, reload and bookmarks work
+// with no navigation state of its own. Reading is somewhere you GO.
+import { state } from '../core/state.js';
+import { scopeRootNode, canOpen, isScopeRoot } from '../nav/scope.js';
+import { actionTarget } from '../view/layout.js';
+import { openFrame, selectedIds } from '../main.js';
 import { byId } from '../utils/dom.js';
 
-const page = byId('page');
-const pgText = byId('pgBody').querySelector('.body') as HTMLElement;
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 
-// The open node, when it is one we READ rather than one we stand inside. Read off the scope root
-// rather than held here: "where am I" has exactly one home (nav/scope.ts), and a second copy of it
-// would be the thing that drifts.
-function readingNode(): MindNode | null {
+// Read off the scope root rather than held here: "where am I" has exactly one home, and a second copy
+// of it would be the thing that drifts.
+export function readingActive(): boolean {
   const n = scopeRootNode();
-  return n && n.type === 'card' ? n : null;
+  return !!n && n.type === 'card';
 }
-export function readingActive(): boolean { return !!readingNode(); }
 
-// Called from paintAll, so an edit anywhere — here, on the canvas, an undo — refreshes the page.
+// Called from paintAll. The class is what the strip's CSS keys off for everything OUTSIDE the card —
+// the canvas tools that have nothing to act on in here.
 export function syncReading(): void {
-  const n = readingNode();
-  document.body.classList.toggle('reading', !!n);
-  if (!n) return;
-  if (ui.bodyEdit?.el === pgText) return;   // the editor is IN here — the same bail paintNode makes
-  const md = cardMarkdown(n);
-  if (pgText.dataset.md === md) return;     // same source-text guard paintNode uses
-  pgText.dataset.md = md;
-  pgText.innerHTML = md.trim() ? renderBodyHTML(md)
-    : '<p class="pg-empty">This note is empty. Double-click to write.</p>';
-  hydrateImages(pgText);
+  document.body.classList.toggle('reading', readingActive());
 }
 
-// Double-click the page edits it — the same gesture as on the card, so the two sides agree about what
-// a double-click means. Not on a link: that's a jump.
-pgText.addEventListener('dblclick', (e) => {
-  if ((e.target as HTMLElement).closest('a.lk')) return;
-  const n = readingNode();
-  if (!n || state.readOnly || isLockedEffective(n)) return;
-  startCardEditIn(n, pgText);
-});
-// Links. The card's own handler is bound per card in paintNode and can't reach here; it's the same
-// two cases — a wikilink jumps (and comes out of this scope on the way, popScopeFor), anything else
-// is a plain external link the browser opens itself.
-pgText.addEventListener('click', (e) => {
-  const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null;
-  if (!a || !a.classList.contains('wikilink')) return;
-  e.preventDefault();
-  focusByTitle(a.dataset.target ?? '');
-});
-// ⤢ on the float bar: the touch-reachable twin of ↑. Acts on the anchor, like ↑ does — you can only
-// stand in one place, so a multi-selection has nothing to open.
+// ⤢ on the float bar: the touch-reachable twin of ↑, since the float bar is the one action surface
+// identical on desktop and on a phone. Acts on the anchor, like ↑ does — you can only stand in one
+// place — and hides on the card you are already standing in, which openFrame would refuse anyway.
+export function canOpenSelection(): boolean {
+  const ids = selectedIds();
+  if (ids.length !== 1) return false;
+  const n = state.nodes.get(ids[0]);
+  return !!n && canOpen(actionTarget(n)) && !isScopeRoot(actionTarget(n));
+}
 fbOpen.addEventListener('click', (e) => {
   e.stopPropagation();
   const ids = selectedIds();
-  if (ids.length !== 1) return;
-  openFrame(state.nodes.get(ids[0]));
+  if (ids.length === 1) openFrame(state.nodes.get(ids[0]));
 });

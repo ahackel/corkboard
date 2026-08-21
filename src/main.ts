@@ -46,7 +46,7 @@ import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
@@ -562,6 +562,7 @@ export function paintNode(n: MindNode): void {
   if (rendersAsFrame(n)) el.style.setProperty('--tab-ink', inkFor(behindFill(n)));
   else el.style.removeProperty('--tab-ink');
   el.className = 'node ' + colorClass(col)
+    + (isReadingRoot(n) ? ' reading-root' : '')   // opened as a page: one screen-fixed strip (styles.css)
     + (isFrameBox(n) ? ' frame' : '')
     + (isStack(n) ? ' stack' : '')
     + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
@@ -2081,9 +2082,10 @@ export function openFrame(target: MindNode | undefined): void {
   // node that owns a tab strip and no content of its own.
   if (isTabsFrame(t) && !t.collapsed) { normalizeTabs(t); t = actionTarget(t); }
   if (isScopeRoot(t)) return;                  // already standing in it
-  // A CARD open is a page, not a canvas: there is no arrangement to frame, and fitting the camera to
-  // a scope whose only visible content is hidden behind #page would leave a random zoom to come back
-  // out to. The camera is simply left where it was.
+  // A CARD open is a page, not a canvas: the strip is placed in SCREEN space (position:fixed), so its
+  // world box says nothing about what you are looking at and framing it would just leave a random zoom
+  // to come back out to. The camera is left exactly where it was, which is also what makes leaving
+  // feel like stepping back out rather than arriving somewhere new.
   applyScope(t, { back, camera: t.type !== 'card' });
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
@@ -2157,6 +2159,10 @@ function hasAuthoredColor(n: MindNode): boolean {
 // writes can't become two different things.
 export function canvasOwner(): MindNode | null {
   const open = scopeRootNode();
+  // An open CARD is drawn ON the canvas rather than replaced by it, so it is not the canvas's owner:
+  // tinting the background with the very colour the strip is painting would hide the card in it. The
+  // canvas behind a strip is still the MAP, which is also what the colour picker should be writing.
+  if (open && open.type === 'card') return null;
   return open ? actionTarget(open) : null;   // a tab group's colour is its open tab's
 }
 // The fill actually behind the cards right now — the one input both the background and the grid ink
@@ -2495,13 +2501,6 @@ window.addEventListener('keydown', (e) => {
   if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive() && !readingActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
   if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
-  // Everything from here down acts on the CANVAS — a card at the pointer, the selection, the camera.
-  // Inside an open card there is no canvas on screen and nothing is selected, so these would fire
-  // invisibly: a card created behind the page, a camera moved under it. One bail rather than a
-  // condition per line, placed here so the genuinely global keys above (read-only, outline, search,
-  // and the undo/save block further down) keep working while you read.
-  if (readingActive()) return;
-
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
   // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).

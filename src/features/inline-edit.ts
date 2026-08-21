@@ -188,17 +188,17 @@ export function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolea
 // select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
 // which is the one nudge that keeps F2 meaningful there.
 type Caret = 'title' | 'end';
-function startCardEdit(n: MindNode, { caret = 'end', isNew = false, host }: { caret?: Caret; isNew?: boolean; host?: HTMLElement } = {}): void {
+function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
   if (isLockedEffective(n)) { setStatus('Locked — can’t edit'); return; }
   if (outlineActive()) { openBranchEditor(n.id, caret === 'title' ? 'title' : 'body'); return; }   // see startInlineEdit
-  if (!host && !n.el) return;
+  if (!n.el) return;
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) return;          // already editing this card
   if (ui.bodyEdit) endBodyEdit();                              // close any other open editor
   if (ui.titleEdit) endTitleEdit();                            // …including a container's label
   touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh card, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);
-  const bodyEl = host ?? (n.el!.querySelector('.body') as HTMLElement);
+  const bodyEl = n.el.querySelector('.body') as HTMLElement;
   const ta = document.createElement('textarea');
   // The editor opens on the note EXACTLY as it is — a rename of an untitled card used to seed a bare
   // `# ` for the name to be typed into, and no longer does: putting a marker in a note nobody asked to
@@ -210,7 +210,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false, host }: { ca
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
   // than just reverting the edit the way it does for an existing card.
   ui.bodyEdit = { id:n.id, orig:text, el:bodyEl, ta, isNew };
-  n.el?.classList.remove('no-body');                           // give the body slot room while editing
+  n.el.classList.remove('no-body');                            // give the body slot room while editing
   // The textarea REPLACES the rendered note, so the render cache paintNode keys `.body` on is no longer
   // describing what's in there — clear it, or committing an edit that changed nothing would leave the
   // textarea sitting in the card (the guarded re-render would see a matching key and skip).
@@ -260,15 +260,6 @@ function caretIn(text: string, caret: Caret): [number, number] {
 // redirect).
 export function startBodyEdit(n: MindNode): void {
   startCardEdit(n, { caret: 'end' });
-}
-// …and the same editor opened somewhere OTHER than the card: the page panel hosts the textarea in its
-// own `.body` while the card keeps its place on the canvas (features/page-panel.ts). Only the host
-// element differs — the text it holds, the undo grouping, the commit that splits the heading back off
-// and the discard-an-empty-new-card rule are all the ones above, so a note edited on the page and the
-// same note edited on the canvas cannot behave differently. The host must sit inside something wearing
-// `.node`, which is where `.body-edit`'s styling (and the card's colour) comes from.
-export function startCardEditIn(n: MindNode, host: HTMLElement): void {
-  startCardEdit(n, { caret: 'end', host });
 }
 // Drop the editor WITHOUT reading the textarea back, because the caller (crud.ts cutBodyRange) has
 // already written the shortened n.body and endBodyEdit would commit the textarea's pre-cut value

@@ -2445,35 +2445,47 @@ body.sheet-open #editorSheet { display:flex; }
 .mp-item .mp-crumb { padding-left:20px; color:var(--muted); font-size:12px;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-/* ---- reading view: an OPENED card is its note, at reading width (features/reading.ts) ----
-   A scope LEVEL, not a panel: nothing of the canvas is on screen beside it, because you went
-   somewhere rather than opened a second view. z-index sits ABOVE #stage and BELOW #toolbar (20) /
-   #homeBar (30), so the crumb path — the way back out — stays on top of the page it belongs to; the
-   top padding is what keeps the text clear of that band instead of scrolling under it. */
-#page { position:fixed; inset:0; z-index:19; display:none; overflow:hidden auto;
-  -webkit-overflow-scrolling:touch; background:var(--bg);
-  padding:calc(60px + var(--sa-t)) calc(16px + var(--sa-r)) calc(64px + var(--sa-b)) calc(16px + var(--sa-l)); }
-body.reading #page { display:block; }
-/* Canvas tools have nothing to act on while you are inside a note — same list body.outline hides,
-   for the same reason. #stage goes too: it is not behind the page, there is no page BESIDE it. */
-body.reading #stage, body.reading #sketchBtn, body.reading #helpBtn, body.reading #gridBtn,
-body.reading #canvasColorBtn, body.reading #fitBtn, body.reading #floatBar,
-body.reading #ghostCard, body.reading #ghostHint { display:none !important; }
-/* The column wears `.node` ON PURPOSE, exactly as a card does: everything below `.node .body` —
-   headings, lists, tables, code, quotes, links, task boxes — is one variable-driven cascade, so
-   borrowing it and restating four variables is what keeps a note's page and a note's card from
-   drifting. Undone here: everything a CARD needs that a page doesn't (absolute box, its own fill,
-   unselectable text). It carries no data-id, so nothing hunting `.node[data-id]` picks it up. */
-#pgBody.node { position:static; width:100%; max-width:680px; margin:0 auto; padding:0;
-  background:none; z-index:auto; color:var(--text);
-  user-select:text; -webkit-user-select:text; touch-action:auto;
-  --h1-size:24px; --h1-lh:28.8px; --text-drop:0; }
-#pgBody .body { font-size:15px; line-height:1.65; overflow:visible; }
-#pgBody .body p { margin:.4em 0 1em; }
-#pgBody .body h1 { margin:.2em 0 .7em; }
-#pgBody .body h2 { font-size:19px; margin:1.6em 0 .4em; }
-#pgBody .body h3 { font-size:16px; margin:1.4em 0 .3em; }
-#pgBody .body h4, #pgBody .body h5, #pgBody .body h6 { font-size:15px; margin:1.2em 0 .3em; }
-#pgBody .body code { font-size:13px; }
-#pgBody .body-edit { font-size:15px; line-height:1.65; }
-.pg-empty { color:var(--muted); font-size:14px; }
+/* ---- reading view: an OPENED card is its note, drawn as one full-height strip ----
+   The element here is THE CARD — the same one paintNode paints on the canvas, so its fill, its
+   derived ink, its markdown, its links and its own editor all arrive for free. Only its GEOMETRY is
+   overridden, and only while it is the thing you are standing in (features/reading.ts + isReadingRoot
+   in nav/scope.ts, the one exception to "the scope root is off the canvas").
+
+   `position:fixed` is what makes it "fixed position and zoom": it leaves #world's pan/zoom transform
+   behind, so the strip holds still while the canvas underneath it is still an ordinary canvas.
+   The three `!important`s are load-bearing rather than lazy — paintNode writes left/top/width inline
+   on EVERY card, every paint (its geometry is world coordinates), and a screen-fixed strip is exactly
+   what world coordinates cannot express. Nothing but !important outranks an inline style. */
+body.reading .node.reading-root {
+  position:fixed !important; top:0 !important; left:0 !important; right:0;
+  margin:0 auto;   /* over-constrained + auto margins = centred, with no transform for a drag to clear */
+  width:min(680px, 100vw) !important; height:100dvh;
+  max-width:none; border-radius:0; z-index:19;
+  display:flex; flex-direction:column;
+  padding:calc(var(--pad-y) + var(--sa-t)) calc(var(--pad-x) + var(--sa-r))
+          calc(var(--pad-y) + var(--sa-b)) calc(var(--pad-x) + var(--sa-l)); }
+/* Reading size, not card size — the strip is 680px wide, and 12px type across 680px is a wall. Set as
+   the same VARIABLES a card reads (`.node .body h1` → --h1-size), so the one title rule still owns it. */
+body.reading .node.reading-root { --h1-size:24px; --h1-lh:28.8px; }
+body.reading .node.reading-root > .title-row { flex:none; }
+/* The note scrolls INSIDE the card: the strip's height is the window's, so the overflow has to go
+   somewhere, and this is the whole reason opening beats panning a 4000px-tall card. */
+body.reading .node.reading-root > .body {
+  flex:1 1 auto; min-height:0; overflow:hidden auto; -webkit-overflow-scrolling:touch;
+  font-size:15px; line-height:1.65; }
+body.reading .node.reading-root > .body p { margin:.4em 0 1em; }
+body.reading .node.reading-root > .body h2 { font-size:19px; margin:1.6em 0 .4em; }
+body.reading .node.reading-root > .body h3 { font-size:16px; margin:1.4em 0 .3em; }
+body.reading .node.reading-root > .body h4,
+body.reading .node.reading-root > .body h5,
+body.reading .node.reading-root > .body h6 { font-size:15px; margin:1.2em 0 .3em; }
+body.reading .node.reading-root > .body code { font-size:13px; }
+/* No resizing and no fold chip on the strip: its size is the window's, and folding the card you are
+   standing inside would leave you looking at nothing. Dragging is refused in features/drag.ts — the
+   handles being invisible is not enough, since a drag would still write x/y to the file. */
+body.reading .node.reading-root .fh,
+body.reading .node.reading-root > .title-row > .hidden-count { display:none !important; }
+/* Canvas tools have nothing to act on while you are inside a note — the same list body.outline hides,
+   for the same reason. #stage stays: the strip lives on it, and the canvas behind is still the map. */
+body.reading #sketchBtn, body.reading #gridBtn, body.reading #canvasColorBtn,
+body.reading #fitBtn { display:none !important; }

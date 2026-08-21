@@ -3,7 +3,7 @@
 // walk that live structure in state.nodes.
 import { state, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
-import { scope } from '../nav/scope.js';
+import { scope, isReadingRoot } from '../nav/scope.js';
 
 export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
@@ -57,7 +57,9 @@ export function isHidden(n: MindNode): boolean {
     if (p.id === scopeId) return false;
     if (p.collapsed) return true;
   }
-  return scopeId !== null;
+  // Nothing above n is the open frame, so n is outside it — EXCEPT when n is an open CARD, whose note
+  // is what the scope exists to show (isReadingRoot). A new term IN here, not a predicate beside it.
+  return scopeId !== null && !isReadingRoot(n);
 }
 // The visible card standing in for n: n itself when it's shown, otherwise its nearest
 // ancestor that is still visible. Search uses this to highlight the first visible parent

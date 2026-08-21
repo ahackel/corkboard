@@ -8,7 +8,7 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
-import { detachParentId } from '../nav/scope.js';
+import { detachParentId, isReadingRoot } from '../nav/scope.js';
 import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -438,7 +438,10 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   if (state.readOnly) return;        // no moving/reparenting in read-only (click & dbl-click still work)
   // Pressing directly on a locked card: never treat it as a drag (click/double-click select/rename
   // still resolve normally on release since drag.moved stays false) — no move, no reparent.
-  if (isLockedEffective(drag.n)) return;
+  // The card you are standing INSIDE takes the same treatment: its geometry is the window's while it
+  // is open (styles.css `.node.reading-root`), so a drag could not move it on screen but would still
+  // write x/y to its file — a move you can't see and didn't ask for. Hiding the handles isn't enough.
+  if (isLockedEffective(drag.n) || isReadingRoot(drag.n)) return;
   drag.alt = e.altKey; drag.shift = e.shiftKey;   // Shift = clone (live — release to cancel), Alt = detach
   drag.cx = e.clientX; drag.cy = e.clientY;   // remembered for edge auto-pan and RAF flush
   const dx = (e.clientX - drag.sx)/state.view.k, dy = (e.clientY - drag.sy)/state.view.k;

@@ -479,34 +479,45 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   but is left out of the framing, or opening a frame would zoom back out to take in a stroke on the far side
   of the map.
 
-**An OPENED CARD is its note** (`features/reading.ts`, `#page`, `body.reading`) — the other half of "you can
-open things". A frame's interior is the CANVAS; a card's interior is its TEXT, laid out in one 680px column at
-reading size and scrolled like a page. That is the whole reason it exists: a card's height is measured
-(`nodeH` → `offsetHeight`, uncapped), so a long note is a 4000px-tall card you can only PAN, and panning is
-not scrolling — no wheel semantics, no paging, and past `FAR_ZOOM` no text at all.
+**An OPENED CARD is its note** (`features/reading.ts`, `.node.reading-root`, `isReadingRoot` in
+`nav/scope.ts`) — the other half of "you can open things". A frame's interior is the CANVAS; a card's
+interior is its TEXT, drawn as one 680px full-height strip whose body scrolls. That is the whole reason it
+exists: a card's height is measured (`nodeH` → `offsetHeight`, uncapped), so a long note is a 4000px-tall
+card you can only PAN, and panning is not scrolling — no wheel semantics, no paging, and past `FAR_ZOOM` no
+text at all.
 
+- **It is THE CARD, not a rendering of it.** The same element `paintNode` already paints: its fill, its
+  derived ink, its markdown, its links, its task boxes and its own `startBodyEdit` all arrive for free, and a
+  note read on the page cannot look or behave differently from the same note on the board. `features/
+  reading.ts` is ~45 lines because all it does is name the state; the strip is CSS.
+- **So the scope root has ONE exception to being off the canvas** — `isReadingRoot`, spelled once in
+  `nav/scope.ts` and read by both scope terms (`outOfScope` there, `isHidden` in `utils/model.ts`, a new term
+  IN it rather than a predicate beside it). A FRAME's root isn't drawn because its box BECAME the viewport —
+  a border round the whole window is not a frame. A CARD's root is the opposite: it is what you came to see.
+- **The geometry is the only override, and it needs `!important`.** `paintNode` writes `left`/`top`/`width`
+  inline on every card every paint, because a card's geometry is world coordinates — and a screen-fixed strip
+  is exactly what world coordinates cannot express. `position:fixed` leaves `#world`'s pan/zoom transform
+  behind, which is what "fixed position and zoom" means here; the canvas underneath stays an ordinary canvas.
+  Centred with `left:0; right:0; margin:0 auto` rather than a transform, so a stray `style.transform = ''`
+  has nothing to clear. Reading size is set as the same `--h1-size`/`--h1-lh` VARIABLES a card reads.
 - **A scope LEVEL, deliberately not a panel beside the canvas.** One entry on the same stack, one crumb, `↓` /
   a crumb / `Esc` to leave, the file path in the same `open=` hash term — so back/forward, reload and
   bookmarks work with no navigation state of its own. Reading is somewhere you GO. The rejected alternative
-  was a docked side panel, and the reason it was rejected is that a panel and a card would show the same note
-  at once, which is what reads as two apps rather than one. (Scrintal takes cards "full screen to focus" for
-  the same reason; Obsidian Canvas's split-view-beside-canvas is a community plugin, not the design.)
+  was a docked side panel: a panel and a card would show one note at once, which is what reads as two apps.
+  (Scrintal takes cards "full screen to focus"; Obsidian Canvas's split-view-beside-canvas is a community
+  plugin, not the design.)
 - **`↑` / the float bar's `⤢` / `⋯ → Open` open it — NEVER double-click.** Double-click on a card's text edits
   it, because that is what a double-click means on text nearly everywhere and it is the commonest action in
   the app; gesture cost follows frequency. So `activateNode` tests the raw `type === 'frame'` rather than
   `canOpen` — the one call site where those two questions genuinely differ, and the line that stops widening
   `canOpen` from silently stealing the edit gesture. `⤢` lives on the float bar because that is the only
-  action surface identical on desktop and touch (it docks to the bottom on coarse pointers).
-- **Same renderer and same EDITOR as the card**, or the two would drift. `#pgBody` wears `.node` so the whole
-  `.node .body` markdown cascade applies with four variables restated for reading size, and a double-click
-  hands the note to `startCardEditIn` — `startCardEdit` with the host element parameterised — so the undo
-  grouping, the deferred file rename and the read-only refusal all still happen in exactly one place.
-- **Two per-kind exemptions on the way in and out.** `applyScope` skips the camera fit for a card (there is no
-  arrangement to frame, and fitting a scope whose content is behind `#page` would leave a random zoom to come
-  back out to), and `growToFitContents` is skipped on the way out (it repairs a BOX; a card hasn't got one).
-- **Canvas shortcuts bail while reading** (one `readingActive()` guard in the keydown handler, above the
-  canvas half): there is no canvas on screen and nothing is selected, so `N`, `F`, `D`, `Tab`… would fire
-  invisibly. The genuinely global keys above it — read-only, outline, search, undo, save — keep working.
+  action surface identical on desktop and touch (it docks to the bottom on coarse pointers); its test
+  (`canOpenSelection`) also drops it on the card you are already inside, which `openFrame` would refuse.
+- **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
+  move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
+  refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
+  background would be tinted with the very colour the strip is painting and the card would vanish into it.
+  And `applyScope` skips the camera fit, since framing a screen-fixed element's world box is meaningless.
 
 ## Sizing
 

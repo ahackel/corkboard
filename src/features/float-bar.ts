@@ -22,6 +22,7 @@ import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen } from '../nav/scope.js';
+import { canOpenSelection } from './reading.js';
 import { frameBox } from '../view/camera.js';
 import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
@@ -311,12 +312,11 @@ function markChips(): void {
   // no subtree to check off) — hide the toggle entirely rather than leave a no-op control in the bar.
   fbChecklistLabel.style.display = type === 'annotation' ? 'none' : '';
 
-  // ⤢ go IN. Single selection only, for the same reason ↑ is single (main.ts navArrow): you can only
-  // stand in one place. Gated on canOpen, so the kinds with no interior — annotation, query — don't
-  // get a button that would refuse. The click itself lives in features/reading.ts, beside the view it
-  // opens. Set BEFORE the layout-picker early-return below, or it would go stale for every leaf kind.
-  const only = ids.length === 1 ? state.nodes.get(ids[0]) : undefined;
-  fbOpen.style.display = only && canOpen(actionTarget(only)) ? '' : 'none';
+  // ⤢ go IN. The test lives in features/reading.ts beside the click that uses it: single selection
+  // (you can only stand in one place, same as ↑), a kind that HAS an interior, and not the card you
+  // are already inside. Set BEFORE the layout-picker early-return below, or it would go stale for
+  // every leaf kind.
+  fbOpen.style.display = canOpenSelection() ? '' : 'none';
 
   const forType: NodeType = type ?? 'card';
   rebuildLayoutChips(forType);

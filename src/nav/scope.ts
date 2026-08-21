@@ -41,6 +41,14 @@ export function scopeRootNode(): MindNode | null {
   return scope.rootId ? state.nodes.get(scope.rootId) ?? null : null;
 }
 export function isScopeRoot(n: MindNode): boolean { return n.id === scope.rootId; }
+// …and the ONE exception to "the scope root is off the canvas". A FRAME's root is not drawn because
+// its box BECAME the viewport — a border round the whole window is not a frame. A CARD's root is the
+// opposite: its note is the thing you came to look at, so it stays on the canvas and is drawn as one
+// full-height strip (features/reading.ts + `.node.reading-root` in styles.css). Spelled once here and
+// read by both scope terms — outOfScope below and isHidden in utils/model.ts — so the two can't drift.
+export function isReadingRoot(n: MindNode): boolean {
+  return n.id === scope.rootId && n.type === 'card';
+}
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }
 
 // The ONE kind test for "can this be opened", kept kind-agnostic on purpose: widen it HERE, never
@@ -66,7 +74,7 @@ export function outOfScope(n: MindNode): boolean {
   if (id === null) return false;
   for (let p = n.parent ? state.nodes.get(n.parent) : undefined; p; p = p.parent ? state.nodes.get(p.parent) : undefined)
     if (p.id === id) return false;
-  return true;   // never reached the open frame — including when n IS it
+  return !isReadingRoot(n);   // never reached the open frame — and n IS it only for a read card
 }
 
 // The open frame's bounds: a SNAPSHOT of the viewport, taken when the level was pushed (and
