@@ -46,7 +46,7 @@ import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
@@ -718,8 +718,8 @@ export function paintNode(n: MindNode): void {
   } else {
     // A plain card or an annotation: an authored width if it has one (else back to the CSS-fixed
     // card / the annotation's shrink-to-fit), never an inline height.
-    const authored = n.w != null;
-    el.style.width = authored ? n.w + 'px' : '';
+    const authored = n.w != null || isReadingRoot(n);
+    el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
     // an annotation's CSS max-width would otherwise cap — and so desync — an authored width
     el.classList.toggle('w-set', authored);
@@ -1121,6 +1121,10 @@ function stackBoxRow(n: MindNode): number | null { return isBoxNode(n) ? stackRo
 // back to the loaded image for a card that has no height of its own yet.
 function boxAspect(n: MindNode): number { return (n.w && n.h) ? n.w / n.h : imageAspect(n); }
 export function nodeW(n: MindNode): number {
+  // Opened as a page: a DERIVED reading width, ahead of every other arm. This is the line that makes
+  // the box, its outline rows (stackRowW → stackInnerW → nodeW) and the layout pass agree about how
+  // wide "open" is — without writing a pixel of it to n.w, so the card comes back out as authored.
+  if (isReadingRoot(n)) return readingWidth();
   const rowBox = stackBoxRow(n);
   if (rowBox != null) return rowBox;
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
@@ -1589,11 +1593,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   window.addEventListener('pointerup', up);
 }
 export function paintAll(): void {
+  syncReading();     // before the nodes: `body.reading` gates the chrome THIS paint hides
   for (const n of state.nodes.values()) paintNode(n);
   paintEdges();   // tethers + free edges (view/edges.ts pairs them)
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
-  syncReading();     // …and the open card's page (no-op unless one is open)
   syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
@@ -2067,6 +2071,10 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
 // Open a frame. Routed through actionTarget, so opening a tab GROUP opens its OPEN TAB — from the
 // user's side the group doesn't exist. Allowed in read-only and on a LOCKED frame, the same
 // exemption activateTab takes: looking inside the box isn't changing it.
+// Where an opened card's top edge lands: clear of the crumb bar and the toolbar, which both float
+// over the canvas at the top. Not the safe-area inset as well — those two already add it themselves,
+// so this only has to clear the taller of them.
+const READING_TOP = 56;
 export function openFrame(target: MindNode | undefined): void {
   let t = target && actionTarget(target);
   if (!t || !canOpen(t)) { setStatus('This can’t be opened'); return; }
@@ -2087,6 +2095,10 @@ export function openFrame(target: MindNode | undefined): void {
   // to come back out to. The camera is left exactly where it was, which is also what makes leaving
   // feel like stepping back out rather than arriving somewhere new.
   applyScope(t, { back, camera: t.type !== 'card' });
+  // …and for a card, the reading camera instead of a fit: 1:1, the strip's top just under the crumb
+  // bar. Only `y` is really set — clampReadingView (view/camera.ts) pins `x` and `k` on every frame
+  // from here on, which is what makes the strip immovable and vertical panning the only movement left.
+  if (t.type === 'card') animateViewTo(0, READING_TOP - elTop(t, t.y), 1);
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.

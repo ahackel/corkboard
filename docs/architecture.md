@@ -494,12 +494,26 @@ text at all.
   `nav/scope.ts` and read by both scope terms (`outOfScope` there, `isHidden` in `utils/model.ts`, a new term
   IN it rather than a predicate beside it). A FRAME's root isn't drawn because its box BECAME the viewport —
   a border round the whole window is not a frame. A CARD's root is the opposite: it is what you came to see.
-- **The geometry is the only override, and it needs `!important`.** `paintNode` writes `left`/`top`/`width`
-  inline on every card every paint, because a card's geometry is world coordinates — and a screen-fixed strip
-  is exactly what world coordinates cannot express. `position:fixed` leaves `#world`'s pan/zoom transform
-  behind, which is what "fixed position and zoom" means here; the canvas underneath stays an ordinary canvas.
-  Centred with `left:0; right:0; margin:0 auto` rather than a transform, so a stray `style.transform = ''`
-  has nothing to clear. Reading size is set as the same `--h1-size`/`--h1-lh` VARIABLES a card reads.
+- **The GEOMETRY is derived, not screen-fixed.** `nodeW` returns `readingWidth()` (`nav/scope.ts`, 680
+  clamped to the window) for the reading root, ahead of every other arm — and that one line is what makes
+  the box, the layout pass and the OUTLINE ROWS inside it agree, since `stackRowW` → `stackInnerW` →
+  `nodeW(stack)`. Nothing reaches `n.w`, so a card opened, read and left comes back out as authored. CSS adds
+  only `min-height:100dvh` (full screen even for a two-line note) and reading type sizes, set as the same
+  `--h1-size`/`--h1-lh` variables `.node .body h1` already reads. Keyed on `.reading-root` alone rather than
+  `body.reading .node…`, since paintNode hangs the class on in the same pass a two-selector rule would miss.
+- **Deliberately NOT `position:fixed`, and this is the load-bearing decision.** The card stays in WORLD
+  space, so screen and world coordinates still line up and every hit-test its children need — dragging a
+  row, dropping one, the marquee — keeps working exactly as on the board. A screen-fixed strip over a
+  world-space canvas would put its children's pointer maths permanently out by the pan. The first pass got
+  this wrong (it rendered the note into its own `#page` element, then into a `position:fixed` card).
+- **"Fixed position and zoom" is the CAMERA, clamped in one place.** `clampReadingView` in `view/camera.ts`
+  pins `k` to 1 and `x` so the strip stays centred; `y` is left free, and vertical panning IS the scroll.
+  It sits at the top of `applyView` because that is the single place every pan/zoom path ends up — wheel,
+  drag-pan, pinch, `⌘±`, `F`/fit, a glide — so one clamp constrains all of them instead of a guard per
+  gesture, and `⌘±`/`F` become inert rather than needing to be caught. It writes `state.view` ITSELF and not
+  just the transform: `screenToWorld` reads the model, and painting at k=1 while hit-testing at some other k
+  is how a click lands on the wrong card. Opening sets only `y` (`READING_TOP - elTop(t, t.y)`), clear of
+  the crumb bar.
 - **A scope LEVEL, deliberately not a panel beside the canvas.** One entry on the same stack, one crumb, `↓` /
   a crumb / `Esc` to leave, the file path in the same `open=` hash term — so back/forward, reload and
   bookmarks work with no navigation state of its own. Reading is somewhere you GO. The rejected alternative
@@ -517,7 +531,7 @@ text at all.
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
   background would be tinted with the very colour the strip is painting and the card would vanish into it.
-  And `applyScope` skips the camera fit, since framing a screen-fixed element's world box is meaningless.
+  And `applyScope` skips the camera fit in favour of the reading camera above.
 
 ## Sizing
 

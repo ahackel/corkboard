@@ -3,7 +3,7 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
-import { scopeActive } from '../nav/scope.js';
+import { scopeActive, scopeRootNode, readingWidth } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -54,7 +54,20 @@ function refreshRaster(): void {
 // drift and screenToWorld keeps its arithmetic — and a disagreement of under half a device pixel between
 // hit-testing and paint is invisible by definition. The SCALE is never snapped (that would quantise zoom).
 const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; return Math.round(v * d) / d; };
+// While a CARD is open, the canvas is not free: the strip is pinned centred at 1:1 and the only
+// movement left is VERTICAL, which is the scroll. Done here, on `state.view` itself, because this is
+// the single place every pan/zoom path ends up — wheel, drag-pan, pinch, ⌘±, F/fit, a glide — so one
+// clamp constrains all of them instead of a guard per gesture. It must write the MODEL and not just
+// the transform: `screenToWorld` reads `state.view`, and a paint at k=1 over hit-tests at some other
+// k is how a click lands on the wrong card.
+function clampReadingView(): void {
+  const root = scopeRootNode();
+  if (!root || root.type !== 'card') return;
+  state.view.k = 1;                                             // no zoom: reading size is reading size
+  state.view.x = (window.innerWidth - readingWidth()) / 2 - root.x;   // centred, horizontally immovable
+}
 export function applyView(): void {
+  clampReadingView();
   world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
   refreshRaster();

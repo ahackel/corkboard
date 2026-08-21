@@ -2445,47 +2445,40 @@ body.sheet-open #editorSheet { display:flex; }
 .mp-item .mp-crumb { padding-left:20px; color:var(--muted); font-size:12px;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-/* ---- reading view: an OPENED card is its note, drawn as one full-height strip ----
+/* ---- reading view: an OPENED card is its note, at reading width ----
    The element here is THE CARD — the same one paintNode paints on the canvas, so its fill, its
-   derived ink, its markdown, its links and its own editor all arrive for free. Only its GEOMETRY is
-   overridden, and only while it is the thing you are standing in (features/reading.ts + isReadingRoot
-   in nav/scope.ts, the one exception to "the scope root is off the canvas").
+   derived ink, its markdown, its links and its own editor all arrive for free, and its children are
+   ordinary child cards you can drag and edit. Only its LOOK is CSS: the width is DERIVED in
+   `nodeW` (nav/scope.ts readingWidth) so the layout pass and the outline rows inside agree with it,
+   and the camera is pinned by clampReadingView (view/camera.ts) so the strip sits centred at 1:1 and
+   the only movement left on the canvas is vertical — which IS the scroll.
 
-   `position:fixed` is what makes it "fixed position and zoom": it leaves #world's pan/zoom transform
-   behind, so the strip holds still while the canvas underneath it is still an ordinary canvas.
-   The three `!important`s are load-bearing rather than lazy — paintNode writes left/top/width inline
-   on EVERY card, every paint (its geometry is world coordinates), and a screen-fixed strip is exactly
-   what world coordinates cannot express. Nothing but !important outranks an inline style. */
-body.reading .node.reading-root {
-  position:fixed !important; top:0 !important; left:0 !important; right:0;
-  margin:0 auto;   /* over-constrained + auto margins = centred, with no transform for a drag to clear */
-  width:min(680px, 100vw) !important; height:100dvh;
-  max-width:none; border-radius:0; z-index:19;
-  display:flex; flex-direction:column;
-  padding:calc(var(--pad-y) + var(--sa-t)) calc(var(--pad-x) + var(--sa-r))
-          calc(var(--pad-y) + var(--sa-b)) calc(var(--pad-x) + var(--sa-l)); }
-/* Reading size, not card size — the strip is 680px wide, and 12px type across 680px is a wall. Set as
-   the same VARIABLES a card reads (`.node .body h1` → --h1-size), so the one title rule still owns it. */
-body.reading .node.reading-root { --h1-size:24px; --h1-lh:28.8px; }
-body.reading .node.reading-root > .title-row { flex:none; }
-/* The note scrolls INSIDE the card: the strip's height is the window's, so the overflow has to go
-   somewhere, and this is the whole reason opening beats panning a 4000px-tall card. */
-body.reading .node.reading-root > .body {
-  flex:1 1 auto; min-height:0; overflow:hidden auto; -webkit-overflow-scrolling:touch;
-  font-size:15px; line-height:1.65; }
-body.reading .node.reading-root > .body p { margin:.4em 0 1em; }
-body.reading .node.reading-root > .body h2 { font-size:19px; margin:1.6em 0 .4em; }
-body.reading .node.reading-root > .body h3 { font-size:16px; margin:1.4em 0 .3em; }
-body.reading .node.reading-root > .body h4,
-body.reading .node.reading-root > .body h5,
-body.reading .node.reading-root > .body h6 { font-size:15px; margin:1.2em 0 .3em; }
-body.reading .node.reading-root > .body code { font-size:13px; }
-/* No resizing and no fold chip on the strip: its size is the window's, and folding the card you are
-   standing inside would leave you looking at nothing. Dragging is refused in features/drag.ts — the
-   handles being invisible is not enough, since a drag would still write x/y to the file. */
-body.reading .node.reading-root .fh,
-body.reading .node.reading-root > .title-row > .hidden-count { display:none !important; }
-/* Canvas tools have nothing to act on while you are inside a note — the same list body.outline hides,
-   for the same reason. #stage stays: the strip lives on it, and the canvas behind is still the map. */
+   Deliberately NOT position:fixed. The card stays in world space, so screen and world coordinates
+   still line up and every hit-test — dragging a row, dropping one, the marquee — keeps working
+   exactly as it does on the board. A screen-fixed strip over a world-space canvas would put its
+   children's pointer maths permanently out by the pan. */
+/* Keyed on the class alone, not `body.reading .node…`: paintNode hangs `.reading-root` on the element
+   in the same pass, so a two-selector rule would miss the first paint of an open and apply on the
+   second. The class is only ever on the open card, so the body class adds nothing here. */
+.node.reading-root {
+  min-height:100dvh;                /* full screen even for a two-line note */
+  border-radius:0;
+  --h1-size:24px; --h1-lh:28.8px;   /* reading size, via the same variables `.node .body h1` reads */
+  padding:calc(var(--pad-y) + 4px) 22px; }
+.node.reading-root > .body { font-size:15px; line-height:1.65; }
+.node.reading-root > .body p { margin:.4em 0 1em; }
+.node.reading-root > .body h2 { font-size:19px; margin:1.6em 0 .4em; }
+.node.reading-root > .body h3 { font-size:16px; margin:1.4em 0 .3em; }
+.node.reading-root > .body h4,
+.node.reading-root > .body h5,
+.node.reading-root > .body h6 { font-size:15px; margin:1.2em 0 .3em; }
+.node.reading-root > .body code { font-size:13px; }
+/* No resize handles and no fold chip on the strip: its width is derived and its height is its text,
+   and folding the card you are standing inside would leave you looking at nothing. Dragging is
+   refused in features/drag.ts — hiding the handles is not enough, since a drag would still write x/y. */
+.node.reading-root > .fh,
+.node.reading-root > .title-row > .hidden-count { display:none !important; }
+/* Canvas tools with nothing to act on in here. Zoom and fit are already INERT (clampReadingView
+   overrides whatever they set), so this is only about not offering a button that does nothing. */
 body.reading #sketchBtn, body.reading #gridBtn, body.reading #canvasColorBtn,
 body.reading #fitBtn { display:none !important; }

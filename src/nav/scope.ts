@@ -49,6 +49,12 @@ export function isScopeRoot(n: MindNode): boolean { return n.id === scope.rootId
 export function isReadingRoot(n: MindNode): boolean {
   return n.id === scope.rootId && n.type === 'card';
 }
+// The strip's width, and the ONE place it is decided. Read by `nodeW` (so the box, the outline rows
+// inside it and the layout pass all agree — `stackRowW` derives from `nodeW(stack)`) and by the camera
+// clamp that keeps it centred. A DERIVED width: `n.w` on disk is never touched, so a card opened,
+// read and left comes back out at exactly the width it was authored at.
+export const READING_W = 680;
+export function readingWidth(): number { return Math.min(READING_W, window.innerWidth); }
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }
 
 // The ONE kind test for "can this be opened", kept kind-agnostic on purpose: widen it HERE, never
