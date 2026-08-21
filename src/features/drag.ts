@@ -282,11 +282,23 @@ function innermostFrameAt(clientX: number, clientY: number): MindNode | null {
   }
   return best;
 }
+// A two-finger tap is at most this long (longer = a pinch, or a rest), and the two taps of the
+// gesture at most this far apart. Both a shade more generous than the one-finger 300ms: two fingers
+// land and lift less crisply than one.
+const TWO_TAP_MS = 250, TWO_TAP_GAP_MS = 450;
 export function bindNodeDrag(n: MindNode): void {
   const el = n.el!;
   // Double-tap on touch -> open the node for editing (mirrors dblclick on desktop, and prevents iOS
   // double-tap zoom). Folding is the corner chip's job on both — tap the card, tap the chip.
-  let lastTouchTap = 0;
+  // …and a TWO-FINGER double-tap goes IN — the touch spelling of ⌥-double-click, and the reason a
+  // one-finger double-tap gets to keep meaning "edit". `twoDown` is what makes it a TAP rather than a
+  // pinch: a two-finger touchstart is also how a zoom begins, so the gesture only registers once
+  // touchend confirms it was short, and two confirmed taps in quick succession open the node.
+  let lastTouchTap = 0, twoDown = 0, lastTwoTap = 0;
+  el.addEventListener('touchend', () => {
+    if (twoDown && performance.now() - twoDown < TWO_TAP_MS) lastTwoTap = performance.now();
+    twoDown = 0;
+  }, { passive: true });
   el.addEventListener('touchstart', (e) => {
     // The innermost card owns the tap, exactly as it owns the dblclick (main.ts nodeEl): child cards
     // are DOM-nested, so without this every ancestor's own counter sees the same two taps and a
@@ -300,6 +312,16 @@ export function bindNodeDrag(n: MindNode): void {
     const t0 = e.touches[0];
     if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = 0; return; }
     const now = performance.now();
+    // Two fingers never count toward the one-finger counter either way — otherwise letting go of a
+    // pinch would leave a half-finished double-tap behind that the next single tap completed.
+    if (e.touches.length === 2) {
+      if (now - lastTwoTap < TWO_TAP_GAP_MS) {
+        e.preventDefault();
+        lastTwoTap = 0; twoDown = 0;
+        activateNode(n, t0?.clientX ?? 0, t0?.clientY ?? 0, { open: true });
+      } else twoDown = now;
+      return;
+    }
     if (e.touches.length === 1 && now - lastTouchTap < 300) {
       e.preventDefault(); // stop double-tap zoom and synthetic dblclick
       activateNode(n, t0.clientX, t0.clientY);   // mirror the dblclick handler

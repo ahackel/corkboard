@@ -90,8 +90,8 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   then the canvas IS its interior" · "An OPENED CARD is its note" (scope, crumbs, canvas colour, `detachParentId`).
 - Outlines — "A `stack` is an OUTLINER" (now: any card with children); files — "A body-less note is MIGRATED on load" · "A note that is
   blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
-- Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "Double-click /
-  double-tap OPENS a node" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
+- Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "A plain double-click
+  MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB

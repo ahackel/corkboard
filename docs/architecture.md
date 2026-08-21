@@ -389,9 +389,10 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   under a pan. `bottomInset()` is excluded (it tracks the SELECTION via the docked float bar, so folding it in
   would move the rect on every click), as is the crumb bar, floating chrome like `#toolbar`. It's anchored at
   the frame's own content origin, so the coordinates its contents already have stay meaningful.
-- **Double-click is the way IN and the way OUT.** A frame's interior opens it; the empty canvas — which, once
-  you're inside, is that same interior — leaves it (`features/gestures.ts`). At the top level there's nowhere
-  to leave to, so the canvas keeps its "new card here". The crumb path and `↓` are the other ways out.
+- **Double-click is still the way OUT, but no longer the way IN.** The empty canvas — which, once you're
+  inside, is that same interior — leaves it (`features/gestures.ts`); at the top level there's nowhere to
+  leave to, so the canvas keeps its "new card here". Going in is ⌥-double-click / two-finger double-tap, `↑`,
+  the float bar's `⤢` or `⋯ → Open`. The crumb path and `↓` are the other ways out.
 - **Leaving pops every SYNTHESIZED level under you, not one crumb at a time.** A level with no `back` is
   one nobody stepped through (`setScopeStack` records a back only on the level you newly enter), so opening
   something three frames deep pushes those frames as crumbs — and leaving one at a time would walk you out
@@ -789,15 +790,23 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
   `bindNodeDrag`'s `el`-level handler never turns the click into a select/drag — the touch double-tap counter
   in `features/drag.ts` exempts it (via `NODE_CONTROLS`) for the same reason.
 
-**Double-click / double-tap OPENS a node (`activateNode` in `main.ts`)** — folding moved to the chip, which
-freed the gesture for what a double-click means nearly everywhere else. One gesture, dispatched by WHAT WAS
-HIT, so it covers every kind without a per-kind entry point: a `.title-row` (a card's title row, a frame's
-folder tab, a docked tab's whole label) renames via `startInlineEdit` — the single rename funnel, so the
-tab-group/annotation/query redirects, the CONTAINER hand-off and the lock refusal come for free; anything else
+**A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — no plain
+double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the
+gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
+the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
+is why it can mean the same thing on a card, a frame and a stack. Its touch spelling is a TWO-FINGER
+double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `↑`, the float bar's
+`⤢` and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
+the exemption `openFrame` itself takes: looking inside something isn't changing it.
+Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
+`.title-row` (a card's title row, a frame's folder tab, a docked tab's whole label) renames via
+`startInlineEdit` — the single rename funnel, so the tab-group/annotation/query redirects, the CONTAINER
+hand-off and the lock refusal come for free; anything else
 on a card edits its note (on a card those two are the same editor with the caret in a different place). A
-FRAME's interior OPENS it (`openFrame`); any OTHER container's interior — i.e. a stack, which `canOpen`
-refuses — gets a new card THERE (`addChildIn` → `addChild`, which routes a group to its open tab, refuses a
-locked parent and reveals a folded one). The same gesture on empty canvas creates a root card (`stage`'s
+FRAME's interior gets a new card WHERE YOU POINTED (`addChild`, which routes a group to its open tab, refuses
+a locked parent and reveals a folded one) — a 2D box is exactly the container where "here" means something,
+whereas a STACK's interior keeps editing the stack, since its outline appends and the point says nothing.
+The same gesture on empty canvas creates a root card (`stage`'s
 `dblclick` in `features/gestures.ts`) — **or, while a frame is open, LEAVES it**, since the canvas then IS
 that frame's interior. Going in and coming out being one gesture is most of what makes a frame feel like a
 folder; making a card inside an open frame is `Space`, `Tab` and the canvas right-click, which all land it in

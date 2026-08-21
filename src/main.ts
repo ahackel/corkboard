@@ -245,7 +245,7 @@ function nodeEl(n: MindNode): HTMLElement {
     // this gesture now writes on (onFrameRim / activateNode)
     if (isNodeControlAt(e.clientX, e.clientY) && !onFrameRim(n, e.clientX, e.clientY)) return;
     e.preventDefault();
-    activateNode(n, e.clientX, e.clientY);
+    activateNode(n, e.clientX, e.clientY, { open: e.altKey });
   });
   return el;
 }
@@ -307,8 +307,15 @@ export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
 // A FOLDED node is nothing but its title (its body is display:none), so every hit on it renames —
 // otherwise a double-click would open an editor inside a hidden .body.
 // Shared by nodeEl's dblclick and the touch double-tap in features/drag.ts.
-export function activateNode(n: MindNode, cx: number, cy: number): void {
-  // Read-only (the help map, or a map the user has locked down): there is nothing to open, so the
+export function activateNode(n: MindNode, cx: number, cy: number, { open = false }: { open?: boolean } = {}): void {
+  // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch: go IN. The one navigating gesture on a node,
+  // and it is held apart from all the editing ones by the modifier rather than by which PART of the
+  // card was hit — so it means the same thing on a card, a frame and a stack, which no plain
+  // double-click ever could. Ahead of the read-only bail on purpose, the same exemption openFrame
+  // itself takes: looking inside something isn't changing it. openFrame reports its own refusal for
+  // the kinds with no interior.
+  if (open) { openFrame(n); return; }
+  // Read-only (the help map, or a map the user has locked down): there is nothing to edit, so the
   // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
   // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
   if (state.readOnly) { toggleCollapse(n.id); return; }
@@ -327,12 +334,13 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   // longer draws). Works the same whether or not the frame is named, so there's one way to write on a
   // frame rather than one for each state; the tab keeps its own double-click through the onTitle branch.
   if (isFrameBox(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
-  // Deliberately the raw kind and NOT canOpen, which now says yes to cards as well: a double-click on
-  // a card's text EDITS it, because that is what a double-click means on text nearly everywhere and it
-  // is far and away the commonest thing anyone does here. Going IN is ↑ / the float bar's ⤢ / ⋯ → Open,
-  // which are the same on a phone. So this stays the FRAME branch, and widening canOpen must not
-  // quietly reroute the gesture — the one call site where the two questions genuinely differ.
-  if (actionTarget(n).type === 'frame') { openFrame(n); return; }
+  // A FRAME's interior gets a new card WHERE YOU POINTED — it no longer opens the frame. No double-click
+  // navigates any more: going in is ⌥-double-click (above), ↑, the float bar's ⤢ or ⋯ → Open. What that
+  // buys is one rule instead of a per-kind table — every plain double-click makes or edits content — and
+  // it costs the frame nothing, because a 2D box is precisely the container where "here" means something
+  // (a stack's outline appends, so its interior keeps editing the stack instead; see below).
+  const container = actionTarget(n);
+  if (container.type === 'frame') { addChild(container.id, screenToWorld(cx, cy)); return; }
   // A STACK is the other container, and the gesture means the same thing anywhere on it: EDIT IT. Its
   // header is its own text (there is no title row to hit), and the rest of the box is its rows, each of
   // which owns the gesture over itself — so what's left is the stack, and a stack has no place to put a
