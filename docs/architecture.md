@@ -570,7 +570,11 @@ text at all.
   would vanish into it — and not the map's either, because what is behind a card is where it SITS: opening
   one inside a blue frame should still look like being inside that frame. Resolved, since `canvasFill` goes
   through `effectiveColor`, so an uncoloured parent keeps walking up. A root-level card has no parent, so the
-  map's own colour shows — exactly what was behind the card before it was opened.
+  map's own colour shows — exactly what was behind the card before it was opened. And when the parent has no
+  authored colour ANYWHERE up its chain, `canvasFill` falls through to the map's own canvas colour rather
+  than to nothing: the same rule `behindFill` already states for containers ("what's behind an uncoloured
+  container is whatever is behind IT"). Without that, going into a card on a teal board turned the board
+  grey and coming out turned it teal again — and the identical discard applied to an uncoloured open FRAME.
 - **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the

@@ -2236,10 +2236,16 @@ export function canvasOwner(): MindNode | null {
 }
 // The fill actually behind the cards right now — the one input both the background and the grid ink
 // are derived from. null = none, and the theme's own background shows through as before.
+//
+// An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
+// rather than to nothing, which is the same rule behindFill states for containers: "what's behind an
+// uncoloured container is whatever is behind IT". Standing inside a frame nobody coloured, or reading
+// a card whose parent nobody coloured, discarded the canvas colour the map itself was painted in — so
+// going in turned a teal board grey, and coming out turned it teal again.
 export function canvasFill(): string | null {
   const owner = canvasOwner();
   if (!owner) return colorFill(state.canvasColor);
-  return hasAuthoredColor(owner) ? colorFill(effectiveColor(owner)) : null;
+  return hasAuthoredColor(owner) ? colorFill(effectiveColor(owner)) : colorFill(state.canvasColor);
 }
 // The fill a frame's TITLE is really sitting on — the one input its ink is measured against. A frame
 // paints no background behind its title any more (styles.css: the tab is a bare label, the folded pill
