@@ -46,7 +46,7 @@ import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingWidth, readingLeft, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
@@ -1234,7 +1234,7 @@ export function readingShiftX(n: MindNode, x: number): number {
   // rather than from state.view.x, so a paint that happens before (or during) the camera glide clamps
   // against the same window the camera is about to show. The two would otherwise disagree for a frame.
   const vw = window.innerWidth;
-  const lo = root.x - (vw - readingWidth()) / 2 + READING_ANNO_PAD;
+  const lo = root.x - readingLeft() + READING_ANNO_PAD;
   const hi = lo + vw - nodeW(n) - 2 * READING_ANNO_PAD;
   return hi < lo ? lo : clamp(x, lo, hi);
 }

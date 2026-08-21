@@ -3,7 +3,7 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
-import { scopeActive, scopeRootNode, readingWidth } from '../nav/scope.js';
+import { scopeActive, scopeRootNode, readingWidth, readingLeft } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH, elTop } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -67,7 +67,7 @@ function clampReadingView(): void {
   const root = scopeRootNode();
   if (!root || root.type !== 'card') return;
   state.view.k = 1;                                             // no zoom: reading size is reading size
-  state.view.x = (window.innerWidth - readingWidth()) / 2 - root.x;   // centred, horizontally immovable
+  state.view.x = readingLeft() - root.x;   // centred in the safe box, horizontally immovable
   // …and vertically: CENTRED while the whole card is on screen, which also means it cannot be
   // scrolled at all (there is nothing off-screen to scroll to, and a page that drifts under a
   // scroll gesture it doesn't need reads as broken). Once it outgrows the window, y is the one free

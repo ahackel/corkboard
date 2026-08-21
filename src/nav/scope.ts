@@ -19,6 +19,7 @@
 // ============================================================
 import { state, type MindNode, type View } from '../core/state.js';
 import { isTabsFrame } from '../view/layout.js';
+import { safeInsets } from '../utils/dom.js';
 
 export interface ScopeBack { view: View; sel: string[]; selId: string | null; }
 export interface ScopeLevel {
@@ -62,7 +63,21 @@ export function boxIsViewport(n: MindNode): boolean {
   return isScopeRoot(n) && !isReadingRoot(n);
 }
 export const READING_W = 680;
-export function readingWidth(): number { return Math.min(READING_W, window.innerWidth); }
+// The gutter the strip keeps on a window too narrow for its full width — the SAME 10px a side the
+// centred #toolbar keeps (`max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r))` in styles.css),
+// so the two pieces of chrome stop at the same line instead of one going edge to edge. Plus the safe
+// areas, which on a notched phone in landscape are the whole reason a gutter isn't decoration.
+const READING_MARGIN = 10;
+export function readingWidth(): number {
+  const sa = safeInsets();
+  return Math.min(READING_W, window.innerWidth - 2 * READING_MARGIN - sa.left - sa.right);
+}
+// …and where that width starts, so the strip is centred in the SAFE box rather than in the window: on
+// a phone in landscape the two insets differ, and centring on the window would push it under a notch.
+export function readingLeft(): number {
+  const sa = safeInsets();
+  return sa.left + (window.innerWidth - sa.left - sa.right - readingWidth()) / 2;
+}
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }
 
 // The ONE kind test for "can this be opened", kept kind-agnostic on purpose: widen it HERE, never
