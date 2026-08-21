@@ -11,7 +11,7 @@
 import { state, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
-import { isScopeRoot, boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
+import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
@@ -658,7 +658,7 @@ export function frameFlow(node: MindNode): 'flow-h' | 'flow-v' | null {
   // branch that had to be told). Being inside a frame should feel like being on a canvas — a flow
   // repacking your cards into rows as you arrange them wouldn't. It also means opening and leaving
   // move nothing at all and so write nothing, whatever layout the frame carries.
-  if (isScopeRoot(node)) return null;
+  if (boxIsViewport(node)) return null;
   return node.layout === 'horizontal' ? 'flow-h' : node.layout === 'vertical' ? 'flow-v' : null;
 }
 // Whether a node's effective layout actively MANAGES its children's positions — line/fan (side-based)

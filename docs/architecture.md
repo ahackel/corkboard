@@ -527,6 +527,13 @@ text at all.
   row, dropping one, the marquee — keeps working exactly as on the board. A screen-fixed strip over a
   world-space canvas would put its children's pointer maths permanently out by the pan. The first pass got
   this wrong (it rendered the note into its own `#page` element, then into a `position:fixed` card).
+- **All of it is measured ONCE per paint, into a band** (`refreshReadingBand`/`readingBand` in
+  `view/camera.ts`, refreshed from `syncScopeChrome` and on a resize). The window's size, the strip's width
+  and the card's own measured height are invariant for a whole pass, while `applyView` runs per pan frame
+  and `paintPos` two to four times per node — reading them there put an `offsetHeight` per frame and an
+  `innerWidth` per annotation *inside* the paint loop's own style writes, which is a forced reflow each
+  time. The band also carries `worldLeft` (the window's left edge in world coordinates), so the camera
+  clamp and the annotation shift share the one derivation instead of computing it in two files.
 - **"Fixed position and zoom" is the CAMERA, clamped in one place.** `clampReadingView` in `view/camera.ts`
   pins `k` to 1 and `x` so the strip stays centred; `y` is left free, and vertical panning IS the scroll.
   It sits at the top of `applyView` because that is the single place every pan/zoom path ends up — wheel,
@@ -584,6 +591,12 @@ text at all.
   than to nothing: the same rule `behindFill` already states for containers ("what's behind an uncoloured
   container is whatever is behind IT"). Without that, going into a card on a teal board turned the board
   grey and coming out turned it teal again — and the identical discard applied to an uncoloured open FRAME.
+- **The chrome it drops is dropped in JS, not shouted down in CSS.** `chipFace` returns `''` for it (no
+  fold chip — folding the card you are standing inside would leave you looking at nothing) and the resize
+  handles are cleared once AFTER the whole sizing chain, since a stack, a frame and a plain card each hand
+  out their own: a DERIVED size isn't resizable, which is the rule the outline-row arm already states. Both
+  were `display:none !important` first, which meant out-shouting the hover/`:has` rules that reveal a chip,
+  and left drag.ts refusing the gesture while CSS hid the handle — two guards for one fact.
 - **It offers no edge PORTS while it's open** (`connectable` in `view/free-edges.ts`). Everything outside it
   is out of scope and off the canvas, so there is nothing left to draw a line to — four rings offering a
   connection the canvas can't complete are worse than no rings. Added to `connectable` rather than beside it

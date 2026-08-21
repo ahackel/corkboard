@@ -50,6 +50,15 @@ export function isScopeRoot(n: MindNode): boolean { return n.id === scope.rootId
 export function isReadingRoot(n: MindNode): boolean {
   return n.id === scope.rootId && n.type === 'card';
 }
+// …and the same question asked of the SCOPE rather than of a node: the card being read, or null.
+// Every "is a card open" test in the app goes through one of these two — the camera clamp, the
+// annotation shift, the canvas-colour owner, the body class, openFrame's own two consequences — so
+// widening what reads as a page (a query card, say) stays the one edit isReadingRoot promises.
+export function readingRootNode(): MindNode | null {
+  const n = scopeRootNode();
+  return n && isReadingRoot(n) ? n : null;
+}
+export function readingActive(): boolean { return readingRootNode() !== null; }
 // The strip's width, and the ONE place it is decided. Read by `nodeW` (so the box, the outline rows
 // inside it and the layout pass all agree — `stackRowW` derives from `nodeW(stack)`) and by the camera
 // clamp that keeps it centred. A DERIVED width: `n.w` on disk is never touched, so a card opened,
@@ -62,7 +71,7 @@ export function isReadingRoot(n: MindNode): boolean {
 export function boxIsViewport(n: MindNode): boolean {
   return isScopeRoot(n) && !isReadingRoot(n);
 }
-export const READING_W = 680;
+const READING_W = 680;
 // The gutter the strip keeps on a window too narrow for its full width — the SAME 10px a side the
 // centred #toolbar keeps (`max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r))` in styles.css),
 // so the two pieces of chrome stop at the same line instead of one going edge to edge. Plus the safe

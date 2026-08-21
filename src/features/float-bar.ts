@@ -21,8 +21,7 @@ import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelec
 import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
-import { canOpen } from '../nav/scope.js';
-import { canOpenSelection } from './reading.js';
+import { canOpen, isScopeRoot } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
 import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
@@ -517,6 +516,15 @@ fbMore.addEventListener('click', (e) => {
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 20;
+// ⤢ go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
+// desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (main.ts navArrow): you can only stand
+// in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
+// kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
+export function canOpenSelection(): boolean {
+  const n = anchorNode();
+  return !!n && canOpen(actionTarget(n)) && !isScopeRoot(actionTarget(n));
+}
+fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;

@@ -21,7 +21,7 @@ import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, i
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView } from './view/camera.js';
+import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand, readingBand } from './view/camera.js';
 import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
@@ -33,7 +33,6 @@ import { createNode, createDetachedNode, createAnnotationHere, createSibling, ad
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
-import { syncReading, readingActive } from './features/reading.js';
 import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -46,7 +45,7 @@ import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingWidth, readingLeft, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingRootNode, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
@@ -339,8 +338,11 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // buys is one rule instead of a per-kind table — every plain double-click makes or edits content — and
   // it costs the frame nothing, because a 2D box is precisely the container where "here" means something
   // (a stack's outline appends, so its interior keeps editing the stack instead; see below).
+  // isFrameBox, not `type === 'frame'`: it means an EXPANDED frame, and the point of this branch is
+  // that a 2D box has a WHERE. A folded frame is a bare pill with its interior off screen, so there is
+  // no "here" to drop into — it falls through to the editor below, as any other folded node does.
   const container = actionTarget(n);
-  if (container.type === 'frame') { addChild(container.id, screenToWorld(cx, cy)); return; }
+  if (isFrameBox(container)) { addChild(container.id, screenToWorld(cx, cy)); return; }
   // A STACK is the other container, and the gesture means the same thing anywhere on it: EDIT IT. Its
   // header is its own text (there is no title row to hit), and the rest of the box is its rows, each of
   // which owns the gesture over itself — so what's left is the stack, and a stack has no place to put a
@@ -425,9 +427,12 @@ export function showsDoneCheckbox(n: MindNode): boolean {
 // the set of boxes that exist and cannot drift from them if that predicate ever gains a term.
 // null = no readout at all, which also covers a checklist whose only child is an annotation.
 // The ONE spelling: the canvas card and the outline row both show this (features/outline.ts).
-export function checklistProgress(n: MindNode): { done: number; total: number } | null {
+// `kids` is passed in wherever the caller already has it — paintNode and the outline row both do, and
+// childrenOf is a full spread of the node map, so re-deriving it here put a second O(nodes) scan on
+// the paint path for every checklist card on screen.
+export function checklistProgress(n: MindNode, kids: MindNode[] = childrenOf(n.id)): { done: number; total: number } | null {
   if (!n.checklist) return null;
-  const items = childrenOf(n.id).filter(showsDoneCheckbox);
+  const items = kids.filter(showsDoneCheckbox);
   return items.length ? { done: items.filter(k => k.done).length, total: items.length } : null;
 }
 // true if ANY ancestor (at any depth, not just the direct parent) has a title containing `needle`
@@ -622,7 +627,7 @@ export function paintNode(n: MindNode): void {
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   (el.querySelector('.donebox') as HTMLInputElement).checked = n.done;
   // this card's own checklist (over ITS children) → an "n/m done" progress readout by the title
-  const prog = checklistProgress(n);
+  const prog = checklistProgress(n, kids);
   const progress = prog ? `${prog.done}/${prog.total}` : '';
   el.querySelector('.progress')!.textContent = progress;
   // …which on a node with no LABEL has to float over the text rather than sit beside it: it's a flex item
@@ -749,6 +754,12 @@ export function paintNode(n: MindNode): void {
     el.style.removeProperty('--frame-stroke');
     ensureResizeHandles(n, EW_DIRS);
   }
+  // Same rule the outline-row arm states, and it has to sit AFTER the whole chain because a stack, a
+  // frame and a plain card each hand out their own handles: a DERIVED size isn't resizable. The card
+  // being read takes the window's width and the window's height, so there is nothing to drag — and
+  // this is also the authority drag.ts's own refusal defers to, instead of CSS hiding the handles
+  // while the gesture was refused somewhere else.
+  if (isReadingRoot(n)) clearResizeHandles(el);
   // A tab group's STRIP is a second container of its own (tabStripEl), so it's created here rather
   // than by the sizing branch above — and dropped the moment the node stops being an expanded group,
   // so switching the layout away (or folding the group) can't strand an empty band on the canvas.
@@ -885,7 +896,7 @@ export function paintNode(n: MindNode): void {
 // A QUERY card keeps its body alone: its title slot shows the live query text instead, so hoisting the
 // name into the note would print a heading nobody wrote. (An image card needs no arm of its own — it is
 // untitled by definition, so joinHeading hands back the picture markdown unchanged.)
-export function cardMarkdown(n: MindNode): string {
+function cardMarkdown(n: MindNode): string {
   return isQueryCard(n) ? n.body : joinHeading(n.title, n.body, n.titleGap !== false);
 }
 // …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
@@ -942,6 +953,10 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   //     under a stub, and a badge would collide with the next tab along the strip;
   //   · the GROUP shows nothing while open (its button is up on the tab) but takes the 'count' face
   //     once folded, when it's a lone pill again and that +N is the only way back.
+  // Folding the card you are standing INSIDE would leave you looking at nothing, so it offers no chip
+  // at all. Here rather than in CSS: chipFace is the single authority for "no chip", and a display:none
+  // in styles.css would have to out-shout the hover/:has rules that reveal it.
+  if (isReadingRoot(n)) return '';
   if (isDockedTab(n)) {
     const g = chipTarget(n);
     return (!n.collapsed && g !== n && !isLockedEffective(g)) ? 'fold' : '';
@@ -1243,14 +1258,15 @@ function paintPos(n: MindNode): Pt {
 const READING_ANNO_PAD = 12;
 export function readingShiftX(n: MindNode, x: number): number {
   if (!isAnnotation(n)) return x;
-  const root = scopeRootNode();
-  if (!root || root.type !== 'card') return x;
-  // The window's own edges, in WORLD coordinates — derived from where clampReadingView puts the strip
-  // rather than from state.view.x, so a paint that happens before (or during) the camera glide clamps
-  // against the same window the camera is about to show. The two would otherwise disagree for a frame.
-  const vw = window.innerWidth;
-  const lo = root.x - readingLeft() + READING_ANNO_PAD;
-  const hi = lo + vw - nodeW(n) - 2 * READING_ANNO_PAD;
+  // Lazily built if this is the first paint of an open — the band is measured post-paint
+  // (syncScopeChrome), and nothing it holds can change within one pass.
+  const b = readingBand() ?? (refreshReadingBand(), readingBand());
+  if (!b) return x;
+  // The window's own edges, in WORLD coordinates — taken from the band the camera clamp was measured
+  // with rather than from state.view.x, so a paint that happens before (or during) the camera glide
+  // clamps against the same window the camera is about to show.
+  const lo = b.worldLeft + READING_ANNO_PAD;
+  const hi = lo + b.vw - nodeW(n) - 2 * READING_ANNO_PAD;
   return hi < lo ? lo : clamp(x, lo, hi);
 }
 // Where a node's ELEMENT paints, given a bounds-top y: the SINGLE authority for the tab drop. The same
@@ -1645,12 +1661,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   window.addEventListener('pointerup', up);
 }
 export function paintAll(): void {
-  syncReading();     // before the nodes: `body.reading` gates the chrome THIS paint hides
   for (const n of state.nodes.values()) paintNode(n);
   paintEdges();   // tethers + free edges (view/edges.ts pairs them)
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
-  syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
+  syncScopeChrome();   // crumbs + reading class + the recovery when the frame you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
 // in the app ends in one of them — some 35 call sites, which is why they used to be written out by
@@ -1985,7 +2000,7 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
 // The way to be exact is the PATH form, `[[Frames/Notes]]` or `[[Notes 2]]`, matched against the node's
 // file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
 // there rather than in some new syntax.
-export function focusByTitle(title: string): void {
+function focusByTitle(title: string): void {
   const hits = resolveWikilink(title);
   const target = hits[0];
   if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
@@ -2101,6 +2116,9 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
     // Now that the stack is settled, containerBox reports the frame we just left at its real size
     // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
     // step: ⌘Z undoes the resize without teleporting you between scopes.
+    // `type === 'frame'` and not a reading predicate: this is a BOX repair, so the question is which
+    // kinds have a box — and it must not be asked of the scope, which setScopeStack has already moved
+    // above this line (isReadingRoot would answer about the level we just arrived at, not the one left).
     if (left && left.type === 'frame' && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
   });
   if (opts.exiting) {
@@ -2123,10 +2141,6 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
 // Open a frame. Routed through actionTarget, so opening a tab GROUP opens its OPEN TAB — from the
 // user's side the group doesn't exist. Allowed in read-only and on a LOCKED frame, the same
 // exemption activateTab takes: looking inside the box isn't changing it.
-// Where an opened card's top edge lands: clear of the crumb bar and the toolbar, which both float
-// over the canvas at the top. Not the safe-area inset as well — those two already add it themselves,
-// so this only has to clear the taller of them.
-const READING_TOP = 56;
 export function openFrame(target: MindNode | undefined): void {
   let t = target && actionTarget(target);
   if (!t || !canOpen(t)) { setStatus('This can’t be opened'); return; }
@@ -2147,10 +2161,10 @@ export function openFrame(target: MindNode | undefined): void {
   // to come back out to. The camera is left exactly where it was, which is also what makes leaving
   // feel like stepping back out rather than arriving somewhere new.
   applyScope(t, { back, camera: t.type !== 'card' });
-  // …and for a card, the reading camera instead of a fit: 1:1, the strip's top just under the crumb
-  // bar. Only `y` is really set — clampReadingView (view/camera.ts) pins `x` and `k` on every frame
-  // from here on, which is what makes the strip immovable and vertical panning the only movement left.
-  if (t.type === 'card') animateViewTo(0, READING_TOP - elTop(t, t.y), 1);
+  // A card needs no fit and no glide of its own: clampReadingView (view/camera.ts) is the ONE author
+  // of the reading camera — it pins x and k and places y on every applyView from here on — so naming
+  // a target here would only be a second copy of its arithmetic for it to overwrite.
+  if (t.type === 'card') { refreshReadingBand(); applyView(); }
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.
@@ -2246,7 +2260,7 @@ export function canvasOwner(): MindNode | null {
   // uncoloured parent keeps walking up), which is what makes opening a card inside a blue frame still
   // look like being inside that frame. A root-level card has no parent, so the map's own colour shows
   // — exactly what was behind the card before it was opened.
-  if (open.type === 'card') { const p = parentOf(open); return p ? actionTarget(p) : null; }
+  if (isReadingRoot(open)) { const p = parentOf(open); return p ? actionTarget(p) : null; }
   return actionTarget(open);   // a tab group's colour is its open tab's
 }
 // The fill actually behind the cards right now — the one input both the background and the grid ink
@@ -2311,6 +2325,11 @@ export function syncCanvasBackground(): void {
 }
 function syncScopeChrome(): void {
   renderCrumbs();
+  // The `reading` body class sits here, beside the `scoped` one renderCrumbs keeps, because it is the
+  // same fact about the same state — and the BAND the camera clamp and the annotation shift read is
+  // measured in the same breath, since this is the one place per paint that knows the scope settled.
+  document.body.classList.toggle('reading', readingActive());
+  refreshReadingBand();
   syncCanvasBackground();
   if (!scope.pruned) return;
   scope.pruned = false;
@@ -2324,13 +2343,20 @@ function syncScopeChrome(): void {
 // DROP lands (dropLanding clamps into containerBox), which a stale rect would confine to the old
 // window. Debounced, and a no-op when the size didn't really change.
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
+let readingResizeRaf: number | null = null;
 window.addEventListener('resize', () => {
   if (!scopeActive()) return;
   // An open CARD's width IS the window's (readingWidth), and so is its centring — so a resize has to
   // re-run the layout, not just re-snapshot the rect: the box, its outline rows and the camera clamp
-  // all read the new width. Immediate rather than debounced, because a strip that lags 200ms behind
-  // the window edge while you drag it is the one thing you're looking at.
-  if (readingActive()) { relayout(); applyView(); return; }
+  // all read the new width. Not debounced, because a strip lagging 200ms behind the window edge while
+  // you drag it is the one thing you're looking at — but coalesced into one frame, since a live drag
+  // emits resize at input rate and each pass measures every card.
+  if (readingActive()) {
+    if (readingResizeRaf === null) readingResizeRaf = requestAnimationFrame(() => {
+      readingResizeRaf = null; refreshReadingBand(); relayout(); applyView();
+    });
+    return;
+  }
   clearTimeout(scopeResizeTimer);
   scopeResizeTimer = setTimeout(refreshScopeRect, 200);
 });

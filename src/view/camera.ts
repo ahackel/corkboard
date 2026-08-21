@@ -3,7 +3,7 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
-import { scopeActive, scopeRootNode, readingWidth, readingLeft } from '../nav/scope.js';
+import { scopeActive, readingRootNode, readingWidth, readingLeft } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH, elTop } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -62,19 +62,46 @@ const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; 
 // k is how a click lands on the wrong card.
 // Room left for the floating chrome: the crumb bar and the toolbar at the top, a little air at the
 // bottom. Only consulted for a card TALLER than the window — one that fits is simply centred.
-const READ_PAD_TOP = 56, READ_PAD_BOTTOM = 24;
+// Deliberately NOT bottomInset(): that one tracks the SELECTION (the docked float bar opening and
+// closing), so folding it in here would slide the page up and down as you click.
+export const READ_PAD_TOP = 56;
+const READ_PAD_BOTTOM = 24;
+
+// Everything the reading clamp and the annotation shift need, measured ONCE per paint instead of per
+// frame and per node. Every input is invariant for a whole pass — the window's size, the strip's
+// width, the card's own measured height — while `applyView` runs on every pan frame and `paintPos`
+// two to four times per node. Reading them there meant an offsetHeight per frame and an innerWidth
+// per annotation, i.e. a forced reflow interleaved with the paint loop's own style writes.
+// A plain object rebuilt on demand rather than a closure: it holds five numbers, and nothing else
+// should be able to keep the node it was measured from alive.
+// `worldLeft` is the window's left edge in WORLD coordinates — the one derivation both consumers
+// want, so neither has to reach for the root node again (and the annotation shift can't trip over a
+// scope that has just been left while the band it was measured with is still here).
+export interface ReadingBand { left: number; worldLeft: number; width: number; vw: number; vh: number; top: number; h: number }
+let band: ReadingBand | null = null;
+// Called from the paint (syncScopeChrome) and on a resize — the two moments any of it can change.
+export function refreshReadingBand(): void {
+  const root = readingRootNode();
+  if (!root) { band = null; return; }
+  const left = readingLeft();
+  band = { left, worldLeft: root.x - left, width: readingWidth(), vw: window.innerWidth,
+           vh: window.innerHeight, top: elTop(root, root.y), h: nodeH(root) };
+}
+export function readingBand(): ReadingBand | null { return band; }
+
 function clampReadingView(): void {
-  const root = scopeRootNode();
-  if (!root || root.type !== 'card') return;
-  state.view.k = 1;                                             // no zoom: reading size is reading size
-  state.view.x = readingLeft() - root.x;   // centred in the safe box, horizontally immovable
+  const root = readingRootNode();
+  if (!root) return;
+  const b = band ?? (refreshReadingBand(), band);
+  if (!b) return;
+  state.view.k = 1;                        // no zoom: reading size is reading size
+  state.view.x = b.left - root.x;          // centred in the safe box, horizontally immovable
   // …and vertically: CENTRED while the whole card is on screen, which also means it cannot be
   // scrolled at all (there is nothing off-screen to scroll to, and a page that drifts under a
   // scroll gesture it doesn't need reads as broken). Once it outgrows the window, y is the one free
   // axis — that IS the scroll — but bounded, so neither end can be panned off into empty canvas.
-  const top = elTop(root, root.y), h = nodeH(root), vh = window.innerHeight;
-  if (h + READ_PAD_TOP + READ_PAD_BOTTOM <= vh) { state.view.y = (vh - h) / 2 - top; return; }
-  state.view.y = clamp(state.view.y, (vh - READ_PAD_BOTTOM) - (top + h), READ_PAD_TOP - top);
+  if (b.h + READ_PAD_TOP + READ_PAD_BOTTOM <= b.vh) { state.view.y = (b.vh - b.h) / 2 - b.top; return; }
+  state.view.y = clamp(state.view.y, (b.vh - READ_PAD_BOTTOM) - (b.top + b.h), READ_PAD_TOP - b.top);
 }
 export function applyView(): void {
   clampReadingView();

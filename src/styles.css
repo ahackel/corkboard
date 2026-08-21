@@ -2499,11 +2499,6 @@ body.sheet-open #editorSheet { display:flex; }
 .node.reading-root > .body h5,
 .node.reading-root > .body h6 { font-size:15px; margin:1.2em 0 .3em; }
 .node.reading-root > .body code { font-size:13px; }
-/* No resize handles and no fold chip on the strip: its width is derived and its height is its text,
-   and folding the card you are standing inside would leave you looking at nothing. Dragging is
-   refused in features/drag.ts — hiding the handles is not enough, since a drag would still write x/y. */
-.node.reading-root > .fh,
-.node.reading-root > .title-row > .hidden-count { display:none !important; }
 /* Canvas tools with nothing to act on in here. Zoom and fit are already INERT (clampReadingView
    overrides whatever they set), so this is only about not offering a button that does nothing. */
 body.reading #sketchBtn, body.reading #gridBtn, body.reading #canvasColorBtn,

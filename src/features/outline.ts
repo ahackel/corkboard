@@ -334,7 +334,7 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
   row.appendChild(title);
   // checklist owner: this row's own "n/m" progress over its direct children, same as the canvas —
   // through the same helper, so "same as the canvas" is a fact rather than two copies of one sum.
-  const prog = checklistProgress(n);
+  const prog = checklistProgress(n, kids);
   if (prog) {
     const progress = document.createElement('span');
     progress.className = 'ol-progress';
