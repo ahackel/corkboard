@@ -501,6 +501,10 @@ text at all.
   only `min-height:100dvh` (full screen even for a two-line note) and reading type sizes, set as the same
   `--h1-size`/`--h1-lh` variables `.node .body h1` already reads. Keyed on `.reading-root` alone rather than
   `body.reading .node…`, since paintNode hangs the class on in the same pass a two-selector rule would miss.
+  Reading MARGINS come with two restrictions: the `--pad-x`/`--pad-y` VARIABLES and never `padding` (the
+  checkbox offset and the `.body` indent are derived from them), and `:not(.stack)` — a stack's `--pad-x` IS
+  the layout pass's `STACK_PAD`, mirrored in `stackInnerW`/`stackRowW` and in where the outline places each
+  row, so widening it moves the interior its rows were measured against and they get clipped by the wrapper.
 - **Deliberately NOT `position:fixed`, and this is the load-bearing decision.** The card stays in WORLD
   space, so screen and world coordinates still line up and every hit-test its children need — dragging a
   row, dropping one, the marquee — keeps working exactly as on the board. A screen-fixed strip over a

@@ -2462,9 +2462,15 @@ body.sheet-open #editorSheet { display:flex; }
 /* Keyed on the class alone, not `body.reading .node…`: paintNode hangs `.reading-root` on the element
    in the same pass, so a two-selector rule would miss the first paint of an open and apply on the
    second. The class is only ever on the open card, so the body class adds nothing here. */
-.node.reading-root {
-  --h1-size:24px; --h1-lh:28.8px;   /* reading size, via the same variables `.node .body h1` reads */
-  padding:calc(var(--pad-y) + 4px) 22px; }
+.node.reading-root { --h1-size:24px; --h1-lh:28.8px; }   /* reading size, via `.node .body h1`'s own variable */
+/* Reading MARGINS, and the two restrictions on them are both load-bearing. The VARIABLES, never
+   `padding` outright (styles.css says so where a stack row halves them): `--pad-x/--pad-y` are what
+   the checkbox offset and the `.body` indent are derived from. And `:not(.stack)` — a stack's own
+   --pad-x IS the layout pass's STACK_PAD, mirrored in stackInnerW/stackRowW and in where the outline
+   places each row, so widening it here would move the interior the rows were measured against and
+   they would overflow the box and be clipped by its wrapper. A stack keeps its 6px; the room its
+   rows need is the row's business, not the box's. */
+.node.reading-root:not(.stack) { --pad-y:14px; --pad-x:22px; }
 .node.reading-root > .body { font-size:15px; line-height:1.65; }
 .node.reading-root > .body p { margin:.4em 0 1em; }
 .node.reading-root > .body h2 { font-size:19px; margin:1.6em 0 .4em; }
