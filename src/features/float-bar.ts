@@ -36,6 +36,7 @@ const fbChecklist = byId<HTMLInputElement>('fbChecklist');
 // hidden entirely for an annotation selection, see markChips below.
 const fbChecklistLabel = fbChecklist.parentElement!;
 const fbLock = byId<HTMLButtonElement>('fbLock');
+const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
 const typePop = byId('fbTypePop');
@@ -310,6 +311,13 @@ function markChips(): void {
   // no subtree to check off) — hide the toggle entirely rather than leave a no-op control in the bar.
   fbChecklistLabel.style.display = type === 'annotation' ? 'none' : '';
 
+  // ⤢ go IN. Single selection only, for the same reason ↑ is single (main.ts navArrow): you can only
+  // stand in one place. Gated on canOpen, so the kinds with no interior — annotation, query — don't
+  // get a button that would refuse. The click itself lives in features/reading.ts, beside the view it
+  // opens. Set BEFORE the layout-picker early-return below, or it would go stale for every leaf kind.
+  const only = ids.length === 1 ? state.nodes.get(ids[0]) : undefined;
+  fbOpen.style.display = only && canOpen(actionTarget(only)) ? '' : 'none';
+
   const forType: NodeType = type ?? 'card';
   rebuildLayoutChips(forType);
   // A tab group has no arrangement to choose — its open tab lays out the box's contents, and tabs
@@ -482,7 +490,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   // way IN while read-only, since a double-click there still folds instead (activateNode). Routed
   // through actionTarget, so right-clicking a tab GROUP's box opens the tab that's showing.
   if (!multi && canOpen(actionTarget(n)))
-    entries.push({ label:'Open frame', shortcut:'↑', run: () => openFrame(n) });
+    entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
   entries.push({ label:'Fit view', shortcut:'F', run: () => frameBox(targetIds.map(id => state.nodes.get(id))) });
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: !n.file });
   if (anyFrame && !state.readOnly)

@@ -209,6 +209,12 @@ button:disabled { opacity:.45; cursor:default; }
    visible AND above the outliner at every width — z-index above #outline (21), mirroring #homeBar's
    own exception on the opposite corner. Still below true modals (#ctxMenu/#startScreen/etc: z:40+). */
 #canvasMenuBtn { top:calc(12px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:30; }
+/* …and it is a TOUCH affordance only. It exists because iOS Safari's synthesized contextmenu on the
+   empty canvas is unreliable (see index.html), which a mouse never needs: a right-click on the canvas
+   already opens the same list (features/context-menu.ts canvasMenuEntries). So on a fine pointer the
+   corner stays empty — one fewer permanent control floating over the board (and over the page panel,
+   which owns that corner while it is open). */
+@media (pointer: fine) { #canvasMenuBtn { display:none; } }
 body.sketching #stage { cursor:crosshair; }
 body.sketching #ghostCard { display:none; }    /* the drag-to-create card would fight the pen */
 body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag / edit while sketching */
@@ -2438,3 +2444,36 @@ body.sheet-open #editorSheet { display:flex; }
   color:var(--text); font-size:15px; font-weight:500; }
 .mp-item .mp-crumb { padding-left:20px; color:var(--muted); font-size:12px;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ---- reading view: an OPENED card is its note, at reading width (features/reading.ts) ----
+   A scope LEVEL, not a panel: nothing of the canvas is on screen beside it, because you went
+   somewhere rather than opened a second view. z-index sits ABOVE #stage and BELOW #toolbar (20) /
+   #homeBar (30), so the crumb path — the way back out — stays on top of the page it belongs to; the
+   top padding is what keeps the text clear of that band instead of scrolling under it. */
+#page { position:fixed; inset:0; z-index:19; display:none; overflow:hidden auto;
+  -webkit-overflow-scrolling:touch; background:var(--bg);
+  padding:calc(60px + var(--sa-t)) calc(16px + var(--sa-r)) calc(64px + var(--sa-b)) calc(16px + var(--sa-l)); }
+body.reading #page { display:block; }
+/* Canvas tools have nothing to act on while you are inside a note — same list body.outline hides,
+   for the same reason. #stage goes too: it is not behind the page, there is no page BESIDE it. */
+body.reading #stage, body.reading #sketchBtn, body.reading #helpBtn, body.reading #gridBtn,
+body.reading #canvasColorBtn, body.reading #fitBtn, body.reading #floatBar,
+body.reading #ghostCard, body.reading #ghostHint { display:none !important; }
+/* The column wears `.node` ON PURPOSE, exactly as a card does: everything below `.node .body` —
+   headings, lists, tables, code, quotes, links, task boxes — is one variable-driven cascade, so
+   borrowing it and restating four variables is what keeps a note's page and a note's card from
+   drifting. Undone here: everything a CARD needs that a page doesn't (absolute box, its own fill,
+   unselectable text). It carries no data-id, so nothing hunting `.node[data-id]` picks it up. */
+#pgBody.node { position:static; width:100%; max-width:680px; margin:0 auto; padding:0;
+  background:none; z-index:auto; color:var(--text);
+  user-select:text; -webkit-user-select:text; touch-action:auto;
+  --h1-size:24px; --h1-lh:28.8px; --text-drop:0; }
+#pgBody .body { font-size:15px; line-height:1.65; overflow:visible; }
+#pgBody .body p { margin:.4em 0 1em; }
+#pgBody .body h1 { margin:.2em 0 .7em; }
+#pgBody .body h2 { font-size:19px; margin:1.6em 0 .4em; }
+#pgBody .body h3 { font-size:16px; margin:1.4em 0 .3em; }
+#pgBody .body h4, #pgBody .body h5, #pgBody .body h6 { font-size:15px; margin:1.2em 0 .3em; }
+#pgBody .body code { font-size:13px; }
+#pgBody .body-edit { font-size:15px; line-height:1.65; }
+.pg-empty { color:var(--muted); font-size:14px; }

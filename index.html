@@ -176,6 +176,11 @@
     <span class="fb-sep"></span>
     <!-- lock toggle: icon (open/closed padlock) + title set from the selection in float-bar.ts.
          While the selection IS locked the bar collapses to just this button (see .locked-sel). -->
+    <!-- go IN: the touch-reachable twin of ↑ / ⋯ → Open. The float bar is the one action surface
+         that is identical on desktop and on a phone (it docks to the bottom on coarse pointers), so
+         this is where "open the selected thing" has to live — see features/reading.ts. -->
+    <button id="fbOpen" class="fb-icon" title="Open (↑)" aria-label="Open">
+      <span class="ic" data-icon="expand"></span></button>
     <button id="fbLock" class="fb-icon" title="Lock (L)" aria-label="Lock"></button>
     <button id="fbMore" class="fb-icon" title="More actions" aria-label="More actions">
       <span class="ic" data-icon="kebab"></span></button>
@@ -216,6 +221,14 @@
       <button id="shDone" title="Save & close (⌘⏎)" aria-label="Save and close">Done</button>
     </div>
     <textarea id="shBody" spellcheck="false" placeholder="Add note…" aria-label="Card note"></textarea>
+  </div>
+
+
+  <!-- reading view: an OPENED card IS its note, full width, at reading size. Not a second view of
+       the map — a scope LEVEL, like an open frame (nav/scope.ts): you go in, the crumbs say where you
+       are, ↓ comes back out. Shown via body.reading; driven by features/reading.ts -->
+  <div id="page">
+    <div id="pgBody" class="node"><div class="body"></div></div>
   </div>
 
   <!-- canvas menu: floating top-right, left of the outline button — a permanent kebab so canvas

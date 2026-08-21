@@ -47,7 +47,16 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 // at a call site. Raw `type` rather than isFrame, deliberately — a COLLAPSED frame is openable
 // (openFrame unfolds it on the way in) and so is a DOCKED TAB, whose own bounds are only a label in
 // the strip but whose CONTENTS are exactly what opening shows.
-export function canOpen(n: MindNode | null | undefined): boolean { return n?.type === 'frame'; }
+//
+// A CARD is openable too, and means something different on the far side: a frame's interior is the
+// canvas, a card's interior is its NOTE, read at full width (features/reading.ts). Same navigation
+// either way — one level on the stack, one crumb, ↓ to leave — which is the whole reason reading a
+// long note is a place you GO rather than a second panel you look at.
+// An ANNOTATION has no interior (it is a margin note pinned on its parent) and a QUERY card's
+// contents are derived rather than written, so neither opens.
+export function canOpen(n: MindNode | null | undefined): boolean {
+  return n?.type === 'frame' || n?.type === 'card';
+}
 
 // The scope term of isHidden, on its own — for the few callers that must tell "folded away" from
 // "not in the frame I'm standing in" (isSelectable, the cross-scope jumps in main.ts). isHidden

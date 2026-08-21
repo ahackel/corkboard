@@ -33,6 +33,7 @@ import { createNode, createDetachedNode, createAnnotationHere, createSibling, ad
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
+import { syncReading, readingActive } from './features/reading.js';
 import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -326,7 +327,12 @@ export function activateNode(n: MindNode, cx: number, cy: number): void {
   // longer draws). Works the same whether or not the frame is named, so there's one way to write on a
   // frame rather than one for each state; the tab keeps its own double-click through the onTitle branch.
   if (isFrameBox(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
-  if (canOpen(actionTarget(n))) { openFrame(n); return; }
+  // Deliberately the raw kind and NOT canOpen, which now says yes to cards as well: a double-click on
+  // a card's text EDITS it, because that is what a double-click means on text nearly everywhere and it
+  // is far and away the commonest thing anyone does here. Going IN is ↑ / the float bar's ⤢ / ⋯ → Open,
+  // which are the same on a phone. So this stays the FRAME branch, and widening canOpen must not
+  // quietly reroute the gesture — the one call site where the two questions genuinely differ.
+  if (actionTarget(n).type === 'frame') { openFrame(n); return; }
   // A STACK is the other container, and the gesture means the same thing anywhere on it: EDIT IT. Its
   // header is its own text (there is no title row to hit), and the rest of the box is its rows, each of
   // which owns the gesture over itself — so what's left is the stack, and a stack has no place to put a
@@ -855,7 +861,7 @@ export function paintNode(n: MindNode): void {
 // A QUERY card keeps its body alone: its title slot shows the live query text instead, so hoisting the
 // name into the note would print a heading nobody wrote. (An image card needs no arm of its own — it is
 // untitled by definition, so joinHeading hands back the picture markdown unchanged.)
-function cardMarkdown(n: MindNode): string {
+export function cardMarkdown(n: MindNode): string {
   return isQueryCard(n) ? n.body : joinHeading(n.title, n.body, n.titleGap !== false);
 }
 // …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
@@ -1586,6 +1592,7 @@ export function paintAll(): void {
   paintEdges();   // tethers + free edges (view/edges.ts pairs them)
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
+  syncReading();     // …and the open card's page (no-op unless one is open)
   syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
@@ -1807,9 +1814,9 @@ function navArrow(key: string): void {
   if (key === 'ArrowDown') { exitScope(); return; }
   const n = state.selId ? state.nodes.get(state.selId) : null;
   if (key === 'ArrowUp') {
-    // ↑ stays single: you can only stand in one frame, so it acts on the anchor.
-    if (!n) { setStatus('Select a frame to open it'); return; }
-    openFrame(n);          // reports "Only a frame can be opened" itself
+    // ↑ stays single: you can only stand in one place, so it acts on the anchor.
+    if (!n) { setStatus('Select a card or frame to open it'); return; }
+    openFrame(n);          // reports its own refusal for the kinds that can't be opened
     return;
   }
   if (!n) return;          // ←/→ have nothing to fold
@@ -1921,7 +1928,7 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
 // The way to be exact is the PATH form, `[[Frames/Notes]]` or `[[Notes 2]]`, matched against the node's
 // file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
 // there rather than in some new syntax.
-function focusByTitle(title: string): void {
+export function focusByTitle(title: string): void {
   const hits = resolveWikilink(title);
   const target = hits[0];
   if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
@@ -2037,7 +2044,7 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
     // Now that the stack is settled, containerBox reports the frame we just left at its real size
     // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
     // step: ⌘Z undoes the resize without teleporting you between scopes.
-    if (left && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
+    if (left && left.type === 'frame' && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
   });
   if (opts.exiting) {
     // Leaving: select the frame you came out of — that's what makes a crumb read as a back button —
@@ -2061,7 +2068,7 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
 // exemption activateTab takes: looking inside the box isn't changing it.
 export function openFrame(target: MindNode | undefined): void {
   let t = target && actionTarget(target);
-  if (!t || !canOpen(t)) { setStatus('Only a frame can be opened'); return; }
+  if (!t || !canOpen(t)) { setStatus('This can’t be opened'); return; }
   const back = currentBack();
   // Unfolding on the way in is the ONE node mutation opening performs, so it alone is recorded:
   // ⌘Z re-folds the frame instead of teleporting you between scopes. Opening itself is navigation,
@@ -2074,7 +2081,10 @@ export function openFrame(target: MindNode | undefined): void {
   // node that owns a tab strip and no content of its own.
   if (isTabsFrame(t) && !t.collapsed) { normalizeTabs(t); t = actionTarget(t); }
   if (isScopeRoot(t)) return;                  // already standing in it
-  applyScope(t, { back });
+  // A CARD open is a page, not a canvas: there is no arrangement to frame, and fitting the camera to
+  // a scope whose only visible content is hidden behind #page would leave a random zoom to come back
+  // out to. The camera is simply left where it was.
+  applyScope(t, { back, camera: t.type !== 'card' });
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.
@@ -2467,6 +2477,9 @@ window.addEventListener('keydown', (e) => {
     // ahead of the selection cases below, which have nothing to clear here (entering sketch mode
     // deselects, and cards stay locked throughout).
     else if (ui.sketchOn) setSketchMode(false);
+    // Inside an open card Esc leaves it, the way it leaves sketch and search — there is no selection
+    // in here for the two cases below to clear, so this can't shadow anything.
+    else if (readingActive()) exitScope();
     else if (state.selEdges.size) clearEdgeSelection();
     else if (state.sel.size) selectNode(null);
     return;
@@ -2479,9 +2492,16 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); navArrow(key); return;
   }
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
-  if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
+  if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive() && !readingActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
   if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
+  // Everything from here down acts on the CANVAS — a card at the pointer, the selection, the camera.
+  // Inside an open card there is no canvas on screen and nothing is selected, so these would fire
+  // invisibly: a card created behind the page, a camera moved under it. One bail rather than a
+  // condition per line, placed here so the genuinely global keys above (read-only, outline, search,
+  // and the undo/save block further down) keep working while you read.
+  if (readingActive()) return;
+
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
   // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).

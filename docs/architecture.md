@@ -473,11 +473,40 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   half of that recovery lives in `syncScopeChrome`. A reload re-mints every id, so `resolveScopeAfterLoad`
   re-points the stack by FILE before the first layout — deliberately not cleared like the undo history, since a
   background refocus reload must not kick you out of the frame you're working in.
-- **Only frames, for now, but the mechanism is kind-agnostic:** `canOpen` is the one kind test — widen it
-  there, never at a call site. A stack stays out (an outliner is not a box you stand in), which is why
-  `activateNode` keeps `addChildIn` for it. Opening a tab GROUP opens its OPEN TAB and the crumbs skip the
-  group. Ink stays visible but is left out of the framing, or opening a frame would zoom back out to take in a
-  stroke on the far side of the map.
+- **The mechanism is kind-agnostic:** `canOpen` is the one kind test — widen it there, never at a call site.
+  Frames and CARDS are in (see below); an ANNOTATION has no interior and a QUERY card's contents are derived,
+  so neither opens. Opening a tab GROUP opens its OPEN TAB and the crumbs skip the group. Ink stays visible
+  but is left out of the framing, or opening a frame would zoom back out to take in a stroke on the far side
+  of the map.
+
+**An OPENED CARD is its note** (`features/reading.ts`, `#page`, `body.reading`) — the other half of "you can
+open things". A frame's interior is the CANVAS; a card's interior is its TEXT, laid out in one 680px column at
+reading size and scrolled like a page. That is the whole reason it exists: a card's height is measured
+(`nodeH` → `offsetHeight`, uncapped), so a long note is a 4000px-tall card you can only PAN, and panning is
+not scrolling — no wheel semantics, no paging, and past `FAR_ZOOM` no text at all.
+
+- **A scope LEVEL, deliberately not a panel beside the canvas.** One entry on the same stack, one crumb, `↓` /
+  a crumb / `Esc` to leave, the file path in the same `open=` hash term — so back/forward, reload and
+  bookmarks work with no navigation state of its own. Reading is somewhere you GO. The rejected alternative
+  was a docked side panel, and the reason it was rejected is that a panel and a card would show the same note
+  at once, which is what reads as two apps rather than one. (Scrintal takes cards "full screen to focus" for
+  the same reason; Obsidian Canvas's split-view-beside-canvas is a community plugin, not the design.)
+- **`↑` / the float bar's `⤢` / `⋯ → Open` open it — NEVER double-click.** Double-click on a card's text edits
+  it, because that is what a double-click means on text nearly everywhere and it is the commonest action in
+  the app; gesture cost follows frequency. So `activateNode` tests the raw `type === 'frame'` rather than
+  `canOpen` — the one call site where those two questions genuinely differ, and the line that stops widening
+  `canOpen` from silently stealing the edit gesture. `⤢` lives on the float bar because that is the only
+  action surface identical on desktop and touch (it docks to the bottom on coarse pointers).
+- **Same renderer and same EDITOR as the card**, or the two would drift. `#pgBody` wears `.node` so the whole
+  `.node .body` markdown cascade applies with four variables restated for reading size, and a double-click
+  hands the note to `startCardEditIn` — `startCardEdit` with the host element parameterised — so the undo
+  grouping, the deferred file rename and the read-only refusal all still happen in exactly one place.
+- **Two per-kind exemptions on the way in and out.** `applyScope` skips the camera fit for a card (there is no
+  arrangement to frame, and fitting a scope whose content is behind `#page` would leave a random zoom to come
+  back out to), and `growToFitContents` is skipped on the way out (it repairs a BOX; a card hasn't got one).
+- **Canvas shortcuts bail while reading** (one `readingActive()` guard in the keydown handler, above the
+  canvas half): there is no canvas on screen and nothing is selected, so `N`, `F`, `D`, `Tab`… would fire
+  invisibly. The genuinely global keys above it — read-only, outline, search, undo, save — keep working.
 
 ## Sizing
 
