@@ -55,6 +55,9 @@
      target automatically with no per-selector overrides. The layout popover's chips use this same
      scale (see .layoutchip below) so it's the same height as #floatBar itself; the colour popover's
      swatches stay their own smaller, fixed scale (matching the sketch sidebar's colour dots). */
+  /* the NARROW crumb strip's own height (styles.css's @media 700px block): one line of text and a
+     hair. Named because #toolbar has to drop by exactly it. */
+  --crumb-bar-h: 26px;
   --bar-btn: 32px;
   --bar-icon: 21px;
 
@@ -262,9 +265,26 @@ body.scoped #scopeBar { display:flex; }
    the middle folded into `…` the segment count is bounded, so this cap now actually holds instead of
    being overflowed by icons and separators that can't shrink. */
 @media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }
-/* NARROW: no room beside the toolbar at all, so the whole pill drops to its own line underneath it —
-   still one pill, just on the next row. */
-@media (max-width:700px){ body.scoped #homeBar { top:58px; max-width:calc(100% - 24px); } }
+/* NARROW: no room beside the CENTRED toolbar at all. The pill used to drop to its own line UNDER the
+   toolbar, which read as a stray capsule floating in the canvas and put the one-way door out of a
+   frame below the tools you use inside it. It stays ABOVE instead, and stops being a pill: a
+   full-width strip one line of text tall with a rule under it — a document header, which is what a
+   path is. The toolbar drops by exactly its height, hence the shared variable: two rules that must
+   agree about where the strip ends, spelled once. */
+@media (max-width:700px){
+  body.scoped #homeBar {
+    top:0; left:0; right:0; max-width:none; box-sizing:border-box; gap:0;
+    height:calc(var(--crumb-bar-h) + var(--sa-t));
+    padding:var(--sa-t) calc(8px + var(--sa-r)) 0 calc(8px + var(--sa-l));
+    border-radius:0; border-bottom:1px solid var(--node-border); }
+  /* A --bar-btn circle (32px, 36 on touch) can't sit in a strip the height of its text, so the home
+     button becomes the line's height too — still the same target, just no longer a capsule. */
+  body.scoped #homeBar #homeBtn { width:var(--crumb-bar-h); height:var(--crumb-bar-h); }
+  body.scoped #homeBar #homeBtn svg { width:15px; height:15px; }
+  /* …and the segments give up the vertical padding that made them capsules. */
+  body.scoped #homeBar .sc-crumb { padding:2px 7px; }
+  body.scoped #toolbar { top:calc(8px + var(--sa-t) + var(--crumb-bar-h)); }
+}
 /* Narrower still: drop the map name (the expendable segment) and let the rest ellipsise. Nothing
    collapses to an icon-only segment — the segments carry no icon, so that would leave empty buttons;
    the `…` fold is what keeps a deep path short. */
