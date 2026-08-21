@@ -416,6 +416,20 @@ export function showsDoneCheckbox(n: MindNode): boolean {
   const p = parentOf(n);
   return !!(p && p.checklist);
 }
+// The "n/m" a checklist owner shows over its own children: how many are done, out of how many CAN
+// be. Deliberately NOT `childrenOf().length` — an ANNOTATION never gets a checkbox (showsDoneCheckbox
+// refuses it above, and the float bar hides the toggle for the same reason: a title-less leaf that can
+// never have children has no subtree to check off), so counting one left a card holding one real item
+// and one margin note reading "1/2" for ever, with nothing on screen to tick down. Counted through
+// showsDoneCheckbox itself rather than a private `!isAnnotation`, so the readout is drawn from exactly
+// the set of boxes that exist and cannot drift from them if that predicate ever gains a term.
+// null = no readout at all, which also covers a checklist whose only child is an annotation.
+// The ONE spelling: the canvas card and the outline row both show this (features/outline.ts).
+export function checklistProgress(n: MindNode): { done: number; total: number } | null {
+  if (!n.checklist) return null;
+  const items = childrenOf(n.id).filter(showsDoneCheckbox);
+  return items.length ? { done: items.filter(k => k.done).length, total: items.length } : null;
+}
 // true if ANY ancestor (at any depth, not just the direct parent) has a title containing `needle`
 // (already lowercased) — backs the "p:<parent>" query token below.
 function hasAncestorTitleContaining(n: MindNode, needle: string): boolean {
@@ -608,7 +622,8 @@ export function paintNode(n: MindNode): void {
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   (el.querySelector('.donebox') as HTMLInputElement).checked = n.done;
   // this card's own checklist (over ITS children) → an "n/m done" progress readout by the title
-  const progress = (n.checklist && hasKids) ? `${kids.filter(k => k.done).length}/${kids.length}` : '';
+  const prog = checklistProgress(n);
+  const progress = prog ? `${prog.done}/${prog.total}` : '';
   el.querySelector('.progress')!.textContent = progress;
   // …which on a node with no LABEL has to float over the text rather than sit beside it: it's a flex item
   // in the title row, so on a card or a stack (whose name is its rendered text, not a label) it was the

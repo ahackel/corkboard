@@ -236,6 +236,15 @@ a card, or a stack demoted to a row inside another stack).
 
 ## Stacks
 
+**A checklist's "n/m" counts the children that CAN be ticked** (`checklistProgress` in `main.ts`) — not
+`childrenOf().length`. An ANNOTATION never gets a checkbox: `showsDoneCheckbox` refuses it and the float bar
+hides the toggle for the same reason (a title-less leaf that can never have children has no subtree to check
+off), and the outliner leaves it out of its rows too. Counting one anyway left a card holding one real item
+and one margin note reading "1/2" for ever, with nothing on screen to tick it down to "2/2". The count runs
+THROUGH `showsDoneCheckbox` rather than a private `!isAnnotation`, so the readout is drawn from exactly the
+set of boxes that exist; null when nothing can be ticked, which also covers a checklist whose only child is
+an annotation. One spelling, because the canvas card and the outline row both show it (`features/outline.ts`).
+
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole subtree as
 one indented, full-width column inside a box that is **width-resizable** (`n.w`, defaulting to `STACK_W` =
 `NODE_W`) and auto-fitted in height, so **every descendant's own layout is ignored** and a stack nested in a

@@ -17,7 +17,7 @@ import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, 
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
 import { orderedKids } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
+import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, checklistProgress, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
 import { createNode, addChild, deleteNode, duplicateSelection, discardNewCard } from './crud.js';
@@ -332,11 +332,13 @@ function rowFor(n: MindNode, depth: number, kids: MindNode[], searching = false)
   title.addEventListener('blur', () => { if (rowEditId === n.id) endRowTitleEdit(); });
 
   row.appendChild(title);
-  // checklist owner: this row's own "n/m" progress over its direct children, same as the canvas
-  if (n.checklist && kids.length) {
+  // checklist owner: this row's own "n/m" progress over its direct children, same as the canvas —
+  // through the same helper, so "same as the canvas" is a fact rather than two copies of one sum.
+  const prog = checklistProgress(n);
+  if (prog) {
     const progress = document.createElement('span');
     progress.className = 'ol-progress';
-    progress.textContent = `${kids.filter(k => k.done).length}/${kids.length}`;
+    progress.textContent = `${prog.done}/${prog.total}`;
     row.appendChild(progress);
   }
   // The fold bubble: the same control, in the same corner, as a canvas card's (.node .hidden-count) —
