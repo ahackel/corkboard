@@ -11,7 +11,7 @@
 import { state, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
-import { isScopeRoot, boxIsViewport, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
+import { isScopeRoot, boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
@@ -502,6 +502,13 @@ function insideFrame(node: MindNode): boolean {
 // a collapsed frame has no box/wrapper, so it can't host anything. Shared with edges.ts so an edge
 // between two cards inside the same frame clips to it too, not just the cards themselves.
 export function hostFrame(node: MindNode): MindNode | null {
+  // A READ CARD is the top of what's on screen, so it has no host: every container above it is out of
+  // scope, hidden, and has already had its content wrapper dropped by paintNode — and a node whose
+  // host wrapper is gone rides along DETACHED with it. Without this the card you just opened is
+  // removed from the DOM the moment its own ancestor frame stops hosting: the box vanishes while its
+  // rows (hosted by the card itself, which is still visible) stay, which is exactly what that looks
+  // like. Only reachable for a card that lives inside a container; a root-level one has no host anyway.
+  if (isReadingRoot(node)) return null;
   const h = containerHost(node);
   // The OPEN frame hosts NOTHING: its children are the top level now, so they go straight under
   // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode. That's what

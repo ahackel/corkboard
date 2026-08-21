@@ -551,6 +551,12 @@ text at all.
   strip's world position rather than from `state.view.x`, so a paint during the opening glide clamps against
   the same window the camera is about to show. `view/edges.ts` reads the same function for the tether's
   start, or the line would point off-screen; hit-testing still uses the authored x, which is the one seam.
+- **A read card has NO HOST, and this one is a trap.** `hostFrame` returns null for it. Every container
+  above it is out of scope, hidden, and has already had its content wrapper dropped by `paintNode` — and a
+  node whose host wrapper is gone rides along DETACHED with it. Without the guard, opening a card that lives
+  inside a frame removes it from the DOM: the box vanishes while its rows, hosted by the card itself and so
+  still visible, stay behind. A root-level card has no host anyway, which is exactly why this only shows up
+  once the card is nested — and why it survived a first round of testing.
 - **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
