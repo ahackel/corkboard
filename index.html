@@ -52,6 +52,8 @@
       <span class="ic" data-icon="sketch"></span></button>
     <button id="outlineBtn" title="Outline view (O) — browse & edit the map as a list" aria-label="Toggle outline view">
       <span class="ic" data-icon="outline"></span></button>
+    <button id="wikiBtn" title="Wiki view (W) — read a card and everything under it as one document" aria-label="Toggle wiki view">
+      <span class="ic" data-icon="wiki"></span></button>
     <button id="roBtn" title="Read-only mode (R) — view & collapse only, nothing is saved" aria-label="Toggle read-only mode">
       <span class="ic" data-icon="lock"></span></button>
     <span class="fb-sep"></span>
@@ -141,6 +143,15 @@
            (title + note), rendered by features/branch-editor.ts. Toggled via body.ol-editing. -->
       <div class="ol-cards" id="olCards"></div>
     </div>
+  </div>
+
+  <!-- wiki view: a card and its whole subtree read as ONE document, with a table of contents down
+       the left (body.wiki; features/wiki.ts). A second alternative VIEW over the same nodes, like
+       #outline above — but a READING surface: nothing in here mutates the map. The two panes are
+       separate scroll boxes so the contents list stays put while the document scrolls. -->
+  <div id="wiki">
+    <nav class="wk-toc" id="wikiToc" aria-label="Contents"></nav>
+    <div class="wk-doc" id="wikiDoc"></div>
   </div>
 
   <!-- properties for the active branch card: colour / tags / checklist (the same

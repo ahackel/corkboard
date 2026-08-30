@@ -8,6 +8,12 @@
 //
 // Shape: #/<map-slug>/<node-file-path>?mode=outline&open=&x=&y=&k=&q=&ro=1
 //
+// In the WIKI view that path slot holds the PAGE's file instead of the selected node's — there the
+// page IS what you're looking at, and the selection isn't even on screen. Deliberately the same slot
+// rather than a literal `/wiki/` segment: a note may genuinely live at `wiki/page.md`, and the mode
+// is already spelled once in `mode=wiki`. So reading pages walks history exactly the way selecting
+// cards does, and the segment always means "the note this view is showing you".
+//
 // `open` is the frame you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
 // navigable VIEW state like mode=outline rather than identity. Only the INNERMOST level is carried;
 // the crumb path above it is rebuilt from the tree (openPathTo), so there's nothing to keep in sync.
@@ -26,6 +32,7 @@ import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
 import { outlineActive, setOutline } from '../features/outline.js';
+import { wikiActive, setWiki, wikiPageNode, showWikiPage } from '../features/wiki.js';
 import { searchBox, openSearch, runSearch } from '../features/search.js';
 import { nodeLabel } from '../utils/model.js';
 
@@ -42,7 +49,9 @@ function decodeFilePath(encoded: string): string {
 }
 
 export function currentDocumentTitle(): string {
-  const node = state.selId ? state.nodes.get(state.selId) : undefined;
+  // …the PAGE while the wiki view is up, for the same reason the hash carries it: that's the thing
+  // on screen, and it's what a bookmark or a history entry should be named after.
+  const node = (wikiActive() ? wikiPageNode() : null) ?? (state.selId ? state.nodes.get(state.selId) : undefined);
   return node ? `${nodeLabel(node)} — ${store.name}` : `Corkboard — ${store.name}`;
 }
 export function updateDocumentTitle(): void {
@@ -53,14 +62,23 @@ function buildHash(): string {
   if (!store.isOpen) return '';
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
   const parts = [slugify(store.name)];
-  if (node?.file) parts.push(encodeFilePath(node.file));
+  const identity = wikiActive() ? wikiPageNode()?.file : node?.file;
+  if (identity) parts.push(encodeFilePath(identity));
   const params = new URLSearchParams();
   if (outlineActive()) params.set('mode', 'outline');
+  else if (wikiActive()) params.set('mode', 'wiki');
   const open = scopeRootFile();
   if (open) params.set('open', encodeFilePath(open));
-  params.set('x', Math.round(state.view.x).toString());
-  params.set('y', Math.round(state.view.y).toString());
-  params.set('k', state.view.k.toFixed(2));
+  // The camera is CANVAS state, so the wiki view leaves it out: there is no canvas on screen to
+  // frame, and carrying it would make every page entry differ by whatever pan the board happened to
+  // be left at. Leaving the view re-frames on the selection anyway (setWiki → focusNode), so there
+  // is nothing here to lose. The outliner keeps them — at desktop width it is a drawer over a
+  // still-visible canvas.
+  if (!wikiActive()) {
+    params.set('x', Math.round(state.view.x).toString());
+    params.set('y', Math.round(state.view.y).toString());
+    params.set('k', state.view.k.toFixed(2));
+  }
   const q = searchBox.value.trim();
   if (q) params.set('q', q);
   if (state.readOnly) params.set('ro', '1');
@@ -117,12 +135,25 @@ export function applyUrlFromHash(): void {
     // pan/zoom the URL explicitly asked for (hence restoreScopeFromFile's own no-camera contract).
     const open = params.get('open');
     restoreScopeFromFile(open ? decodeFilePath(open) : null);
+    // The MODE is settled BEFORE the path segment is read, because the mode is what the segment
+    // MEANS: the page in the wiki view, the selected card everywhere else. (After the scope, which
+    // the wiki view's opening page is derived from.)
+    const mode = params.get('mode');
+    if (mode === 'outline' && !outlineActive()) setOutline(true, false);
+    // Wiki is the one mode a hash can also turn OFF. Back/forward can land on an entry from before
+    // the view was ever opened, and staying in it would strand the reader on a page the URL doesn't
+    // name. Outline stays one-way on purpose: a phone FORCES it by orientation (features/outline.ts
+    // phoneWantsOutline), so letting a URL switch it off would fight that.
+    if (mode === 'wiki') { if (!wikiActive()) setWiki(true, false); }
+    else if (wikiActive()) setWiki(false, false);
     if (pathSegs.length) {
       const file = decodeFilePath(pathSegs.join('/'));
-      const target = [...state.nodes.values()].find(n => n.file === file);
-      if (target) selectNode(target.id);
+      if (wikiActive()) showWikiPage(file);
+      else {
+        const target = [...state.nodes.values()].find(n => n.file === file);
+        if (target) selectNode(target.id);
+      }
     }
-    if (params.get('mode') === 'outline' && !outlineActive()) setOutline(true, false);
     const x = Number(params.get('x')), y = Number(params.get('y')), k = Number(params.get('k'));
     if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(k) && k > 0) {
       state.view.x = x; state.view.y = y; state.view.k = k;

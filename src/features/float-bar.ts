@@ -222,10 +222,19 @@ function rebuildLayoutChips(type: NodeType): void {
 // Change the KIND of the selection: seed/reset the box, drop a now-invalid layout, reseed order.
 function setType(type: NodeType): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
+  if (!setTypeOn(ids, type)) return;
+  markChips();
+}
+// …and the same conversion driven by ID rather than by the selection, for the callers that aren't
+// the chips: the wiki view's "Make this a page", which turns a card into a FRAME because a frame is
+// what a sub-page is (features/wiki.ts). Returns false if the change was refused. Kept as the ONE
+// spelling of what retyping a node means — the box seed, the layout fallback and the order reseed
+// all have to happen together, and a second hand-written copy would drift from this one.
+export function setTypeOn(ids: string[], type: NodeType): boolean {
   // annotation/query are leaves — refuse to flip a card that already has children into one
   if ((type === 'annotation' || type === 'query') && ids.some(id => childrenOf(id).length)) {
     setStatus(`A${type === 'query' ? ' query card' : 'n annotation'} can’t have children — move or delete them first`);
-    return;
+    return false;
   }
   record(ids, () => {
     for (const id of ids){
@@ -250,8 +259,8 @@ function setType(type: NodeType): void {
       n.dirty = true;
     }
   });
-  markChips();
   relayout(); scheduleSave();
+  return true;
 }
 // Give a tab group's tabs their own boxes back: open every one (only one was open) and cascade them
 // inside the frame, since as tabs they were all stacked in the same strip band and would otherwise

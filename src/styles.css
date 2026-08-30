@@ -2119,6 +2119,140 @@ body.outline #floatBar { display:none !important; }
 }
 @media (prefers-reduced-motion: reduce) { #outline { transition:none; } }
 
+/* ---- wiki view: a card and its subtree as ONE document, with a contents list down the left
+   (body.wiki, toggled in features/wiki.ts). The third view over the same nodes, and a READING
+   surface — nothing in it writes to the map, which is what keeps it from taxing the rest of the app.
+
+   z-index 19: BELOW the toolbar / search / home bar (20-30) rather than above them like #outline's
+   drawer (21). The panel is full-screen and opaque, so it hides the canvas by COVERING it while the
+   app's own chrome keeps floating on top exactly as it does over the board — and the two panes are
+   inset from the top to leave that chrome its band. Covering rather than `display:none` on #stage is
+   deliberate: a hidden card measures 0 (view/layout.ts layoutH), and a relayout that ran while the
+   canvas was display:none would lay the board out from zero heights. */
+#wiki { position:fixed; inset:0; z-index:19; display:none; background:var(--bg); color:var(--text); }
+body.wiki #wiki { display:flex; }
+/* canvas-only chrome: nothing here acts on a document (the outline / wiki toggles stay, so the two
+   other views remain one click away, and #homeBar stays reachable above the contents list) */
+body.wiki #sketchBtn, body.wiki #helpBtn, body.wiki #gridBtn, body.wiki #canvasColorBtn,
+body.wiki #canvasMenuBtn, body.wiki #fitBtn, body.wiki #floatBar, body.wiki #scopeBar,
+body.wiki #ghostCard, body.wiki #ghostHint { display:none !important; }
+
+/* the contents list: the whole map's titled cards, page + sections in one tree (features/wiki.ts
+   tocRows). Its own scroll box, so it stays put while the document scrolls. */
+.wk-toc { flex:none; width:260px; overflow:hidden auto; -webkit-overflow-scrolling:touch;
+  border-right:1px solid var(--grid); background:var(--panel);
+  padding:calc(56px + var(--sa-t)) 8px calc(24px + var(--sa-b)) calc(8px + var(--sa-l)); }
+.wk-row { display:block; width:100%; text-align:left; padding:5px 8px; border:none; background:none;
+  color:var(--muted); font:inherit; font-size:13px; line-height:1.35; border-radius:var(--r-inner);
+  cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wk-row:hover { background:var(--bg); color:var(--text); }
+.wk-row.inpage { color:var(--text); }                      /* part of the document you're reading */
+.wk-row.page { font-weight:650; }                          /* …and the card the page IS */
+.wk-row.here { color:var(--accent); box-shadow:inset 2px 0 0 var(--accent); }   /* the section on screen */
+
+/* the document */
+.wk-doc { flex:1; min-width:0; overflow:hidden auto; -webkit-overflow-scrolling:touch;
+  padding-top:calc(56px + var(--sa-t)); }
+/* The reading column. The tail padding is a WHOLE viewport, not a fraction of one: it is what lets
+   the LAST section scroll to the top of the pane, and anything less leaves the end of a short
+   document unreachable — the contents list would jump to it and land at the scroll limit instead,
+   with the highlight stuck on the section above. */
+.wk-page { max-width:70ch; margin:0 auto;
+  padding:0 calc(32px + var(--sa-r)) calc(100vh + var(--sa-b)) calc(32px + var(--sa-l)); }
+.wk-empty { padding:80px 32px; text-align:center; color:var(--muted); }
+
+/* the ancestor trail above the page — the way back OUT to a wider document */
+.wk-up { display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin:0 0 24px; }
+.wk-up-sep { color:var(--muted); opacity:.6; font-size:12px; }
+.wk-up-crumb { padding:2px 4px; border:none; background:none; color:var(--muted);
+  font:inherit; font-size:12px; cursor:pointer; border-radius:4px; }
+.wk-up-crumb:hover { color:var(--accent); }
+
+/* A section's OWN heading (.wk-h) — clickable, it hands the card back to the canvas. Headings
+   INSIDE a note's markdown carry no .wk-h and stay inert, which is why the class exists. */
+.wk-sec { scroll-margin-top:12px; }
+.wk-h { cursor:pointer; margin:1.6em 0 .5em; line-height:1.25; font-weight:650; }
+.wk-sec:first-of-type > .wk-h { margin-top:0; }
+.wk-h:hover { color:var(--accent); }
+h1.wk-h { font-size:32px; }  h2.wk-h { font-size:24px; }  h3.wk-h { font-size:19px; }
+h4.wk-h { font-size:17px; }  h5.wk-h, h6.wk-h { font-size:15px; color:var(--muted); }
+
+/* reading type — deliberately NOT the card's, so the page reads as a document rather than as one
+   very large card (the cards' own body rules are scoped to .node) */
+.wk-body { font-size:16.5px; line-height:1.7; }
+.wk-body p { margin:0 0 1em; }
+.wk-body ul, .wk-body ol { margin:0 0 1em; padding-left:1.4em; }
+.wk-body li { margin:.2em 0; }
+.wk-body li.task { list-style:none; margin-left:-1.2em; }
+.wk-body li.task .taskbox { margin-right:.5em; }
+.wk-body h1, .wk-body h2, .wk-body h3, .wk-body h4, .wk-body h5, .wk-body h6 {
+  font-size:1em; font-weight:650; margin:1.4em 0 .4em; }
+.wk-body blockquote { margin:0 0 1em; padding:.1em 0 .1em 1em; border-left:3px solid var(--grid);
+  color:var(--muted); }
+.wk-body pre { margin:0 0 1em; padding:12px 14px; border-radius:8px; background:var(--panel);
+  overflow-x:auto; }
+.wk-body code { font-size:.9em; }
+.wk-body hr { border:none; border-top:1px solid var(--grid); margin:2em 0; }
+.wk-body img.md-img { max-width:100%; height:auto; border-radius:8px; }
+.wk-body .img-zoom { display:none; }        /* the canvas card's magnifier — no viewer to open here */
+.wk-body table { border-collapse:collapse; margin:0 0 1em; display:block; overflow-x:auto; }
+.wk-body th, .wk-body td { border:1px solid var(--grid); padding:5px 9px; text-align:left; }
+.wk-body a.lk { color:var(--accent); }
+.wk-body a.wikilink { cursor:pointer; text-decoration:underline; text-decoration-style:dotted; }
+
+/* ↗ — "show this card on the canvas". Lives INSIDE the heading rather than being the heading: with
+   double-click editing text, a plain click on a title must not fling you out of the page. Revealed
+   on hover where there is a pointer to hover with, and always faintly present on a touch screen. */
+.wk-jump { margin-left:.4em; padding:0 4px; border:none; background:none; color:var(--muted);
+  font:inherit; font-size:.6em; line-height:1; vertical-align:middle; cursor:pointer;
+  opacity:0; transition:opacity .12s ease; }
+.wk-sec:hover .wk-jump, .wk-jump:focus-visible { opacity:1; }
+.wk-jump:hover { color:var(--accent); }
+@media (pointer: coarse) { .wk-jump { opacity:.45; } }
+
+/* the in-place section editor: ONE field holding the note's `# ` heading line and its body, exactly
+   as the file holds them (features/wiki.ts startWikiEdit) */
+.wk-edit { display:block; width:100%; margin:1.6em 0 .5em; padding:12px 14px; box-sizing:border-box;
+  min-height:6em; resize:none; overflow:hidden;
+  background:var(--panel); color:var(--text);
+  border:1px solid var(--accent); border-radius:8px; outline:none;
+  font:inherit; font-size:15.5px; line-height:1.6; tab-size:2; white-space:pre-wrap; }
+.wk-sec:first-of-type > .wk-edit { margin-top:0; }
+
+/* A SUB-PAGE inside its parent: a card you click, never its content (features/wiki.ts sectionsOf).
+   Name, an excerpt off the note's first line, and how much is under it — the listing every wiki
+   shows here (Confluence's Children Display, Notion's sub-page line, Docusaurus's DocCardList). */
+.wk-sub { display:block; width:100%; text-align:left; margin:1.1em 0; padding:12px 14px;
+  background:var(--panel); border:1px solid var(--grid); border-radius:10px;
+  color:var(--text); font:inherit; cursor:pointer; transition:border-color .12s ease; }
+.wk-sub:hover { border-color:var(--accent); }
+.wk-sub-name { display:block; font-weight:650; font-size:16px; }
+.wk-sub-name::after { content:' →'; color:var(--muted); font-weight:400; }
+.wk-sub:hover .wk-sub-name::after { color:var(--accent); }
+.wk-sub-ex { display:block; margin-top:3px; color:var(--muted); font-size:14px; line-height:1.5;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.wk-sub-meta { display:block; margin-top:6px; color:var(--muted); font-size:12px; opacity:.8; }
+
+/* "Make a page" — split this section off. Spelled out rather than glyphed: it is rare, it changes
+   the card's KIND on the board, and it should say so. Hover-revealed like ↗ beside it. */
+.wk-mkpage { margin-left:.5em; padding:1px 7px; border:1px solid var(--grid); border-radius:var(--r-full);
+  background:none; color:var(--muted); font:inherit; font-size:11px; font-weight:500;
+  vertical-align:middle; cursor:pointer; opacity:0; transition:opacity .12s ease; }
+.wk-sec:hover .wk-mkpage, .wk-mkpage:focus-visible { opacity:1; }
+.wk-mkpage:hover { color:var(--accent); border-color:var(--accent); }
+@media (pointer: coarse) { .wk-mkpage { opacity:.45; } }
+
+/* the contents list holds two kinds of row: PAGES (the tree) and, under the one you're reading, its
+   own SECTIONS — lighter, so the page tree still reads as the structure */
+.wk-row-sec { font-size:12.5px; opacity:.9; }
+
+/* Below the app's narrow breakpoint the contents list is dropped rather than squeezed — a 260px
+   column and a readable measure don't both fit on a phone, and the trail + wikilinks still navigate. */
+@media (max-width: 700px) {
+  .wk-toc { display:none; }
+  .wk-page { padding-left:calc(18px + var(--sa-l)); padding-right:calc(18px + var(--sa-r)); }
+}
+
 /* ---- outline branch editor: this card + its siblings as full editable cards (features/
    branch-editor.ts) ---- Rendered into #olCards inside the outline panel; body.ol-editing swaps
    the row list for it INSTANTLY (no slide). Colour/tags/checklist live in the bottom

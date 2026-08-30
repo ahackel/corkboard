@@ -33,6 +33,7 @@ import { createNode, createDetachedNode, createAnnotationHere, createSibling, ad
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
+import { renderWiki, toggleWikiView, wikiActive } from './features/wiki.js';   // also wires the wiki toggle button
 import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -249,9 +250,9 @@ function nodeEl(n: MindNode): HTMLElement {
   return el;
 }
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
-// what a Space tap used to. Refuses in the outline view, which has no canvas to drop it onto.
+// what a Space tap used to. Refuses in the outline and wiki views, which have no canvas to drop it onto.
 function newCardAtPointer(): void {
-  if (outlineActive()) return;
+  if (outlineActive() || wikiActive()) return;
   if (ui.lastMouse) createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
   else createNode();
 }
@@ -1586,6 +1587,7 @@ export function paintAll(): void {
   paintEdges();   // tethers + free edges (view/edges.ts pairs them)
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
+  renderWiki();      // …and the wiki document (likewise a no-op unless it's the active view)
   syncScopeChrome();   // crumbs + the recovery when the frame you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
@@ -2467,11 +2469,23 @@ window.addEventListener('keydown', (e) => {
     // ahead of the selection cases below, which have nothing to clear here (entering sketch mode
     // deselects, and cards stay locked throughout).
     else if (ui.sketchOn) setSketchMode(false);
+    // the wiki view is a place you're IN, like sketch mode — Esc is the way out of it, ahead of the
+    // selection cases (which would silently clear the selection the reader came in on)
+    else if (wikiActive()) toggleWikiView();
     else if (state.selEdges.size) clearEdgeSelection();
     else if (state.sel.size) selectNode(null);
     return;
   }
   if (typing) return;
+  // The wiki view is a READING surface with no canvas behind it to act on, so the card shortcuts
+  // below would edit a map you can't see. Only the three that get you back out of it stay live
+  // (Esc is handled above); everything else is swallowed here rather than guarded line by line.
+  if (wikiActive()){
+    if (key === 'w' && !mod){ e.preventDefault(); toggleWikiView(); return; }
+    if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }
+    if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
+    return;
+  }
   // ←→↑↓ walk / fold the tree (navArrow). Canvas only: the outline view is its own tree widget with
   // its own fold state (outlineFold), so arrows there are a separate concern. No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
@@ -2481,6 +2495,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
   if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
+  if (key === 'w' && !mod){ e.preventDefault(); toggleWikiView(); return; }      // Wiki view
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the

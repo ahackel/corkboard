@@ -111,7 +111,16 @@ function sortedRoots(exclude?: string): MindNode[] {
 }
 
 // ---- mode toggle (persisted like theme / edge style) ----
-const VIEW_KEY = 'corkboard.viewMode';   // 'canvas' | 'outline'
+// The saved view mode, shared with the OTHER alternative view (features/wiki.ts) — one key, so the
+// three modes can't disagree about which one the user last chose. Anything that isn't 'outline'
+// leaves the outliner closed here, and wiki.ts reads it the same way for its own value.
+export const VIEW_KEY = 'corkboard.viewMode';   // 'canvas' | 'outline' | 'wiki'
+// Turning the outliner ON has to close the wiki view: they're mutually exclusive, and only ONE of
+// them may own the screen. wiki.ts imports this module (for the key + setOutline) and never the
+// reverse, so the dependency can only run this way round — hence a registered callback rather than
+// a direct call into it, which would make the two feature modules a cycle at evaluation time.
+const closers: (() => void)[] = [];
+export function beforeOutlineOn(cb: () => void): void { closers.push(cb); }
 export function outlineActive(): boolean { return document.body.classList.contains('outline'); }
 // On a PHONE the mode is dictated by orientation and can't be toggled — portrait is outline
 // (reading/quick capture, no room for the 2D canvas), landscape is canvas (the extra width makes
@@ -126,6 +135,7 @@ export function toggleOutlineView(): void { if (!outlineLocked()) setOutline(!ou
 export function setOutline(on: boolean, persist = true): void {
   if (on === outlineActive()) return;
   if (document.body.classList.contains('sketching')) { setStatus('Leave sketch mode first (S)'); return; }
+  if (on) for (const close of closers) close();   // the wiki view can't stay open behind the outliner
   if (!on) { closeBranchEditor(); olSearchInput.value = ''; outlineQuery = ''; disarmKeyboardTracking(); }   // leaving outline: drop any open branch editor + search filter
   document.body.classList.toggle('outline', on);
   outlineBtn.classList.toggle('active', on);
