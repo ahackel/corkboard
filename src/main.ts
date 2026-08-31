@@ -42,6 +42,7 @@ import { toggleSketchMode, setSketchMode } from './features/sketch.js';   // als
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
 import { commitStep, record, touch, undo, redo, updateUndoButtons } from './features/history.js';
 import { hydrateImages } from './features/images.js';
+import { syncSectionLayer, sectionDragging } from './features/section-drag.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
@@ -267,7 +268,7 @@ function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
 }
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
-const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge, .query-icon, .query-input, .query-box, .tag-row, .img-zoom, a.lk, .fh';
+const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge, .query-icon, .query-input, .query-box, .tag-row, .img-zoom, a.lk, .fh, .sec-grip';
 // What a gesture at these viewport coords actually hits. Deliberately NOT the event's own `target`:
 // bindNodeDrag takes a POINTER CAPTURE on the node's element, and a capture retargets the click (and
 // so the dblclick) that follows to the capturing element — so by the time a double-click arrives its
@@ -790,11 +791,16 @@ export function paintNode(n: MindNode): void {
     // querySelectorAll, all to produce what is already there. Keyed on the source text, so a paint
     // that only MOVED cards skips the lot.
     const md = collapsed ? collapsedMarkdown(n) : cardMarkdown(n);
-    if (bodyEl.dataset.md !== md){
+    if (bodyEl.dataset.md !== md && !sectionDragging(n.id)){
       bodyEl.dataset.md = md;
       bodyEl.innerHTML = renderBodyHTML(md);
       hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
     }
+    // …and, on the one selected card, a grip beside each block of it (features/section-drag.ts).
+    // After the render, since it measures what was just laid out.
+    syncSectionLayer(n, el, bodyEl, md, collapsed, false);
+  } else {
+    syncSectionLayer(n, el, bodyEl, '', collapsed, true);
   }
   if (isQueryBox(n)) {
     const qInput = el.querySelector('.query-input') as HTMLInputElement;
@@ -856,7 +862,7 @@ export function paintNode(n: MindNode): void {
 // A QUERY card keeps its body alone: its title slot shows the live query text instead, so hoisting the
 // name into the note would print a heading nobody wrote. (An image card needs no arm of its own — it is
 // untitled by definition, so joinHeading hands back the picture markdown unchanged.)
-function cardMarkdown(n: MindNode): string {
+export function cardMarkdown(n: MindNode): string {
   return isQueryCard(n) ? n.body : joinHeading(n.title, n.body, n.titleGap !== false);
 }
 // …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything

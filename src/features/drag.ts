@@ -41,7 +41,7 @@ function landingGhostEl(): HTMLElement {
   world.appendChild(el);
   return _landingGhost = el;
 }
-function showLandingGhost(x: number, y: number, w: number, h: number): void {
+export function showLandingGhost(x: number, y: number, w: number, h: number): void {
   const el = landingGhostEl();
   el.style.left = x + 'px'; el.style.top = y + 'px';
   el.style.width = w + 'px'; el.style.height = h + 'px';
@@ -52,7 +52,7 @@ function showLandingGhost(x: number, y: number, w: number, h: number): void {
   el.style.display = '';
   if (_insertLine) _insertLine.style.display = 'none';   // ghost and reorder bar never coexist
 }
-function hideLandingGhost(): void {
+export function hideLandingGhost(): void {
   if (_landingGhost) _landingGhost.style.display = 'none';
   if (_insertLine) _insertLine.style.display = 'none';
 }
@@ -855,8 +855,9 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   // the modifier free to carry this at all. An IMAGE card needs no branch of its own here: it's an
   // untitled card, and an untitled card contributes its body alone (mergeCardsInto's `section`), which
   // for a picture is exactly the `![alt](src)` line the old image-fold used to append by hand.
-  const mergeDrag = !!drag && !!drag.alt && drag.selRoots.length > 0
+  const fuseDrag = !!drag && drag.selRoots.length > 0
     && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
+  const mergeDrag = fuseDrag && !!drag?.alt;
   let target: string | null = null;
   let mode: 'child' | 'sibling' | 'reorder' = 'child';
   let after: string | null | undefined = undefined;   // insertion anchor (sibling/reorder)
@@ -970,17 +971,23 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
         ({ afterId: after, line } = flowReorderTarget(pf, dragged));
       }
     } else {
-      // Centre zone + hovered card has a parent -> sibling drop: adopt hovered's parent. Where the
-      // card then LANDS is the parent's business — an outlining card slots it as a row (previewed by
-      // the stack branch above, which owns the insertion bar), a free frame leaves it where dropped.
-      if (hoveredCenter && hoveredNode.parent) {
-        const sibParent = hoveredNode.parent;
-        if (sibParent !== dragged.id && !sub.has(sibParent)) { target = hovered; mode = 'sibling'; }
+      // ---- CARD ONTO CARD: the CENTRE means INTO it, the EDGE means BESIDE it ----
+      // Dropping a card in the middle of another folds its note in as a SECTION of that one — the
+      // same merge ⌥ carries above, now what the plain gesture means. It used to make the dragged
+      // card a CHILD, i.e. turn the card you aimed at into an outliner, which was a second and
+      // parallel way of saying the very thing a section says: this belongs inside that. One of them
+      // had to go, and the section is the one that round-trips — features/section-drag.ts drags it
+      // straight back out again. Card-in-card containment is still REACHABLE (Tab, "Add child",
+      // ⌘⇧E, and every map that already has one still renders it); it just isn't what aiming one
+      // card at another means any more.
+      // The sibling drop keeps its partner half of the card and moves out to the RIM, where "next
+      // to it" is the obvious reading. Where it then LANDS stays the parent's business — an
+      // outlining card slots it as a row, a free frame leaves it where it was dropped.
+      if (hoveredCenter && fuseDrag && canMerge(hoveredNode)) {
+        fuseTarget = hovered;
+      } else if (hoveredNode.parent && hoveredNode.parent !== dragged.id && !sub.has(hoveredNode.parent)) {
+        target = hovered; mode = 'sibling';
       }
-      // Edge zone (or no valid sibling target) -> child-of-hovered. Image/annotation are leaves —
-      // they never adopt children, so they're not valid child-drop targets (sibling-mode above
-      // still is).
-      if (!target && !isLeafType(hoveredNode)) target = hovered;
     }
   }
   // An inheriting card's colour depends on its parent chain (effectiveColor), and while poised
@@ -1006,8 +1013,8 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     if (line) showInsertLine(line);
     else showLandingGhost(t.x + frameLabelW(t) + TAB_GAP, tabBandRect(t).y, frameLabelW(dragged), FRAME_TAB_H);
   } else if (fuseTarget) {
-    // Alt-dragging image card(s) — or plain cards — over a plain card: a dashed outline on the target
-    // is the whole affordance for both, since neither is a reparent (`target` stayed null), so
+    // Poised to fold into a plain card — the centre of it, or anywhere on it with ⌥: a dashed outline
+    // on the target is the whole affordance, since this is no reparent (`target` stayed null), so
     // there's no landing ghost or insertion bar to draw.
     state.nodes.get(fuseTarget)!.el?.classList.add('drop-merge');
     hideLandingGhost();

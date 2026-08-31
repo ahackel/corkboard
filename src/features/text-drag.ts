@@ -33,8 +33,10 @@ let pending: TextSource | null = null;
 // Where a release right now would put the text. `null` = not a drop we handle (anywhere on the card
 // it came FROM, or over something locked), which leaves the browser its native behaviour — dragging
 // the selection back into its own note must stay a plain in-textarea move.
-type Dest = { into: MindNode } | { container: MindNode | null };
-function destAt(t: EventTarget | null, sourceId: string): Dest | null {
+// Exported for features/section-drag.ts, which drags a paragraph out by its grip: the two gestures
+// differ only in how they PICK the text, so what a landing means has to be one piece of code.
+export type TextDest = { into: MindNode } | { container: MindNode | null };
+export function textDestAt(t: EventTarget | null, sourceId: string): TextDest | null {
   const el = t instanceof Element ? t : null;
   // A card's own element is what a drop hits: .frame-content is pointer-events:none, so the empty
   // interior of a frame resolves to the FRAME, and a card inside it to that card.
@@ -61,7 +63,7 @@ function setHint(el: Element | null, cls = ''): void {
   hintEl = el; hintCls = cls;
   if (hintEl && hintCls) hintEl.classList.add(hintCls);
 }
-function showHint(dest: Dest | null): void {
+export function showTextDropHint(dest: TextDest | null): void {
   if (!dest) { setHint(null); return; }
   if ('into' in dest) setHint(dest.into.el ?? null, 'drop-merge');
   else setHint(dest.container?.el ?? null, 'drop-target');
@@ -88,7 +90,7 @@ export function cardTextDrag(target: EventTarget | null): TextSource | null {
   if (!be || be.ta.selectionStart === be.ta.selectionEnd) return null;
   const n = state.nodes.get(be.id);
   if (!n || !n.el || isLockedEffective(n) || !n.el.contains(target)) return null;
-  return { id: be.id, start: be.ta.selectionStart, end: be.ta.selectionEnd };
+  return { id: be.id, start: be.ta.selectionStart, end: be.ta.selectionEnd, editor: true };
 }
 
 // What rides the cursor: a CARD, not the browser's snapshot of the dragged text. The gesture's whole
@@ -135,8 +137,8 @@ document.addEventListener('dragstart', (e) => {
 });
 document.addEventListener('dragover', (e) => {
   if (!pending) return;
-  const dest = destAt(e.target, pending.id);
-  showHint(dest);
+  const dest = textDestAt(e.target, pending.id);
+  showTextDropHint(dest);
   if (!dest) return;              // no preventDefault → the browser keeps the drop (or refuses it)
   e.preventDefault();
   if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
@@ -145,7 +147,7 @@ document.addEventListener('drop', (e) => {
   const p = pending;
   if (!p) return;
   pending = null;
-  const dest = destAt(e.target, p.id);
+  const dest = textDestAt(e.target, p.id);
   setHint(null);
   if (!dest) return;
   e.preventDefault();

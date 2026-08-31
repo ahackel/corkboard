@@ -10,7 +10,7 @@ import { applyLayouts, insertedKidOrder, isTabsFrame, isDockedTab, canBeTab, tab
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure, cardMarkdown } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { gcJunctions, scheduleSaveBoard } from '../data/board.js';
@@ -295,9 +295,17 @@ const nodeOrNull = (id: string | null | undefined): MindNode | null =>
 // at dragstart; the offsets are into that editor's live text, which is why the drop re-reads it rather
 // than trusting n.title/n.body). It used to carry a `part: 'title' | 'body'` too, with a contenteditable
 // measured by Range on one side and a textarea's selectionStart on the other — one field, one arm.
-export interface TextSource { id: string; start: number; end: number }
+// `editor: true` says the offsets are into an OPEN in-place editor, so the drop must refuse once that
+// editor is gone (features/text-drag.ts drags a live selection, and the text behind it may have moved
+// on). Without it they are offsets into the note AS RENDERED — the reading features/section-drag.ts
+// needs, since dragging a paragraph by its grip opens no editor at all. Both are the same string while
+// an editor is open: startCardEdit seeds the textarea from cardMarkdown.
+export interface TextSource { id: string; start: number; end: number; editor?: boolean }
 function liveText(src: TextSource): string | null {
-  return ui.bodyEdit && ui.bodyEdit.id === src.id ? ui.bodyEdit.ta.value : null;
+  if (ui.bodyEdit && ui.bodyEdit.id === src.id) return ui.bodyEdit.ta.value;
+  if (src.editor) return null;                     // the gesture outlived the editor it was reading
+  const n = state.nodes.get(src.id);
+  return n ? cardMarkdown(n) : null;
 }
 // The text under the drag, read live — `null` once that editor is no longer open on that card, which
 // is also the drop's own "did this drag outlive its editor" test. Exported for the drag PREVIEW, so

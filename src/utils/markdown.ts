@@ -246,3 +246,84 @@ export function renderBodyHTML(md: string | null | undefined): string {
   }
   return html;
 }
+
+// ---------- the same walk, returning SOURCE RANGES instead of HTML ----------
+// One entry per top-level block renderBodyHTML emits an element for, in the same order: a heading, a
+// paragraph, a whole list, a table, a fenced block, a blockquote, a rule. So `blocks(md)[k]` is the
+// source behind `container.children[k]` — which is what lets features/section-drag.ts put a grip on a
+// paragraph and know which lines to move. A text RUN is split into paragraphs here exactly as
+// flushPara splits it there (one entry per group of non-blank lines, blank-only runs emitting
+// nothing), because that arm is the one place a block does not map to a single line span.
+//
+// It MIRRORS the loop above and must keep mirroring it — same regexes, same helpers, same order —
+// which is why it lives here rather than in a module of its own. Its callers check the count against
+// the rendered children and stand down when the two disagree, so a drift shows up as a missing grip
+// rather than as a paragraph moved to the wrong place.
+export interface Block { start: number; end: number }   // line indices into the TRIMMED source, [start, end)
+
+export function blocks(md: string | null | undefined): Block[] {
+  const src = (md || '').replace(/\r\n?/g, '\n').trim();
+  if (!src) return [];
+  const lines = src.split('\n');
+  const out: Block[] = [];
+  const BLOCK = /^(#{1,6}\s|```|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
+  let i = 0;
+  while (i < lines.length){
+    const start = i;
+    if (/^```/.test(lines[i])){                                 // fenced code block
+      i++;
+      while (i < lines.length && !/^```/.test(lines[i])) i++;
+      i++;                                                      // closing fence (may run off the end)
+      out.push({ start, end: Math.min(i, lines.length) }); continue;
+    }
+    if (/^(#{1,6})\s+(.*)$/.test(lines[i])){ out.push({ start, end: ++i }); continue; }        // heading
+    if (/^\s*(?:[-*_]\s*){3,}$/.test(lines[i])){ out.push({ start, end: ++i }); continue; }    // rule
+    const cols = tableAt(lines, i);
+    if (cols){ i = renderTable(lines, i, cols).next; out.push({ start, end: i }); continue; }  // table
+    if (/^\s*>/.test(lines[i])){                                // blockquote
+      while (i < lines.length && /^\s*>/.test(lines[i])) i++;
+      out.push({ start, end: i }); continue;
+    }
+    if (/^\s*[-*+]\s+/.test(lines[i])){                         // unordered list
+      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) i++;
+      out.push({ start, end: i }); continue;
+    }
+    if (/^\s*\d+\.\s+/.test(lines[i])){                         // ordered list
+      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) i++;
+      out.push({ start, end: i }); continue;
+    }
+    // text run → one entry per PARAGRAPH (see flushPara above)
+    const runStart = i;
+    while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) i++;
+    let p = -1;
+    for (let j = runStart; j < i; j++){
+      if (lines[j].trim()){ if (p < 0) p = j; }
+      else if (p >= 0){ out.push({ start: p, end: j }); p = -1; }
+    }
+    if (p >= 0) out.push({ start: p, end: i });
+  }
+  return out;
+}
+
+// Move the `from`-th block so that it sits before the `to`-th (`to === blocks.length` puts it last),
+// leaving every other line BYTE-IDENTICAL — the order is the file's own text, so a reorder must read
+// back as a reorder and not as a reformat. The blank line between two blocks travels with the block
+// above it (below it, for the last one), which is what keeps the gaps from doubling up at the cut and
+// vanishing at the paste.
+export function moveBlock(text: string, from: number, to: number): string {
+  const src = (text || '').replace(/\r\n?/g, '\n').trim();
+  const bs = blocks(src);
+  const b = bs[from];
+  if (!b || to === from || to === from + 1 || to < 0 || to > bs.length) return text;
+  const lines = src.split('\n');
+  const moved = lines.slice(b.start, b.end);
+  const last = from === bs.length - 1;
+  let cutS = b.start, cutE = b.end;
+  if (last) { while (cutS > 0 && !lines[cutS - 1].trim()) cutS--; }
+  else      { while (cutE < lines.length && !lines[cutE].trim()) cutE++; }
+  const rest = [...lines.slice(0, cutS), ...lines.slice(cutE)];
+  if (to >= bs.length) { rest.push('', ...moved); return rest.join('\n').trim(); }
+  const anchor = bs[to].start;
+  rest.splice(anchor >= cutE ? anchor - (cutE - cutS) : anchor, 0, ...moved, '');
+  return rest.join('\n').trim();
+}

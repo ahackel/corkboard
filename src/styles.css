@@ -1341,6 +1341,29 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node { --text-drop:2px; }
 .node .body > :first-child { margin-top:var(--text-drop); }
 .node .body > :last-child { margin-bottom:0; }
+
+/* ---------- section grips: reordering a card's blocks (features/section-drag.ts) ---------- */
+/* An OVERLAY, not content. Wrapping each block in an element of its own would be the obvious way to
+   hang a grip on it — but the two rules directly above, and .node.done/.collapsed/.image-card's
+   beside them, all reach for DIRECT children of .body: the card's whole vertical rhythm is built on
+   that child list staying flat. So the grips are absolutely positioned over the body instead, and
+   NO gutter is reserved for them — a margin would re-wrap the text and change the card's measured
+   height the instant it was selected, so every card would visibly reflow on click. They sit in the
+   --pad-x column the note already leaves empty on the left. */
+.sec-layer { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.sec-grip  { position:absolute; left:3px; width:5px; border-radius:3px;
+             pointer-events:auto; cursor:grab; touch-action:none;
+             background:color-mix(in srgb, var(--ink) 30%, transparent);
+             opacity:.45; transition:opacity .12s, background .12s; }
+.sec-grip:hover, .sec-grip.dragging { opacity:1; background:var(--node-sel); }
+.sec-grip.dragging { cursor:grabbing; }
+/* Where the release would put it. The other sections stay put while one is dragged — on a card this
+   small, a list that reflows under the cursor is harder to read than a line that says where it lands. */
+.sec-line  { position:absolute; left:var(--pad-x); right:var(--pad-x); height:2px; border-radius:1px;
+             background:var(--node-sel); display:none; }
+.node .body > .sec-lift { opacity:.7; position:relative; z-index:6; pointer-events:none; }
+body.sec-dragging { cursor:grabbing; }
+body.sec-dragging .node { user-select:none; }
 /* A card is ONE text field, so while its editor is open the rendered title row stands down: the name is
    the `# ` line inside the textarea, and showing it in both places would read as two fields (and let
    them disagree mid-edit). The row — not just the label — because its checkbox and fold chip aren't
