@@ -140,6 +140,12 @@ body.light .c-none { --scrim:rgba(255,255,255,.62); }
 
 * { box-sizing: border-box; }
 html, body { margin:0; height:100%; overflow:hidden;
+  /* Only #stage cancels the wheel (features/gestures.ts), so a two-finger trackpad swipe that
+     starts on the toolbar or any floating bar falls through to the browser — and since selecting a
+     card PUSHES a history entry (nav/url-state.ts) there is by then a stack to walk, so Chrome
+     reads the gesture as back/forward. Stopped at the root scroller, where an uncancelled
+     horizontal overscroll ends up once nothing between here and the cursor scrolls. */
+  overscroll-behavior-x:none;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--bg); color: var(--text);
   user-select:none; -webkit-user-select:none;
@@ -2169,19 +2175,19 @@ body.wiki #ghostCard, body.wiki #ghostHint { display:none !important; }
   color:var(--muted); font:inherit; font-size:13px; line-height:1.35; border-radius:var(--r-inner);
   cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wk-row:hover { background:var(--bg); color:var(--text); }
-.wk-row.inpage { color:var(--text); }                      /* part of the document you're reading */
-.wk-row.page { font-weight:650; }                          /* …and the card the page IS */
-.wk-row.here { color:var(--accent); box-shadow:inset 2px 0 0 var(--accent); }   /* the section on screen */
+.wk-row.page { font-weight:650; color:var(--text); }       /* the page you're reading */
 
 /* the document */
 .wk-doc { flex:1; min-width:0; overflow:hidden auto; -webkit-overflow-scrolling:touch;
+  /* …and contained here too: hitting the top or bottom of a page must not chain the scroll out to
+     the root, where it would become the same browser navigation the rule above just stopped. */
+  overscroll-behavior:contain;
   padding-top:calc(56px + var(--sa-t)); }
-/* The reading column. The tail padding is a WHOLE viewport, not a fraction of one: it is what lets
-   the LAST section scroll to the top of the pane, and anything less leaves the end of a short
-   document unreachable — the contents list would jump to it and land at the scroll limit instead,
-   with the highlight stuck on the section above. */
+/* The reading column. The tail padding was a WHOLE viewport while a page was a stack of sections
+   the contents list scrolled between; a page is ONE note now and nothing scrolls to a section, so
+   it is back to breathing room under the last line. */
 .wk-page { max-width:70ch; margin:0 auto;
-  padding:0 calc(32px + var(--sa-r)) calc(100vh + var(--sa-b)) calc(32px + var(--sa-l)); }
+  padding:0 calc(32px + var(--sa-r)) calc(96px + var(--sa-b)) calc(32px + var(--sa-l)); }
 .wk-empty { padding:80px 32px; text-align:center; color:var(--muted); }
 
 /* the ancestor trail above the page — the way back OUT to a wider document */
@@ -2191,8 +2197,8 @@ body.wiki #ghostCard, body.wiki #ghostHint { display:none !important; }
   font:inherit; font-size:12px; cursor:pointer; border-radius:4px; }
 .wk-up-crumb:hover { color:var(--accent); }
 
-/* A section's OWN heading (.wk-h) — clickable, it hands the card back to the canvas. Headings
-   INSIDE a note's markdown carry no .wk-h and stay inert, which is why the class exists. */
+/* The page's OWN heading (.wk-h) — it carries the ↗ back to the canvas. Headings INSIDE a note's
+   markdown carry no .wk-h and stay inert, which is why the class exists. */
 .wk-sec { scroll-margin-top:12px; }
 .wk-h { cursor:pointer; margin:1.6em 0 .5em; line-height:1.25; font-weight:650; }
 .wk-sec:first-of-type > .wk-h { margin-top:0; }
@@ -2222,6 +2228,10 @@ h4.wk-h { font-size:17px; }  h5.wk-h, h6.wk-h { font-size:15px; color:var(--mute
 .wk-body th, .wk-body td { border:1px solid var(--grid); padding:5px 9px; text-align:left; }
 .wk-body a.lk { color:var(--accent); }
 .wk-body a.wikilink { cursor:pointer; text-decoration:underline; text-decoration-style:dotted; }
+/* …and one whose page isn't written yet (markWikilinks). Muted and dashed rather than MediaWiki red:
+   an unwritten link here is a note to self, not a hole in the record — clicking it writes the page. */
+.wk-body a.wikilink.missing { color:var(--muted); text-decoration-style:dashed; }
+.wk-body a.wikilink.missing:hover { color:var(--accent); }
 
 /* ↗ — "show this card on the canvas". Lives INSIDE the heading rather than being the heading: with
    double-click editing text, a plain click on a title must not fling you out of the page. Revealed
@@ -2242,9 +2252,29 @@ h4.wk-h { font-size:17px; }  h5.wk-h, h6.wk-h { font-size:15px; color:var(--mute
   font:inherit; font-size:15.5px; line-height:1.6; tab-size:2; white-space:pre-wrap; }
 .wk-sec:first-of-type > .wk-edit { margin-top:0; }
 
+/* A page's ITEMS: a card's children, set as the nested list they already are on the canvas
+   (features/wiki.ts itemList). Not a link and not a card — this is the page's own content, so it
+   reads as prose and only its `.wk-item-name` carries the weight of a name. */
+.wk-items { margin:0 0 1em; padding-left:1.4em; list-style:disc; }
+.wk-items .wk-items { margin-bottom:0; }
+.wk-item { margin:.35em 0; font-size:16.5px; line-height:1.7; }
+.wk-item-name { font-weight:600; }
+/* the note under the line, tighter than a page's body: it is a line's aside, not a section */
+.wk-item-body { margin:.15em 0 .4em; font-size:15.5px; }
+.wk-item-body > :last-child { margin-bottom:0; }
+/* a checklist row (the parent has mm_checklist) — the box replaces the bullet, as on the canvas */
+.wk-item.checkitem { list-style:none; margin-left:-1.4em; padding-left:1.4em; position:relative; }
+.wk-item-box { position:absolute; left:0; top:.45em; margin:0; }
+.wk-item.done > .wk-item-name { color:var(--muted); text-decoration:line-through; }
+/* editing an item in place: the same one field, sized to sit in the list rather than open a page */
+.wk-item > .wk-edit { margin:.2em 0; min-height:4em; font-size:15px; }
+
 /* A SUB-PAGE inside its parent: a card you click, never its content (features/wiki.ts sectionsOf).
    Name, an excerpt off the note's first line, and how much is under it — the listing every wiki
    shows here (Confluence's Children Display, Notion's sub-page line, Docusaurus's DocCardList). */
+/* a page's list of sub-pages — where an `Index` card sits, or the whole body of an empty container */
+.wk-index { margin:1.1em 0; display:flex; flex-direction:column; gap:8px; }
+.wk-index .wk-sub { margin:0; }
 .wk-sub { display:block; width:100%; text-align:left; margin:1.1em 0; padding:12px 14px;
   background:var(--panel); border:1px solid var(--grid); border-radius:10px;
   color:var(--text); font:inherit; cursor:pointer; transition:border-color .12s ease; }
@@ -2255,19 +2285,6 @@ h4.wk-h { font-size:17px; }  h5.wk-h, h6.wk-h { font-size:15px; color:var(--mute
 .wk-sub-ex { display:block; margin-top:3px; color:var(--muted); font-size:14px; line-height:1.5;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wk-sub-meta { display:block; margin-top:6px; color:var(--muted); font-size:12px; opacity:.8; }
-
-/* "Make a page" — split this section off. Spelled out rather than glyphed: it is rare, it changes
-   the card's KIND on the board, and it should say so. Hover-revealed like ↗ beside it. */
-.wk-mkpage { margin-left:.5em; padding:1px 7px; border:1px solid var(--grid); border-radius:var(--r-full);
-  background:none; color:var(--muted); font:inherit; font-size:11px; font-weight:500;
-  vertical-align:middle; cursor:pointer; opacity:0; transition:opacity .12s ease; }
-.wk-sec:hover .wk-mkpage, .wk-mkpage:focus-visible { opacity:1; }
-.wk-mkpage:hover { color:var(--accent); border-color:var(--accent); }
-@media (pointer: coarse) { .wk-mkpage { opacity:.45; } }
-
-/* the contents list holds two kinds of row: PAGES (the tree) and, under the one you're reading, its
-   own SECTIONS — lighter, so the page tree still reads as the structure */
-.wk-row-sec { font-size:12.5px; opacity:.9; }
 
 /* Below the app's narrow breakpoint the contents list is dropped rather than squeezed — a 260px
    column and a readable measure don't both fit on a phone, and the trail + wikilinks still navigate. */

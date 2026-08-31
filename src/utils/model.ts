@@ -167,3 +167,23 @@ export function resolveWikilink(name: string): MindNode[] {
   });
   return byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
 }
+
+// Does a name resolve AT ALL? The same two-step rule, answered off an index instead of a scan: a
+// page may hold dozens of links and each one asking `resolveWikilink` would walk (and copy) the whole
+// map. Built lazily and dropped whenever bodies are re-rendered — see resetWikilinkIndex's callers.
+let linkNames: Set<string> | null = null;
+export function resetWikilinkIndex(): void { linkNames = null; }
+export function wikilinkResolves(name: string): boolean {
+  const t = name.trim().toLowerCase();
+  if (!t) return false;
+  if (!linkNames) {
+    linkNames = new Set<string>();
+    for (const n of state.nodes.values()) {
+      const f = (n.file ?? '').toLowerCase();
+      if (f) { linkNames.add(f); if (f.endsWith('.md')) linkNames.add(f.slice(0, -3)); }
+      const ti = n.title.trim().toLowerCase();
+      if (ti) linkNames.add(ti);
+    }
+  }
+  return linkNames.has(t);
+}

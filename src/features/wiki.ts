@@ -5,33 +5,53 @@
 // the W key; the choice persists per device in outline.ts's VIEW_KEY, which the two alternative
 // views share so they can't disagree about which one is on.
 //
-// ONE rule decides what a page is: A PAGE IS A NODE, AND ITS BODY IS THAT NODE'S WHOLE SUBTREE
-// FLATTENED INTO A DOCUMENT. Heading level follows depth (page root → h1, its children → h2, …
-// capped at h6), and section order is exactly the canvas order (rootsInOrder / orderedKids) — which
-// is the point of the view: drag a card up its parent's stack and the section moves up the document.
+// ONE question decides what a page is, and it is asked of the PARENT: does it hold PAGES or ITEMS?
 //
-// The view stays deliberately NARROW — it has four interactions and no more, so most of the app
-// still has nothing to say about it:
-//   · DOUBLE-CLICK a section to edit it, in place, as raw markdown. One textarea holding the whole
+//        a FRAME holds PAGES              ·              a CARD holds ITEMS
+//
+// A page is its own note plus its ITEMS — the lines of it — and it ENDS at the next frame, whose
+// children are pages of their own. Child order is the canvas order (rootsInOrder / orderedKids), so
+// dragging a card up its parent's stack moves the line up the page, and dragging a card up a frame
+// moves the page up the tree. See holdsPages/pageOf below for why this is scaffolding.
+//
+// That is the third answer this view has given, and it is the two earlier ones' halves. The FIRST
+// flattened a whole subtree into one document and gave every child a heading, which says every name
+// twice — once in the contents tree, once as a heading with nothing under it — and made a frame the
+// only way to say "sub-page", so a parent page had to be a box that can't hold prose. The SECOND
+// made every node a page, which is right for a map of notes and absurd for a card holding a
+// checklist: eleven contents rows for one day, each openable as a document of its own.
+//
+// Containment on the canvas means "is inside", and a wiki reads that two ways depending on what is
+// doing the containing: a card with children is an OUTLINE (view/layout.ts isStack) and its rows are
+// its lines, a frame is a SPACE you go inside (nav/scope.ts) and a space of notes is a branch of the
+// tree. Neither inlines a child PAGE — no wiki does (Confluence's page tree, Notion's sub-pages,
+// MediaWiki's `/`, BookStack's book/chapter/page) — and neither hides an ITEM behind a link.
+//
+// The view stays deliberately NARROW — four interactions and one naming convention, so most of the
+// app still has nothing to say about it:
+//   · DOUBLE-CLICK the page to edit its note, in place, as raw markdown. One textarea holding the whole
 //     note — its `# ` heading line and its body together — because that is what the note IS on disk
 //     (utils/frontmatter.ts joinHeading/splitHeading), exactly as the in-card editor holds it.
 //   · A [[wikilink]] navigates within the document set — and one naming a card that DOESN'T EXIST
-//     creates it, as a child of the section the link was written in, then opens it for editing. That
-//     is how a wiki grows, and it means writing a link is enough to grow the outline too.
+//     creates it, BESIDE the page the link was written in, then opens it for editing. That is how a
+//     wiki grows, and it means writing a link is enough to grow the tree too. Such a link is drawn
+//     as UNWRITTEN before you click it (markWikilinks) — MediaWiki's red link.
 //   · The ↗ button in a heading hands that card back to the canvas, selected — read here, rearrange
 //     there. It is a button rather than the heading itself so a stray click can't teleport you off
 //     the page you're reading, now that clicking into text means editing it.
 //   · The contents list and the crumb trail move between pages.
+//   · A page named `Index` (or Home / README / Contents) renders the LISTING of its sub-pages, and
+//     a root so named is where the view opens — the map's front page.
 // Everything else — creating cards, deleting, colours, layout — stays on the canvas.
 //
-// Two things a card shows that a document shouldn't: a collapsed subtree is still READ here
-// (mm_collapsed is a canvas fold, and a section vanishing from a document because it happens to be
-// folded on the board would be a surprise), and annotations + query cards are skipped entirely —
+// Two things a card shows that a document shouldn't: a collapsed subtree is still reachable HERE
+// (mm_collapsed is a canvas fold, and a page vanishing from the contents tree because it happens to
+// be folded on the board would be a surprise), and annotations + query cards are skipped entirely —
 // the first is canvas furniture pinned over its parent, the second a live search widget, and
 // neither is prose.
-import { state, setStatus, isAnnotation, isQueryCard, isLeafType, type MindNode } from '../core/state.js';
+import { state, setStatus, isAnnotation, isQueryCard, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
-import { nodeLabel, childrenOf, ancestors, isLockedEffective, descendantCount, rootsInOrder, resolveWikilink } from '../utils/model.js';
+import { nodeLabel, childrenOf, parentOf, ancestors, isLockedEffective, rootsInOrder, resolveWikilink, wikilinkResolves, resetWikilinkIndex } from '../utils/model.js';
 import { orderedKids } from '../view/layout.js';
 import { renderBodyHTML } from '../utils/markdown.js';
 import { joinHeading, splitHeading } from '../utils/frontmatter.js';
@@ -40,7 +60,6 @@ import { scheduleUrlSync, syncUrl, updateDocumentTitle } from '../nav/url-state.
 import { scheduleSave } from '../data/persistence.js';
 import { hydrateImages } from './images.js';
 import { createNode } from './crud.js';
-import { setTypeOn } from './float-bar.js';
 import { pasteUrlLink } from './inline-edit.js';
 import { touch, commitStep } from './history.js';
 import { outlineActive, setOutline, beforeOutlineOn, VIEW_KEY } from './outline.js';
@@ -91,47 +110,25 @@ if (wantWiki() && !document.body.classList.contains('outline')) {
 }
 
 // ---- which page ----
-// Where the view opens: the frame you have open if you're inside one, else the ROOT of whatever is
-// selected (its whole document, not the paragraph you happened to click), else the first root.
+// Where the view opens: the frame you have open if you're inside one, else whatever is selected —
+// through pageOf either way, since a selected checklist item is a LINE of a page rather than one —
+// else the map's front page, else the first root.
 function defaultPage(): string | null {
   const open = scopeRootNode();
-  if (open) return open.id;
+  if (open) return pageOf(open).id;
   const sel = state.selId ? state.nodes.get(state.selId) : null;
-  if (sel) return pageHolding(sel).id;
-  return rootsInOrder()[0]?.id ?? null;
+  if (sel) return pageOf(sel).id;
+  return (homeRoot() ?? rootsInOrder()[0])?.id ?? null;
 }
-// The page a node BELONGS to: itself if it is one, else the nearest sub-page above it, else its
-// root. Not the outermost root any more — with frames as boundaries, that would open the whole map's
-// top document instead of the one the card is actually written in.
-function pageHolding(n: MindNode): MindNode {
-  if (isSubPage(n)) return n;
-  let top = n;
-  for (const a of ancestors(n)) { if (isSubPage(a)) return a; top = a; }
-  return top;
-}
-// Is `id` part of the document currently on screen? Decides the ONE navigation rule shared by the
-// contents list and by wikilinks: something inside this page SCROLLS, anything else BECOMES the page.
-// "Inside" stops at the first sub-page: a node under a nested frame is a descendant of this page's
-// root but belongs to a page of its own, and scrolling to a section that isn't rendered would do
-// nothing at all.
-function inPage(id: string): boolean {
-  if (!pageId) return false;
-  if (id === pageId) return true;
-  const n = state.nodes.get(id);
-  if (!n) return false;
-  // A sub-page belongs to ITSELF, not to the document that links to it — it renders in its parent as
-  // a card, never as a section, so "scroll to it here" has nothing to scroll to.
-  if (isSubPage(n)) return false;
-  for (const p of ancestors(n)) {
-    if (p.id === pageId) return true;
-    if (isSubPage(p)) return false;   // crossed into a nested page on the way up
-  }
-  return false;
-}
+// Navigation is ONE rule: a contents row, a crumb and a [[wikilink]] all open the PAGE of what they
+// name (pageOf), so a link pointing at a card's item lands on the page that item is a line of rather
+// than on nothing. Nothing scrolls to a section — a page's items are on it, not elsewhere.
 function goTo(id: string): void {
-  if (!state.nodes.has(id)) return;
-  if (inPage(id)) { scrollToSection(id); return; }
-  pageId = id;
+  const target = state.nodes.get(id);
+  if (!target) return;
+  const page = pageOf(target);
+  if (page.id === pageId) return;
+  pageId = page.id;
   renderWiki();
   docEl.scrollTop = 0;
   // A page change is a NAVIGATION — the same kind of step selecting a card is on the canvas — so it
@@ -152,110 +149,132 @@ export function wikiPageNode(): MindNode | null {
 // inside its own re-entrancy guard, and a push here would bury the entry being restored.
 export function showWikiPage(file: string): void {
   const target = [...state.nodes.values()].find(n => n.file === file);
-  if (!target || target.id === pageId) return;
-  pageId = target.id;
+  if (!target) return;
+  const page = pageOf(target);   // a hash naming an item restores the page it is a line of
+  if (page.id === pageId) return;
+  pageId = page.id;
   renderWiki();
   docEl.scrollTop = 0;
   updateDocumentTitle();   // the tab names the page, and a restored one is still a page change
 }
 
 // ---- where a page ENDS ----
-// Containment does two jobs in this app — "is a section of" and "is a sub-page of" — and a document
-// needs them told apart, or every descendant pours into one endless page. Every wiki draws that line
-// explicitly (Confluence's page tree, Notion's sub-page BLOCK, MediaWiki's `/`, BookStack's
-// book/chapter/page); none of them infers it from depth, and none of them inlines a child page.
+// At the next FRAME. Asked of the parent, as above: a frame holds pages, a card holds items — and a
+// page's whole ancestry must hold pages, so the page tree is a PREFIX of the map's tree. The moment
+// a card appears in the chain, everything below it is that card's own content, however deep.
 //
-// The line here is the KIND, because the canvas already draws it there: `canOpen` is frame-only and
-// an open frame IS the canvas (nav/scope.ts), while "a card with children IS the outliner". So:
+// This is SCAFFOLDING, and it is written to be DELETED. It exists because containment currently
+// does two jobs — "is a line of" and "is a page under" — and this is the first view that has to
+// tell them apart. If the line-of job moves into the note's own text (a bullet list where child
+// cards are now), every child is a page again and these three functions simply go away. Nothing
+// here reaches disk: no `mm_*` key, no board.json entry, nothing to migrate back.
 //
-//     a FRAME is a sub-PAGE          ·          a CARD with children is SECTIONS
+// Keyed on the RAW `type`, never view/layout.ts's isFrame: that one answers a RENDERING question (a
+// collapsed frame is not a frame, a frame inside a stack is a row), and this view reads through
+// both — a page dropping out of the contents tree because its box happens to be folded on the board
+// would be exactly the surprise that keeping collapsed subtrees readable here already avoids.
+function holdsPages(n: MindNode): boolean { return n.type === 'frame'; }
+// The page a node is READ ON: itself when it is one, else the nearest ancestor that is. Every
+// navigation goes through this, and it always answers — a root holds whatever it likes and is a page
+// regardless, so the walk terminates. Annotations and query cards stop it too: canvas furniture and
+// a live search widget are not prose, so a link landing on one reads its parent's page instead.
+function pageOf(n: MindNode): MindNode {
+  const chain = [n, ...ancestors(n)];            // near → far; the last is a root, always a page
+  let page = chain[chain.length - 1];
+  for (let i = chain.length - 2; i >= 0; i--) {
+    const kid = chain[i];
+    if (!holdsPages(chain[i + 1]) || isAnnotation(kid) || isQueryCard(kid)) break;
+    page = kid;
+  }
+  return page;
+}
 //
-// which costs no new `mm_*` key and means the wiki's page tree and the canvas's frame tree are the
-// same tree — opening a frame on the board and opening a page in here are one gesture.
-export function isSubPage(n: MindNode): boolean { return n.type === 'frame'; }
+// ---- an INDEX, by name ----
+// A page shows its children as a LISTING only where it asks for one, because they are already rows
+// in the contents tree beside it and printing them again says everything twice. The ask is the
+// page's NAME — no new `mm_*` key, and no new gesture: you title a note `# Index`.
+//
+// Naming a FILE and naming a CARD are the same act here — the slug is re-derived from the leading
+// `# ` line on every save — so a card titled “Index” IS `index.md`, and the convention every folder
+// of Markdown already uses lands without a second spelling of it.
+const INDEX_NAMES = new Set(['index', 'home', 'readme', 'contents', 'table of contents']);
+export function isIndexNamed(n: MindNode): boolean { return INDEX_NAMES.has(n.title.trim().toLowerCase()); }
+// The map's HOME: a root so named is where the view opens and where the contents tree starts. It is
+// the one thing the map couldn't say before — with several roots, `first root` is an accident of
+// where they sit on the board.
+function homeRoot(): MindNode | null { return rootsInOrder().find(isIndexNamed) ?? null; }
+// Roots for the contents tree, home first. Everything else keeps canvas order.
+function pagesInOrder(): MindNode[] {
+  const roots = rootsInOrder();
+  const home = roots.find(isIndexNamed);
+  return home ? [home, ...roots.filter(r => r !== home)] : roots;
+}
+// Does this index write its OWN list? A body carrying links IS the listing its author wanted, and
+// generating a second one under it would be the duplication this whole rule exists to remove.
+function listsItself(n: MindNode): boolean {
+  return /\[\[[^\]]+\]\]|\[[^\]]*\]\([^)]+\)/.test(n.body);
+}
 
 // ---- the document ----
-// A section per node, in canvas order. `level` is the heading level it would use; a node with no
-// title of its own gets no heading at all (the app's UNTITLED card — see nodeLabel's contract), so
-// a card holding one paragraph reads as one paragraph rather than as a stub section with a made-up
-// name. Its children still nest under it, which is what makes breaking a note into paragraph cards
-// and dragging them around read as a document.
-//
-// A sub-page is a `link` entry instead: the walk STOPS there and renders a card you click, at the
-// position it holds in the order — so dragging still reorders what you see, and a page stays the
-// length its author chose. That a container page with no prose of its own then shows nothing but a
-// list of its children is Docusaurus's "generated index", falling out rather than special-cased.
-interface Section { n: MindNode; level: number; link?: boolean }
-function sectionsOf(root: MindNode): Section[] {
-  const out: Section[] = [];
-  const walk = (n: MindNode, depth: number): void => {
-    if (isAnnotation(n) || isQueryCard(n)) return;
-    // …the ROOT is always the page itself, however it's typed — a frame is a boundary for the
-    // document ABOVE it, never for its own.
-    if (depth > 0 && isSubPage(n)) { out.push({ n, level: Math.min(depth + 1, 6), link: true }); return; }
-    out.push({ n, level: Math.min(depth + 1, 6) });
-    for (const k of orderedKids(n, childrenOf(n.id))) walk(k, depth + 1);
-  };
-  walk(root, 0);
-  return out;
+// A node's children in canvas order, less the two kinds that are never prose — an annotation (canvas
+// furniture pinned over its parent) and a query card (a live search widget).
+function kidsOf(n: MindNode): MindNode[] {
+  return orderedKids(n, childrenOf(n.id)).filter(k => !isAnnotation(k) && !isQueryCard(k));
 }
+// …split by the one question above. Every child is one or the other and no child is both, which is
+// what keeps the contents tree and the page's own text from ever saying the same name twice.
+function childPages(n: MindNode): MindNode[] { return holdsPages(n) ? kidsOf(n) : []; }
+function childItems(n: MindNode): MindNode[] { return holdsPages(n) ? [] : kidsOf(n); }
+// A link to a page that doesn't exist yet is worth SEEING before you click it — every wiki says so,
+// and they say it two ways. MediaWiki (and DokuWiki, and Confluence's `+` link) paints it RED, an
+// error to be fixed, which suits an encyclopaedia where a red link is a gap in the record. The
+// personal-wiki lineage — Obsidian, Logseq, TiddlyWiki, Dendron — mutes it instead, because there an
+// unwritten link is a NOTE TO SELF, the normal way a map grows, and a page of red would read as a
+// page of mistakes. This is a personal map, so: muted, dashed, and a tooltip that says what the
+// click will do — which here is create the page, not fail.
+function markWikilinks(root: ParentNode): void {
+  for (const a of root.querySelectorAll<HTMLElement>('a.wikilink')) {
+    const name = (a.dataset.target ?? '').trim();
+    const missing = !wikilinkResolves(name);
+    a.classList.toggle('missing', missing);
+    a.title = missing ? `Create page “${name}”` : `Go to “${name}”`;
+  }
+}
+// Everything a rendered note needs once its HTML has landed: pictures resolved, unwritten links
+// marked, and every task box frozen — a reading surface writes nothing, so a `- [ ]` renders as it
+// stands and can't be ticked here. One spelling, since a page's body and each of its items' bodies
+// all want the same three.
+function dressBody(el: HTMLElement): void {
+  hydrateImages(el);
+  markWikilinks(el);
+  el.querySelectorAll<HTMLInputElement>('.taskbox').forEach(b => { b.disabled = true; });
+}
+// A NOTE in the DOM — the page's own `.wk-sec`, or one of its items' `.wk-item` rows. Both carry the
+// id of the file behind them and both are edited in place by the same one textarea, because both ARE
+// notes: an item is a card of the map that happens to read as a line here.
 function sectionEl(id: string): HTMLElement | null {
-  return docEl.querySelector<HTMLElement>(`.wk-sec[data-id="${CSS.escape(id)}"]`);
-}
-// Scroll a section to the top of the document pane. Measured off the two rects rather than
-// offsetTop: .wk-page isn't the scroll box's offset parent, so offsetTop would be relative to
-// #wiki and quietly off by the pane's own inset.
-function scrollToSection(id: string): void {
-  const el = sectionEl(id);
-  if (!el) return;
-  docEl.scrollTop += el.getBoundingClientRect().top - docEl.getBoundingClientRect().top - 12;
-  markHere();
+  return docEl.querySelector<HTMLElement>(`.wk-sec[data-id="${CSS.escape(id)}"], .wk-item[data-id="${CSS.escape(id)}"]`);
 }
 
 // ---- the contents list ----
-// The PAGE TREE — every page in the map — with the current page's own SECTIONS expanded beneath it.
-// That pairing is what a wiki sidebar is (Confluence's page tree, BookStack's book tree): the tree
-// tells you where you are among the documents, the sections tell you where you are within one, and
-// no other page's innards are along for the ride.
-//
-// A page is a root or a frame (isSubPage). Sections are the titled cards inside the current page,
-// found by the same walk the document uses, so the list and the prose can't disagree about what
-// this page contains.
-interface TocRow { n: MindNode; depth: number; section?: boolean }
+// The PAGE TREE — every page, at its own depth, home root first. That is what a wiki sidebar is
+// (Confluence's page tree, BookStack's book tree). It needs no filtering of its own: childPages
+// returns nothing for a card, so the walk stops at the first one and a day's eleven checklist items
+// contribute the ONE row their page does. Nothing to expand or collapse into it either — where you
+// are in the pages and where you are in the map are the same question.
+interface TocRow { n: MindNode; depth: number }
 function tocRows(): TocRow[] {
   const out: TocRow[] = [];
-  // the pages BELOW `n`, without crossing another page on the way down
-  const childPages = (n: MindNode): MindNode[] => {
-    const found: MindNode[] = [];
-    const dig = (m: MindNode): void => {
-      for (const k of orderedKids(m, childrenOf(m.id))) {
-        if (isAnnotation(k) || isQueryCard(k)) continue;
-        if (isSubPage(k)) found.push(k);
-        else dig(k);          // an ordinary section can still hold a sub-page under it
-      }
-    };
-    dig(n);
-    return found;
-  };
-  const walkPages = (n: MindNode, depth: number): void => {
-    if (isAnnotation(n) || isQueryCard(n)) return;
+  const walk = (n: MindNode, depth: number): void => {
     out.push({ n, depth });
-    // the page you're READING opens up to show its own sections, between it and its child pages
-    if (n.id === pageId) {
-      for (const { n: sec, level, link } of sectionsOf(n)) {
-        if (link || sec.id === n.id || !sec.title.trim()) continue;   // links are pages; the root is the row above
-        out.push({ n: sec, depth: depth + level - 1, section: true });
-      }
-    }
-    for (const c of childPages(n)) walkPages(c, depth + 1);
+    for (const c of childPages(n)) walk(c, depth + 1);
   };
-  for (const r of rootsInOrder()) walkPages(r, 0);
+  for (const r of pagesInOrder()) walk(r, 0);
   return out;
 }
 
-// A sub-page, as it appears INSIDE its parent: a link card carrying the name, an excerpt and how
-// much is under it — Notion's sub-page line and Docusaurus's DocCardList. Never the content: that is
-// the whole point of the boundary, and a listing is what every wiki shows here.
+// A child page, as it appears in a LISTING: a link card carrying the name, an excerpt and how much
+// is under it — Docusaurus's DocCardList. Never the content: that is the whole point of the boundary.
 function subPageCard(n: MindNode): HTMLElement {
   const card = document.createElement('button');
   card.type = 'button';
@@ -273,14 +292,85 @@ function subPageCard(n: MindNode): HTMLElement {
     ex.textContent = lead.replace(/^[#>\-*+\s]+/, '').slice(0, 140);
     card.append(ex);
   }
-  const count = descendantCount(n.id);
+  // how much is under it, counted in PAGES — descendantCount counts every node, which on a page
+  // holding a checklist would report its lines as though they were documents of their own.
+  const count = subPageCount(n);
   if (count) {
     const meta = document.createElement('span');
     meta.className = 'wk-sub-meta';
-    meta.textContent = `${count} card${count === 1 ? '' : 's'}`;
+    meta.textContent = `${count} page${count === 1 ? '' : 's'}`;
     card.append(meta);
   }
   return card;
+}
+function subPageCount(n: MindNode): number {
+  let c = 0; for (const k of childPages(n)) c += 1 + subPageCount(k); return c;
+}
+
+// The listing itself: the page's sub-pages, in canvas order. Rendered under an `Index` page, or as
+// the whole body of a page that says nothing of its own.
+function subPageList(page: MindNode): HTMLElement | null {
+  const subs = childPages(page);
+  if (!subs.length) return null;
+  const list = document.createElement('div');
+  list.className = 'wk-index';
+  for (const n of subs) list.append(subPageCard(n));
+  return list;
+}
+
+// ---- a page's ITEMS ----
+// A card's children are LINES of its page, and they render as one nested list — the outline the
+// canvas draws, set as prose. Never as headings: that was the first version of this view, and a
+// parent listing its children's titles said every name twice. A list says it once, and it is what
+// the thing already is on the board.
+//
+// Each row IS the note behind it: its title if it has one, its body under that, then its own items.
+// Where the parent runs a checklist (`mm_checklist`) the rows wear its done marks — the same
+// Trello-style box the canvas draws (main.ts showsDoneCheckbox) — disabled like every other control
+// in here. Unlike the sub-page listing this is never suppressed: items are the page's own content,
+// not a second spelling of the contents tree, so leaving them out would lose them altogether.
+function itemRow(n: MindNode, checklist: boolean): HTMLElement {
+  const li = document.createElement('li');
+  li.className = 'wk-item';
+  li.dataset.id = n.id;
+  if (checklist) {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'wk-item-box';
+    box.checked = n.done;
+    box.disabled = true;
+    li.classList.add('checkitem');
+    li.classList.toggle('done', n.done);
+    li.append(box);
+  }
+  // A titled note names the row and puts its body under it. A title-less one IS its body, so it
+  // renders as the paragraph it is — nodeLabel's `No-title 3` fallback is for LISTS OF NAMES, and
+  // printing one in the middle of prose would be inventing text nobody wrote.
+  const title = n.title.trim();
+  if (title) {
+    const name = document.createElement('span');
+    name.className = 'wk-item-name';
+    name.textContent = title;
+    li.append(name);
+  }
+  if (n.body.trim()) {
+    const body = document.createElement('div');
+    body.className = 'wk-item-body';
+    body.innerHTML = renderBodyHTML(n.body);
+    dressBody(body);
+    li.append(body);
+  }
+  const sub = itemList(n);
+  if (sub) li.append(sub);
+  return li;
+}
+function itemList(n: MindNode): HTMLElement | null {
+  const items = childItems(n);
+  if (!items.length) return null;
+  const ul = document.createElement('ul');
+  ul.className = 'wk-items';
+  for (const k of items) ul.append(itemRow(k, n.checklist));
+  return ul;
 }
 
 // ---- rendering ----
@@ -290,6 +380,7 @@ function subPageCard(n: MindNode): HTMLElement {
 export function renderWiki(): void {
   if (!wikiActive()) return;
   if (editId) return;   // a rebuild would blow away the open textarea (autosave's paintAll lands here)
+  resetWikilinkIndex();   // a page renamed or created since the last render must re-resolve
   if (!pageId || !state.nodes.has(pageId)) pageId = defaultPage();
   const page = pageId ? state.nodes.get(pageId) : null;
   const keepScroll = shownPageId === pageId ? docEl.scrollTop : 0;
@@ -305,16 +396,15 @@ export function renderWiki(): void {
   }
 
   // contents
-  for (const { n, depth, section } of tocRows()) {
+  for (const { n, depth } of tocRows()) {
     const row = document.createElement('button');
     row.type = 'button';
-    row.className = section ? 'wk-row wk-row-sec' : 'wk-row';
+    row.className = 'wk-row';
     row.dataset.id = n.id;
     row.style.paddingLeft = `${10 + depth * 12}px`;
     row.textContent = nodeLabel(n);
     row.title = nodeLabel(n);
     row.classList.toggle('page', n.id === pageId);
-    row.classList.toggle('inpage', !!section);
     tocEl.append(row);
   }
 
@@ -333,61 +423,44 @@ export function renderWiki(): void {
     });
     wrap.append(nav);
   }
-  for (const { n, level, link } of sectionsOf(page)) {
-    // a SUB-PAGE: a card you click, at the position it holds in the order — never its content
-    if (link) { wrap.append(subPageCard(n)); continue; }
-    const sec = document.createElement('section');
-    sec.className = 'wk-sec';
-    sec.dataset.id = n.id;
-    if (n.title.trim()) {
-      const h = document.createElement(`h${level}`);
-      h.className = 'wk-h';
-      h.textContent = n.title.trim();
-      // …and, on a section that could BE one, the way to split it off (see promoteToPage)
-      if (n.id !== page.id && n.type === 'card' && !state.readOnly && !isLockedEffective(n)) {
-        const mk = document.createElement('button');
-        mk.type = 'button'; mk.className = 'wk-mkpage';
-        mk.textContent = 'Make a page';
-        mk.title = 'Split this section off as a sub-page (turns the card into a frame)';
-        h.append(mk);
-      }
-      const jump = document.createElement('button');
-      jump.type = 'button'; jump.className = 'wk-jump';
-      jump.textContent = '↗';
-      jump.title = 'Show this card on the canvas';
-      jump.setAttribute('aria-label', `Show “${n.title.trim()}” on the canvas`);
-      h.append(jump);
-      sec.append(h);
-    }
-    const body = document.createElement('div');
-    body.className = 'wk-body';
-    body.innerHTML = renderBodyHTML(n.body);
-    hydrateImages(body);
-    // a reading surface writes nothing: a task list renders as it stands, and can't be ticked here
-    body.querySelectorAll<HTMLInputElement>('.taskbox').forEach(b => { b.disabled = true; });
-    sec.append(body);
-    wrap.append(sec);
+  // the page's own note — the ONE section a page has
+  const sec = document.createElement('section');
+  sec.className = 'wk-sec';
+  sec.dataset.id = page.id;
+  if (page.title.trim()) {
+    const h = document.createElement('h1');
+    h.className = 'wk-h';
+    h.textContent = page.title.trim();
+    const jump = document.createElement('button');
+    jump.type = 'button'; jump.className = 'wk-jump';
+    jump.textContent = '↗';
+    jump.title = 'Show this card on the canvas';
+    jump.setAttribute('aria-label', `Show “${page.title.trim()}” on the canvas`);
+    h.append(jump);
+    sec.append(h);
+  }
+  const body = document.createElement('div');
+  body.className = 'wk-body';
+  body.innerHTML = renderBodyHTML(page.body);
+  dressBody(body);
+  sec.append(body);
+  // …then its ITEMS, inside the section: they are this page's own content, so the in-place editor
+  // clearing `.wk-sec` takes them with it and the rebuild on commit puts them back.
+  const items = itemList(page);
+  if (items) sec.append(items);
+  wrap.append(sec);
+
+  // …and the LISTING, where the page asked for one by its name, or where it said nothing at all and
+  // would otherwise read as a bare title. An index that already wrote its own list of links keeps it
+  // (listsItself) — generating a second one under it is the duplication this rule exists to remove.
+  if (isIndexNamed(page) ? !listsItself(page) : !page.body.trim()) {
+    const list = subPageList(page);
+    if (list) wrap.append(list);
   }
   docEl.append(wrap);
   shownPageId = pageId;
   docEl.scrollTop = keepScroll;
-  markHere();
 }
-
-// The row for the section you're reading. Cheap enough to run straight off the scroll event (a
-// document is tens of sections, not thousands) — no rAF, so it also behaves under a paused
-// compositor.
-function markHere(): void {
-  const top = docEl.getBoundingClientRect().top + 80;
-  let here: string | null = null;
-  for (const sec of docEl.querySelectorAll<HTMLElement>('.wk-sec')) {
-    if (sec.getBoundingClientRect().top <= top) here = sec.dataset.id ?? null;
-    else break;
-  }
-  for (const row of tocEl.querySelectorAll<HTMLElement>('.wk-row'))
-    row.classList.toggle('here', !!here && row.dataset.id === here);
-}
-docEl.addEventListener('scroll', markHere, { passive: true });
 
 // ---- the two interactions ----
 tocEl.addEventListener('click', (e) => {
@@ -411,37 +484,17 @@ docEl.addEventListener('click', (e) => {
     else createFromLink(name, link.closest<HTMLElement>('.wk-sec')?.dataset.id);
     return;
   }
-  // a sub-page card — open it as the page
+  // a listing card — open it as the page
   const sub = t.closest<HTMLElement>('.wk-sub');
   if (sub?.dataset.id) { goTo(sub.dataset.id); return; }
-  // "Make a page" — split this section off (see promoteToPage)
-  const mk = t.closest<HTMLElement>('.wk-mkpage');
-  const mkId = mk?.closest<HTMLElement>('.wk-sec')?.dataset.id;
-  if (mkId) { promoteToPage(mkId); return; }
   // ↗ — hand this card back to the canvas, selected: the way out of reading and into rearranging
   const jump = t.closest<HTMLElement>('.wk-jump');
   const id = jump?.closest<HTMLElement>('.wk-sec')?.dataset.id;
   if (id && state.nodes.has(id)) { selectNode(id); setWiki(false); }
 });
 
-// ---- splitting a document ----
-// "Make a page" turns the section's CARD into a FRAME, which is what a sub-page is here — so the
-// split is the same act on the board (a box you can open) as it is in the document, and it is undone
-// by the same type chip. Offered from the reading view because that is where you notice a page has
-// grown too long. setTypeOn is float-bar's own conversion, reused rather than re-spelled: the box
-// seed, the layout fallback and the order reseed all have to happen together.
-function promoteToPage(id: string): void {
-  const n = state.nodes.get(id);
-  if (!n || n.type !== 'card') return;
-  if (state.readOnly) { setStatus('Read-only — nothing is saved'); return; }
-  if (isLockedEffective(n)) { setStatus('Locked — unlock it on the canvas first'); return; }
-  if (!setTypeOn([id], 'frame')) return;
-  setStatus(`“${nodeLabel(n)}” is a page now`);
-  renderWiki();
-}
-
-// ---- editing a section in place ----
-// One textarea over the section, holding the note the way the FILE holds it: the `# ` heading line
+// ---- editing a page in place ----
+// One textarea over the page's note, holding it the way the FILE holds it: the `# ` heading line
 // and the body together (joinHeading), split back apart on commit (splitHeading). Same contract as
 // the in-card editor (features/inline-edit.ts) and the outline's panel editor, and it borrows the
 // latter's `ui.panelEdit` slot — the two can't be open at once (the views are exclusive), and being
@@ -475,7 +528,7 @@ function startWikiEdit(n: MindNode): void {
     if (e.key === 'Escape') { e.preventDefault(); commitWikiEdit({ cancel: true }); }
     else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); commitWikiEdit(); }
   });
-  sec.textContent = '';   // a section holds only its OWN heading + body; its children are siblings
+  sec.textContent = '';   // one field holds this note alone — its items are notes of their own
   sec.append(ta);
   size();
   ta.focus();
@@ -505,13 +558,14 @@ function commitWikiEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   commitStep();          // cancelled / unchanged sessions are discarded
 }
 
-// Double-click anywhere in a section edits it — the canvas gesture, in a document. Ignored on a
+// Double-click anywhere in the page edits its note — the canvas gesture, in a document. Ignored on a
 // link (a single click already followed it) and while a session is open (double-clicking inside
 // the textarea is just selecting a word).
 docEl.addEventListener('dblclick', (e) => {
   const t = e.target as HTMLElement;
   if (editId || t.closest('a') || t.closest('.wk-edit') || t.closest('.wk-jump')) return;
-  const id = t.closest<HTMLElement>('.wk-sec')?.dataset.id;
+  // the nearest NOTE, which on a page's item is that item's own file rather than the page's
+  const id = t.closest<HTMLElement>('.wk-item, .wk-sec')?.dataset.id;
   const n = id ? state.nodes.get(id) : null;
   if (!n) return;
   e.preventDefault();
@@ -519,22 +573,24 @@ docEl.addEventListener('dblclick', (e) => {
 });
 
 // ---- a [[wikilink]] to a card that doesn't exist yet ----
-// Writing the link is what creates the note: it lands as a CHILD of the section the link was
-// written in — so the outline grows the way the prose does, and the new page is already part of the
-// document you're reading — and opens for editing straight away. A link inside a LEAF (an
-// annotation, an image card) can't take a child, so it re-anchors to that leaf's own parent.
+// Writing the link is what creates the note, and it lands as a SIBLING of the page it was written
+// in — so the new note is a PAGE, which a child would not be wherever that page is a card (a card
+// holds items). Inside a frame that reads as "next to the page you're on, in the same space"; at the
+// top level it is a new root. Either way it opens for editing straight away, which is how a wiki
+// grows: writing the link is enough to grow the tree too.
 function createFromLink(name: string, hostId: string | undefined): void {
   if (state.readOnly) { setStatus(`No card titled “${name}” — read-only, so none was created`); return; }
-  let host = hostId ? state.nodes.get(hostId) ?? null : null;
-  if (host && isLeafType(host)) host = host.parent ? state.nodes.get(host.parent) ?? null : null;
+  const from = hostId ? state.nodes.get(hostId) ?? null : null;
+  const page = from ? pageOf(from) : null;
+  const host = page ? parentOf(page) : null;
   const sibs = host ? childrenOf(host.id).length : 0;
   const n = createNode({
     parent: host?.id ?? null,
     title: name,
-    // beside its parent, the way addChild places one — the canvas is covered, so there is no
-    // pointer to drop it at and no visible spot for the user to have chosen
-    x: host ? host.x + 40 + sibs * 30 : undefined,
-    y: host ? host.y + 150 + sibs * 10 : undefined,
+    // beside the page it was linked from, the way addChild places one — the canvas is covered, so
+    // there is no pointer to drop it at and no visible spot for the user to have chosen
+    x: page ? page.x + 40 + sibs * 30 : undefined,
+    y: page ? page.y + 150 + sibs * 10 : undefined,
     edit: false,   // the wiki has its own editor; the canvas one would open behind this view
   });
   if (!n) return;   // refused (locked parent) — createNode has already said why
