@@ -6,8 +6,8 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 
 ## What this is
 
-**Corkboard** — a local-first visual editor for a folder of Markdown notes. `index.html` (the style +
-HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
+**Corkboard** — a local-first visual editor for a folder of Markdown notes. `index.html` (the HTML
+shell) plus `src/styles.css` and strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
 `vite-plugin-singlefile` bundles it all back into ONE self-contained `dist/index.html`. No runtime
 dependencies, no tests, no lint.
 
@@ -42,6 +42,7 @@ dependencies, no tests, no lint.
 - `boot.ts` — local-first boot onto the last map, the home/storage screen, the help store.
 - `main.ts` — entry: the render core (`paintNode`/`paintAll`/`effectiveColor`), selection, read-only
   mode, global keyboard/toolbar wiring. Its `main`↔feature cycles are deliberate and runtime-only.
+- `styles.css` — ALL app CSS (imported by `main.ts`, inlined at build); `index.html` carries none.
 
 ## Non-negotiable invariants
 
@@ -83,7 +84,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **The product is "Corkboard"; the document is a "map"/"board".** The old `mindmap` name survives
   only in `utils/legacy-keys.ts`, `openRenamed` (`utils/idb.ts`) and the `mm_*` keys.
 
-## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
+## Deep dives (`docs/architecture.md`; edges/containment: `docs/spec-edges-and-containment.md`) — look each up by its **bolded lead sentence**
 
 - Frames — "A `frame`'s BOUNDS include its title tab" · "A container's two side wrappers are
   LIFECYCLE-managed" · "A frame with `mm_layout: tabs` is a TAB GROUP" · "A frame can be OPENED, and
@@ -96,5 +97,4 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
   fallback, FSA) · "Boot order" · "Help map" · "External-change reload".
-- Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its
-  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`".
+- Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`".
