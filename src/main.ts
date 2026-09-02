@@ -42,7 +42,7 @@ import { toggleSketchMode, setSketchMode } from './features/sketch.js';   // als
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
 import { commitStep, record, touch, undo, redo, updateUndoButtons } from './features/history.js';
 import { hydrateImages } from './features/images.js';
-import { syncSectionLayer, sectionDragging } from './features/section-drag.js';
+import { syncSectionLayer, sectionDragging, clearSectionSel, nudgeSection } from './features/section-drag.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
@@ -2478,6 +2478,9 @@ window.addEventListener('keydown', (e) => {
     // the wiki view is a place you're IN, like sketch mode — Esc is the way out of it, ahead of the
     // selection cases (which would silently clear the selection the reader came in on)
     else if (wikiActive()) toggleWikiView();
+    // A selected SECTION is INSIDE the selected card, so Esc steps out of it first: one press leaves
+    // the paragraph, the next leaves the card (features/section-drag.ts).
+    else if (clearSectionSel()) { /* stepped out of the note */ }
     else if (state.selEdges.size) clearEdgeSelection();
     else if (state.sel.size) selectNode(null);
     return;
@@ -2495,6 +2498,13 @@ window.addEventListener('keydown', (e) => {
   // ←→↑↓ walk / fold the tree (navArrow). Canvas only: the outline view is its own tree widget with
   // its own fold state (outlineFold), so arrows there are a separate concern. No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
+  // ⌥↑/⌥↓ reorder the SELECTED SECTION of the selected card — the keyboard half of the grip drag
+  // (features/section-drag.ts). Checked before the bare arrows below because it is the same keys with
+  // a modifier, and it stands down (returning false) whenever no section is selected, so ⌥-arrow on a
+  // plain selection still falls through to the browser.
+  if ((key === 'ArrowUp' || key === 'ArrowDown') && e.altKey && !e.shiftKey && !mod && !outlineActive()){
+    if (nudgeSection(key === 'ArrowUp' ? -1 : 1)) { e.preventDefault(); return; }
+  }
   if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey && !outlineActive()){
     e.preventDefault(); navArrow(key); return;
   }

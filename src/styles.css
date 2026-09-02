@@ -1361,13 +1361,23 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
              pointer-events:auto; cursor:grab; touch-action:none;
              background:color-mix(in srgb, var(--ink) 30%, transparent);
              opacity:.45; transition:opacity .12s, background .12s; }
-.sec-grip:hover, .sec-grip.dragging { opacity:1; background:var(--node-sel); }
+.sec-grip:hover, .sec-grip.dragging, .sec-grip.sel { opacity:1; background:var(--node-sel); }
 .sec-grip.dragging { cursor:grabbing; }
+/* The SELECTED section — a click on a grip, the thing ⌥↑/⌥↓ then moves. Marked with a tint and a
+   box-shadow of the same colour rather than a border or padding: both of those would re-wrap the
+   note and change the card's measured height the instant a paragraph was picked, and the shadow
+   bleeds the band a couple of px past the text so a one-line bullet still reads as a highlighted
+   ROW. The grip beside it goes full-strength (above), which is what says WHICH one is selected when
+   the tint is subtle. */
+.node .body .sec-sel { border-radius:3px;
+             background:color-mix(in srgb, var(--node-sel) 20%, transparent);
+             box-shadow:0 0 0 3px color-mix(in srgb, var(--node-sel) 20%, transparent); }
 /* Where the release would put it. The other sections stay put while one is dragged — on a card this
    small, a list that reflows under the cursor is harder to read than a line that says where it lands. */
 .sec-line  { position:absolute; left:var(--pad-x); right:var(--pad-x); height:2px; border-radius:1px;
              background:var(--node-sel); display:none; }
-.node .body > .sec-lift { opacity:.7; position:relative; z-index:6; pointer-events:none; }
+/* descendant, not `>`: a section is a `<li>` as often as it is a block of the body */
+.node .body .sec-lift { opacity:.7; position:relative; z-index:6; pointer-events:none; }
 body.sec-dragging { cursor:grabbing; }
 body.sec-dragging .node { user-select:none; }
 /* A card is ONE text field, so while its editor is open the rendered title row stands down: the name is

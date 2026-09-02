@@ -248,82 +248,121 @@ export function renderBodyHTML(md: string | null | undefined): string {
 }
 
 // ---------- the same walk, returning SOURCE RANGES instead of HTML ----------
-// One entry per top-level block renderBodyHTML emits an element for, in the same order: a heading, a
-// paragraph, a whole list, a table, a fenced block, a blockquote, a rule. So `blocks(md)[k]` is the
-// source behind `container.children[k]` — which is what lets features/section-drag.ts put a grip on a
-// paragraph and know which lines to move. A text RUN is split into paragraphs here exactly as
-// flushPara splits it there (one entry per group of non-blank lines, blank-only runs emitting
-// nothing), because that arm is the one place a block does not map to a single line span.
+// One entry per SECTION — the smallest piece of a note the user can point at, select and move. That
+// is one top-level block for nearly everything renderBodyHTML emits an element for (a heading, a
+// paragraph, a table, a fenced block, a blockquote, a rule) and ONE ITEM for a list: a list is the
+// one block whose parts are already a sequence in the reader's eye, and reordering the lines of a
+// list is most of what reordering a note ever means. So a section addresses the DOM in two steps —
+// `child` is the index into the body's child list, `item` the index of the `<li>` inside it (-1 when
+// the section IS the child).
 //
-// It MIRRORS the loop above and must keep mirroring it — same regexes, same helpers, same order —
-// which is why it lives here rather than in a module of its own. Its callers check the count against
-// the rendered children and stand down when the two disagree, so a drift shows up as a missing grip
-// rather than as a paragraph moved to the wrong place.
-export interface Block { start: number; end: number }   // line indices into the TRIMMED source, [start, end)
+// It MIRRORS renderBodyHTML's loop and must keep mirroring it — same regexes, same helpers, same
+// order — which is why it lives here rather than in a module of its own. Its callers resolve every
+// address against the rendered children and stand down when the two disagree (see
+// features/section-drag.ts sectionEls), so a drift shows up as a missing grip rather than as a
+// paragraph moved to the wrong place.
+// A text RUN is split into paragraphs here exactly as flushPara splits it there (one entry per group
+// of non-blank lines, blank-only runs emitting nothing), because that arm is the one place a block
+// does not map to a single line span.
+export interface Section {
+  start: number; end: number;   // line indices into the TRIMMED source, [start, end)
+  child: number;                // index into the rendered body's children
+  item: number;                 // index of the <li> within that child, or -1
+}
 
-export function blocks(md: string | null | undefined): Block[] {
+// The two list markers, kept as a pair because everything below has to tell a bullet list from an
+// ordered one: they are separate blocks in the walk above (each arm's `while` only re-tests its own
+// regex), so two adjacent items of DIFFERENT kinds do not belong to one list.
+const UL_ITEM = /^\s*[-*+]\s+/;
+const OL_ITEM = /^\s*\d+\.\s+/;
+
+export function sections(md: string | null | undefined): Section[] {
   const src = (md || '').replace(/\r\n?/g, '\n').trim();
   if (!src) return [];
   const lines = src.split('\n');
-  const out: Block[] = [];
+  const out: Section[] = [];
   const BLOCK = /^(#{1,6}\s|```|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
-  let i = 0;
+  let i = 0, child = 0;
+  // one whole rendered element, consuming a child slot
+  const one = (start: number, end: number): void => { out.push({ start, end, child: child++, item: -1 }); };
   while (i < lines.length){
     const start = i;
     if (/^```/.test(lines[i])){                                 // fenced code block
       i++;
       while (i < lines.length && !/^```/.test(lines[i])) i++;
       i++;                                                      // closing fence (may run off the end)
-      out.push({ start, end: Math.min(i, lines.length) }); continue;
+      one(start, Math.min(i, lines.length)); continue;
     }
-    if (/^(#{1,6})\s+(.*)$/.test(lines[i])){ out.push({ start, end: ++i }); continue; }        // heading
-    if (/^\s*(?:[-*_]\s*){3,}$/.test(lines[i])){ out.push({ start, end: ++i }); continue; }    // rule
+    if (/^(#{1,6})\s+(.*)$/.test(lines[i])){ one(start, ++i); continue; }        // heading
+    if (/^\s*(?:[-*_]\s*){3,}$/.test(lines[i])){ one(start, ++i); continue; }    // rule (BEFORE the list arm, as above)
     const cols = tableAt(lines, i);
-    if (cols){ i = renderTable(lines, i, cols).next; out.push({ start, end: i }); continue; }  // table
+    if (cols){ i = renderTable(lines, i, cols).next; one(start, i); continue; }  // table
     if (/^\s*>/.test(lines[i])){                                // blockquote
       while (i < lines.length && /^\s*>/.test(lines[i])) i++;
-      out.push({ start, end: i }); continue;
+      one(start, i); continue;
     }
-    if (/^\s*[-*+]\s+/.test(lines[i])){                         // unordered list
-      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) i++;
-      out.push({ start, end: i }); continue;
+    // A LIST — the one block that is finer than a section: one entry per ITEM, all of them naming
+    // the same child. This renderer has no continuation lines, so an item is exactly one line.
+    const mark = UL_ITEM.test(lines[i]) ? UL_ITEM : OL_ITEM.test(lines[i]) ? OL_ITEM : null;
+    if (mark){
+      let item = 0;
+      while (i < lines.length && mark.test(lines[i])){ out.push({ start: i, end: i + 1, child, item: item++ }); i++; }
+      child++; continue;
     }
-    if (/^\s*\d+\.\s+/.test(lines[i])){                         // ordered list
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) i++;
-      out.push({ start, end: i }); continue;
-    }
-    // text run → one entry per PARAGRAPH (see flushPara above)
+    // text run -> one entry per PARAGRAPH (see flushPara above)
     const runStart = i;
     while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) i++;
     let p = -1;
     for (let j = runStart; j < i; j++){
       if (lines[j].trim()){ if (p < 0) p = j; }
-      else if (p >= 0){ out.push({ start: p, end: j }); p = -1; }
+      else if (p >= 0){ one(p, j); p = -1; }
     }
-    if (p >= 0) out.push({ start: p, end: i });
+    if (p >= 0) one(p, i);
   }
   return out;
 }
 
-// Move the `from`-th block so that it sits before the `to`-th (`to === blocks.length` puts it last),
-// leaving every other line BYTE-IDENTICAL — the order is the file's own text, so a reorder must read
-// back as a reorder and not as a reformat. The blank line between two blocks travels with the block
-// above it (below it, for the last one), which is what keeps the gaps from doubling up at the cut and
-// vanishing at the paste.
-export function moveBlock(text: string, from: number, to: number): string {
+// ---------- moving one section ----------
+// Which list a line belongs to, or '' for a line that is not a list item at all. A rule (`- - -`) is
+// read as a bullet here, deliberately: the walk above lets a rule that FOLLOWS a bullet be swallowed
+// into that list (the list arm's `while` doesn't re-test the rule), so the two really are one block
+// and must not be prised apart by a blank line.
+function listKind(l: string | undefined): string {
+  if (l == null) return '';
+  return UL_ITEM.test(l) ? 'ul' : OL_ITEM.test(l) ? 'ol' : '';
+}
+// Does a blank line have to go between these two, or would they read as one thing? The whole grammar
+// above answers "no" in exactly one case — two items of the SAME list, which is precisely the seam a
+// reorder inside a list lands on. Everywhere else a separator is what keeps the drop from merging
+// two paragraphs, extending a table, or continuing a quote.
+function needsGap(a: string | undefined, b: string | undefined): boolean {
+  if (a == null || b == null || !a.trim() || !b.trim()) return false;
+  const k = listKind(a);
+  return !(k !== '' && k === listKind(b));
+}
+
+// Move the `from`-th section so that it sits before the `to`-th (`to === sections.length` puts it
+// last), leaving every other line BYTE-IDENTICAL — the order is the file's own text, so a reorder
+// must read back as a reorder and not as a reformat. The blank line between two blocks travels with
+// the block above it (below it, for the last one), which is what keeps the gaps from doubling up at
+// the cut; at the paste, `needsGap` puts back exactly the separators the landing needs — none at all
+// between two items of one list, which is what makes dragging a bullet up the list a pure line swap.
+export function moveSection(text: string, from: number, to: number): string {
   const src = (text || '').replace(/\r\n?/g, '\n').trim();
-  const bs = blocks(src);
-  const b = bs[from];
-  if (!b || to === from || to === from + 1 || to < 0 || to > bs.length) return text;
+  const ss = sections(src);
+  const s = ss[from];
+  if (!s || to === from || to === from + 1 || to < 0 || to > ss.length) return text;
   const lines = src.split('\n');
-  const moved = lines.slice(b.start, b.end);
-  const last = from === bs.length - 1;
-  let cutS = b.start, cutE = b.end;
+  const moved = lines.slice(s.start, s.end);
+  const last = from === ss.length - 1;
+  let cutS = s.start, cutE = s.end;
   if (last) { while (cutS > 0 && !lines[cutS - 1].trim()) cutS--; }
   else      { while (cutE < lines.length && !lines[cutE].trim()) cutE++; }
   const rest = [...lines.slice(0, cutS), ...lines.slice(cutE)];
-  if (to >= bs.length) { rest.push('', ...moved); return rest.join('\n').trim(); }
-  const anchor = bs[to].start;
-  rest.splice(anchor >= cutE ? anchor - (cutE - cutS) : anchor, 0, ...moved, '');
+  const anchor = to >= ss.length ? lines.length : ss[to].start;
+  const at = anchor >= cutE ? anchor - (cutE - cutS) : anchor;
+  const pre  = needsGap(rest[at - 1], moved[0]) ? [''] : [];
+  const post = needsGap(moved[moved.length - 1], rest[at]) ? [''] : [];
+  rest.splice(at, 0, ...pre, ...moved, ...post);
   return rest.join('\n').trim();
 }

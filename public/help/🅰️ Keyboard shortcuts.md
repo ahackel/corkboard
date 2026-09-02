@@ -34,6 +34,8 @@ mm_collapsed: true
 - `F2` — rename
 - `E` — edit note
 - `X` — collapse / expand
+- click a **grip** beside a paragraph or list item — select that part of the note
+- `⌥/Alt ↑` / `⌥/Alt ↓` — move the selected part up or down
 
 ## Move around
 - `↑` — open the selected frame
