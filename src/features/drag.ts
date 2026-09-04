@@ -20,7 +20,7 @@ import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, FRAME_W, FRAME_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, dissolveThinFrames, mkNode, reanchorContents, interiorAtHome } from './crud.js';
-import { near as nearCards, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
+import { near as nearCards, hullGap, hasHull, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
@@ -876,7 +876,7 @@ const CENTER_FRAC = 0.45;
 function tabZoneAt(wx: number, wy: number, skip: Set<string>): MindNode | null {
   let best: MindNode | null = null, bestDepth = -1;
   for (const [id, m] of state.nodes) {
-    if (skip.has(id) || isHidden(m) || m.type !== 'frame') continue;
+    if (skip.has(id) || isHidden(m) || m.type !== 'frame' || hasHull(m)) continue;   // a bubble has no tab band
     const b = tabBandRect(m);
     if (wx < b.x || wx > b.x + b.w || wy < b.y || wy > b.y + b.h) continue;
     const d = ancestorDepth(m);

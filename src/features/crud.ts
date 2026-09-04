@@ -6,6 +6,7 @@ import { state, setStatus, isLeafType, isAnnotation, type MindNode, type NodeTyp
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
+import { hasHull } from '../view/hull.js';
 import { applyLayouts, insertedKidOrder, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame, frameLabelled } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId, boxIsViewport } from '../nav/scope.js';
@@ -469,7 +470,7 @@ export function dockFrames(target: MindNode, rootIds: string[], afterId?: string
   if (state.readOnly) return null;
   const frames = rootIds.map(id => state.nodes.get(id))
     .filter((f): f is MindNode => !!f && canBeTab(f) && f.id !== target.id && !isLockedEffective(f));
-  if (!frames.length || isLockedEffective(target)) return null;
+  if (!frames.length || isLockedEffective(target) || hasHull(target)) return null;   // no tabs on a bubble
   let g = isTabsFrame(target) ? target : null;
   // Dropping a tab on a FOLDED group means "open it and put this in there" — a new tab hidden inside a
   // folded group would just look like the drop had vanished.

@@ -15,7 +15,7 @@ import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } fr
 import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
-import { hullBox } from './hull.js';
+import { hullBox, hasHull } from './hull.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -276,7 +276,8 @@ export function activeTab(g: MindNode): MindNode | null {
 // turned into a frame on the way in (crud.ts dockFrames), since that's what a tab is. The other kinds
 // keep out: an annotation is a note pinned on top of something else and holds nothing, a stack's whole
 // nature is its outliner box, and an image/query card is a leaf whose box IS its content.
-export function canBeTab(n: MindNode): boolean { return n.type === 'frame' || n.type === 'card'; }
+// A goo frame is not: tabs are a box's face, and a bubble has none (docs/spec-goo-groups.md retires them).
+export function canBeTab(n: MindNode): boolean { return n.type === 'card' || (n.type === 'frame' && !hasHull(n)); }
 // The node a user-facing action on `n` should actually hit. A tab group doesn't exist from the outside:
 // what you see, colour, rename or delete is the OPEN TAB, so those land there. The box-shaped actions
 // stay on the group, because the box is the one thing it visibly owns — moving it, resizing it, its
