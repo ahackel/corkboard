@@ -749,10 +749,12 @@ export function paintNode(n: MindNode): void {
     const authored = isReadingRoot(n);
     el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
-    el.classList.toggle('w-set', authored);
     el.style.removeProperty('--frame-stroke');
     clearResizeHandles(el);
   }
+  // Any inline width is a BOX (frame, stack, row, the open card): it lifts the shrink-to-fit cap, or a
+  // wide frame would render 320px and its hull would spill past the element that takes the click.
+  el.classList.toggle('w-set', !!el.style.width);
   // Same rule the outline-row arm states, and it has to sit AFTER the whole chain because a stack, a
   // frame and a plain card each hand out their own handles: a DERIVED size isn't resizable. The card
   // being read takes the window's width and the window's height, so there is nothing to drag — and

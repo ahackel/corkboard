@@ -15,7 +15,7 @@ import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } fr
 import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
-import { HULL_PAD } from './hull.js';
+import { hullBox } from './hull.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -844,16 +844,12 @@ export function reorderDraggedParents(movedIds: Iterable<string>): void {
 // CURRENT positions, so dragging a child past a sibling reorders them on the next pass.
 // Room the derived box keeps around its children: the hull's padding plus a hair, so a press on the
 // hull's rim lands on the frame's box and moves it.
-const FIT_PAD = HULL_PAD + 2;
+// The frame's box is the bubble's bounding box (view/hull.ts), not the children's padded union: the
+// spline bulges past the padded corners, and a press on that bulge has to land on the frame.
 function fitFrame(f: MindNode, kids: MindNode[]): void {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const k of kids) {
-    x0 = Math.min(x0, k.x); y0 = Math.min(y0, k.y);
-    x1 = Math.max(x1, k.x + nodeW(k)); y1 = Math.max(y1, k.y + layoutH(k));
-  }
-  const inset = frameInsetY(f);
-  const x = x0 - FIT_PAD - FRAME_BORDER, y = y0 - FIT_PAD - inset;
-  const w = x1 - x0 + 2 * (FIT_PAD + FRAME_BORDER), h = y1 - y0 + 2 * FIT_PAD + inset + FRAME_BORDER;
+  const b = hullBox(kids), inset = frameInsetY(f);
+  const x = b.x - FRAME_BORDER, y = b.y - inset;
+  const w = b.w + 2 * FRAME_BORDER, h = b.h + inset + FRAME_BORDER;
   if (f.x === x && f.y === y && f.w === w && f.h === h) return;
   f.x = x; f.y = y; f.w = w; f.h = h; f.dirtyLayout = true;
 }

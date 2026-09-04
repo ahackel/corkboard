@@ -193,6 +193,14 @@ function authored(f: MindNode): boolean {
   return false;
 }
 
+// The bubble at rest, as a box: what layout gives the frame, so the rim you see is the rim you press.
+export function hullBox(kids: MindNode[]): Rect {
+  const pts = sample(spline(simplify(convexHull(cornerPoints(kids)))));
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
 export function paintHulls(): void {
   const surface = canvasSurface();
   const neutral = `color-mix(in srgb, ${inkFor(surface)} 9%, ${surface})`;

@@ -1252,7 +1252,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    shrink-to-fit cap has to go, or the element would render at 280 while nodeW reported the authored
    width — desyncing every consumer of it (edges, marquee, subtreeBox). The inline width also beats
    the editing width above, so a resized annotation keeps its size while its body is edited. */
-.node.annotation.w-set { max-width:none; }
+.node.w-set { max-width:none; }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 /* while editing a title/body/query in place, drop the card's selection ring so only the editor's
    own outline shows */
