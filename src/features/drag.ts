@@ -20,7 +20,7 @@ import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, FRAME_W, FRAME_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, dissolveThinFrames, mkNode, reanchorContents, interiorAtHome } from './crud.js';
-import { near as nearCards, touchesFrame, JOIN_DIST, LEAVE_DIST } from '../view/hull.js';
+import { near as nearCards, nodeRect, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
@@ -108,13 +108,12 @@ function distanceRip(node: MindNode): boolean {
   return (dist - diag) * state.view.k > RIP_THRESHOLD / 2;
 }
 
-// Is a container's child still IN it? A frame holds by PROXIMITY: the card stays while it's within
-// LEAVE_DIST of another card of the frame (a step past JOIN_DIST, so the edge doesn't flicker). A frame
-// with nothing else in it, and a stack, hold by their box.
+// Is a container's child still IN it? A frame holds by its BUBBLE: the card stays until it is LEAVE_GAP
+// clear of the hull the other children make (view/hull.ts). A frame with nothing else in it, and a
+// stack, hold by their box.
 function insideContainer(r: MindNode, c: MindNode, sub: Set<string>): boolean {
-  if (isFrame(c) && childrenOf(c.id).some(k => k.id !== r.id && !sub.has(k.id) && !isHidden(k) && !isAnnotation(k)))
-    return touchesFrame(r, c, LEAVE_DIST, sub);
-  return centreInFrame(r, c);
+  const gap = isFrame(c) ? hullGap(nodeRect(r), c, sub) : Infinity;
+  return gap === Infinity ? centreInFrame(r, c) : gap <= LEAVE_GAP;
 }
 // Is a screen point outside the browser window? True once a drag has left for another app.
 const outsideWindow = (x: number, y: number): boolean =>
@@ -1060,32 +1059,36 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       if (!target && !isLeafType(hoveredNode)) target = hovered;
     }
   }
-  // PROXIMITY (docs/spec-goo-groups.md): nothing under the pointer resolved, and a single plain card
-  // is being dragged — the card it has come CLOSE to decides. A card inside a FRAME stands for its
-  // frame: the drag joins that frame (the ordinary child drop, landing where released). A LOOSE card at
-  // the same top level makes the two a group on release (`near`; dragPointerUp mints the frame).
-  // ponytail: only top-level pairs group, so cards nudged together inside a frame don't spawn nested frames.
+  // GOO (docs/spec-goo-groups.md): nothing under the pointer resolved, and one card or frame is being
+  // dragged. JOIN: the deepest frame whose bubble it overlaps takes it — a card anywhere in the goo
+  // belongs, and inside a nested frame the inner one wins. Its own parent is never a target (staying is
+  // not a drop), and neither is any other frame it is still inside; once it has ripped out of its
+  // parent (drag.rip), an enclosing frame IS, which is how a card pulled out of an inner frame lands in
+  // the outer one instead of at the top level. GROUP: two loose CARDS touching at the top level become a
+  // frame on release (`near`; dragPointerUp mints it). Only there — siblings inside a frame sit close by
+  // design, and nudging them must not mint frames. Nested frames come from dropping a frame into a hull.
   let near: string | null = null;
+  const goo = (m: MindNode): boolean => m.type === 'card' || (isFrame(m) && !isDockedTab(m) && !isTabsFrame(m));
   if (drag && !target && !dockTarget && !fuseTarget && !drag.alt && drag.selRoots.length === 1
-      && dragged.type === 'card' && !isLockedEffective(dragged)) {
+      && goo(dragged) && !isLockedEffective(dragged)) {
     const top = detachParentId();
-    // Where the dragged card WILL sit: a card ripping out of its frame is already at the top level for
-    // this purpose (updateRip's verdict from the previous frame — one paint of lag, never a wrong group).
-    const dparent = drag.rip ? top : dragged.parent;
-    let best: MindNode | null = null, bestD = Infinity;
-    for (const [id, m] of state.nodes) {
-      if (sub.has(id) || isHidden(m) || m.type !== 'card' || isLockedEffective(m) || !nearCards(dragged, m, JOIN_DIST)) continue;
-      const p = parentOf(m);
-      const joins = p && isFrame(p) && !isDockedTab(p) && p.id !== dragged.parent && !sub.has(p.id) && !isLockedEffective(p);
-      const groups = !p ? top === null && dparent === null : p.id === top && dparent === top && !isFrame(p);
-      if (!joins && !groups) continue;
-      const d = Math.hypot(m.x - dragged.x, m.y - dragged.y);
-      if (d < bestD) { bestD = d; best = m; }
+    const r = nodeRect(dragged);
+    let best: MindNode | null = null, bestDepth = -1;
+    for (const [id, f] of state.nodes) {
+      if (sub.has(id) || id === dragged.parent || isHidden(f) || !isFrame(f) || isDockedTab(f) || isTabsFrame(f) || isLockedEffective(f)) continue;
+      if (!drag.rip && isAncestor(id, dragged.id)) continue;
+      if (hullGap(r, f, sub) > 0) continue;
+      const depth = ancestorDepth(f);
+      if (depth > bestDepth) { bestDepth = depth; best = f; }
     }
-    if (best) {
-      const p = parentOf(best);
-      if (p && isFrame(p) && p.id !== dragged.parent) { target = p.id; mode = 'child'; }
-      else near = best.id;
+    if (best) { target = best.id; mode = 'child'; }
+    else if (dragged.type === 'card' && (drag.rip ? top : dragged.parent) === top) {
+      let bestD = Infinity;
+      for (const [id, m] of state.nodes) {
+        if (sub.has(id) || isHidden(m) || m.parent !== top || m.type !== 'card' || isLockedEffective(m) || !nearCards(dragged, m, JOIN_DIST)) continue;
+        const d = Math.hypot(m.x - dragged.x, m.y - dragged.y);
+        if (d < bestD) { bestD = d; near = id; }
+      }
     }
   }
   // An inheriting card's colour depends on its parent chain (effectiveColor), and while poised

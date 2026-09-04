@@ -31,13 +31,16 @@ Each was a question with alternatives; the alternatives are under "Rejected" bel
 - **A frame's bounds are DERIVED from its children.** `mm_w`/`mm_h` are no longer read or written for
   frames (still the file format, still honoured for `query` and image cards). An empty frame cannot exist
   except transiently. There is no empty interior to drop into: dropping NEAR is the gesture.
-- **Joining is automatic, by proximity, during the drag.** A card whose padded bounds come within
-  `JOIN_GAP` of a frame's hull, or of a loose card, becomes a member on the spot; the hull grows to include
-  it while the pointer is still down. Leaving needs `LEAVE_GAP` > `JOIN_GAP` (hysteresis, no flicker).
-  No magnetic snap: the card stays exactly where the pointer put it.
-- **Two loose cards touching CREATE an untitled frame** around both, at the same level they were on.
-  Frame-meets-frame is inert: frames only bump, never nest or merge by proximity. Explicit drop ONTO a
-  frame (reparent) can stay as the deliberate way to nest.
+- **Joining is automatic, by the BUBBLE, during the drag.** A card whose rect overlaps a frame's resting
+  hull (`hullGap` = 0) becomes a member — anywhere in the goo, not only next to another card; the hull
+  grows to include it while the pointer is still down. Leaving needs `LEAVE_GAP` clear of the hull's edge
+  (hysteresis, no flicker). No magnetic snap: the card stays exactly where the pointer put it.
+- **Two loose cards touching CREATE an untitled frame** around both, at the top level only: siblings
+  inside a frame sit close by design, and nudging them must not mint frames.
+- **Frames NEST by the same rule** (revised 2026-09-04, was "frames only bump"). A frame dragged into
+  another's bubble becomes its child, its hull box standing in for a card's rect; the deepest bubble a
+  dragged node overlaps wins. A card pulled out of an inner frame lands in the enclosing one, not at the
+  top. A nested untitled frame's wash deepens one step from its parent's.
 - **A frame dissolves when it is down to one child**, unless the user authored something on it (a title,
   a colour, tags, body text). Symmetric with creation; `dissolveEmptyTabGroups` in `crud.ts` is the
   precedent and gets generalised.
@@ -139,12 +142,12 @@ in JS for ~250ms with a spring curve (slight overshoot, the World of Goo snap) a
 2. **DONE (minimal)** — `fitFrame` in `view/layout.ts`: a frame with children takes the padded union of
    them as its box every layout pass; an EMPTY frame keeps its authored size. `mm_w`/`mm_h` are still
    written (derived values, harmless). Tab groups, opening a frame and frame resize are NOT retired yet.
-3. **DONE (on release, not mid-drag)** — `updateDropTarget` resolves proximity when nothing is under the
-   pointer: a card within `JOIN_DIST` (= the hull padding) of a frame's child joins that frame — measured
-   edge to edge, the same all round (`near`); it leaves past `LEAVE_DIST` (`insideContainer`); a card that close to
-   a loose TOP-LEVEL card sets `drag.near`, and the release mints an untitled frame around both.
-   `dissolveThinFrames` (crud.ts): an EMPTIED frame always goes, an unauthored one already at 1 child. The hull
-   previews both during the drag (`hullKids` counts the poised card, drops the ripping one).
-   Deferred: live commit mid-drag with hysteresis, grouping inside a frame (ponytail note in drag.ts).
+3. **DONE (on release, not mid-drag)** — `updateDropTarget` resolves membership when nothing is under the
+   pointer: the deepest frame whose resting hull the dragged card or frame overlaps (`hullGap`, hull.ts)
+   takes it; a member leaves once `LEAVE_GAP` clear of the hull (`insideContainer`), and while still inside an
+   outer bubble lands there. A card within `JOIN_DIST` of a loose TOP-LEVEL card sets `drag.near`, and the
+   release mints an untitled frame around both. `dissolveThinFrames` (crud.ts): an EMPTIED frame always goes,
+   an unauthored one already at 1 child. The hull previews all of it during the drag (`hullKids` counts the
+   poised node, drops the ripping one). Deferred: live commit mid-drag with hysteresis.
 4. Connect mode and nearest-outline docking; remove ports.
 5. Docs: update CLAUDE.md invariants and the frame deep dives in architecture.md.

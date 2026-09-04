@@ -6,9 +6,9 @@
 // (layout.ts fitFrame) pads to the same distance so the rim is what you press to move it.
 import { state, hullsSvg, isAnnotation, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf } from '../utils/model.js';
-import { isFrame, isDockedTab } from './layout.js';
+import { isFrame, isDockedTab, ancestorDepth } from './layout.js';
 import { boxIsViewport } from '../nav/scope.js';
-import { nodeW, nodeH, colorFill, effectiveColor, canvasSurface } from '../main.js';
+import { nodeW, nodeH, colorFill, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
 import { ui } from '../core/ui-state.js';
@@ -27,17 +27,52 @@ const P = (p: Pt): string => `${f1(p.x)} ${f1(p.y)}`;
 // way round (Euclidean, so a corner counts like a side). A card touching a frame's bubble — within
 // HULL_PAD of a card inside it — joins; it has to pull a little further clear to leave, so the edge
 // doesn't flicker. Two loose cards group at the same distance.
-export const JOIN_DIST = HULL_PAD, LEAVE_DIST = HULL_PAD + 20;
-const rect = (k: MindNode): Rect => ({ x: k.x, y: k.y, w: nodeW(k), h: nodeH(k) });
+export const JOIN_DIST = HULL_PAD;
+export const nodeRect = (k: MindNode): Rect => ({ x: k.x, y: k.y, w: nodeW(k), h: nodeH(k) });
+const rect = nodeRect;
 function gap(a: Rect, b: Rect): number {
   const dx = Math.max(0, b.x - (a.x + a.w), a.x - (b.x + b.w));
   const dy = Math.max(0, b.y - (a.y + a.h), a.y - (b.y + b.h));
   return Math.hypot(dx, dy);
 }
 export function near(a: MindNode, b: MindNode, dist: number): boolean { return gap(rect(a), rect(b)) <= dist; }
-// Is `card` within `dist` of anything ELSE the frame holds? `skip` = the cards riding the same drag.
-export function touchesFrame(card: MindNode, f: MindNode, dist: number, skip: Set<string>): boolean {
-  return childrenOf(f.id).some(k => k !== card && !skip.has(k.id) && !isHidden(k) && !isAnnotation(k) && near(card, k, dist));
+
+// Membership is read off the BUBBLE itself (docs/spec-goo-groups.md): a card anywhere inside a frame's
+// resting hull belongs to it, and it has left once it is LEAVE_GAP clear of that edge — the hysteresis
+// that keeps the rim from flickering. The hull is drawn WITHOUT the cards in `skip` (those riding the
+// drag), so a card can't hold itself in. Infinity when nothing is left to draw around.
+export const LEAVE_GAP = 20;
+export function hullGap(r: Rect, f: MindNode, skip: Set<string>): number {
+  const kids = childrenOf(f.id).filter(k => !skip.has(k.id) && !isHidden(k) && !isAnnotation(k));
+  if (!kids.length) return Infinity;
+  const poly = restPoly(kids);
+  const c = [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }];
+  if (c.some(p => inPoly(p, poly))) return 0;
+  let gap = Infinity;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length];
+    gap = Math.min(gap, Math.hypot(Math.max(0, r.x - p.x, p.x - r.x - r.w), Math.max(0, r.y - p.y, p.y - r.y - r.h)));
+    for (let j = 0; j < 4; j++) {
+      if (cross(p, q, c[j], c[(j + 1) % 4])) return 0;
+      gap = Math.min(gap, segDist(c[j], p, q));
+    }
+  }
+  return gap;
+}
+function inPoly(p: Pt, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+const side = (a: Pt, b: Pt, p: Pt): number => Math.sign((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
+const cross = (a: Pt, b: Pt, c: Pt, d: Pt): boolean => side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
+function segDist(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+  return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
 }
 
 // The four corners of every card, pushed out by PAD: the points the bubble is built from.
@@ -96,6 +131,8 @@ function spline(v: Pt[]): Pt[] {
   }
   return out;
 }
+// The bubble at rest: the polygon the springs settle on.
+const restPoly = (kids: MindNode[]): Pt[] => spline(simplify(convexHull(cornerPoints(kids))));
 const centre = (pts: Pt[]): Pt => ({ x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length });
 
 // The hull re-sampled at N fixed angles around its centre, so two hulls' points correspond by
@@ -188,14 +225,10 @@ function hullKids(f: MindNode): MindNode[] {
 // Does this node render as a hull rather than a box? Its box chrome (ring, tab, ports) stands down.
 export function hasHull(n: MindNode): boolean { return hullKids(n).length > 0; }
 
-function authored(f: MindNode): boolean {
-  for (let c: MindNode | null = f; c; c = parentOf(c)) if (c.color && c.color !== 'none') return true;
-  return false;
-}
 
 // The bubble at rest, as a box: what layout gives the frame, so the rim you see is the rim you press.
 export function hullBox(kids: MindNode[]): Rect {
-  const pts = sample(spline(simplify(convexHull(cornerPoints(kids)))));
+  const pts = sample(restPoly(kids));
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
@@ -208,12 +241,22 @@ export function paintHulls(): void {
   let svg = '';
   const draw = (id: string, kids: MindNode[], wash: string, ring: boolean, label: string, rigid = false): void => {
     seen.add(id);
-    const d = curve(shape(id, sample(spline(simplify(convexHull(cornerPoints(kids))))), rigid));
+    const d = curve(shape(id, sample(restPoly(kids)), rigid));
     svg += `${ring ? `<path class="hull-ring" d="${d}"/>` : ''}<path class="hull" style="fill:${wash}" d="${d}"/>${label}`;
   };
-  for (const f of state.nodes.values()) {
-    const kids = hullKids(f);
-    f.el?.classList.toggle('hulled', kids.length > 0);
+  // A nested frame's bubble sits INSIDE its parent's, so it paints after it (deepest last) and its
+  // neutral wash deepens one step from the parent's instead of from the canvas — or the two would
+  // be the same grey and the inner one invisible.
+  const washOf = (f: MindNode): string => {
+    const fill = f.color && f.color !== 'none' ? colorFill(f.color) : null;   // its OWN colour, not an inherited one
+    if (fill) return `color-mix(in srgb, ${fill} 42%, ${surface})`;
+    const p = parentOf(f);
+    return `color-mix(in srgb, ${inkFor(surface)} 9%, ${p && hasHull(p) ? washOf(p) : surface})`;
+  };
+  const frames = [...state.nodes.values()].map(f => ({ f, kids: hullKids(f) }));
+  for (const { f, kids } of frames) f.el?.classList.toggle('hulled', kids.length > 0);
+  frames.sort((a, b) => ancestorDepth(a.f) - ancestorDepth(b.f));
+  for (const { f, kids } of frames) {
     if (!kids.length) continue;
     const title = f.title.trim() || f.body.trim().split('\n')[0] || '';
     let label = '';
@@ -222,9 +265,7 @@ export function paintHulls(): void {
       const top = kids.reduce((m, k) => k.y < m.y || (k.y === m.y && k.x < m.x) ? k : m);
       label = `<text class="hull-label" x="${f1(top.x + 2)}" y="${f1(top.y - 6)}">${esc(title)}</text>`;
     }
-    const fill = colorFill(effectiveColor(f));
-    const wash = fill && authored(f) ? `color-mix(in srgb, ${fill} 42%, ${surface})` : neutral;
-    draw(f.id, kids, wash, state.sel.has(f.id), label, !!ui.drag?.targets.has(f.id));
+    draw(f.id, kids, washOf(f), state.sel.has(f.id), label, !!ui.drag?.targets.has(f.id));
   }
   // Two loose cards about to become a group: the frame they would make, previewed in the neutral wash.
   const dg = ui.drag, nb = dg?.near ? state.nodes.get(dg.near) : null;
