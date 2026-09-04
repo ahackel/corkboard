@@ -28,8 +28,7 @@ const P = (p: Pt): string => `${f1(p.x)} ${f1(p.y)}`;
 // HULL_PAD of a card inside it — joins; it has to pull a little further clear to leave, so the edge
 // doesn't flicker. Two loose cards group at the same distance.
 export const JOIN_DIST = HULL_PAD;
-export const nodeRect = (k: MindNode): Rect => ({ x: k.x, y: k.y, w: nodeW(k), h: nodeH(k) });
-const rect = nodeRect;
+const rect = (k: MindNode): Rect => ({ x: k.x, y: k.y, w: nodeW(k), h: nodeH(k) });
 function gap(a: Rect, b: Rect): number {
   const dx = Math.max(0, b.x - (a.x + a.w), a.x - (b.x + b.w));
   const dy = Math.max(0, b.y - (a.y + a.h), a.y - (b.y + b.h));
@@ -40,12 +39,23 @@ export function near(a: MindNode, b: MindNode, dist: number): boolean { return g
 // Membership is read off the BUBBLE itself (docs/spec-goo-groups.md): a card anywhere inside a frame's
 // resting hull belongs to it, and it has left once it is LEAVE_GAP clear of that edge — the hysteresis
 // that keeps the rim from flickering. The hull is drawn WITHOUT the cards in `skip` (those riding the
-// drag), so a card can't hold itself in. Infinity when nothing is left to draw around.
+// drag), so a card can't hold itself in. Infinity when nothing is left to draw around. A dragged FRAME
+// is measured by its CARDS, not by its own bubble's box — so a frame meets a frame at the same distance
+// a card does, its nearest card 20px from one of theirs.
 export const LEAVE_GAP = 20;
-export function hullGap(r: Rect, f: MindNode, skip: Set<string>): number {
+export function hullGap(n: MindNode, f: MindNode, skip: Set<string>): number {
   const kids = childrenOf(f.id).filter(k => !skip.has(k.id) && !isHidden(k) && !isAnnotation(k));
   if (!kids.length) return Infinity;
   const poly = restPoly(kids);
+  return Math.min(...cardRects(n).map(r => rectGap(r, poly)));
+}
+// The rects a node is measured by: a card's own, a frame's cards' (through nested frames).
+function cardRects(n: MindNode): Rect[] {
+  if (!isFrame(n)) return [rect(n)];
+  const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));
+  return kids.length ? kids.flatMap(cardRects) : [rect(n)];
+}
+function rectGap(r: Rect, poly: Pt[]): number {
   const c = [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }];
   if (c.some(p => inPoly(p, poly))) return 0;
   let gap = Infinity;

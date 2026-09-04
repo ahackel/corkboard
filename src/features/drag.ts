@@ -20,7 +20,7 @@ import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, FRAME_W, FRAME_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, dissolveThinFrames, mkNode, reanchorContents, interiorAtHome } from './crud.js';
-import { near as nearCards, nodeRect, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
+import { near as nearCards, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
@@ -112,7 +112,7 @@ function distanceRip(node: MindNode): boolean {
 // clear of the hull the other children make (view/hull.ts). A frame with nothing else in it, and a
 // stack, hold by their box.
 function insideContainer(r: MindNode, c: MindNode, sub: Set<string>): boolean {
-  const gap = isFrame(c) ? hullGap(nodeRect(r), c, sub) : Infinity;
+  const gap = isFrame(c) ? hullGap(r, c, sub) : Infinity;
   return gap === Infinity ? centreInFrame(r, c) : gap <= LEAVE_GAP;
 }
 // Is a screen point outside the browser window? True once a drag has left for another app.
@@ -1072,12 +1072,11 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   if (drag && !target && !dockTarget && !fuseTarget && !drag.alt && drag.selRoots.length === 1
       && goo(dragged) && !isLockedEffective(dragged)) {
     const top = detachParentId();
-    const r = nodeRect(dragged);
     let best: MindNode | null = null, bestDepth = -1;
     for (const [id, f] of state.nodes) {
       if (sub.has(id) || id === dragged.parent || isHidden(f) || !isFrame(f) || isDockedTab(f) || isTabsFrame(f) || isLockedEffective(f)) continue;
       if (!drag.rip && isAncestor(id, dragged.id)) continue;
-      if (hullGap(r, f, sub) > 0) continue;
+      if (hullGap(dragged, f, sub) > 0) continue;
       const depth = ancestorDepth(f);
       if (depth > bestDepth) { bestDepth = depth; best = f; }
     }
