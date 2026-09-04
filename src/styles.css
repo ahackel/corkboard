@@ -441,6 +441,18 @@ svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:6; p
    card's press — a card would stop being draggable in a band either side of every line crossing it.
    Split in two, the line is visible over the card and the card still owns the pixels: exactly the
    behaviour from when the whole layer sat behind them. */
+/* A card whose text came out as ONE LINE is a PILL: radius past half its height, a little more room at
+   the ends so the text doesn't crowd the curve. Boxes and outline rows keep the card radius. */
+.node.pill { border-radius:999px; --pad-x:16px; }   /* set by paintNode from the measured height */
+/* Frame HULLS (view/hull.ts): under the cards with the hit layer, above the frame boxes (auto). */
+svg#hulls { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
+svg#hulls .hull-label { font:600 13px/1 system-ui, sans-serif; fill:var(--text); }
+/* A frame that draws a hull hides its box and tab — the hull is the shape now (class set by paintHulls). */
+.node.frame.hulled { border-color:transparent; background:transparent; }
+.node.frame.hulled > .title-row { display:none; }
+.node.frame.hulled.sel { box-shadow:none; }   /* the ring is drawn on the hull instead (hull-ring) */
+.node.frame.hulled > .fh { display:none; }   /* the box is not the shape any more; its size goes in spec step 2 */
+svg#hulls .hull-ring { fill:var(--node-sel); stroke:var(--node-sel); stroke-width:4px; stroke-linejoin:round; }
 svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
 .node { z-index:2; }                               /* the cards */
 /* The port overlay (view/free-edges.ts: sockets, endpoint handles, the live draw): above every CARD
@@ -515,7 +527,9 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    untitled cards and had already been switched off for the bodyless case (`.node.no-body`), so the two
    halves of a card now behave the same way: whatever is in it decides how tall it is. */
 .node {
-  position:absolute; width:200px;
+  /* A card is as wide as its text asks, up to a reading width — never authored, never resized. Kinds
+     that own a box (frame, stack, image, query, an outline row, the open card) set an inline width. */
+  position:absolute; width:max-content; max-width:320px;
   background: var(--card, var(--node)); border:none;
   /* text colour = the ink this card's own fill demands (see the .c-* block up top). The literal
      fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
@@ -987,6 +1001,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
    ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
    ring, no width change, no fill; no landing-ghost card or reparent edge (see drag.ts / edges.ts). */
 .node.frame.drop-target, .node.stack.drop-target { border-style:dashed; border-color:#fff; }
+.node.frame.hulled.drop-target { border-color:transparent; }   /* the hull grows to show the join (view/hull.ts) */
 /* A frame with nothing written on it shows NO TITLE — see paintNode, which sets `no-title` for exactly
    that case, and elTop/frameInsetY, which then stop reserving the 39px strip its tab would have sat in.
    The box IS the frame there; its text is written by double-clicking the rim (onFrameRim).

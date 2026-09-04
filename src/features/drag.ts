@@ -7,7 +7,7 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf } from '../utils/model.js';
 import { detachParentId, isReadingRoot } from '../nav/scope.js';
 import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
@@ -17,9 +17,10 @@ import { paintEdges } from '../view/edges.js';
 import { snapTo } from '../utils/num.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, FRAME_W, FRAME_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
-import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
+import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, dissolveThinFrames, mkNode, reanchorContents, interiorAtHome } from './crud.js';
+import { near as nearCards, touchesFrame, JOIN_DIST, LEAVE_DIST } from '../view/hull.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
@@ -107,6 +108,14 @@ function distanceRip(node: MindNode): boolean {
   return (dist - diag) * state.view.k > RIP_THRESHOLD / 2;
 }
 
+// Is a container's child still IN it? A frame holds by PROXIMITY: the card stays while it's within
+// LEAVE_DIST of another card of the frame (a step past JOIN_DIST, so the edge doesn't flicker). A frame
+// with nothing else in it, and a stack, hold by their box.
+function insideContainer(r: MindNode, c: MindNode, sub: Set<string>): boolean {
+  if (isFrame(c) && childrenOf(c.id).some(k => k.id !== r.id && !sub.has(k.id) && !isHidden(k) && !isAnnotation(k)))
+    return touchesFrame(r, c, LEAVE_DIST, sub);
+  return centreInFrame(r, c);
+}
 // Is a screen point outside the browser window? True once a drag has left for another app.
 const outsideWindow = (x: number, y: number): boolean =>
   x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight;
@@ -135,7 +144,7 @@ function updateRip(drag: Drag): void {
   const inFrame = !!(parent && isContainer(parent)) && !isAnnotation(act);
   if (act.parent && !reordering) {
     if (inFrame) {
-      rip = !centreInFrame(act, parent!);
+      rip = !insideContainer(act, parent!, new Set(drag.targets.keys()));
     } else {
       rip = distanceRip(act);   // pulled clear of the parent's footprint by half the base threshold
     }
@@ -191,7 +200,7 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
         // shift twice. Only "roots" of the dragged subtree(s) — no host, or a host that isn't
         // moving in this same gesture — need an explicit transform of their own.
         const carried = m.hostFrameId != null && drag.targets.has(m.hostFrameId);
-        const t = carried ? '' : `translate(${m.x-orig.x}px,${m.y-orig.y}px)`;
+        const t = carried ? '' : dragTransform(drag, m, orig);
         m.el.style.transform = t;
         // An expanded frame's overflow:hidden content wrapper (frameContentEl) is a second,
         // separately-positioned element (left/top only re-synced by a full paintNode) — mirror
@@ -209,6 +218,36 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
   }
 }
 
+// The compositor transform of a dragged root: its offset, plus — for the one card that swings — the
+// swing's rotation about the grab point.
+function dragTransform(drag: Drag, m: MindNode, orig: Pt): string {
+  const t = `translate(${m.x - orig.x}px,${m.y - orig.y}px)`;
+  const sw = drag.swing;
+  return sw && m === drag.active ? `${t} rotate(${sw.angle.toFixed(2)}deg)` : t;
+}
+
+// ---------- the swing ----------
+// A card in hand hangs from the point you grabbed it at: pull it and it swings back like a pendulum
+// in air, the faster the pull the further, with an overshoot as it settles once the pointer rests.
+// Pure feedback — nothing it does reaches x/y. The torque is the speed's moment about the pivot, so a
+// card taken by its centre barely turns and one taken by a corner swings the most.
+const SWING_STIFF = 200, SWING_DAMP = 12;   // ω≈14/s, ζ≈0.42 — a visible overshoot, settled in ~½s
+const SWING_GAIN = 1.6;                     // deg per px/s of pull, before the spring; ~8° at 1000px/s
+const SWING_MAX = 14;
+function stepSwing(drag: Drag, dt: number): boolean {
+  const sw = drag.swing, el = drag.active.el;
+  if (!sw || !el) return false;
+  // The pointer went quiet: its speed dies away, and with it the pull.
+  if (performance.now() - sw.t > 40) { sw.vx *= 0.75; sw.vy *= 0.75; }
+  const rx = nodeW(drag.active) / 2 - sw.pivot.x, ry = nodeH(drag.active) / 2 - sw.pivot.y;
+  const torque = SWING_GAIN * (sw.vx * ry - sw.vy * rx) / Math.max(24, Math.hypot(rx, ry));
+  sw.omega += (torque - SWING_STIFF * sw.angle - SWING_DAMP * sw.omega) * dt;
+  sw.angle = Math.max(-SWING_MAX, Math.min(SWING_MAX, sw.angle + sw.omega * dt));
+  const orig = drag.origins.get(drag.active.id);
+  if (orig) { el.style.transformOrigin = `${sw.pivot.x}px ${sw.pivot.y}px`; el.style.transform = dragTransform(drag, drag.active, orig); }
+  return Math.abs(sw.angle) > 0.05 || Math.abs(sw.omega) > 0.5;   // still moving?
+}
+
 // While a node is dragged to the screen edge, pan the view so you can drop onto cards that are
 // currently off-screen. The view pans toward the edge the cursor sits in, and the dragged subtree
 // is shifted in world-space by the inverse so it stays glued under the (stationary) cursor.
@@ -222,6 +261,7 @@ function flushDragPaint(): void {
   }
   updateRip(drag);
   paintEdges();   // n.x/y is current, so edges track the dragged nodes correctly
+  if (drag.moved && stepSwing(drag, 1 / 60) && !ui.dragRAF) ui.dragRAF = requestAnimationFrame(flushDragPaint);
   if (drag.moved && !ui.autoPanRAF) ui.autoPanRAF = requestAnimationFrame(autoPanStep);
 }
 function stopAutoPan(): void { if (ui.autoPanRAF){ cancelAnimationFrame(ui.autoPanRAF); ui.autoPanRAF = null; } }
@@ -381,20 +421,6 @@ export function bindNodeDrag(n: MindNode): void {
     if (ui.titleEdit && ui.titleEdit.id !== n.id) endTitleEdit();
     // while this node is being edited, let clicks place the caret — don't start a drag
     if (inPlaceEditOn(n.id)) { e.stopPropagation(); return; }
-    // A drag inside an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather
-    // than moving the frame — you move the frame from its interior only once it's selected. A
-    // no-move click selects the frame (endMarquee). ⌘/Ctrl-click still falls through to the normal
-    // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the frame's
-    // own handle, so pressing it always takes the card path — a press there selects and drags the
-    // frame itself, the way a card's title does, rather than rubber-banding its contents.
-    // A tab group's box is never itself selected (main.ts selTarget hands its open TAB the selection),
-    // so `selJoin` is what "selected" means for it — otherwise its interior could only ever rubber-band
-    // and the box would have no way to be moved at all.
-    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && !selJoin(n) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
-      e.stopPropagation();
-      beginMarqueeFromNode(e, n.id);
-      return;
-    }
     e.stopPropagation();
     try { el.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
     // Dragging a card that's part of a multi-selection moves the WHOLE selection at once;
@@ -423,7 +449,12 @@ export function bindNodeDrag(n: MindNode): void {
              moved:false, dropTarget:null as string | null, dropMode:'child', dropAfter:undefined, dropLine:null, alt:e.altKey, shift:e.shiftKey, cloned:false, rip:false,
              meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
              touch: e.pointerType === 'touch',  // higher move threshold for finger taps
-             cardMerge: null };
+             cardMerge: null,
+             // a lone plain card swings about the grab point; anything with a box, or a group, moves stiff
+             swing: !multi && !isContainer(n) && !isFrame(n) && !isDockedTab(n)
+               ? { pivot: { x: (e.clientX - el.getBoundingClientRect().left) / state.view.k, y: (e.clientY - el.getBoundingClientRect().top) / state.view.k },
+                   angle: 0, omega: 0, vx: 0, vy: 0, t: performance.now() }
+               : undefined };
     for (const id of ids) { const m2 = state.nodes.get(id); if (m2?.el){ m2.el.style.willChange = 'transform'; m2.el.classList.add('dragging'); } }
     // Continue/commit this drag on `window`, not `el` — pointer capture (above) is still requested
     // best-effort so the dragged card's own hover/other handlers stay quiet, but capture can be
@@ -465,6 +496,14 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   // write x/y to its file — a move you can't see and didn't ask for. Hiding the handles isn't enough.
   if (isLockedEffective(drag.n) || isReadingRoot(drag.n)) return;
   drag.alt = e.altKey; drag.shift = e.shiftKey;   // Shift = clone (live — release to cancel), Alt = detach
+  if (drag.swing) {
+    const now = performance.now(), dt = (now - drag.swing.t) / 1000;
+    if (dt > 0.004) {   // smoothed a little, so a jittery mouse doesn't rattle the card
+      drag.swing.vx = 0.6 * ((e.clientX - drag.cx) / dt) + 0.4 * drag.swing.vx;
+      drag.swing.vy = 0.6 * ((e.clientY - drag.cy) / dt) + 0.4 * drag.swing.vy;
+      drag.swing.t = now;
+    }
+  }
   drag.cx = e.clientX; drag.cy = e.clientY;   // remembered for edge auto-pan and RAF flush
   const dx = (e.clientX - drag.sx)/state.view.k, dy = (e.clientY - drag.sy)/state.view.k;
   const wasMoved = drag.moved;
@@ -498,7 +537,7 @@ function dragPointerUp(): void {
       // Clear compositor transforms so paintAll()/paintNode() can commit final left/top cleanly.
       for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
         const m2 = state.nodes.get(id);
-        if (m2?.el){ m2.el.style.transform = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging'); }
+        if (m2?.el){ m2.el.style.transform = ''; m2.el.style.transformOrigin = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging'); }
         if (m2?.frameContentEl) m2.frameContentEl.style.transform = '';
         if (m2?.tabStripEl) m2.tabStripEl.style.transform = '';
       }
@@ -530,7 +569,9 @@ function dragPointerUp(): void {
         // dropped onto a node? re-parent (the whole multi-selection, if that's what's dragging).
         // Alt+drop on empty canvas? detach to root. Otherwise it's just a move.
         const tgt = drag.dropTarget;
-        const { cloned, targets, alt, shift, clones, dropMode, dropAfter, selRoots, cardMerge, dock } = drag;
+        const { cloned, targets, alt, shift, clones, dropMode, dropAfter, selRoots, cardMerge, dock, near } = drag;
+        // The frames this drag may leave thin — resolved at the end (dissolveThinFrames).
+        const oldParents = selRoots.map(id => state.nodes.get(id)?.parent);
         clearDropTarget();
         hideLandingGhost();
         // Null drag NOW so every paintAll/paintEdges in the commit phase sees no active drag
@@ -634,7 +675,7 @@ function dragPointerUp(): void {
             if (!r?.parent) continue;
             const rp = state.nodes.get(r.parent);
             const rInFrame = !!(rp && isContainer(rp)) && !isAnnotation(r);   // frame/stack; annotations detach by rip only
-            const rOut = rInFrame && !centreInFrame(r, rp!);
+            const rOut = rInFrame && !insideContainer(r, rp!, new Set(targets.keys()));
             if (!shift && (rInFrame ? rOut : (alt || distanceRip(r)))){
               // UNDOCK: a tab dragged clear of its group's bounds becomes an ordinary frame again — it
               // gets its box back (open, at the mm_w/mm_h it kept all along) where it was dropped, and
@@ -662,6 +703,15 @@ function dragPointerUp(): void {
               : leftFrame ? `"${nodeLabel(act)}" left the frame`
               : `"${nodeLabel(act)}" is now a root`);
           dissolveEmptyTabGroups(emptied);   // the last tab out leaves an empty box + label behind
+          // Released CLOSE to a loose card (updateDropTarget's `near`): the two become a group — a new,
+          // untitled frame at their level, sized by layout from what it holds (fitFrame).
+          const nb = near ? state.nodes.get(near) : null;
+          if (nb && !cloned && nb.parent === act.parent) {   // (a detach above already put `act` at the top level)
+            const f = mkNode({ type: 'frame', parent: nb.parent, x: act.x, y: act.y, w: FRAME_W, h: FRAME_H });
+            state.nodes.set(f.id, f);
+            for (const m of [nb, act]) { touch(m.id); m.parent = f.id; m.dirty = true; m.dirtyLayout = true; }
+            setStatus(`Grouped “${nodeLabel(act)}” with “${nodeLabel(nb)}”`);
+          }
           // Refresh sibling order from the dropped positions (the ONLY position-based reorder).
           // The drop-target branch above skips this: there the previewed kidOrder was just set
           // explicitly via insertedKidOrder, and re-sorting from positions is exactly the
@@ -669,6 +719,7 @@ function dragPointerUp(): void {
           for (const id of targets.keys()) touch(state.nodes.get(id)?.parent);   // kidOrder pre-images
           reorderDraggedParents(targets.keys());
         }
+        if (!cloned) dissolveThinFrames(oldParents);   // a frame left with one card lets it go
         // Paint first so freshly-created clone cards have real DOM heights before applyLayouts
         // measures them — otherwise a chain/fan of clones lays out on the 64px height fallback
         // (only the first lands right). That paint -> layout -> paint order IS remeasure(), which the
@@ -715,7 +766,7 @@ export function abortDrag(): void {
   hideLandingGhost();
   for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
     const m = state.nodes.get(id);
-    if (m?.el){ m.el.style.transform = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }
+    if (m?.el){ m.el.style.transform = ''; m.el.style.transformOrigin = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }
     if (m?.frameContentEl) m.frameContentEl.style.transform = '';
     if (m?.tabStripEl) m.tabStripEl.style.transform = '';
   }
@@ -750,7 +801,7 @@ function applyDragClone(): void {
     for (const [id, s] of drag.start){             // pin the original subtree(s) back to start
       const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = false; }
       // revert their compositor transforms — `drag.active` is about to switch to the clone
-      if (m?.el) { m.el.style.transform = ''; }
+      if (m?.el) { m.el.style.transform = ''; m.el.style.transformOrigin = ''; }
       if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; }
       if (m?.tabStripEl) { m.tabStripEl.style.transform = ''; }
     }
@@ -765,7 +816,7 @@ function applyDragClone(): void {
     paintAll();                                    // render + bind the new clone nodes
   } else if (!drag.shift && drag.cloned){
     for (const clone of (drag.clones || [])){
-      if (clone.el){ clone.el.style.transform = ''; clone.el.style.willChange = ''; }
+      if (clone.el){ clone.el.style.transform = ''; clone.el.style.transformOrigin = ''; clone.el.style.willChange = ''; }
       if (clone.frameContentEl){ clone.frameContentEl.style.transform = ''; }
       if (clone.tabStripEl){ clone.tabStripEl.style.transform = ''; }
       state.nodes.delete(clone.id); clone.el?.remove();   // drop the clones we made
@@ -976,10 +1027,11 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       // …but never onto something this gesture is carrying: dragging the OPEN tab across its own
       // group's box resolves that very tab as the host, and "drop it into itself" is no drop at all.
       // Leaving the target null makes it a plain reposition, with the rip rules deciding the rest.
-      if (!sub.has(host.id) && !isLockedEffective(host)) {
+      // Only a FLOW frame takes the card from its box. A free frame's box is no target: the card joins
+      // by coming close to what the frame holds — the proximity rule below — the same test all round.
+      if (!sub.has(host.id) && !isLockedEffective(host) && frameFlow(host)) {
         target = host.id; mode = 'child';
-        // …and if that tab FLOWS its children, resolve the slot like any other flow frame would
-        if (frameFlow(host)) ({ afterId: after, line } = flowReorderTarget(host, dragged));
+        ({ afterId: after, line } = flowReorderTarget(host, dragged));
       }
     } else if (pf && frameFlow(pf)) {
       // A card inside a FLOW frame. Dead-CENTRE nests the dragged card as a CHILD of it (a grand-
@@ -1008,6 +1060,34 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       if (!target && !isLeafType(hoveredNode)) target = hovered;
     }
   }
+  // PROXIMITY (docs/spec-goo-groups.md): nothing under the pointer resolved, and a single plain card
+  // is being dragged — the card it has come CLOSE to decides. A card inside a FRAME stands for its
+  // frame: the drag joins that frame (the ordinary child drop, landing where released). A LOOSE card at
+  // the same top level makes the two a group on release (`near`; dragPointerUp mints the frame).
+  // ponytail: only top-level pairs group, so cards nudged together inside a frame don't spawn nested frames.
+  let near: string | null = null;
+  if (drag && !target && !dockTarget && !fuseTarget && !drag.alt && drag.selRoots.length === 1
+      && dragged.type === 'card' && !isLockedEffective(dragged)) {
+    const top = detachParentId();
+    // Where the dragged card WILL sit: a card ripping out of its frame is already at the top level for
+    // this purpose (updateRip's verdict from the previous frame — one paint of lag, never a wrong group).
+    const dparent = drag.rip ? top : dragged.parent;
+    let best: MindNode | null = null, bestD = Infinity;
+    for (const [id, m] of state.nodes) {
+      if (sub.has(id) || isHidden(m) || m.type !== 'card' || isLockedEffective(m) || !nearCards(dragged, m, JOIN_DIST)) continue;
+      const p = parentOf(m);
+      const joins = p && isFrame(p) && !isDockedTab(p) && p.id !== dragged.parent && !sub.has(p.id) && !isLockedEffective(p);
+      const groups = !p ? top === null && dparent === null : p.id === top && dparent === top && !isFrame(p);
+      if (!joins && !groups) continue;
+      const d = Math.hypot(m.x - dragged.x, m.y - dragged.y);
+      if (d < bestD) { bestD = d; best = m; }
+    }
+    if (best) {
+      const p = parentOf(best);
+      if (p && isFrame(p) && p.id !== dragged.parent) { target = p.id; mode = 'child'; }
+      else near = best.id;
+    }
+  }
   // An inheriting card's colour depends on its parent chain (effectiveColor), and while poised
   // over a valid target that chain is about to change — repaint the dragged subtree so an
   // inheriting card previews the NEW parent's colour live, instead of only updating on drop.
@@ -1015,7 +1095,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const colorKey = (t: string | null, m: string): string => (!t || m === 'reorder') ? '' : m + ':' + t;
   const changed = !!drag && colorKey(drag.dropTarget, drag.dropMode) !== colorKey(target, mode);
   const prevLine = drag?.dropLine ?? null;
-  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropAfter = after; drag.dropLine = line; drag.cardMerge = fuseTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; }
+  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropAfter = after; drag.dropLine = line; drag.cardMerge = fuseTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; drag.near = near; }
   if (changed) for (const id of sub) { const m = state.nodes.get(id); if (m) paintNode(m); }
   if (dockTarget) {
     // Dock preview: the target's own box outline goes dashed (.drop-target — "it lands in here", the

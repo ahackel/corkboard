@@ -19,6 +19,7 @@ import { clamp } from '../utils/num.js';
 import { isHidden, resolveWikilink } from '../utils/model.js';
 import { isStack, insideStack, isDockedTab } from './layout.js';
 import { isReadingRoot } from '../nav/scope.js';
+import { hasHull } from './hull.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
 import { nodeW, nodeH, colorFill, elTop, canvasSurface, snapPt } from '../main.js';
@@ -541,7 +542,7 @@ export function paintFreeEdges(): void {
   const one = state.sel.size === 1 ? state.nodes.get(state.selId ?? '') : null;
   // The selected card's own links, on the line layer with every other line.
   if (one && !isHidden(one)) svg += linkEdges(one);
-  if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one))
+  if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one) && !hasHull(one))   // a hull has no box for ports to sit on
     for (const { side, p } of socketPoints(one)) {
       // A ring already carrying an edge is FILLED — the same fill the draw preview uses for the port
       // it is about to take, and for the same reason: filled means "a line is on this one". So the

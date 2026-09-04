@@ -48,6 +48,14 @@ export interface Drag {
   dock?: string | null;
   // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
   dockAfter?: string | null;
+  // A loose card the dragged card has come CLOSE to (view/hull.ts cardsTouch): releasing wraps the
+  // two in a new frame (docs/spec-goo-groups.md). Set by updateDropTarget only when nothing else
+  // resolved, so it never competes with a drop onto something.
+  near?: string | null;
+  // A lone card in hand SWINGS about the point it was grabbed at (features/drag.ts stepSwing): `pivot`
+  // in the element's own px, `angle`/`omega` the spring's state, `vx`/`vy` the smoothed pointer speed
+  // in screen px/s, `t` when it was last fed. Absent for frames, stacks and multi-drags.
+  swing?: { pivot: Pt; angle: number; omega: number; vx: number; vy: number; t: number };
 }
 // A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
 // its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the

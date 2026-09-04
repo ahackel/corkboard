@@ -63,9 +63,9 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
   (folding legacy `image`/`stack` → `card`). Kinds: card, frame, annotation, query — a card with
   children IS the outliner.
-- **`n.w` is always AUTHORED; `n.h` only for frame/query and an IMAGE card** — a card whose note is
-  one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
-  Derived from the text (`isImageCard`), never a kind. Card/annotation measure their height.
+- **A card/annotation MEASURES both its width and height; a frame DERIVES its box from its children**
+  (`fitFrame`; `docs/spec-goo-groups.md`). `n.w`/`n.h` are authored only for query, an EMPTY frame and an
+  IMAGE card — a note that is one `![](…)`: no padding, aspect-locked resize, a 40px icon when folded.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
   open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`**; `state.readOnly` and `store.isOpen === false` (demo mode)

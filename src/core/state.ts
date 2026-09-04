@@ -247,6 +247,8 @@ export const world = byId('world');
 export const stage = byId('stage');
 // Freehand sketch layer — sits behind the cards (see index.html / styles.css z-index).
 export const sketchSvg = byId<SVGSVGElement>('sketch');
+// Frame hulls — the goo shape a frame draws around its children (view/hull.ts), under the cards.
+export const hullsSvg = byId<SVGSVGElement>('hulls');
 export const edgesSvg = byId<SVGSVGElement>('edges');
 // The free edges the user drew — see BoardEdge above and view/free-edges.ts.
 export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');

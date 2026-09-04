@@ -6,9 +6,9 @@ import { state, setStatus, isLeafType, isAnnotation, type MindNode, type NodeTyp
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
-import { applyLayouts, insertedKidOrder, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame } from '../view/layout.js';
+import { applyLayouts, insertedKidOrder, isTabsFrame, isDockedTab, canBeTab, tabsOf, activeTab, actionTarget, frameInterior, frameInsetY, moveSubtreeTo, hostFrame, frameLabelled } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
-import { detachParentId } from '../nav/scope.js';
+import { detachParentId, boxIsViewport } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, FRAME_BORDER, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
@@ -535,6 +535,28 @@ export function dissolveEmptyTabGroups(ids: Iterable<string | null | undefined>)
       if (state.selId === g.id) selectNode(null);
       deleteNodes([g.id]);
       id = g.parent;
+    }
+  }
+}
+
+// A frame lives by what it holds (docs/spec-goo-groups.md): the LAST card dragged out takes the frame
+// with it, whatever was written on it. Down to ONE child, a frame with nothing authored — no title,
+// colour or tags — dissolves too and the child steps up to where the frame sat. Walks up like
+// dissolveEmptyTabGroups, since the parent may be thin now as well.
+export function dissolveThinFrames(ids: Iterable<string | null | undefined>): void {
+  if (state.readOnly) return;
+  for (let id of new Set(ids)) {
+    while (id) {
+      const f = state.nodes.get(id);
+      if (!f || f.type !== 'frame' || isTabsFrame(f) || isDockedTab(f) || boxIsViewport(f)) break;
+      const kids = childrenOf(f.id);
+      if (kids.length > 1) break;
+      if (kids.length === 1 && (frameLabelled(f) || f.color || f.tags.length)) break;
+      touch(f.parent);
+      for (const k of kids) { touch(k.id); k.parent = f.parent; k.dirty = true; k.dirtyLayout = true; }
+      if (state.selId === f.id) selectNode(null);
+      deleteNodes([f.id]);
+      id = f.parent;
     }
   }
 }

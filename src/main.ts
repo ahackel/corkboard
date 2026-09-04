@@ -744,15 +744,14 @@ export function paintNode(n: MindNode): void {
     el.style.removeProperty('--frame-stroke');
     clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
   } else {
-    // A plain card or an annotation: an authored width if it has one (else back to the CSS-fixed
-    // card / the annotation's shrink-to-fit), never an inline height.
-    const authored = n.w != null || isReadingRoot(n);
+    // A plain card or an annotation shrink-wraps its text (styles.css .node); only the card being READ
+    // takes a width, the window's. Never an inline height, and no handles: nothing here is authored.
+    const authored = isReadingRoot(n);
     el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
-    // an annotation's CSS max-width would otherwise cap — and so desync — an authored width
     el.classList.toggle('w-set', authored);
     el.style.removeProperty('--frame-stroke');
-    ensureResizeHandles(n, EW_DIRS);
+    clearResizeHandles(el);
   }
   // Same rule the outline-row arm states, and it has to sit AFTER the whole chain because a stack, a
   // frame and a plain card each hand out their own handles: a DERIVED size isn't resizable. The card
@@ -884,7 +883,13 @@ export function paintNode(n: MindNode): void {
     // button's whole job there is to fold the GROUP (see the click handler in nodeEl)
     chip.title = isDockedTab(n) ? 'Collapse tab group' : (hasKids ? 'Collapse (X)' : 'Fold note away (X)');
   }
+  // A plain card whose text WRAPPED to one line is a pill (styles.css .pill) — measured, because "one
+  // line" is what the text came out as, not what the note holds. Only a card that could be one pays
+  // the layout read; the class changes no height, so the answer can't flip on the next paint.
+  const pillable = !isBoxNode(n) && !isStack(n) && !isFrameFold(n) && !isImageFold(n) && !isAnnotation(n) && !inStack(n) && !n.tags.length && !editingBody;
+  el.classList.toggle('pill', pillable && el.offsetHeight <= PILL_MAX_H);
 }
+const PILL_MAX_H = 46;   // one line of title or body plus the card's padding; two lines are past this
 // The markdown a node RENDERS — its whole note, title included.
 //
 // For a plain card that's `joinHeading(title, body)`: the title is the leading `# ` line of the text, and
@@ -1170,8 +1175,7 @@ export function nodeW(n: MindNode): number {
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
   const row = stackRowW(n); if (row != null) return row;             // outline row — derived, not authored
   if (isStack(n)) return n.w ?? STACK_W;
-  if (isAnnotation(n)) return n.w ?? ((n.el && n.el.offsetWidth) || NODE_W);
-  return n.w ?? NODE_W;
+  return (n.el && n.el.offsetWidth) || NODE_W;   // a card or annotation is measured, never authored
 }
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.

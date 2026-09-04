@@ -83,6 +83,8 @@
          transform (compositor-only); the gradients are rebuilt only when the level changes. -->
     <div id="grid"><div id="gridFine"></div></div>
     <div id="world">
+      <!-- goo hulls: a frame drawn as one soft shape around its children (view/hull.ts), under the cards -->
+      <svg id="hulls"></svg>
       <!-- freehand sketch layer: ink drawn on the canvas, always on top of the cards (z-index, see styles.css) -->
       <svg id="sketch"></svg>
       <svg id="edges"></svg>

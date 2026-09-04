@@ -15,6 +15,7 @@ import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } fr
 import { snapTo } from '../utils/num.js';
 import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
+import { HULL_PAD } from './hull.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -841,6 +842,21 @@ export function reorderDraggedParents(movedIds: Iterable<string>): void {
 // The node itself stays put — only its children (and their whole subtrees) move. A `free`
 // node leaves its children wherever they are. Sibling ORDER is read from the children's
 // CURRENT positions, so dragging a child past a sibling reorders them on the next pass.
+// Room the derived box keeps around its children: the hull's padding plus a hair, so a press on the
+// hull's rim lands on the frame's box and moves it.
+const FIT_PAD = HULL_PAD + 2;
+function fitFrame(f: MindNode, kids: MindNode[]): void {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const k of kids) {
+    x0 = Math.min(x0, k.x); y0 = Math.min(y0, k.y);
+    x1 = Math.max(x1, k.x + nodeW(k)); y1 = Math.max(y1, k.y + layoutH(k));
+  }
+  const inset = frameInsetY(f);
+  const x = x0 - FIT_PAD - FRAME_BORDER, y = y0 - FIT_PAD - inset;
+  const w = x1 - x0 + 2 * (FIT_PAD + FRAME_BORDER), h = y1 - y0 + 2 * FIT_PAD + inset + FRAME_BORDER;
+  if (f.x === x && f.y === y && f.w === w && f.h === h) return;
+  f.x = x; f.y = y; f.w = w; f.h = h; f.dirtyLayout = true;
+}
 function layoutSubtree(node: MindNode): void {
   if (node.collapsed) return;
   // annotations opt out of layout: never ordered, spaced, or flowed — they stay where dragged and
@@ -851,6 +867,10 @@ function layoutSubtree(node: MindNode): void {
   if (!kids.length) { if (isStack(node)) sizeEmptyStack(node); return; }
   // lay out each child's own subtree first, so subtreeBox() reflects the grandchildren
   for (const k of kids) layoutSubtree(k);
+  // A frame's BOUNDS follow its children (docs/spec-goo-groups.md, step 2): the box is the padded
+  // union of what it holds, so the hull can never clip a card and a card that joins is inside by
+  // construction. Only an EMPTY frame keeps an authored size. Tab groups keep theirs until they go.
+  if (isFrame(node) && !isDockedTab(node) && !isTabsFrame(node) && !boxIsViewport(node)) fitFrame(node, kids);
 
   // TABS: the group's child frames are docked as tabs, so this pass places their LABELS along the
   // strip — a tab's bounds ARE its label (isFrameFold, main.ts) and its own contents are placed by its

@@ -16,6 +16,7 @@ import { ui } from '../core/ui-state.js';
 import { readingShiftX, nodeW, nodeH, elTop, effectiveColor, colorFill } from '../main.js';
 import { clamp } from '../utils/num.js';
 import { paintFreeEdges } from './free-edges.js';
+import { paintHulls } from './hull.js';
 
 const DOT_R = 5;   // the anchor disk where a tether meets the card it annotates
 
@@ -25,6 +26,7 @@ const DOT_R = 5;   // the anchor disk where a tether meets the card it annotates
 // otherwise each have to remember the second one. Free edges go LAST: both write the #toggles
 // overlay and that layer is theirs.
 export function paintEdges(): void {
+  paintHulls();   // rides every repaint the lines do, drags included, so a hull follows its cards
   paintTethers();
   paintFreeEdges();
 }
