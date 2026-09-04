@@ -735,15 +735,17 @@ export function abortDrag(): void {
 export function cancelDragRestore(): void {
   const drag = ui.drag;
   if (!drag) return;
-  for (const clone of (drag.cloned && drag.clones) || []){
-    state.nodes.delete(clone.id); clone.el?.remove();
-  }
+  for (const clone of (drag.cloned && drag.clones) || []) dropSubtree(clone);
   for (const [id, s] of drag.start){
     const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = true; }
   }
   abortDrag();
   relayout();   // no new cards to measure — one layout + paint suffices
   commitStep();   // nothing changed → the pending step nets out and is discarded
+}
+// Remove a clone and everything under it (the clone of a frame brought its cards) from the map and the DOM.
+function dropSubtree(root: MindNode): void {
+  for (const id of subtreeIds(root.id)) { const m = state.nodes.get(id); state.nodes.delete(id); m?.el?.remove(); m?.frameContentEl?.remove(); }
 }
 // Bring the Shift-clone state in line with the live `drag.shift` flag. Shift down (and moved past
 // the threshold) leaves a clone of each dragged card at its start spot and drags the COPIES away;
@@ -759,21 +761,18 @@ function applyDragClone(): void {
       if (m?.el) { m.el.style.transform = ''; m.el.style.transformOrigin = ''; }
       if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; m.frameContentEl.style.transformOrigin = ''; }
     }
-    // clone each dragged ROOT (just the card, not its subtree) at its own start spot
+    // clone each dragged ROOT — with its subtree, so a frame's cards come along — at its own start spot
     const rootIds = drag.selRoots;
     const clones = rootIds.map(id => leaveClone(state.nodes.get(id)!, drag!.start.get(id)!));
     drag.clones = clones;
     drag.active = clones[0];                        // representative (drives the landing snap)
     drag.selRoots = clones.map(c => c.id);           // reparent the clones on drop, not the originals
-    drag.targets = new Map(rootIds.map((id, i) => { const sp = drag!.start.get(id)!; return [clones[i].id, { x:sp.x, y:sp.y }] as [string, Pt]; }));
+    // The clones and everything under them are what moves from here: each sits at its start spot now.
+    drag.targets = new Map(clones.flatMap(c => subtreeIds(c.id)).map(id => { const m = state.nodes.get(id)!; return [id, { x: m.x, y: m.y }] as [string, Pt]; }));
     drag.origins = new Map([...drag.targets].map(([id, s]) => [id, { x:s.x, y:s.y }] as [string, Pt]));
     paintAll();                                    // render + bind the new clone nodes
   } else if (!drag.shift && drag.cloned){
-    for (const clone of (drag.clones || [])){
-      if (clone.el){ clone.el.style.transform = ''; clone.el.style.transformOrigin = ''; clone.el.style.willChange = ''; }
-      if (clone.frameContentEl){ clone.frameContentEl.style.transform = ''; clone.frameContentEl.style.transformOrigin = ''; }
-      state.nodes.delete(clone.id); clone.el?.remove();   // drop the clones we made
-    }
+    for (const clone of (drag.clones || [])) dropSubtree(clone);   // drop the clones we made
     drag.clones = null;
     drag.cloned = false;
     drag.active = drag.n;                           // back to dragging the original

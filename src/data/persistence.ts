@@ -467,6 +467,7 @@ export async function saveAll(): Promise<void> {
   // parent paths must be final before we serialize anyone.
   const removals: string[] = [];
   const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
+  let rekeyed = false;                          // any note named or renamed: board.json keys by path
   // Kept in step with n.file below, so a name this loop has already handed out is seen as taken by
   // the nodes after it — the live `state.nodes` scan this replaced got that for free.
   const inUse = filesInUse();
@@ -480,7 +481,7 @@ export async function saveAll(): Promise<void> {
       renames.set(n.file, target);
       for (const c of childrenOf(n.id)) needWrite.add(c.id);
     }
-    if (n.file !== target) needWrite.add(n.id);    // brand-new node, or a rename
+    if (n.file !== target) { needWrite.add(n.id); rekeyed = true; }   // brand-new node, or a rename
     if (n.file) inUse.delete(n.file.toLowerCase());
     n.file = target;                               // adopt the final name
     inUse.set(target.toLowerCase(), n.id);
@@ -503,6 +504,10 @@ export async function saveAll(): Promise<void> {
     if (![...state.nodes.values()].some(n => n.file === old)) await store.remove(old);
 
   for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write below carries these
+  // board.json keys geometry by PATH, and its own debounce fires BEFORE this one — so a card that had
+  // no file yet was skipped, and a renamed one was written under its old name. Rewrite it now that
+  // every path is final, or the positions of every new card are lost on the next load.
+  if (rekeyed) await flushBoard();
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   paintAll();
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
