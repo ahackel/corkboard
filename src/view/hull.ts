@@ -226,7 +226,7 @@ function hullKids(f: MindNode): MindNode[] {
   let kids = childrenOf(f.id).filter(k => !isHidden(k) && !isAnnotation(k));
   const d = ui.drag;
   if (d?.moved && !d.cloned) {
-    if (d.rip) kids = kids.filter(k => !d.targets.has(k.id));
+    if (d.rip) kids = kids.filter(k => !d.selRoots.includes(k.id));   // the ROOTS leave; a dragged frame keeps its own cards
     if (d.dropTarget === f.id && d.dropMode === 'child' && !d.cardMerge)
       for (const id of d.selRoots) { const m = state.nodes.get(id); if (m && !kids.includes(m) && !isAnnotation(m)) kids.push(m); }
   }

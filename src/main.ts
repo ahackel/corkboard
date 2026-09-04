@@ -1431,7 +1431,12 @@ function frameContentEl(f: MindNode): HTMLElement {
   // re-spelling frameInterior's insets here — otherwise a change to them resizes the wrapper without
   // moving it, sliding the clip off its own box.
   const o = contentOrigin(f);
-  place(w, o.x, o.y, settledHost(f));
+  // A frame being dragged OUT of another lifts its own box to the drag layer (the dragOrig branch in
+  // paintNode); its wrapper has to go with it, or the cards inside stay clipped to the host it is
+  // leaving and vanish the moment they cross its edge. A frame carried by its host's drag stays put.
+  const d = ui.drag;
+  const lifted = !!(d?.origins?.get(f.id) && !(f.hostFrameId != null && d.targets.has(f.hostFrameId)));
+  place(w, o.x, o.y, lifted ? null : settledHost(f));
   w.style.width  = box.w + 'px';
   w.style.height = box.h + 'px';
   return w;
