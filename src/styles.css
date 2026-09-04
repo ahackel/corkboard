@@ -451,7 +451,7 @@ svg#hulls { position:absolute; top:0; left:0; overflow:visible; z-index:1; point
 .node.frame.hulled > .title-row {   /* the LABEL: bare text at `label`, inside the goo (main.ts --lx/--ly) */
   left:var(--lx); top:var(--ly); bottom:auto; right:auto; max-width:none; white-space:nowrap; cursor:grab;
   color:#fff; }   /* always white, always bold — a label over the wash, whatever the wash */
-.node.frame.hulled > .title-row > .title, .node.frame.hulled > .title-row > .title > * { font-weight:700; }
+.node.frame.hulled > .title-row > .title, .node.frame.hulled > .title-row > .title > * { font-weight:700; font-size:14px; }   /* a step above card text (12px) */
 /* An untitled bubble offers a place to write its name while it is selected: the same row, as a hint. */
 .node.frame.hulled.sel.no-title > .title-row,
 .node.frame.hulled.no-title > .title-row:has(> .title.editing) { visibility:visible; height:auto; padding:10px 12px; }
