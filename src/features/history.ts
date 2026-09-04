@@ -25,7 +25,7 @@ import { byId } from '../utils/dom.js';
 // sameSnap() saw no difference and commitStep() discarded the whole step (⌘Z then undid the
 // PREVIOUS action instead). A stack's `h` is derived, but restoring it is harmless: applyStep
 // re-runs applyLayouts(), which recomputes it.
-type NodeSnap = Omit<MindNode, 'id' | 'el' | 'frameContentEl' | 'tabStripEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
+type NodeSnap = Omit<MindNode, 'id' | 'el' | 'frameContentEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
 type Images = Map<string, NodeSnap | null>;      // null = the node does not exist
 // A step captures node before/after images and, where an op changed something that isn't a node:
 // the whole strokes array (a sketch gesture, see touchStrokes), the map's canvas colour (see

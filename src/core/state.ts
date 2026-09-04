@@ -25,12 +25,11 @@ export type NodeType = 'card' | 'frame' | 'annotation' | 'query';
 //             choose. `inherit`/`free`/`line`/`fan` survive in the type only to read old notes;
 //             `line`/`fan` placed children BESIDE the parent and are unreachable now.
 //   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
-//             down), vertical (auto-flow columns: top→bottom, wrap right), tabs (its child FRAMES
-//             are docked as tabs: their title tabs flow along the frame's top band and whichever
-//             tab is open borrows the whole box — see isTabsFrame in view/layout.ts).
+//             down), vertical (auto-flow columns: top→bottom, wrap right). `tabs` (a tab group) is
+//             retired: utils/frontmatter.ts folds it to `free` on load.
 //   · annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
-export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'tabs';
+export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
 // sizing from title/body content — a frame or a query card. An IMAGE card authors a height too, but
 // it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
@@ -108,7 +107,6 @@ export interface MindNode {
                                     // sort HINT, never a record of membership — mm_parent is that.
   el?: HTMLElement | null;         // the rendered card (added during paint)
   frameContentEl?: HTMLElement | null;   // this frame's overflow:hidden content wrapper (frames only)
-  tabStripEl?: HTMLElement | null;       // this tab GROUP's strip: the unclipped band holding its tabs' labels
   hostFrameId?: string | null;     // which frame's content wrapper el/frameContentEl currently live
                                     // in, DOM-wise (null = directly under #world) — transient render
                                     // bookkeeping, settled outside gestures (see main.ts settledHost)

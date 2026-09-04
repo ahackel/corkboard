@@ -141,7 +141,8 @@ in JS for ~250ms with a spring curve (slight overshoot, the World of Goo snap) a
    look: PAD / R / NECK_GAP / NECK_MIN / LABEL_H at the top of the file.
 2. **DONE (minimal)** — `fitFrame` in `view/layout.ts`: a frame with children takes the padded union of
    them as its box every layout pass; an EMPTY frame keeps its authored size. `mm_w`/`mm_h` are still
-   written (derived values, harmless). Tab groups, opening a frame and frame resize are NOT retired yet.
+   written (derived values, harmless). Tab groups are RETIRED (2026-09-04): `mm_layout: tabs` folds to `free`
+   on load and its former tabs are nested frames. Opening a frame and frame resize are not retired yet.
 3. **DONE (on release, not mid-drag)** — `updateDropTarget` resolves membership when nothing is under the
    pointer: the deepest frame whose resting hull the dragged card or frame overlaps (`hullGap`, hull.ts)
    takes it; a member leaves once `LEAVE_GAP` clear of the hull (`insideContainer`), and while still inside an

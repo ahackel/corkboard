@@ -17,7 +17,7 @@ import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type 
 import { junctionOf } from '../data/board.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, resolveWikilink } from '../utils/model.js';
-import { isStack, insideStack, isDockedTab } from './layout.js';
+import { isStack, insideStack } from './layout.js';
 import { isReadingRoot } from '../nav/scope.js';
 import { hasHull } from './hull.js';
 import { ui, type Pt } from '../core/ui-state.js';
@@ -46,7 +46,6 @@ export const SOCKET_R = 6;          // the four rings on a selected card you dra
 // Everything else keeps the full set.
 const ALL_SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
 export function portSides(n: MindNode): EdgeSide[] {
-  if (isDockedTab(n)) return ['up'];
   if (insideStack(n)) return ['left', 'right'];
   if (isStack(n)) return ['up', 'down'];
   return ALL_SIDES;
@@ -80,10 +79,7 @@ export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
 // A frame's own title tab has a ring of its own too (inset -2px), but no port sits on it: a frame's
 // ports are on its BOX (portRect below drops the tab from the rect), whose ring is the plain +1.
 const RING_MID = 1;
-function ringMid(n: MindNode): number {
-  if (isDockedTab(n)) return n.collapsed ? 3 : 5;
-  return RING_MID;
-}
+function ringMid(_n: MindNode): number { return RING_MID; }
 
 // The rectangle the ports sit on: the selection ring's centre line, all the way round (ringMid). Or,
 // put the other way, a node's bounds grown by half a ring — EXCEPT for a frame with a title tab: its

@@ -6,7 +6,7 @@
 // (layout.ts fitFrame) pads to the same distance so the rim is what you press to move it.
 import { state, hullsSvg, isAnnotation, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf } from '../utils/model.js';
-import { isFrame, isDockedTab, ancestorDepth } from './layout.js';
+import { isFrame, ancestorDepth } from './layout.js';
 import { boxIsViewport } from '../nav/scope.js';
 import { nodeW, nodeH, colorFill, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
@@ -222,7 +222,7 @@ function tick(now: number): void {
 // drag is poised to drop INTO this frame its cards already count, and one about to rip OUT no longer
 // does, so the hull previews the release.
 function hullKids(f: MindNode): MindNode[] {
-  if (!(isFrame(f) && !isDockedTab(f) && !boxIsViewport(f) && !isHidden(f))) return [];
+  if (!(isFrame(f) && !boxIsViewport(f) && !isHidden(f))) return [];
   let kids = childrenOf(f.id).filter(k => !isHidden(k) && !isAnnotation(k));
   const d = ui.drag;
   if (d?.moved && !d.cloned) {

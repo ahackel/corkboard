@@ -18,7 +18,6 @@
 // (for the one canonical spelling of "is a tab group") `view/layout.js`, never the reverse.
 // ============================================================
 import { state, type MindNode, type View } from '../core/state.js';
-import { isTabsFrame } from '../view/layout.js';
 import { safeInsets } from '../utils/dom.js';
 
 export interface ScopeBack { view: View; sel: string[]; selId: string | null; }
@@ -130,14 +129,13 @@ export function scopeRect(): { x: number; y: number; w: number; h: number } {
 // spelling of that, shared by every create/detach path (crud, clipboard, drag, the outline).
 export function detachParentId(): string | null { return scope.rootId; }
 
-// The openable ancestors of `t`, outermost first, EXCLUDING t itself — i.e. its folder path.
-// A tabs GROUP is skipped: from the user's side it doesn't exist (its open tab stands for it), the
-// same reason navArrow's ← steps past it. The crumb path IS this, which is why opening a deep frame
-// from the ⋯ menu still shows `Map › A › B › C` rather than `Map › C`.
+// The openable ancestors of `t`, outermost first, EXCLUDING t itself — i.e. its folder path. The
+// crumb path IS this, which is why opening a deep frame from the ⋯ menu still shows `Map › A › B › C`
+// rather than `Map › C`.
 export function openPathTo(t: MindNode): MindNode[] {
   const out: MindNode[] = [];
   for (let p = t.parent ? state.nodes.get(t.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    if (canOpen(p) && !isTabsFrame(p)) out.push(p);
+    if (canOpen(p)) out.push(p);
   return out.reverse();
 }
 

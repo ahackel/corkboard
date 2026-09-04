@@ -11,7 +11,7 @@ import { state, stage, setStatus, isBoxType, isAnnotation, isQueryCard, type Min
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { subtreeBox, frameInterior, tabsOf, moveSubtreeTo, actionTarget, isTabsFrame } from '../view/layout.js';
+import { subtreeBox } from '../view/layout.js';
 import { outlineActive } from './outline.js';
 import { FOLDER_PATH } from '../view/icons.js';
 import { createProperties, type PropertyControls } from './properties.js';
@@ -23,7 +23,7 @@ import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
-import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, elTop, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -53,12 +53,7 @@ const edLayoutTypes = byId('edLayoutTypes');
 // is still being imported at main.ts's top — see the main↔features import cycle note in CLAUDE.md.
 let _props: PropertyControls | null = null;
 function props(): PropertyControls {
-  // actionTarget, not the raw selection: selecting a tab group's box means "this frame" to the user, and
-  // the frame they mean is the OPEN TAB — so its colour (and its checklist) is what the swatches read
-  // and write. Colouring the invisible group would look like nothing happened; colouring the open tab
-  // tints the box too, since that's where the box takes its colour from (effectiveColor).
-  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist },
-    () => selectedIds().map(id => actionTarget(state.nodes.get(id)!).id));
+  return _props ??= createProperties({ colors: edColors, checklist: fbChecklist }, selectedIds);
 }
 
 // ---------- layout picker ----------
@@ -91,9 +86,8 @@ const NODE_TYPES: { key: NodeType; label: string; icon: string }[] = [
 // An ARRANGEMENT, one glyph per layout key — deliberately generic: none of them draws the container
 // it sits in, so the same chip means the same thing whichever kind offers it (`free` is shared by
 // card and frame already, and a kind added later inherits the vocabulary for free). Blocks are cards:
-// scattered for free, three columns for horizontal, three rows for vertical. `tabs` is excluded from
-// the map, not just from the rows below — it's never a chip (see LAYOUTS_BY_TYPE.frame).
-const LAYOUT_ICONS: Record<Exclude<NodeLayout, 'tabs'>, string> = {
+// scattered for free, three columns for horizontal, three rows for vertical.
+const LAYOUT_ICONS: Record<NodeLayout, string> = {
   inherit: SVG_OPEN + '<rect x="5" y="7" width="14" height="10" rx="2" stroke-dasharray="3 2.5"/></svg>',
   // Cards where they were dropped — the same BLOCKs the two flow glyphs use, just not lined up. Dots
   // are the CONNECTOR vocabulary (line/fan below, where what matters is the chain, not the card).
@@ -115,11 +109,6 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
     { key:'free', label:'Free — children placed freely inside the box', icon: LAYOUT_ICONS.free },
     { key:'horizontal', label:'Horizontal — cards flow left to right, wrapping down', icon: LAYOUT_ICONS.horizontal },
     { key:'vertical', label:'Vertical — cards flow top to bottom, wrapping right', icon: LAYOUT_ICONS.vertical },
-    // No `tabs` chip, deliberately: a tab group is made by DRAGGING one frame's title onto another's
-    // tab and unmade by dragging its tabs back out (the last one takes the empty box with it), so
-    // `mm_layout: tabs` is bookkeeping the user never picks. It's also unreachable from here — an open
-    // group can't be selected at all (main.ts selTarget) — and markChips hides this whole row for the
-    // one group that still can be, the folded pill.
   ],
   annotation: [],
   query: [],
@@ -237,9 +226,6 @@ function setType(type: NodeType): void {
       // silently keeping it would turn a converted 800px frame into an 800px card.
       // card/annotation/stack: the height is never authored — and the width goes too if we're
       // leaving a 2D box, whose width described its contents rather than its own text.
-      // A tab group is a FRAME with layout tabs; leaving `frame` behind dissolves the group, so its
-      // tabs need their own boxes back (same as switching the layout away — see undockAllTabs).
-      if (n.type === 'frame' && n.layout === 'tabs' && type !== 'frame') undockAllTabs(n);
       if (!isBoxType(type)) { n.h = undefined; if (isBoxType(n.type)) n.w = undefined; }
       if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
       if (type === 'query' && (n.w == null || n.h == null)) { n.w = QUERY_W; n.h = QUERY_H; }
@@ -254,37 +240,12 @@ function setType(type: NodeType): void {
   markChips();
   relayout(); scheduleSave();
 }
-// Give a tab group's tabs their own boxes back: open every one (only one was open) and cascade them
-// inside the frame, since as tabs they were all stacked in the same strip band and would otherwise
-// land in a pile. Their authored mm_w/mm_h were never touched while docked, so each comes back at the
-// size it went in at. Run while the frame is still a tabs frame, i.e. BEFORE the type is reassigned —
-// setType (retyping a folded group to a card/stack/…) is the one caller left, since the layout picker
-// no longer offers tabs at all and hides itself for a group.
-function undockAllTabs(g: MindNode): void {
-  const box = frameInterior(g);
-  tabsOf(g).forEach((t, i) => {
-    touch(...subtreeIds(t.id));   // its whole subtree moves with it, so it all needs undoing
-    const lent = frameInterior(t);   // where its cards sit right now: the interior the group lent it
-    t.collapsed = false;
-    t.x = box.x + 20 + i * 24; t.y = box.y + 20 + i * 24;
-    // Re-anchor its cards to the box they're in rather than carrying them along with the frame: while
-    // docked, their offset was measured from a LABEL in the strip, which says nothing about where they
-    // sit — what has to be preserved is their position inside the interior. Spelt out (border, plus the
-    // frame's own title tab) because the group's layout hasn't flipped yet, so frameInterior would
-    // still hand back the lent box.
-    const dx = (t.x + FRAME_BORDER) - lent.x, dy = (t.y + FRAME_BORDER + FRAME_TAB_DROP) - lent.y;
-    for (const k of childrenOf(t.id)) moveSubtreeTo(k, k.x + dx, k.y + dy);
-    t.dirty = true; t.dirtyLayout = true;
-  });
-}
 // Change the child-ARRANGEMENT of the selection (within its current type).
 function setLayout(layout: NodeLayout): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.layout === layout) continue;
-      // No tabs case here: this row is hidden for a tab group (markChips), so a layout is never
-      // reassigned over one. Leaving tabs behind is the KIND picker's job (setType → undockAllTabs).
       // Drop the stored child order: a switch INTO a managed layout (line/fan/flow) must reseed
       // order from the children's CURRENT positions — a free layout never touches kidOrder, so a
       // stale order from an earlier managed pass would otherwise survive.
@@ -319,12 +280,7 @@ function markChips(): void {
 
   const forType: NodeType = type ?? 'card';
   rebuildLayoutChips(forType);
-  // A tab group has no arrangement to choose — its open tab lays out the box's contents, and tabs
-  // mode itself is entered/left by dragging (no chip, see LAYOUTS_BY_TYPE.frame). Only a FOLDED group
-  // reaches this at all, and showing it three chips with none active would read as a layout it lost;
-  // worse, clicking one would silently dissolve the group. Hide the row for any selection holding one.
-  const hasTabs = ids.some(id => { const n = state.nodes.get(id); return !!n && isTabsFrame(n); });
-  const hasLayout = LAYOUTS_BY_TYPE[forType].length > 0 && !hasTabs;
+  const hasLayout = LAYOUTS_BY_TYPE[forType].length > 0;
   fbLayout.style.display = hasLayout ? '' : 'none';
   if (!hasLayout) { fbLayout.innerHTML = ''; return; }
   const layoutSet = new Set(ids.map(id => state.nodes.get(id)?.layout));
@@ -486,9 +442,8 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id),
       disabled: locked || (!childrenOf(n.id).length && !(n.body && n.body.trim())) });
   // Opening a frame mutates nothing, so it belongs in this read-only-safe block — and it's the one
-  // way IN while read-only, since a double-click there still folds instead (activateNode). Routed
-  // through actionTarget, so right-clicking a tab GROUP's box opens the tab that's showing.
-  if (!multi && canOpen(actionTarget(n)))
+  // way IN while read-only, since a double-click there still folds instead (activateNode).
+  if (!multi && canOpen(n))
     entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
   entries.push({ label:'Fit view', shortcut:'F', run: () => frameBox(targetIds.map(id => state.nodes.get(id))) });
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: !n.file });
@@ -522,7 +477,7 @@ const GAP = 20;
 // kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
 export function canOpenSelection(): boolean {
   const n = anchorNode();
-  return !!n && canOpen(actionTarget(n)) && !isScopeRoot(actionTarget(n));
+  return !!n && canOpen(n) && !isScopeRoot(n);
 }
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
 function anchorNode(): MindNode | undefined {
@@ -531,15 +486,12 @@ function anchorNode(): MindNode | undefined {
 }
 // What the bar centres itself over HORIZONTALLY: the node's TITLE, not its box. A frame's box can be
 // many times wider than its label, and the bar belongs over the thing you selected and are about to
-// rename/recolour — centred on a wide box it drifts far from the tab it acts on. Via actionTarget, so a
-// selected tab GROUP (which shows no title of its own) uses its OPEN TAB's label, the same node its
-// colour/rename/delete already land on. labelEl (main.ts) owns WHICH element that is, so the folded /
-// docked case needs no second spelling here; an image card / annotation renders its title row empty,
-// hence the width guard falling back to the whole box.
+// rename/recolour — centred on a wide box it drifts far from the tab it acts on. labelEl (main.ts) owns
+// WHICH element that is, so the folded case needs no second spelling here; an image card / annotation
+// renders its title row empty, hence the width guard falling back to the whole box.
 function labelRect(n: MindNode): DOMRect {
-  const t = actionTarget(n);
-  const el = t.el ?? n.el!;
-  const lr = labelEl(t)?.getBoundingClientRect();
+  const el = n.el!;
+  const lr = labelEl(n)?.getBoundingClientRect();
   return (lr && lr.width > 4) ? lr : el.getBoundingClientRect();
 }
 // Put the bar over its anchor card. Returns whether it could actually be placed — false when the

@@ -169,8 +169,11 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
   const t = fmValue(entries, 'mm_type');
   if (t === 'image') return { type: 'card', layout: 'free', wasStack: false };
   if (t === 'stack') return { type: 'card', layout: 'inherit', wasStack: true };
-  if (t === 'frame' || t === 'card' || t === 'annotation' || t === 'query')
-    return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout, wasStack: false };
+  if (t === 'frame' || t === 'card' || t === 'annotation' || t === 'query') {
+    // `tabs` (a tab group, retired) folds to a plain frame: its former tabs are nested frames now.
+    const l = fmValue(entries, 'mm_layout');
+    return { type: t, layout: (l && l !== 'tabs' ? l : (t === 'frame' ? 'free' : 'inherit')) as NodeLayout, wasStack: false };
+  }
   // legacy: infer both from the combined mm_layout token
   const v = fmValue(entries, 'mm_layout');
   if (v === 'image') return { type: 'card', layout: 'free', wasStack: false };

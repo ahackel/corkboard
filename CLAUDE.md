@@ -86,8 +86,8 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 ## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
 - Frames — "A `frame`'s BOUNDS include its title tab" · "A container's two side wrappers are
-  LIFECYCLE-managed" · "A frame with `mm_layout: tabs` is a TAB GROUP" · "A frame can be OPENED, and
-  then the canvas IS its interior" · "An OPENED CARD is its note" (scope, crumbs, canvas colour, `detachParentId`).
+  LIFECYCLE-managed" · "A frame can be OPENED, and then the canvas IS its interior" · "An OPENED CARD is
+  its note" (scope, crumbs, canvas colour, `detachParentId`). Tab groups are gone: `mm_layout: tabs` folds to `free`.
 - Outlines — "A `stack` is an OUTLINER" (now: any card with children); files — "A body-less note is MIGRATED on load" · "A note that is
   blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "A plain double-click

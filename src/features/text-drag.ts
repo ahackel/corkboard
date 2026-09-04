@@ -20,7 +20,7 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { isContainer } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
-import { centredAt, contentParent, dropCardText, cardText, canMerge,
+import { centredAt, dropCardText, cardText, canMerge,
          type TextSource } from './crud.js';
 import { firstLineSplit } from '../utils/frontmatter.js';
 import { effectiveColor, colorClass, applyColorVars, NODE_W } from '../main.js';
@@ -44,8 +44,8 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
   if (!n) return { container: null };                    // open canvas → a sibling of the source
   if (isLockedEffective(n)) return null;                 // locked: no drop, no hint
   if (canMerge(n)) return { into: n };                    // a card or annotation swallows the text
-  if (isContainer(n)) return { container: contentParent(n) };   // a frame/stack takes a card of its own
-  // Anything else under the cursor (an image or query card, a folded frame or a docked tab) has no
+  if (isContainer(n)) return { container: n };   // a frame/stack takes a card of its own
+  // Anything else under the cursor (an image or query card, a folded frame) has no
   // note to take the text and no interior to hold a card, so it counts as canvas — the new card
   // simply lands over it.
   return { container: null };

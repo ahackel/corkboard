@@ -16,10 +16,10 @@ import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { outlineActive, startRowTitleEdit } from './outline.js';
-import { actionTarget, isTabsFrame, frameLabelled } from '../view/layout.js';
+import { frameLabelled } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, startQueryEdit, toggleCollapse, relayout, remeasure, reframeForTab } from '../main.js';
+import { selectNode, startQueryEdit, relayout, remeasure, reframeForTab } from '../main.js';
 import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
 import { extractToChild, discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
@@ -43,8 +43,6 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   // hold there too — but the tab itself is hidden inside the fold, and an editor on a display:none
   // element can't be typed into. So unfold first, the way focusNode reveals before it acts; a locked
   // group refuses, stays folded, and falls through to the lock check below.
-  if (isTabsFrame(n) && n.collapsed) toggleCollapse(n.id);
-  n = actionTarget(n);
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   // An annotation has no title — its double-click / F2 / add-child rename all edit the BODY instead.
   if (isAnnotation(n)) { startBodyEdit(n); return; }

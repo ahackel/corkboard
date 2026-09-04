@@ -41,13 +41,6 @@ export interface Drag {
   // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
   // dropTarget stays null and every other preview stands down.
   cardMerge?: string | null;
-  // The frame whose TAB the dragged frame(s) are poised over: releasing DOCKS them there as tabs
-  // (features/drag.ts tabZoneAt → crud.ts dockFrames). Its own resolution, not a dropMode, because it
-  // isn't a reparent-with-a-landing: dropTarget stays null, so every other preview stands
-  // down — same shape as cardMerge above.
-  dock?: string | null;
-  // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
-  dockAfter?: string | null;
   // A loose card the dragged card has come CLOSE to (view/hull.ts cardsTouch): releasing wraps the
   // two in a new frame (docs/spec-goo-groups.md). Set by updateDropTarget only when nothing else
   // resolved, so it never competes with a drop onto something.

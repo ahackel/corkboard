@@ -7,9 +7,9 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId, isReadingRoot } from '../nav/scope.js';
-import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
+import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -17,10 +17,10 @@ import { paintEdges } from '../view/edges.js';
 import { snapTo } from '../utils/num.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, FRAME_W, FRAME_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, FRAME_W, FRAME_H, STACK_PAD, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
-import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, dissolveThinFrames, mkNode, reanchorContents, interiorAtHome } from './crud.js';
-import { near as nearCards, hullGap, hasHull, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
+import { leaveClone, mergeCardsInto, canMerge, dissolveThinFrames, mkNode } from './crud.js';
+import { near as nearCards, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
@@ -171,8 +171,8 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   const s = drag.targets.get(act.id);
   if (!s) return { x: dx, y: dy };
   const fp = parentOf(act);
-  // …and no grid AT ALL for a card whose position is CALCULATED — a stack row, a flow frame's child, a
-  // docked tab (isManagedLayout, view/layout.ts). It has no authored x/y for the grid to land on: the
+  // …and no grid AT ALL for a card whose position is CALCULATED — a stack row, a flow frame's child
+  // (isManagedLayout, view/layout.ts). It has no authored x/y for the grid to land on: the
   // governor recomputes both in the next layout pass, and the gesture is a REORDER, so snapping only
   // fights the pointer on the way to a drop that ignores the result.
   if (fp && isManagedLayout(fp)) return { x: dx, y: dy };
@@ -206,12 +206,7 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
         // the same compositor transform onto it (only when this frame itself is a root — a
         // carried frame's wrapper is already moving with its own host's transform) so the clip
         // window slides with the frame instead of staying stranded at its pre-drag position.
-        // …and a tab GROUP has a third: the strip its tabs' labels live in, which sits outside that
-        // wrapper (main.ts tabStripEl), so it needs the same treatment or the tabs stay behind.
-        // A dragged TAB is the exception: only its label travels. The box its cards sit in belongs to its
-        // group and stays where it is, so its wrapper keeps still — you drag the tab, not the contents.
-        if (m.frameContentEl) m.frameContentEl.style.transform = isDockedTab(m) ? '' : t;
-        if (m.tabStripEl) m.tabStripEl.style.transform = t;
+        if (m.frameContentEl) m.frameContentEl.style.transform = t;
       }
     }
   }
@@ -373,10 +368,7 @@ export function bindNodeDrag(n: MindNode): void {
     if (e.button === 2) { e.stopPropagation(); return; }   // right-click = context menu only: no drag/select/rename
     // A descendant of a locked card can't be selected or dragged at all — only the locked card
     // itself (checked further below) remains reachable this way.
-    // …except a docked TAB, which stays pressable however locked it (or its group) is: clicking it only
-    // opens it, which lock doesn't forbid (activateTab), and a tab you can't click is a tab you can't
-    // reach. Moving it is still refused further down (dragPointerMove's isLockedEffective).
-    if (hasLockedAncestor(n) && !isDockedTab(n)) { e.stopPropagation(); return; }
+    if (hasLockedAncestor(n)) { e.stopPropagation(); return; }
     const tgt = e.target as HTMLElement;
     // A frame's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
     // A press there is a press on the frame ITSELF: it must take the ordinary card path below —
@@ -450,7 +442,7 @@ export function bindNodeDrag(n: MindNode): void {
              touch: e.pointerType === 'touch',  // higher move threshold for finger taps
              cardMerge: null,
              // a lone plain card swings about the grab point; anything with a box, or a group, moves stiff
-             swing: !multi && !isContainer(n) && !isFrame(n) && !isDockedTab(n)
+             swing: !multi && !isContainer(n) && !isFrame(n)
                ? { pivot: { x: (e.clientX - el.getBoundingClientRect().left) / state.view.k, y: (e.clientY - el.getBoundingClientRect().top) / state.view.k },
                    angle: 0, omega: 0, vx: 0, vy: 0, t: performance.now() }
                : undefined };
@@ -538,7 +530,6 @@ function dragPointerUp(): void {
         const m2 = state.nodes.get(id);
         if (m2?.el){ m2.el.style.transform = ''; m2.el.style.transformOrigin = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging'); }
         if (m2?.frameContentEl) m2.frameContentEl.style.transform = '';
-        if (m2?.tabStripEl) m2.tabStripEl.style.transform = '';
       }
       const act = drag.active;
       // Released OUTSIDE the browser window → cancel the whole gesture, OS-style snap-back.
@@ -555,10 +546,6 @@ function dragPointerUp(): void {
         // (opacity .75) for any node still in ui.drag.targets — leaving the selected card
         // semi-transparent. Nulling here means the repaint sees no active drag.
         ui.drag = null;
-        // Clicking a TAB opens it (closing its siblings) as well as selecting it — that's what a tab
-        // is for. Before the selection branch below, so it happens on the FIRST click, whether or not
-        // this tab was already the selected node. Locked tabs included (see activateTab).
-        if (isDockedTab(n) && !state.readOnly) activateTab(n);
         if (drag.meta) toggleSel(n.id);                 // ⌘/Ctrl-click: add/remove from selection
         else if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);   // reduce a multi-selection to this card
         // A click only ever SELECTS. Editing in place is the double-click's job (main.ts
@@ -568,7 +555,7 @@ function dragPointerUp(): void {
         // dropped onto a node? re-parent (the whole multi-selection, if that's what's dragging).
         // Alt+drop on empty canvas? detach to root. Otherwise it's just a move.
         const tgt = drag.dropTarget;
-        const { cloned, targets, alt, shift, clones, dropMode, dropAfter, selRoots, cardMerge, dock, near } = drag;
+        const { cloned, targets, alt, shift, clones, dropMode, dropAfter, selRoots, cardMerge, near } = drag;
         // The frames this drag may leave thin — resolved at the end (dissolveThinFrames).
         const oldParents = selRoots.map(id => state.nodes.get(id)?.parent);
         clearDropTarget();
@@ -591,30 +578,6 @@ function dragPointerUp(): void {
               : `Merged “${nodeLabel(act)}” into “${nodeLabel(fuseNode)}”`);
             remeasure();
             selectNode(fuseNode.id);
-            scheduleSave(); commitStep();
-            return;
-          }
-        }
-        // Dropped on a frame's TAB (dock, resolved by updateDropTarget): the dragged frame(s) become
-        // tabs of it, sharing one box — no reparent-with-a-landing, so this supersedes everything
-        // below, exactly like the image-fold above. A group the frames LEFT and that's now empty
-        // dissolves in the same step.
-        const dockNode = dock ? state.nodes.get(dock) : null;
-        if (dockNode) {
-          const oldParents = selRoots.map(id => state.nodes.get(id)?.parent);
-          const wasTab = selRoots.every(id => state.nodes.get(id)?.parent === dockNode.id);
-          // drag.start = every dragged node's PRE-drag position: dockFrames needs each frame's own to
-          // cancel the delta its cards rode along with it — see reanchorContents.
-          const g = dockFrames(dockNode, selRoots, drag.dockAfter, drag.start);
-          if (g) {
-            dissolveEmptyTabGroups(oldParents);
-            setStatus(wasTab
-              ? `Moved “${nodeLabel(act)}” in the tab row`
-              : selRoots.length > 1
-              ? `Docked ${selRoots.length} frames as tabs of “${nodeLabel(g)}”`
-              : `Docked “${nodeLabel(act)}” as a tab of “${nodeLabel(g)}”`);
-            remeasure();
-            selectNode(act.id);
             scheduleSave(); commitStep();
             return;
           }
@@ -668,7 +631,6 @@ function dragPointerUp(): void {
           // still inside it. Any other root detaches on Alt or once its own distanceRip fires (per
           // root, since each measures against its own parent — matches the updateRip preview).
           let detached = 0, leftFrame = 0;
-          const emptied: (string | null | undefined)[] = [];   // groups a tab may have just left
           for (const rootId of selRoots){
             const r = state.nodes.get(rootId);
             if (!r?.parent) continue;
@@ -676,11 +638,6 @@ function dragPointerUp(): void {
             const rInFrame = !!(rp && isContainer(rp)) && !isAnnotation(r);   // frame/stack; annotations detach by rip only
             const rOut = rInFrame && !insideContainer(r, rp!, new Set(targets.keys()));
             if (!shift && (rInFrame ? rOut : (alt || distanceRip(r)))){
-              // UNDOCK: a tab dragged clear of its group's bounds becomes an ordinary frame again — it
-              // gets its box back (open, at the mm_w/mm_h it kept all along) where it was dropped, and
-              // its cards come along, re-anchored from the lent interior to that box (reanchorContents).
-              const wasTab = isDockedTab(r);
-              const lent = wasTab ? interiorAtHome(r, drag.start.get(r.id) ?? r) : null;
               // the old parent's kidOrder, BEFORE the link is cut — else undo restores the child but
               // not its slot, and it comes back appended at the end of its siblings
               touch(rp?.id);
@@ -689,11 +646,6 @@ function dragPointerUp(): void {
               // show it (detachParentId, nav/scope.ts). Either way there's no side and no frame host.
               r.parent = detachParentId();
               r.dirty = true;                     // mm_parent is in the note — see reparentOnly
-              if (wasTab) {
-                if (r.collapsed) { r.collapsed = false; r.dirty = true; }
-                reanchorContents(r, lent!, drag.start.get(r.id) ?? r);
-                emptied.push(rp!.id);
-              }
               detached++; if (rOut) leftFrame++;
             }
           }
@@ -701,7 +653,6 @@ function dragPointerUp(): void {
             detached > 1 ? `Detached ${detached} cards`
               : leftFrame ? `"${nodeLabel(act)}" left the frame`
               : `"${nodeLabel(act)}" is now a root`);
-          dissolveEmptyTabGroups(emptied);   // the last tab out leaves an empty box + label behind
           // Released CLOSE to a loose card (updateDropTarget's `near`): the two become a group — a new,
           // untitled frame at their level, sized by layout from what it holds (fitFrame).
           const nb = near ? state.nodes.get(near) : null;
@@ -767,7 +718,6 @@ export function abortDrag(): void {
     const m = state.nodes.get(id);
     if (m?.el){ m.el.style.transform = ''; m.el.style.transformOrigin = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }
     if (m?.frameContentEl) m.frameContentEl.style.transform = '';
-    if (m?.tabStripEl) m.tabStripEl.style.transform = '';
   }
   ui.drag = null;
   document.body.classList.remove('grabbing');
@@ -802,7 +752,6 @@ function applyDragClone(): void {
       // revert their compositor transforms — `drag.active` is about to switch to the clone
       if (m?.el) { m.el.style.transform = ''; m.el.style.transformOrigin = ''; }
       if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; }
-      if (m?.tabStripEl) { m.tabStripEl.style.transform = ''; }
     }
     // clone each dragged ROOT (just the card, not its subtree) at its own start spot
     const rootIds = drag.selRoots;
@@ -817,7 +766,6 @@ function applyDragClone(): void {
     for (const clone of (drag.clones || [])){
       if (clone.el){ clone.el.style.transform = ''; clone.el.style.transformOrigin = ''; clone.el.style.willChange = ''; }
       if (clone.frameContentEl){ clone.frameContentEl.style.transform = ''; }
-      if (clone.tabStripEl){ clone.tabStripEl.style.transform = ''; }
       state.nodes.delete(clone.id); clone.el?.remove();   // drop the clones we made
     }
     drag.clones = null;
@@ -869,23 +817,6 @@ window.addEventListener('keyup',   (e) => {
 // zone now answers one question instead of two.
 const CENTER_FRAC = 0.45;
 
-// The frame whose TAB BAND (tabBandRect: its folder tab, or a group's whole strip) contains this world
-// point — the DOCK zone. Innermost-first, like every other frame hit test here, so nested frames stay
-// reachable; a hit on a docked TAB resolves to its group, since a tab of a group is where you aim when
-// you mean "put it in this row of tabs". Returns null when the point is on no tab at all.
-function tabZoneAt(wx: number, wy: number, skip: Set<string>): MindNode | null {
-  let best: MindNode | null = null, bestDepth = -1;
-  for (const [id, m] of state.nodes) {
-    if (skip.has(id) || isHidden(m) || m.type !== 'frame' || hasHull(m)) continue;   // a bubble has no tab band
-    const b = tabBandRect(m);
-    if (wx < b.x || wx > b.x + b.w || wy < b.y || wy > b.y + b.h) continue;
-    const d = ancestorDepth(m);
-    if (d > bestDepth) { bestDepth = d; best = m; }
-  }
-  if (!best) return null;
-  const g = tabGroupOf(best);
-  return g && !skip.has(g.id) ? g : best;
-}
 function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: number }): void {
   // Everything currently being dragged — dragged's own subtree for a single drag, or the whole
   // multi-selection's subtrees. Never a valid drop target (self, sibling-in-tow, or descendant).
@@ -937,29 +868,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   let after: string | null | undefined = undefined;   // insertion anchor (sibling/reorder)
   let line: Seg | null = null;   // reorder gap indicator
   let fuseTarget: string | null = null;    // card-merge target card (mergeDrag over a plain card)
-  let dockTarget: string | null = null;    // frame whose tab band the dragged FRAME(s) are poised over
-  let dockAfter: string | null = null;     // …and the tab they'd slot in after (null = first)
-  // Dragging frames or plain cards — every root, so a mixed selection can't half-dock — over another
-  // frame's tab band DOCKS them there as tabs (a card becomes a frame on the way in; see canBeTab).
-  // Resolved before everything else and taken as exclusive: a tab band sits outside the box it belongs
-  // to, so nothing else sensible can be meant by a release there.
-  const tabDrag = !!drag && !drag.alt && drag.selRoots.length > 0
-    && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canBeTab(m); });
-  if (tabDrag) {
-    const zone = tabZoneAt(wx, wy, sub);
-    if (zone && !isLockedEffective(zone)) {
-      dockTarget = zone.id;
-      // WHERE in the strip: a group resolves the slot under the cursor (so dragging a tab sideways
-      // re-slots it, and a new tab can land between two existing ones); a frame that isn't a group yet
-      // has only its own tab to compare against — left of its middle means the newcomer goes first.
-      if (isTabsFrame(zone) && !zone.collapsed) ({ afterId: dockAfter, line } = tabDropTarget(zone, wx, sub));
-      else dockAfter = zone.id;   // a fresh group reads one way: the frame you aimed at first, this one next
-    }
-  }
-  if (dockTarget) {
-    // no target/side: the reparent previews (landing ghost, dashed edge) stand down, and the dock
-    // preview below draws either the insertion bar in the strip or the tab this would become.
-  } else if (hovered && sub.has(hovered)){
+  if (hovered && sub.has(hovered)){
     setStatus(`Can't parent "${nodeLabel(dragged)}" onto its own child/descendant`);
   } else if (mergeDrag) {
     // Only an unlocked card or annotation can swallow a note (canMerge). Over anything else nothing is
@@ -1018,13 +927,8 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       ({ afterId: after, line } = flowReorderTarget(hoveredNode, dragged));
     } else if (isFrame(hoveredNode)) {
       // FREE frame: adopt the card wherever it's released inside the box (dropLanding's frame branch).
-      // A tab GROUP holds no content of its own, though — its box belongs to whichever tab is OPEN, so
-      // the drop goes to that tab. Otherwise the card would sit in the group and stay on screen no
-      // matter which tab you switch to, which is exactly not what a tab is for. (An empty group has no
-      // tab to take it, so it keeps the card itself.)
-      const host = isTabsFrame(hoveredNode) ? (activeTab(hoveredNode) ?? hoveredNode) : hoveredNode;
-      // …but never onto something this gesture is carrying: dragging the OPEN tab across its own
-      // group's box resolves that very tab as the host, and "drop it into itself" is no drop at all.
+      const host = hoveredNode;
+      // …but never onto something this gesture is carrying: "drop it into itself" is no drop at all.
       // Leaving the target null makes it a plain reposition, with the rip rules deciding the rest.
       // Only a FLOW frame takes the card from its box. A free frame's box is no target: the card joins
       // by coming close to what the frame holds — the proximity rule below — the same test all round.
@@ -1068,13 +972,13 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   // frame on release (`near`; dragPointerUp mints it). Only there — siblings inside a frame sit close by
   // design, and nudging them must not mint frames. Nested frames come from dropping a frame into a hull.
   let near: string | null = null;
-  const goo = (m: MindNode): boolean => m.type === 'card' || (isFrame(m) && !isDockedTab(m) && !isTabsFrame(m));
-  if (drag && !target && !dockTarget && !fuseTarget && !drag.alt && drag.selRoots.length === 1
+  const goo = (m: MindNode): boolean => m.type === 'card' || isFrame(m);
+  if (drag && !target && !fuseTarget && !drag.alt && drag.selRoots.length === 1
       && goo(dragged) && !isLockedEffective(dragged)) {
     const top = detachParentId();
     let best: MindNode | null = null, bestDepth = -1;
     for (const [id, f] of state.nodes) {
-      if (sub.has(id) || id === dragged.parent || isHidden(f) || !isFrame(f) || isDockedTab(f) || isTabsFrame(f) || isLockedEffective(f)) continue;
+      if (sub.has(id) || id === dragged.parent || isHidden(f) || !isFrame(f) || isLockedEffective(f)) continue;
       if (!drag.rip && isAncestor(id, dragged.id)) continue;
       if (hullGap(dragged, f, sub) > 0) continue;
       const depth = ancestorDepth(f);
@@ -1097,22 +1001,9 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const colorKey = (t: string | null, m: string): string => (!t || m === 'reorder') ? '' : m + ':' + t;
   const changed = !!drag && colorKey(drag.dropTarget, drag.dropMode) !== colorKey(target, mode);
   const prevLine = drag?.dropLine ?? null;
-  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropAfter = after; drag.dropLine = line; drag.cardMerge = fuseTarget; drag.dock = dockTarget; drag.dockAfter = dockAfter; drag.near = near; }
+  if (drag) { drag.dropTarget = target; drag.dropMode = mode; drag.dropAfter = after; drag.dropLine = line; drag.cardMerge = fuseTarget; drag.near = near; }
   if (changed) for (const id of sub) { const m = state.nodes.get(id); if (m) paintNode(m); }
-  if (dockTarget) {
-    // Dock preview: the target's own box outline goes dashed (.drop-target — "it lands in here", the
-    // same affordance a frame drop-in uses), plus ONE marker for the slot, never both:
-    //  · a GROUP shows the insertion bar in the gap the tab would take (line, from tabDropTarget) —
-    //    the same language a line/flow reorder speaks;
-    //  · a frame that isn't a group yet has no strip to point into, so the ghost TAB is drawn right
-    //    where it will appear — one label past that frame's own tab, which is exact, since the minted
-    //    group shows no tab of its own and the target's tab keeps the position it already has.
-    // (showInsertLine and showLandingGhost hide each other, so only one is ever on screen.)
-    const t = state.nodes.get(dockTarget)!;
-    t.el?.classList.add('drop-target');
-    if (line) showInsertLine(line);
-    else showLandingGhost(t.x + frameLabelW(t) + TAB_GAP, tabBandRect(t).y, frameLabelW(dragged), FRAME_TAB_H);
-  } else if (fuseTarget) {
+if (fuseTarget) {
     // Alt-dragging image card(s) — or plain cards — over a plain card: a dashed outline on the target
     // is the whole affordance for both, since neither is a reparent (`target` stayed null), so
     // there's no landing ghost or insertion bar to draw.
@@ -1126,10 +1017,8 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   } else if (target) {
     const targetNode = state.nodes.get(target)!;
     // Highlight the target — EXCEPT a flow frame, which shows the insertion bar (below) instead of
-    // the frame-outline highlight (like line-layout reorder). For a docked TAB the highlight goes on
-    // its GROUP's box: that's the box the card is about to land in, and outlining the tab's little
-    // label instead would point at the switch rather than at the drop.
-    const hiEl = (isDockedTab(targetNode) ? tabGroupOf(targetNode) ?? targetNode : targetNode).el;
+    // the frame-outline highlight (like line-layout reorder).
+    const hiEl = targetNode.el;
     if (mode !== 'reorder' && !frameFlow(targetNode)) hiEl?.classList.add(mode === 'sibling' ? 'drop-sibling' : 'drop-target');
     // One preview at a time, never both: joining/reordering a managed branch with existing
     // children shows ONLY the insertion bar in the sibling gap (the dragged subtree's edge is

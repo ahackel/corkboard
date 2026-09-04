@@ -13,9 +13,9 @@ import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
 import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { snapTo } from '../utils/num.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, FRAME_BORDER, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
-import { hullBox, hasHull } from './hull.js';
+import { hullBox } from './hull.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the layout
@@ -83,8 +83,8 @@ export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' |
     if (h && isStack(h)) return { x: governor.x + STACK_INDENT, y: subtreeBox(governor).y1 + STACK_GAP };
   }
   // A frame adopts the card where it's released, snapped to the grid RELATIVE to the frame's
-  // origin (its children live in the frame's coordinate space) — containerBox, so a docked tab
-  // snaps against the box its group lent it rather than its own label in the strip.
+  // origin (its children live in the frame's coordinate space) — containerBox, so the OPEN frame
+  // snaps against the viewport it fills.
   if (isFrame(governor)) {
     const g = gridSnap();
     const box = containerBox(governor);
@@ -166,13 +166,6 @@ const FLOW_BAND_TOL = 30;
 // row is ever squeezed to (so a deep outline never collapses to zero width).
 const STACK_INDENT = 18;
 const STACK_MIN_ROW_W = 90;
-// Gap between two tabs in a group's strip. It was zero back when every tab carried a border and the two
-// 2px rims met as the divider between them; an inactive tab is now fill-only (see the frame section in
-// CLAUDE.md), so flush tabs would run their soft patches into one continuous band. A thin gap is what
-// divides them instead — small enough that they still read as sheets in one folder rather than separate
-// pills. A term in three places (tabSlots, tabDropTarget, the dock ghost); the insertion bar lands in the
-// middle of the gap (`+ TAB_GAP / 2`).
-export const TAB_GAP = 4;
 
 // Bounding box over a node + its VISIBLE descendants (what the layout actually placed).
 export function subtreeBox(node: MindNode){
@@ -241,121 +234,14 @@ export function hasRows(node: MindNode): boolean {
 export function isStack(node: MindNode): boolean {
   return node.type === 'card' && !node.collapsed && !insideStack(node) && hasRows(node);
 }
-// ---------- tab groups: a frame whose child FRAMES are docked as tabs ----------
-// A TABS frame (mm_layout: tabs): its child frames aren't content, they're TABS. Their title tabs
-// flow along this frame's own top band (tabStripRect) and whichever tab is OPEN borrows the whole
-// box for its children — so the group owns the geometry (x/y/w/h, colour, resize handles, border)
-// and a tab owns only its contents. Keyed on the RAW type + layout rather than isFrame, so
-// collapsing the group can't flip a hosted tab's identity mid-paint (same caution as frameInsetY).
-export function isTabsFrame(node: MindNode): boolean {
-  return node.type === 'frame' && node.layout === 'tabs' && !insideStack(node);
-}
-// The group `node` is docked into as a tab, or null. A tab is always a FRAME child of a tabs frame:
-// any other child kind is ordinary content (e.g. a card dropped into the box), never a tab.
-export function tabGroupOf(node: MindNode): MindNode | null {
-  if (node.type !== 'frame') return null;
-  const p = parentOf(node);
-  return p && isTabsFrame(p) ? p : null;
-}
-// (tabGroupOf already returns null inside a stack — a demoted group is no longer a tabs frame — so a
-// tab in there is an ordinary frame child, i.e. a row of the outline like every other descendant.)
-export function isDockedTab(node: MindNode): boolean { return !!tabGroupOf(node); }
-// A group's tabs in strip order (left to right) — stored like any child order, i.e. seeded from the
-// tabs' own positions along the strip (kidsByPosition) and only changed by dragging one.
-export function tabsOf(g: MindNode): MindNode[] {
-  return orderedKids(g, childrenOf(g.id).filter(k => k.type === 'frame'));
-}
-// The one OPEN tab. Exactly one tab is open at a time (normalizeTabs), which is what lets a tab
-// reuse the plain collapse machinery: an open tab is an expanded frame that happens to render as
-// just its label, a closed one is a folded frame, and a closed tab's contents hide themselves
-// (isHidden — an ancestor is collapsed). No `mm_active` key, no second notion of visibility.
-export function activeTab(g: MindNode): MindNode | null {
-  return tabsOf(g).find(t => !t.collapsed) ?? null;
-}
-// What can be dropped on a frame's tab to become a tab of it. A frame already is one; a plain CARD is
-// turned into a frame on the way in (crud.ts dockFrames), since that's what a tab is. The other kinds
-// keep out: an annotation is a note pinned on top of something else and holds nothing, a stack's whole
-// nature is its outliner box, and an image/query card is a leaf whose box IS its content.
-// A goo frame is not: tabs are a box's face, and a bubble has none (docs/spec-goo-groups.md retires them).
-export function canBeTab(n: MindNode): boolean { return n.type === 'card' || (n.type === 'frame' && !hasHull(n)); }
-// The node a user-facing action on `n` should actually hit. A tab group doesn't exist from the outside:
-// what you see, colour, rename or delete is the OPEN TAB, so those land there. The box-shaped actions
-// stay on the group, because the box is the one thing it visibly owns — moving it, resizing it, its
-// kind/layout (which is how you leave tabs mode) and its lock, all of which apply to every tab at once.
-export function actionTarget(n: MindNode): MindNode {
-  return isTabsFrame(n) && !n.collapsed ? (activeTab(n) ?? n) : n;
-}
-// Enforce "exactly one open tab" — the single invariant this feature adds. Run as a pre-pass in
-// applyLayouts so every path that could break it (a tab click, collapse-all, expand-all, a
-// hand-edited vault with none or three tabs open) is covered by ONE funnel instead of each having to
-// remember. Marks what it changes dirty, so a vault that disagreed is healed on disk too.
-export function normalizeTabs(g: MindNode): void {
-  const tabs = tabsOf(g);
-  if (!tabs.length) return;
-  const keep = tabs.find(t => !t.collapsed) ?? tabs[0];   // first open wins; none open → open the first
-  for (const t of tabs) {
-    const want = t !== keep;
-    if (t.collapsed !== want) { t.collapsed = want; t.dirty = true; t.dirtyLayout = true; }
-  }
-}
-// The box a container actually holds its children in. Its own bounds for everything else — but a
-// DOCKED TAB has no box: its bounds are just its label up in the strip, and its contents live in the
-// interior its group lent it. The single spelling of that indirection, shared by frameInterior, the
-// flow layout, the drop landing and the in-frame/out-of-frame rip test, so none of them has to know
-// whether the frame it's given is docked.
+// The box a container actually holds its children in: its own bounds — or, for the OPEN one
+// (nav/scope.ts), the VIEWPORT, which is what gives its contents the whole window instead of a
+// rectangle on the canvas. A DERIVED override: f.w/f.h are neither read nor written here, which is
+// what lets the frame come back out at its authored size. Shared by frameInterior, the flow layout,
+// the drop landing and the in-frame/out-of-frame rip test.
 export function containerBox(f: MindNode): { x: number; y: number; w: number; h: number } {
-  // …or whether it's the OPEN one (nav/scope.ts), whose box is the VIEWPORT — that's what gives its
-  // contents the whole window instead of a rectangle on the canvas. A DERIVED override: f.w/f.h are
-  // neither read nor written here, which is what lets the frame come back out at its authored size.
-  // Checked before the docked branch, or an open TAB would keep the interior its group lent it.
   if (boxIsViewport(f)) return scopeRect();
-  const g = tabGroupOf(f);
-  if (g) return frameInterior(g);
   return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
-}
-// Where a group lays its tabs out: the band across the top of its BOUNDS — exactly where its own
-// title tab hangs (styles.css `.node.frame > .title-row`), since the tabs are that tab's siblings in
-// the same band. A DOCKED group has no band above it (it's a tab itself), so its strip takes the top
-// of the interior it was lent instead; frameInterior reserves that room (see below).
-export function tabStripRect(g: MindNode): { x: number; y: number; w: number; h: number } {
-  const box = containerBox(g);
-  return { x: box.x, y: box.y, w: box.w, h: FRAME_TAB_H };
-}
-// Where each tab sits along its group's strip, plus `next` — the slot PAST the last tab, where a newly
-// docked one lands. The single spelling of the strip's arithmetic: the layout pass places tabs from it
-// and the dock preview draws its ghost tab at `next`, so the preview can't disagree with the result.
-// Reads measured label widths (frameLabelW), so callers must have painted the tabs first.
-export function tabSlots(g: MindNode): { xs: number[]; next: number } {
-  const strip = tabStripRect(g);
-  // From the very left of the band: a group with tabs shows no tab of its own (styles.css
-  // `.tabs.has-tabs > .title-row`), so there's nothing to start past — two docked frames must read as
-  // two tabs, not three.
-  let cx = strip.x;
-  const xs: number[] = [];
-  for (const t of tabsOf(g)) { xs.push(cx); cx += nodeW(t) + TAB_GAP; }
-  return { xs, next: cx };
-}
-// Where a frame dropped on a group's strip slots in: the tab it lands AFTER (`null` = first), plus the
-// insertion bar to draw in that gap. The strip's analogue of flowReorderTarget — one row of tabs, so
-// it's a plain midpoint comparison along x, and dragging a tab sideways past its neighbour re-slots it.
-// `skip` drops the dragged frames from the ordering, so a tab can't anchor against itself.
-export function tabDropTarget(g: MindNode, wx: number, skip: Set<string>): { afterId: string | null; line: Seg } {
-  const strip = tabStripRect(g);
-  const tabs = tabsOf(g).filter(t => !skip.has(t.id));
-  let afterId: string | null = null;
-  let pos = strip.x;                      // the front slot, at the strip's left edge
-  for (const t of tabs) {
-    if (wx < t.x + nodeW(t) / 2) break;   // left of this tab's middle → it goes in front of it
-    afterId = t.id; pos = t.x + nodeW(t) + TAB_GAP / 2;
-  }
-  return { afterId, line: { x0: pos, y0: strip.y, x1: pos, y1: strip.y + strip.h } };
-}
-// The band that counts as "on this frame's tab" — the DOCK zone, i.e. what a dragged frame has to be
-// released over to become a tab of it. For a plain frame that's its own folder tab (its label in the
-// top band of its bounds); for a GROUP it's the whole strip, so anywhere along the row of tabs docks.
-export function tabBandRect(f: MindNode): { x: number; y: number; w: number; h: number } {
-  if (isTabsFrame(f) && !f.collapsed) return tabStripRect(f);
-  return { x: f.x, y: f.y, w: frameLabelW(f), h: FRAME_TAB_H };
 }
 // Either kind of child-containing box: a frame or a stack. Used at every touchpoint where the box
 // behaves purely as "a container that holds & clips its children" (footprint, hosting, edge
@@ -545,19 +431,9 @@ export function ancestorDepth(node: MindNode): number {
 // pixel-identical by construction instead of by two hand-synced copies of the same arithmetic.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
   // The OPEN frame's interior IS the viewport, with no border and no tab to inset from. Spelled here
-  // as well as in containerBox because a non-docked frame doesn't route through it — this function is
-  // the one every hosted child, wrapper and edge clip-path reads.
+  // as well as in containerBox because this function is the one every hosted child, wrapper and edge
+  // clip-path reads.
   if (boxIsViewport(f)) return scopeRect();
-  // A DOCKED TAB draws no box of its own — its group lends it the whole interior, which is the point
-  // of docking (one box, several tabs). It reserves room at the top only when it is ITSELF a group:
-  // a top-level group's strip hangs in the band above its box, but a docked one has nothing above it,
-  // so its own tabs have to come off the interior it was lent.
-  const g = tabGroupOf(f);
-  if (g) {
-    const lent = frameInterior(g);
-    const strip = isTabsFrame(f) ? FRAME_TAB_H : 0;
-    return { x: lent.x, y: lent.y + strip, w: lent.w, h: Math.max(0, lent.h - strip) };
-  }
   return {
     x: f.x + FRAME_BORDER, y: f.y + frameInsetY(f),
     w: Math.max(0, nodeW(f) - FRAME_BORDER * 2),
@@ -583,23 +459,21 @@ export function frameInsetY(f: MindNode): number {
 // the `ax + FRAME_PAD` the other sides use from the box's outer edge. A nested frame's own tab lives
 // inside ITS bounds (see frameInsetY), so this frame reserves no room for it. Shared by the flow layout
 // and its insertion bar so the two can't disagree.
-// (A docked tab's lent box already starts below its group's border, and has no tab band of its own
-// above it, so the FRAME_PAD comes straight off it — hence containerBox rather than frame.y here.
-// The OPEN frame is the same case for the same reason: its box is the viewport and it draws no tab.
+// (The OPEN frame's box is the viewport and it draws no tab, so the FRAME_PAD comes straight off it —
+// hence containerBox rather than frame.y here.
 // Fixed here rather than by making isFrameBox false for it, deliberately: isFrameBox feeds isBoxNode
 // and nodeH, and nodeH would then fall through to offsetHeight on a display:none element and
 // silently report a 64px frame. elTop is the one place that needs the exception.)
 function frameContentTop(frame: MindNode): number {
   const box = containerBox(frame);
-  return ((isDockedTab(frame) || boxIsViewport(frame)) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
+  return (boxIsViewport(frame) ? box.y : elTop(frame, box.y)) + FRAME_PAD;
 }
 // Is `child`'s centre inside `frame`'s OUTER box? The single source of truth for "a frame child is
 // still in its frame" — the trigger drag.ts uses in BOTH the rip PREVIEW (updateRip) and the detach
 // COMMIT (dragPointerUp), so a child ripping out previews the detach exactly where it commits. Uses
 // the full box (not frameInterior's inset) deliberately: a card counts as inside until its centre
 // clears the frame edge.
-// containerBox, not the frame's own bounds: a DOCKED TAB's child is "in" the box its group lent it,
-// not in the tab's label up in the strip.
+// containerBox, not the frame's own bounds, so the OPEN frame's viewport counts as its box.
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {
   // The OPEN frame's interior is the whole canvas, so its children can never be ripped out of it —
   // there is nowhere visible to rip them TO. One guard, so the preview and the commit still agree.
@@ -668,9 +542,7 @@ export function frameFlow(node: MindNode): 'flow-h' | 'flow-v' | null {
 // spelling of "is this a managed governor?" shared by layout, drop-landing sim, and order reseeding.
 export function isManagedLayout(node: MindNode): boolean {
   const t = effectiveLayout(node).type;
-  // isTabsFrame: a group owns its tabs' positions (they're slots in its strip, not free placements),
-  // so a dragged tab's order is reseeded from where it was dropped — like a flow frame's children.
-  return t === 'line' || t === 'fan' || t === 'stack' || !!frameFlow(node) || !!stackOf(node) || isTabsFrame(node);
+  return t === 'line' || t === 'fan' || t === 'stack' || !!frameFlow(node) || !!stackOf(node);
 }
 // The stack whose outline governs `node`'s CHILDREN: `node` itself when it's a stack box, otherwise
 // the stack hosting it — a row inside an outline, whose children are rows too, so the stack owns
@@ -714,10 +586,6 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
   // column, so they order by y as well — side/midpoint ranking is meaningless in an outline.
   if (stackOf(node))
     return kids.slice().sort((a, b) => boxTL(a).y - boxTL(b).y || cmpTie(a, b)).map(k => k.id);
-  // TABS: one left→right strip, so order is purely the tab's own x — the slot it sits in, which is
-  // what mm_position_x persists (no separate order key). The tab's OWN x, not its subtree box: an
-  // open tab's contents sit in the box the group lent it, nowhere near its label in the strip.
-  if (isTabsFrame(node)) return kids.slice().sort((a, b) => a.x - b.x || cmpTie(a, b)).map(k => k.id);
   const flow = frameFlow(node);
   if (flow) {
     const cross = (k: MindNode) => flow === 'flow-h' ? boxTL(k).y : boxTL(k).x;
@@ -866,26 +734,8 @@ function layoutSubtree(node: MindNode): void {
   for (const k of kids) layoutSubtree(k);
   // A frame's BOUNDS follow its children (docs/spec-goo-groups.md, step 2): the box is the padded
   // union of what it holds, so the hull can never clip a card and a card that joins is inside by
-  // construction. Only an EMPTY frame keeps an authored size. Tab groups keep theirs until they go.
-  if (isFrame(node) && !isDockedTab(node) && !isTabsFrame(node) && !boxIsViewport(node)) fitFrame(node, kids);
-
-  // TABS: the group's child frames are docked as tabs, so this pass places their LABELS along the
-  // strip — a tab's bounds ARE its label (isFrameFold, main.ts) and its own contents are placed by its
-  // own layoutSubtree (already run above) inside the interior the group lent it (containerBox). Which
-  // is why a tab's label moves WITHOUT shiftSubtree: its contents aren't attached to the label, they
-  // live in the box. (Their mm_position_x, being an offset from the tab, is rewritten when a tab
-  // changes slot — harmless churn, and it reloads to the same absolute spot either way.)
-  if (isTabsFrame(node)) {
-    const tabs = tabsOf(node);
-    // paint BEFORE measuring: a tab shrink-wraps its title, so both its own width and the slot maths
-    // that follows are live measurements (nodeW → offsetWidth) that don't exist until it has been
-    // rendered at all — the same paint-then-measure rule the stack outliner above follows.
-    for (const t of tabs) paintNode(t);
-    const y = tabStripRect(node).y;
-    const { xs } = tabSlots(node);
-    tabs.forEach((t, i) => { t.x = xs[i]; t.y = y; t.dirtyLayout = true; paintNode(t); });
-    return;
-  }
+  // construction. Only an EMPTY frame keeps an authored size.
+  if (isFrame(node) && !boxIsViewport(node)) fitFrame(node, kids);
 
   const type = effectiveLayout(node).type;            // `none` inherits the parent's layout
   const flow = frameFlow(node);                       // flow-h / flow-v for a flow frame, else null
@@ -971,17 +821,13 @@ function layoutSubtree(node: MindNode): void {
 // never persists: scheduleSave is a no-op there, so the in-memory positions are discarded
 // when read-only is left and the map is reloaded from disk.
 export function applyLayouts(): void {
-  // Settle every tab group on exactly one open tab FIRST: the pass below (and the paints it triggers)
-  // reads `collapsed` all over, so the invariant has to hold before any of it runs — and doing it
-  // here covers every caller at once (~20 relayout sites) instead of per gesture.
-  for (const n of state.nodes.values()) if (isTabsFrame(n)) normalizeTabs(n);
   // The open frame may have just been deleted / undone away / vanished on disk. Repaired here for
-  // the same reason normalizeTabs is: this runs after every structural change, so one call covers
+  // this runs after every structural change, so one call covers
   // every path instead of each remembering.
   pruneScope();
   const open = scopeRootNode();
   if (open) {
-    // …and while a frame is open it is never FOLDED — an invariant, kept beside normalizeTabs
+    // …and while a frame is open it is never FOLDED — an invariant, kept here
     // because a reload or an undo can re-collapse it and layoutSubtree bails on a collapsed node,
     // which would leave the canvas blank.
     if (open.collapsed) { open.collapsed = false; open.dirty = true; open.dirtyLayout = true; }

@@ -139,8 +139,7 @@ tab is a label that says nothing while costing the box 39px. Four things hold it
 **A frame INSIDE A STACK isn't a frame at all** — `isFrame` tests `insideStack`, so it renders as an
 outline row like a nested stack does (see the stack section). Three render sites had asked the RAW type and
 so kept drawing a tab for it; they go through `rendersAsFrame` now (`isFrameBox || isFrameFold`), which is
-the same question spelled once: does this node draw a frame at all. The tab machinery is demoted with it —
-`isTabsFrame` is false in a stack, so a group's tabs are ordinary frame children there, i.e. rows.
+the same question spelled once: does this node draw a frame at all.
 
 **A `frame`'s BOUNDS include its title tab.** The title renders as a folder tab above the box's top-left
 corner (`.node.frame > .title-row`, absolutely positioned) and `n.x/n.y/w/h` cover it: `n.y` is the **tab's**
@@ -152,48 +151,19 @@ title. `FRAME_TAB_H` is **40px**, a normal card's padding and title metric, and 
 renders, so the tab's `padding`/`font-size`/`line-height` are pinned in `styles.css` rather than inherited
 from `.node .title`.
 
-**A frame is an outline and a label; the ONE thing that FILLS is a DOCKED TAB** — and outline and fill trade
-places between the two tab states. The OPEN tab (`.tab-active`) is outlined *and* filled solid in
-`--frame-stroke`: the sheet at the front of the folder, so box → tab reads as one outlined shape. An INACTIVE
-tab (`.frame-folded.docked:not(.tab-active)`) is fill only, at 62%, with NO border — a sheet tucked behind
-that front (which is literally where it paints), so the canvas shows through and no rim draws three shapes
-where there is one folder. Semitransparent fill, not `opacity`, which would fade the title too. Everything
-that is NOT a docked tab is a 2px outline in `--frame-stroke` over nothing: an expanded frame's tab, a folded
-frame, a folded group's pill. Four knock-ons:
+**A frame is an outline and a label, never a fill:** its label is a 2px outline in `--frame-stroke` over
+nothing — an expanded frame's tab, a folded frame's pill. `FRAME_TAB_H` is spent as `padding` + `border` + the
+20px line: `box-sizing` is `border-box` and nothing sets a height, so the three must total 40 (`8px/2px` for a
+pill). Widths are MEASURED off the element (`nodeW`) and `nodeH` just asserts `FRAME_TAB_H`. Its ink is
+`--tab-ink` (`inkFor(behindFill(n))`): the walk stops at the open frame, and falls back to canvas → map colour
+→ `THEME_BG`. One knock-on:
 
-- **Every tab keeps the SAME BOX, and `FRAME_TAB_H` is spent three ways.** Widths are MEASURED off the
-  element (`nodeW`) and `nodeH` just asserts `FRAME_TAB_H`, so any state spending the 40px differently would
-  slide every tab along the strip when you switched which was open. `box-sizing` is `border-box` and nothing
-  sets a height, so `padding` + `border` + the 20px line must total 40: `8px/2px` for a pill; a docked tab
-  drops the bottom border (that edge meets the box) and pays it back as `padding-bottom:10px`; an inactive
-  one drops the border entirely and pays it back on BOTH axes (`padding:10px 12px` — the horizontal half is
-  easy to forget, and it's 4px of drift per click). The active tab fills *behind* its border rather than
-  dropping it (both `--frame-stroke`, so it rasterizes as one shape) for the same no-reflow reason. Change
-  one, change the others. (2px, not the box's 4px: a 4px rim eats most of the label at this size.) The
-  selection ring's `inset` pays for that border too — `-4px` on a bordered tab (an absolutely positioned
-  child resolves against the PADDING box), `-2px` on a borderless inactive one.
-- **A title with no fill under it is inked against what's BEHIND the frame** (`--tab-ink` ← `behindFill`,
-  written by `paintNode` on every frame), not against the frame's own colour: `var(--ink)` answers "what
-  reads on this fill", the wrong question once the fill is gone. `behindFill` walks out through the
-  containers that actually paint one (authorship-tested like `canvasFill`, since `.c-none` is transparent),
-  stops at the open frame, and falls back to canvas → map colour → `THEME_BG`. A DOCKED tab has a fill of its
-  own, so its title goes back to `var(--ink)`; what still reads `--tab-ink` there is its LOCK BADGE, which
-  hangs 8px *outside* the tab — which is why `behindFill` starts a docked tab's walk ABOVE its group.
 - **`isFrame` means an EXPANDED frame** (`view/layout.ts` tests `!collapsed`), and so, through `isContainer`,
   does every question built on it. Both rules above must reach the FOLDED half too, which is why `paintNode`
   writes `--tab-ink` off the raw `n.type === 'frame'` and `inFrame` bails on `isFrameFold(n)` beside
   `isContainer(n)`. Get the second wrong and a folded frame falls through to the plain-card branch and takes
   the `.frame-child` tint — whose `(0,3,0)` selector out-specifies `.node.frame-folded`'s own
-  `background:none`, so the pill meant to read as a bare outline wears a washed-out fill. (A docked tab
-  escapes that by accident, its own fill rule being `(0,4,0)` — don't lean on it.)
-- **A folded group's outline is its OPEN TAB's colour**, which is why `effectiveColor` redirects a tabs frame
-  to `activeTab` unconditionally rather than only while expanded: the pill already wears that tab's title
-  (`foldedTab`), so anything else would show two identities at once. The colour picker on a folded group
-  still writes the GROUP (`actionTarget` doesn't redirect while folded), which then shows only when the open
-  tab inherits — exactly as on an expanded one.
-- **Only a TAB GROUP squares its top-left corner** (`.node.frame.tabs.has-tabs`, mirrored onto the content
-  wrapper by `frameContentEl`), so a tab's straight left side meets the box flush. An untabbed frame is
-  rounded all round like every other box.
+  `background:none`, so the pill meant to read as a bare outline wears a washed-out fill.
 
 **An annotation RE-PINS in one drag, once it's past the rip threshold.** Over its own card it moves
 freely — a remark is positioned by dragging, so passing over a neighbour must not silently hand it over —
@@ -208,8 +178,8 @@ target refuses it, as every other drop does (this branch runs ahead of the share
 An ANNOTATION pinned to a frame anchors on the BOX, never the tab: its connector runs to the closest point
 on the parent, and that clamp takes its top edge from `elTop` rather than the bounds (`view/edges.ts`) — the
 tab is a separate shape hanging above the box, half the strip beside it isn't drawn at all, and a dot parked
-up there reads as pointing at nothing. `elTop` is 0 for every other kind, a FOLDED frame and a docked tab
-included, where the tab IS the body.
+up there reads as pointing at nothing. `elTop` is 0 for every other kind, a FOLDED frame included, where
+the tab IS the body.
 
 Two more consequences: the tab must stay a single ellipsised line (a wrapping one would make the box's
 position depend on a live measurement — hence the hover tooltip in `paintNode`), and the vertical projection
@@ -220,13 +190,12 @@ of a hosted child into its host goes through `frameInsetY` rather than a bare `F
 **Anything that writes a node's `left`/`top` must go through `placeSelf` + `elTop`**, not a bare `place()` —
 that is the pair `paintNode`'s final branch uses, and the relayout ANIMATION (`placeNodeEl`/`setNodeElXY`)
 writes left/top too, since interpolating them IS the animation. Skipping `elTop` parks a frame's box at its
-bounds top instead of one tab lower; because the box paints after the tab strip (tree order, see
-`tabStripEl`), a tab group then draws a big empty box over its own tabs for the transition. Skipping
-`placeSelf` re-parents a docked tab's label out of its group's strip for the same duration.
+bounds top instead of one tab lower. Skipping `placeSelf` re-parents a hosted element out of its wrapper for
+the same duration.
 
-**A container's two side wrappers are LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
-`hostsContent(n)` (an expanded frame box, an expanded stack, or an OPEN docked tab) and `tabStripEl` iff the
-node is an expanded tabs group — `paintNode` drops each the moment that stops holding. Being HIDDEN counts
+**A container's content wrapper is LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
+`hostsContent(n)` (an expanded frame box or an expanded stack) — `paintNode` drops it the moment that stops
+holding. Being HIDDEN counts
 as holding nothing (`hostsContent` is false for it), which lets the whole lifecycle be ONE drop placed ahead
 of `paintNode`'s `isHidden` early return rather than repeated inside it: folding a group hides the open tab
 whose wrapper would otherwise survive. Both are created lazily, so a fold/reopen round-trips through the same
@@ -285,83 +254,6 @@ picks the DEPTH there — so a straight drag only re-slots and nesting takes a d
   on the way out; without it a stack keeps `nodeH`'s `STACK_HEADER + STACK_PAD` fallback and a two-line title
   spills out of the box.
 
-## Tab groups
-
-**A frame with `mm_layout: tabs` is a TAB GROUP:** its child *frames* aren't content, they're TABS. Their
-title tabs flow along its top band (`tabStripRect`/`tabSlots`, DOM wrapper `tabStripEl`) and whichever tab is
-OPEN borrows the whole box for its children — the group owns the geometry (x/y/w/h, border, resize handles),
-a tab owns only its contents and its tint. Zero new frontmatter keys: docking is plain `mm_parent`, strip
-order is `mm_position_x` (`kidsByPosition` sorts tabs by x), open/closed is `mm_collapsed`.
-
-- **A docked tab's bounds ARE its tab rect** — same render path as a folded frame (`isFrameFold` covers both,
-  `isFrameBox` excludes it); open vs closed differs only in `mm_collapsed` (which already hides its contents
-  via `isHidden`) plus a CSS class.
-- **Its contents live in the box its group lent it**, which is what `containerBox` spells — the single
-  indirection shared by `frameInterior`, `centreInFrame`, `frameContentTop`, the flow layout and
-  `dropLanding`, so none of them needs to know whether the frame is docked **or OPEN** (whose box is the
-  viewport — the scope branch comes FIRST there, or an open tab would keep the interior its group lent it). A
-  group with tabs shows no tab of its own (`.tabs.has-tabs`): two docked frames must read as two tabs, not
-  three.
-- **At most one tab is open.** `normalizeTabs` (a pre-pass in `applyLayouts`) repairs it,
-  `activateTab`/`openTabFlags` perform it, and every collapse-family path funnels through them —
-  `toggleCollapse` on a tab OPENS it, `focusNode` opens a closed tab rather than expanding it. Opening is the
-  single thing a LOCK doesn't forbid (it's how you look at the box, not a change to it), so a locked tab stays
-  pressable — `dragPointerDown`'s `hasLockedAncestor` bail exempts docked tabs — while moving it is refused.
-  Its lock badge hangs 8px outside the tab, which is what `TAB_STRIP_PAD` leaves room for.
-- **The strip's tabs must not carry a `z-index`.** `.tab-strip` deliberately has none, so plain tree order
-  decides between a tab and the box (`tabStripEl` keeps the strip right BEFORE the box) — which tucks an
-  inactive tab *behind* the box like a sheet behind a folder's front, letting the box's border and selection
-  ring run unbroken across its top. But a tab is a `.node`, and `.node { z-index:2 }` was quietly overriding
-  that and chopping the ring into pieces, so `.frame-folded.docked` resets it to `auto`; only `.tab-active`
-  takes one (5), keeping the OPEN tab in front where its three-sided ring joins the box.
-- **A group and its open tab carry ONE fold button, and it's on the tab** — the title you can see. `chipFace`
-  gives the open tab the `'fold'` face and the click handler redirects to `toggleCollapse(group)`; the group
-  shows nothing while open and takes the `'count'` face once folded, when that `+N` is the only way back. A
-  CLOSED tab shows neither. Since the two ring as one shape, `.sel-join` reveals the chip as well as `.sel`.
-- **A group holds no content of its own**, so anything added "to the group" goes to the open tab: dropped
-  cards, `addChild`/`createSibling`, paste (`contentParent`). It has no COLOUR of its own either —
-  `effectiveColor` starts the walk at the open tab, so the box (border, incoming edge, outline swatch) is
-  tinted by whichever tab is showing, which is also why `dockFrames` doesn't copy the target's colour onto the
-  group. A colour authored on the group is *not* an override: the walk continues from the tab THROUGH the
-  group, so it stands in for any tab that inherits.
-- **A group doesn't exist from the user's side** — there are just tabs, one of them open. User-facing actions
-  on a selected group land on the OPEN TAB via `actionTarget`: colour + checklist, rename (`startInlineEdit`,
-  the single funnel for F2 / ⋯ / the outline) and deletion (after which `normalizeTabs` promotes the next tab
-  and `dissolveEmptyTabGroups` takes the box away with the last one). The float bar centres horizontally on
-  the LABEL, not the box (`labelRect`) — a frame's box can be many times wider than its title. An open group
-  can't even BE the selection: `selTarget` maps it to its open tab in all three entry points
-  (`selectNode`/`setSelectionSet`/`toggleSel`), so clicking the box selects the TAB and the float bar shows
-  that tab's kind/layout/colour. What the box keeps is what it visibly owns, moving and resizing, and both had
-  to stop asking `state.sel`: `dragPointerDown`'s marquee bail takes `selJoin(n)` as "selected" too (else the
-  box would be unmovable), while the resize handles are plain hit-zones. `navArrow`'s `←` steps out of a
-  docked tab to the GROUP's parent for the same reason — landing on a group would bounce back to the tab and
-  read as a dead key.
-- **Tabs are made and unmade by DRAGGING only** (dock a title onto a tab; drag the last tab out and the empty
-  box goes with it). `mm_layout: tabs` is bookkeeping the user never picks: `LAYOUTS_BY_TYPE.frame` has no
-  tabs chip, and `markChips` hides the whole layout row for any selection holding a tabs frame — a group has
-  no arrangement of its own, and a click there would silently dissolve it. That leaves `setType` as
-  `undockAllTabs`'s one caller.
-- **A folded group is the one that stays selectable** (a lone pill with no tab on screen, so nothing else
-  could move or unfold it) — the only place its kind picker and its lock are reachable, and where deleting it
-  takes the whole group down instead of promoting the next tab. **Its own title is never on the canvas**,
-  folded or not (only in the outline, in search, and as its filename): folded, the pill shows the OPEN TAB's
-  title (`foldedTab`) with a folder icon in front (`FOLDER_SVG`, revealed by `.tabs-fold`), so the text
-  doesn't change under the fold and the icon is what tells it from a folded plain frame. Two knock-ons:
-  `startInlineEdit` on a folded group UNFOLDS it first and then redirects (`actionTarget` only redirects while
-  open, and an editor can't open on a `display:none` tab), and `toggleCollapse`'s status line names the open
-  tab both ways round.
-
-Dock, undock and re-slot all re-anchor the frame's contents through ONE formula (`reanchorContents`): where
-they sat before the gesture (`interiorAtHome` — the lent box if it was already a tab, else its own box at its
-pre-drag position), where they sit now, minus the drag delta its cards rode along with the label. Drop that
-last term and re-slotting a tab — a gesture that doesn't change the box at all — leaves its content offset
-sideways. A docked frame's own `mm_w`/`mm_h` are never touched, which lets it come back out at the size it
-went in at. A group left with no children dissolves. What may become a tab is `canBeTab`: a frame, or a plain
-CARD, which `dockFrames` turns into a frame on the way in (`asFrame`). Other kinds fall through to the
-ordinary drop and land in the box as content — an annotation holds nothing, and a stack/query is a box whose
-own shape IS the point. An image card goes in as an ordinary card would (`asFrame` makes it a frame, whose
-body is never drawn — so the picture is out of sight while it serves as a tab, and back when it isn't).
-
 ## Open frames (scope)
 
 **A frame can be OPENED, and then the canvas IS its interior** (`nav/scope.ts` for the model,
@@ -386,8 +278,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   nothing to disk whatever layout the frame has.
 - **The box becomes the VIEWPORT through `containerBox`/`frameInterior`**, as a DERIVED override. Hard
   invariant: the frame's own `n.w`/`n.h` are neither read there nor written, which lets it come back out at
-  its authored size. `frameInterior` needs the guard too (a non-docked frame doesn't route through
-  `containerBox`), and `frameContentTop` needs it because an open frame draws no tab to drop below — fixed
+  its authored size. `frameInterior` needs the guard too (it doesn't route through `containerBox`), and `frameContentTop` needs it because an open frame draws no tab to drop below — fixed
   there and NOT by making `isFrameBox` false for it, which feeds `nodeH` and would measure a `display:none`
   element and report a 64px frame. What still READS that rect is where a DROP lands: `dropLanding` clamps into
   `containerBox`, so without the override a card dragged across the open canvas would snap back into the
@@ -427,7 +318,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   swallows the chrome floating on it. Authorship, not the hex — a frame explicitly coloured white still tints.
 - **At the TOP level that same variable carries the MAP's own colour** — `state.canvasColor`, per-map in
   `settings.json` beside the grid, so it travels with the vault rather than the browser. One resolver answers
-  both, `canvasFill`, off `canvasOwner`: the open frame's `actionTarget`, or `null` for "the map". The
+  both, `canvasFill`, off `canvasOwner`: the open frame, or `null` for "the map". The
   `hasAuthoredColor` test applies only to the frame half — `canvasColor` is authored by definition, and `''`
   means the theme's background.
 - **The canvas-colour BUTTON edits whichever of those two you're standing on** (`#canvasColorBtn`, one slot
@@ -468,7 +359,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 - **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no node field.
   The two things around it that DO are recorded separately: unfolding a collapsed frame on the way in, and the
   grow-to-fit on the way out, so ⌘Z re-folds or un-grows without teleporting you between scopes. Allowed in
-  read-only and on a LOCKED frame (`activateTab`'s exemption: looking inside the box isn't changing it) —
+  read-only and on a LOCKED frame (looking inside the box isn't changing it) —
   though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
   `↑` and the ⋯ menu as the ways in.
 - **"No parent" means the OPEN FRAME** (`detachParentId`) — for `createNode`, `createDetachedNode`, a paste's
@@ -483,8 +374,8 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   frame's children (which is also what makes dropping a row beside a top row mean "put it here"). The map-wide
   jumps come OUT of as many levels as it takes first (`popScopeFor`), because `isSelectable` refuses an
   out-of-scope id and the step would otherwise look dead.
-- **The open frame is never folded, and never missing.** `applyLayouts` repairs the first beside
-  `normalizeTabs` (a reload or an undo can re-collapse it, and `layoutSubtree` bails on collapsed — a blank
+- **The open frame is never folded, and never missing.** `applyLayouts` repairs the first (a reload or an
+  undo can re-collapse it, and `layoutSubtree` bails on collapsed — a blank
   canvas being the worst failure here, so `isHidden` checks scope-root identity BEFORE the fold as a third
   layer). `pruneScope` handles the second in the same pass, truncating the stack to what survives; the camera
   half of that recovery lives in `syncScopeChrome`. A reload re-mints every id, so `resolveScopeAfterLoad`
@@ -808,13 +699,12 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
 - **Both faces live in the button permanently** (`nodeEl` bakes the chevron in beside a `.cnt` span) and
   `data-chip` picks which is visible, so `paintNode` never rewrites the chip's `innerHTML` — re-parsing that
   `<svg>` per foldable node per paint is real work, and `paintAll` runs once per animation FRAME for the
-  length of a resize drag. Which node the button ACTS on is `chipTarget` (itself, or a docked tab's group),
-  read by both `chipFace` and the click handler so the button shown and the node folded can't disagree.
+  length of a resize drag.
 - **The chip lives INSIDE `.title-row`** (hence the `> .title-row >` in every one of its selectors), which
   puts both faces in the same spot in every state — hanging 8px off the TITLE's top-right corner — so folding
   never moves the button: the row is the containing block exactly when it's positioned, i.e. when it's a
   frame's title TAB, so a frame's chip rides its tab instead of sitting `FRAME_TAB_DROP` lower on the box, and
-  a folded frame / docked tab (whose label IS the element) needs no special case. Where the row is in flow the
+  a folded frame (whose label IS the element) needs no special case. Where the row is in flow the
   offsets resolve against the node's own padding box, so a bordered box adds its border back (`.stack` →
   `-12px`).
 - The hover rule needs `:not(:has(.node:hover))` because child cards are DOM-nested (a deep hover would
@@ -831,8 +721,8 @@ double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers
 `⤢` and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
 the exemption `openFrame` itself takes: looking inside something isn't changing it.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
-`.title-row` (a card's title row, a frame's folder tab, a docked tab's whole label) renames via
-`startInlineEdit` — the single rename funnel, so the tab-group/annotation/query redirects, the CONTAINER
+`.title-row` (a card's title row, a frame's folder tab) renames via
+`startInlineEdit` — the single rename funnel, so the annotation/query redirects, the CONTAINER
 hand-off and the lock refusal come for free; anything else
 on a card edits its note (on a card those two are the same editor with the caret in a different place). A
 FRAME's interior gets a new card WHERE YOU POINTED (`addChild`, which routes a group to its open tab, refuses
@@ -942,8 +832,7 @@ clicking (or the outline, a real tree widget) covers siblings. The keys no longe
 survives for its other callers). They were never geometric: a child's side is its own stored `mm_side`, so a fan
 branch has children on two sides at once and "left" would stop meaning anything. Two details: `←`/`→` are
 DIRECTIONAL rather than toggles (pressing `→` twice can't fold what it just unfolded, and a MIXED selection
-lands on one state in a single press), and `←` on an OPEN docked tab folds its GROUP, exactly as its corner chip
-does (`chipTarget`). They act on the WHOLE selection via the directional sibling of `toggleCollapseSelection`,
+lands on one state in a single press). They act on the WHOLE selection via the directional sibling of `toggleCollapseSelection`,
 both filtering through one shared foldable-selection helper so the chip, `X` and the arrows can't disagree about
 what counts — a keyboard fold has no business reaching fewer cards than a click does. `↑` stays single, since
 you can only stand in one frame. Because the directional form skips cards already in the target state, its undo
