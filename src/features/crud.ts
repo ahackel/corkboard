@@ -103,8 +103,9 @@ export function createDetachedNode(x: number, y: number): MindNode | undefined {
   paintAll();   // give the card a DOM element so it can be dragged
   return n;
 }
-// Clone one card (not its subtree) at (x,y): same content/colour, keeping its parent so the copy
-// stays attached as a sibling. Keeps the source's title VERBATIM — a duplicate of "Idea" is another
+// Clone a node AND its subtree at (x,y): same content/colour, keeping its parent so the copy stays
+// attached as a sibling; every descendant is copied under it at the same offset, so a duplicated
+// frame holds copies of its cards and a duplicated outliner keeps its rows. Keeps the source's title VERBATIM — a duplicate of "Idea" is another
 // card called "Idea", and the two are told apart by where they sit, which is what a canvas is for.
 // (It used to become "Idea 2", numbered against every other title in the map, purely so the copy's
 // filename wouldn't collide; that's desiredFileFor's business now, and it suffixes the FILE.)
@@ -125,6 +126,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     collapsed: s.collapsed, titleGap: s.titleGap,
   });
   state.nodes.set(copy.id, copy);
+  for (const k of childrenOf(s.id)) cloneNodeAt(k, k.x + x - s.x, k.y + y - s.y).parent = copy.id;
   return copy;
 }
 // A duplicate sits directly below the original, clear of it.
