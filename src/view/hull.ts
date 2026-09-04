@@ -8,7 +8,7 @@ import { state, hullsSvg, isAnnotation, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf } from '../utils/model.js';
 import { isFrame, ancestorDepth } from './layout.js';
 import { boxIsViewport } from '../nav/scope.js';
-import { nodeW, nodeH, colorFill, canvasSurface } from '../main.js';
+import { nodeW, nodeH, elTop, colorFill, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
 import { ui } from '../core/ui-state.js';
@@ -181,15 +181,18 @@ function curve(p: Pt[]): string {
 // of its centre. paintHulls only updates targets and draws; tick() steps the physics between paints.
 type Spring = { d: Pt[]; v: Pt[]; t: Pt[] };
 const springs = new Map<string, Spring>();
-let raf = 0, lastTick = 0;
+let raf = 0, lastTick = 0, lastDrag = -Infinity;   // lastDrag: when a drag was last painted
 
 // `rigid`: the whole frame is in hand, so the drawn shape moves with it as one piece — the springs
 // carry only the wobble of a CHANGE in shape, never a lag behind the pointer.
 function shape(id: string, target: Pt[], rigid: boolean): Pt[] {
   let s = springs.get(id);
   if (!s) {
+    // A bubble born of a gesture pops out from its centre; one that is simply THERE when the map
+    // loads (or comes back from undo) is already at rest — nothing happened for it to react to.
+    const pop = performance.now() - lastDrag < 1000;
     const c = centre(target);
-    s = { d: target.map(() => ({ ...c })), v: target.map(() => ({ x: 0, y: 0 })), t: target };
+    s = { d: target.map(p => pop ? { ...c } : { ...p }), v: target.map(() => ({ x: 0, y: 0 })), t: target };
     springs.set(id, s);
   } else {
     if (rigid) {
@@ -249,10 +252,19 @@ export function paintHulls(): void {
   const neutral = `color-mix(in srgb, ${inkFor(surface)} 9%, ${surface})`;
   const seen = new Set<string>();
   let svg = '';
+  const dg = ui.drag;
+  if (dg?.moved) lastDrag = performance.now();
+  // The frame in hand SWINGS about the grab point like a card does (features/drag.ts stepSwing): its
+  // box and wrapper carry the rotation as a CSS transform, so the bubble — and every bubble riding
+  // inside it — takes the same turn here, about the same world point.
+  const sw = dg?.swing;
+  const spin = sw && dg && Math.abs(sw.angle) > 0.01
+    ? `rotate(${sw.angle.toFixed(2)} ${f1(dg.active.x + sw.pivot.x)} ${f1(elTop(dg.active, dg.active.y) + sw.pivot.y)})` : '';
   const draw = (id: string, kids: MindNode[], wash: string, ring: boolean, label: string, rigid = false): void => {
     seen.add(id);
     const d = curve(shape(id, sample(restPoly(kids)), rigid));
-    svg += `${ring ? `<path class="hull-ring" d="${d}"/>` : ''}<path class="hull" style="fill:${wash}" d="${d}"/>${label}`;
+    const body = `${ring ? `<path class="hull-ring" d="${d}"/>` : ''}<path class="hull" style="fill:${wash}" d="${d}"/>${label}`;
+    svg += rigid && spin ? `<g transform="${spin}">${body}</g>` : body;
   };
   // A nested frame's bubble sits INSIDE its parent's, so it paints after it (deepest last) and its
   // neutral wash deepens one step from the parent's instead of from the canvas — or the two would
@@ -263,9 +275,12 @@ export function paintHulls(): void {
     const p = parentOf(f);
     return `color-mix(in srgb, ${inkFor(surface)} 9%, ${p && hasHull(p) ? washOf(p) : surface})`;
   };
+  // …and the frames IN HAND paint last of all, like the cards in #dragLayer: the bubble poised to take
+  // them grows to show the join, and must not cover them.
   const frames = [...state.nodes.values()].map(f => ({ f, kids: hullKids(f) }));
   for (const { f, kids } of frames) f.el?.classList.toggle('hulled', kids.length > 0);
-  frames.sort((a, b) => ancestorDepth(a.f) - ancestorDepth(b.f));
+  const order = (f: MindNode): number => ancestorDepth(f) + (dg?.targets.has(f.id) ? 1000 : 0);
+  frames.sort((a, b) => order(a.f) - order(b.f));
   for (const { f, kids } of frames) {
     if (!kids.length) continue;
     const title = f.title.trim() || f.body.trim().split('\n')[0] || '';
@@ -278,7 +293,7 @@ export function paintHulls(): void {
     draw(f.id, kids, washOf(f), state.sel.has(f.id), label, !!ui.drag?.targets.has(f.id));
   }
   // Two loose cards about to become a group: the frame they would make, previewed in the neutral wash.
-  const dg = ui.drag, nb = dg?.near ? state.nodes.get(dg.near) : null;
+  const nb = dg?.near ? state.nodes.get(dg.near) : null;
   if (dg && nb) draw(`near:${dg.active.id}:${nb.id}`, [dg.active, nb], neutral, false, '');
   hullsSvg.innerHTML = svg;
   for (const id of springs.keys()) if (!seen.has(id)) springs.delete(id);

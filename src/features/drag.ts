@@ -17,7 +17,7 @@ import { paintEdges } from '../view/edges.js';
 import { snapTo } from '../utils/num.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, FRAME_W, FRAME_H, STACK_PAD, relayout, remeasure } from '../main.js';
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, FRAME_BORDER, FRAME_W, FRAME_H, STACK_PAD, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dissolveThinFrames, mkNode } from './crud.js';
 import { near as nearCards, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
@@ -238,7 +238,13 @@ function stepSwing(drag: Drag, dt: number): boolean {
   sw.omega += (torque - SWING_STIFF * sw.angle - SWING_DAMP * sw.omega) * dt;
   sw.angle = Math.max(-SWING_MAX, Math.min(SWING_MAX, sw.angle + sw.omega * dt));
   const orig = drag.origins.get(drag.active.id);
-  if (orig) { el.style.transformOrigin = `${sw.pivot.x}px ${sw.pivot.y}px`; el.style.transform = dragTransform(drag, drag.active, orig); }
+  if (orig) {
+    el.style.transformOrigin = `${sw.pivot.x}px ${sw.pivot.y}px`; el.style.transform = dragTransform(drag, drag.active, orig);
+    // A frame's cards ride in its content wrapper, which sits FRAME_BORDER inside the box on both axes
+    // — so the same turn about the same point, spelled from the wrapper's own corner.
+    const w = drag.active.frameContentEl;
+    if (w) { w.style.transformOrigin = `${sw.pivot.x - FRAME_BORDER}px ${sw.pivot.y - FRAME_BORDER}px`; w.style.transform = el.style.transform; }
+  }
   return Math.abs(sw.angle) > 0.05 || Math.abs(sw.omega) > 0.5;   // still moving?
 }
 
@@ -441,8 +447,8 @@ export function bindNodeDrag(n: MindNode): void {
              meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
              touch: e.pointerType === 'touch',  // higher move threshold for finger taps
              cardMerge: null,
-             // a lone plain card swings about the grab point; anything with a box, or a group, moves stiff
-             swing: !multi && !isContainer(n) && !isFrame(n)
+             // a lone card or frame swings about the grab point; an outliner, or a group, moves stiff
+             swing: !multi && !isStack(n)
                ? { pivot: { x: (e.clientX - el.getBoundingClientRect().left) / state.view.k, y: (e.clientY - el.getBoundingClientRect().top) / state.view.k },
                    angle: 0, omega: 0, vx: 0, vy: 0, t: performance.now() }
                : undefined };
@@ -529,7 +535,7 @@ function dragPointerUp(): void {
       for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
         const m2 = state.nodes.get(id);
         if (m2?.el){ m2.el.style.transform = ''; m2.el.style.transformOrigin = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging'); }
-        if (m2?.frameContentEl) m2.frameContentEl.style.transform = '';
+        if (m2?.frameContentEl) { m2.frameContentEl.style.transform = ''; m2.frameContentEl.style.transformOrigin = ''; }
       }
       const act = drag.active;
       // Released OUTSIDE the browser window → cancel the whole gesture, OS-style snap-back.
@@ -717,7 +723,7 @@ export function abortDrag(): void {
   for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
     const m = state.nodes.get(id);
     if (m?.el){ m.el.style.transform = ''; m.el.style.transformOrigin = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }
-    if (m?.frameContentEl) m.frameContentEl.style.transform = '';
+    if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; m.frameContentEl.style.transformOrigin = ''; }
   }
   ui.drag = null;
   document.body.classList.remove('grabbing');
@@ -751,7 +757,7 @@ function applyDragClone(): void {
       const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = false; }
       // revert their compositor transforms — `drag.active` is about to switch to the clone
       if (m?.el) { m.el.style.transform = ''; m.el.style.transformOrigin = ''; }
-      if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; }
+      if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; m.frameContentEl.style.transformOrigin = ''; }
     }
     // clone each dragged ROOT (just the card, not its subtree) at its own start spot
     const rootIds = drag.selRoots;
@@ -765,7 +771,7 @@ function applyDragClone(): void {
   } else if (!drag.shift && drag.cloned){
     for (const clone of (drag.clones || [])){
       if (clone.el){ clone.el.style.transform = ''; clone.el.style.transformOrigin = ''; clone.el.style.willChange = ''; }
-      if (clone.frameContentEl){ clone.frameContentEl.style.transform = ''; }
+      if (clone.frameContentEl){ clone.frameContentEl.style.transform = ''; clone.frameContentEl.style.transformOrigin = ''; }
       state.nodes.delete(clone.id); clone.el?.remove();   // drop the clones we made
     }
     drag.clones = null;
