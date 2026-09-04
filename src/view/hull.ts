@@ -6,11 +6,10 @@
 // (layout.ts fitFrame) pads to the same distance so the rim is what you press to move it.
 import { state, hullsSvg, isAnnotation, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf } from '../utils/model.js';
-import { isFrame, ancestorDepth } from './layout.js';
+import { isFrame, ancestorDepth, frameLabelled } from './layout.js';
 import { boxIsViewport } from '../nav/scope.js';
 import { nodeW, nodeH, elTop, colorFill, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
-import { esc } from '../utils/markdown.js';
 import { ui } from '../core/ui-state.js';
 
 export const HULL_PAD = 20;   // hull padding around each child (layout's fitFrame pads the box to match)
@@ -45,15 +44,29 @@ export function near(a: MindNode, b: MindNode, dist: number): boolean { return g
 export const LEAVE_GAP = 20;
 export function hullGap(n: MindNode, f: MindNode, skip: Set<string>): number {
   const kids = childrenOf(f.id).filter(k => !skip.has(k.id) && !isHidden(k) && !isAnnotation(k));
-  if (!kids.length) return Infinity;
-  const poly = restPoly(kids);
+  const rects = hullRects(f, kids);
+  if (!rects.length) return Infinity;
+  const poly = restPoly(rects);
   return Math.min(...cardRects(n).map(r => rectGap(r, poly)));
 }
-// The rects a node is measured by: a card's own, a frame's cards' (through nested frames).
+// The rects a node is measured by: a card's own, a frame's cards' (through nested frames), an empty
+// frame's label.
 function cardRects(n: MindNode): Rect[] {
   if (!isFrame(n)) return [rect(n)];
   const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));
-  return kids.length ? kids.flatMap(cardRects) : [rect(n)];
+  return kids.length ? kids.flatMap(cardRects) : [labelRect(n) ?? rect(n)];
+}
+// A frame's TITLE is a member of its own bubble: it sits at `label`, as big as its title row renders,
+// and the goo wraps it wherever it is dragged — which is also what lets a named EMPTY frame exist.
+function labelRect(f: MindNode): Rect | null {
+  if (!f.label || !frameLabelled(f)) return null;
+  const row = f.el?.querySelector(':scope > .title-row') as HTMLElement | null;
+  return { x: f.label.x, y: f.label.y, w: row?.offsetWidth || 120, h: row?.offsetHeight || 40 };
+}
+// Everything a frame's bubble is drawn around: its cards, and its label.
+function hullRects(f: MindNode, kids: MindNode[]): Rect[] {
+  const l = labelRect(f);
+  return l ? [...kids.map(rect), l] : kids.map(rect);
 }
 function rectGap(r: Rect, poly: Pt[]): number {
   const c = [{ x: r.x, y: r.y }, { x: r.x + r.w, y: r.y }, { x: r.x + r.w, y: r.y + r.h }, { x: r.x, y: r.y + r.h }];
@@ -85,11 +98,11 @@ function segDist(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t);
 }
 
-// The four corners of every card, pushed out by PAD: the points the bubble is built from.
-function cornerPoints(kids: MindNode[]): Pt[] {
+// The four corners of every rect, pushed out by PAD: the points the bubble is built from.
+function cornerPoints(rects: Rect[]): Pt[] {
   const pts: Pt[] = [];
-  for (const k of kids) {
-    const x0 = k.x - PAD, y0 = k.y - PAD, x1 = k.x + nodeW(k) + PAD, y1 = k.y + nodeH(k) + PAD;
+  for (const k of rects) {
+    const x0 = k.x - PAD, y0 = k.y - PAD, x1 = k.x + k.w + PAD, y1 = k.y + k.h + PAD;
     pts.push({ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x0, y: y1 }, { x: x1, y: y1 });
   }
   return pts;
@@ -142,7 +155,7 @@ function spline(v: Pt[]): Pt[] {
   return out;
 }
 // The bubble at rest: the polygon the springs settle on.
-const restPoly = (kids: MindNode[]): Pt[] => spline(simplify(convexHull(cornerPoints(kids))));
+const restPoly = (rects: Rect[]): Pt[] => spline(simplify(convexHull(cornerPoints(rects))));
 const centre = (pts: Pt[]): Pt => ({ x: pts.reduce((s, p) => s + p.x, 0) / pts.length, y: pts.reduce((s, p) => s + p.y, 0) / pts.length });
 
 // The hull re-sampled at N fixed angles around its centre, so two hulls' points correspond by
@@ -235,13 +248,16 @@ function hullKids(f: MindNode): MindNode[] {
   }
   return kids;
 }
+// What this frame's bubble is drawn around right now — empty when it draws none.
+function hullRectsOf(f: MindNode): Rect[] {
+  return isFrame(f) && !boxIsViewport(f) && !isHidden(f) ? hullRects(f, hullKids(f)) : [];
+}
 // Does this node render as a hull rather than a box? Its box chrome (ring, tab, ports) stands down.
-export function hasHull(n: MindNode): boolean { return hullKids(n).length > 0; }
-
+export function hasHull(n: MindNode): boolean { return hullRectsOf(n).length > 0; }
 
 // The bubble at rest, as a box: what layout gives the frame, so the rim you see is the rim you press.
-export function hullBox(kids: MindNode[]): Rect {
-  const pts = sample(restPoly(kids));
+export function hullBox(f: MindNode, kids: MindNode[]): Rect {
+  const pts = sample(restPoly(hullRects(f, kids)));
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of pts) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
@@ -260,10 +276,10 @@ export function paintHulls(): void {
   const sw = dg?.swing;
   const spin = sw && dg && Math.abs(sw.angle) > 0.01
     ? `rotate(${sw.angle.toFixed(2)} ${f1(dg.active.x + sw.pivot.x)} ${f1(elTop(dg.active, dg.active.y) + sw.pivot.y)})` : '';
-  const draw = (id: string, kids: MindNode[], wash: string, ring: boolean, label: string, rigid = false): void => {
+  const draw = (id: string, rects: Rect[], wash: string, ring: boolean, rigid = false): void => {
     seen.add(id);
-    const d = curve(shape(id, sample(restPoly(kids)), rigid));
-    const body = `${ring ? `<path class="hull-ring" d="${d}"/>` : ''}<path class="hull" style="fill:${wash}" d="${d}"/>${label}`;
+    const d = curve(shape(id, sample(restPoly(rects)), rigid));
+    const body = `${ring ? `<path class="hull-ring" d="${d}"/>` : ''}<path class="hull" style="fill:${wash}" d="${d}"/>`;
     svg += rigid && spin ? `<g transform="${spin}">${body}</g>` : body;
   };
   // A nested frame's bubble sits INSIDE its parent's, so it paints after it (deepest last) and its
@@ -277,24 +293,16 @@ export function paintHulls(): void {
   };
   // …and the frames IN HAND paint last of all, like the cards in #dragLayer: the bubble poised to take
   // them grows to show the join, and must not cover them.
-  const frames = [...state.nodes.values()].map(f => ({ f, kids: hullKids(f) }));
-  for (const { f, kids } of frames) f.el?.classList.toggle('hulled', kids.length > 0);
+  const frames = [...state.nodes.values()].map(f => ({ f, rects: hullRectsOf(f) }));
+  for (const { f, rects } of frames) f.el?.classList.toggle('hulled', rects.length > 0);
   const order = (f: MindNode): number => ancestorDepth(f) + (dg?.targets.has(f.id) ? 1000 : 0);
   frames.sort((a, b) => order(a.f) - order(b.f));
-  for (const { f, kids } of frames) {
-    if (!kids.length) continue;
-    const title = f.title.trim() || f.body.trim().split('\n')[0] || '';
-    let label = '';
-    if (title) {
-      // The title sits in the padding above the top-left child.
-      const top = kids.reduce((m, k) => k.y < m.y || (k.y === m.y && k.x < m.x) ? k : m);
-      label = `<text class="hull-label" x="${f1(top.x + 2)}" y="${f1(top.y - 6)}">${esc(title)}</text>`;
-    }
-    draw(f.id, kids, washOf(f), state.sel.has(f.id), label, !!ui.drag?.targets.has(f.id));
+  for (const { f, rects } of frames) {
+    if (rects.length) draw(f.id, rects, washOf(f), state.sel.has(f.id), !!dg?.targets.has(f.id));
   }
   // Two loose cards about to become a group: the frame they would make, previewed in the neutral wash.
   const nb = dg?.near ? state.nodes.get(dg.near) : null;
-  if (dg && nb) draw(`near:${dg.active.id}:${nb.id}`, [dg.active, nb], neutral, false, '');
+  if (dg && nb) draw(`near:${dg.active.id}:${nb.id}`, [rect(dg.active), rect(nb)], neutral, false);
   hullsSvg.innerHTML = svg;
   for (const id of springs.keys()) if (!seen.has(id)) springs.delete(id);
   const live = [...springs.values()].some(s => !settled(s));

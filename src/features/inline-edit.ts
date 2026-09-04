@@ -36,13 +36,6 @@ const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.tit
 // hand-off and the lock refusal all still happen in exactly one place.
 export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
-  // A tab group has no title you can see — renaming "this frame" means renaming the OPEN TAB, which is
-  // the name actually on screen. Here rather than at the call sites, so F2, the ⋯ menu and the outline
-  // all follow. (A fresh node is never a group, so the isNew rename path is unaffected.)
-  // FOLDED, the group's pill shows that same tab's title (main.ts foldedTab), so the redirect has to
-  // hold there too — but the tab itself is hidden inside the fold, and an editor on a display:none
-  // element can't be typed into. So unfold first, the way focusNode reveals before it acts; a locked
-  // group refuses, stays folded, and falls through to the lock check below.
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   // An annotation has no title — its double-click / F2 / add-child rename all edit the BODY instead.
   if (isAnnotation(n)) { startBodyEdit(n); return; }

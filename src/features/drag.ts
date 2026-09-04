@@ -9,7 +9,7 @@
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId, isReadingRoot } from '../nav/scope.js';
-import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth } from '../view/layout.js';
+import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, setPos } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -20,7 +20,7 @@ import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, FRAME_BORDER, FRAME_W, FRAME_H, STACK_PAD, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dissolveThinFrames, mkNode } from './crud.js';
-import { near as nearCards, hullGap, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
+import { near as nearCards, hullGap, hasHull, JOIN_DIST, LEAVE_GAP } from '../view/hull.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
@@ -189,7 +189,7 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
   ({ x: dx, y: dy } = snappedDelta(drag, dx, dy));
   for (const [id, s] of drag.targets){
     const m = state.nodes.get(id); if (!m) continue;
-    m.x = s.x + dx; m.y = s.y + dy; m.dirtyLayout = true;
+    setPos(m, s.x + dx, s.y + dy); m.dirtyLayout = true;
     if (m.el) {
       const orig = drag.origins.get(id);
       if (orig) {
@@ -210,6 +210,26 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
       }
     }
   }
+}
+
+// Drag a frame's label to a new spot inside its bubble. Moves the label only; the bubble follows,
+// since the label is one of its members (view/hull.ts labelRect). No pointer capture, no transform:
+// a label is small and moved rarely, so it simply re-lays out per move.
+function startLabelDrag(n: MindNode, e: PointerEvent): void {
+  const lab = n.label!, sx = e.clientX, sy = e.clientY, ox = lab.x, oy = lab.y;
+  let moved = false;
+  const move = (ev: PointerEvent): void => {
+    if (!moved) { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return; moved = true; touch(n.id); }
+    lab.x = ox + (ev.clientX - sx) / state.view.k; lab.y = oy + (ev.clientY - sy) / state.view.k;
+    n.dirtyLayout = true;
+    relayout();
+  };
+  const up = (ev: PointerEvent): void => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up);
+    if (!moved) { if (ev.metaKey || ev.ctrlKey) toggleSel(n.id); else selectNode(n.id); return; }
+    scheduleSave(); commitStep();
+  };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
 }
 
 // The compositor transform of a dragged root: its offset, plus — for the one card that swings — the
@@ -376,6 +396,12 @@ export function bindNodeDrag(n: MindNode): void {
     // itself (checked further below) remains reachable this way.
     if (hasLockedAncestor(n)) { e.stopPropagation(); return; }
     const tgt = e.target as HTMLElement;
+    // A bubble's LABEL is a handle of its own: dragging it moves the title about inside the goo and
+    // nothing else. A click still selects the frame, and the dblclick (main.ts nodeEl) still renames.
+    if (e.button === 0 && isFrame(n) && n.label && hasHull(n) && tgt.closest('.node') === el && tgt.closest('.title-row')
+        && !state.readOnly && !isLockedEffective(n)) {
+      e.stopPropagation(); startLabelDrag(n, e); return;
+    }
     // A frame's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
     // A press there is a press on the frame ITSELF: it must take the ordinary card path below —
     // click selects, a double-click renames, a drag moves the frame — so both frame-specific
@@ -603,7 +629,7 @@ function dragPointerUp(): void {
             const startAct = targets.get(act.id)!;
             const ddx = land.x - startAct.x, ddy = land.y - startAct.y;
             for (const [id, s] of targets){
-              const m = state.nodes.get(id); if (m){ m.x = s.x + ddx; m.y = s.y + ddy; m.dirtyLayout = true; }
+              const m = state.nodes.get(id); if (m){ setPos(m, s.x + ddx, s.y + ddy); m.dirtyLayout = true; }
             }
           }
           // Re-parent every ROOT of the drag, chaining each one in right after the last so the
@@ -663,7 +689,8 @@ function dragPointerUp(): void {
           // untitled frame at their level, sized by layout from what it holds (fitFrame).
           const nb = near ? state.nodes.get(near) : null;
           if (nb && !cloned && nb.parent === act.parent) {   // (a detach above already put `act` at the top level)
-            const f = mkNode({ type: 'frame', parent: nb.parent, x: act.x, y: act.y, w: FRAME_W, h: FRAME_H });
+            // Its label starts in the padding above the pair, so it never lands on a card.
+            const f = mkNode({ type: 'frame', parent: nb.parent, x: Math.min(act.x, nb.x), y: Math.min(act.y, nb.y) - 44, w: FRAME_W, h: FRAME_H });
             state.nodes.set(f.id, f);
             for (const m of [nb, act]) { touch(m.id); m.parent = f.id; m.dirty = true; m.dirtyLayout = true; }
             setStatus(`Grouped “${nodeLabel(act)}” with “${nodeLabel(nb)}”`);
@@ -737,7 +764,7 @@ export function cancelDragRestore(): void {
   if (!drag) return;
   for (const clone of (drag.cloned && drag.clones) || []) dropSubtree(clone);
   for (const [id, s] of drag.start){
-    const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = true; }
+    const m = state.nodes.get(id); if (m){ setPos(m, s.x, s.y); m.dirtyLayout = true; }
   }
   abortDrag();
   relayout();   // no new cards to measure — one layout + paint suffices
@@ -756,7 +783,7 @@ function applyDragClone(): void {
   if (drag.shift && !drag.cloned){
     drag.cloned = true;
     for (const [id, s] of drag.start){             // pin the original subtree(s) back to start
-      const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = false; }
+      const m = state.nodes.get(id); if (m){ setPos(m, s.x, s.y); m.dirtyLayout = false; }
       // revert their compositor transforms — `drag.active` is about to switch to the clone
       if (m?.el) { m.el.style.transform = ''; m.el.style.transformOrigin = ''; }
       if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; m.frameContentEl.style.transformOrigin = ''; }

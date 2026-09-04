@@ -680,7 +680,12 @@ export function paintNode(n: MindNode): void {
     // pass, which reads as the box snapping back.
     if (stackBoxRow(n) != null) { if (isImageBox(n)) clearResizeHandles(el); else ensureResizeHandles(n, S_DIRS); }
     else ensureResizeHandles(n, FRAME_DIRS);
-    if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+    if (isFrameBox(n)) {
+      frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+      // The title row is the frame's LABEL, placed at `label` inside the bubble (styles.css .hulled reads
+      // these); relative to the box, so the compositor transform of a drag carries it along.
+      if (n.label) { el.style.setProperty('--lx', (n.label.x - n.x) + 'px'); el.style.setProperty('--ly', (n.label.y - n.y) + 'px'); }
+    }
   } else if (isFrameFold(n)) {
     // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
     // size, no resize zones, but it keeps --frame-stroke, which tints the tab itself.
@@ -1170,22 +1175,16 @@ export function readingShiftX(n: MindNode, x: number): number {
 // is looking at, and the part its children sit in) doesn't move when the text crosses that line. Pass
 // what frameLabelled said BEFORE the text changed. Folded is left alone: the pill sits AT n.y, so moving
 // the bounds there would move the thing on screen instead of holding it still.
-export function reframeForTab(n: MindNode, wasLabelled: boolean): void {
-  if (n.type !== 'frame' || n.collapsed) return;
-  const now = frameLabelled(n);
-  if (now === wasLabelled) return;
-  const d = now ? FRAME_TAB_DROP : -FRAME_TAB_DROP;
-  n.y -= d;
-  if (n.h != null) n.h += d;
+export function reframeForTab(_n: MindNode, _wasLabelled: boolean): void {
+  // Nothing to hold still any more: the title is a label INSIDE the bubble, and the box is derived from
+  // what the frame holds (view/layout.ts fitFrame). Kept so the three rename paths keep one call.
 }
-export function elTop(n: MindNode, y: number): number {
-  return isFrameBox(n) && frameLabelled(n) ? y + FRAME_TAB_DROP : y;
-}
+// Identity since a frame's title became a label inside its bubble (no tab above the box); kept as the
+// one spelling every placement goes through, so a tab could come back in one place.
+export function elTop(_n: MindNode, y: number): number { return y; }
 // elTop's inverse: the BOUNDS top for an element that paints at y. Only followEdges needs it — it
 // reads back interpolated left/top mid-animation to reproject them into world coordinates.
-function boundsTop(n: MindNode, y: number): number {
-  return isFrameBox(n) && frameLabelled(n) ? y - FRAME_TAB_DROP : y;
-}
+function boundsTop(_n: MindNode, y: number): number { return y; }
 // Place an element at absolute world coords, expressed relative to its container: #world (or the drag
 // layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so
 // the offset is the host's own inset (the border, plus a frame's title tab — see frameInsetY).

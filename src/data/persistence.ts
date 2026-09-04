@@ -260,6 +260,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     const alreadyRel = relSeed.has(n.id) || (legacySeed.has(n.id) && !!p && p.type === 'frame');
     if (p && !alreadyRel) { n.rx -= pax; n.ry -= pay; }   // absolute seed → parent-relative
     n.x = pax + n.rx; n.y = pay + n.ry;                   // working absolute coords
+    if (n.type === 'frame') n.label = { x: n.x, y: n.y }; // …which for a frame is where its LABEL sits
     for (const k of kidsOf.get(n.id) ?? []) stack.push(k);
   }
   // A map written before containment: its card-to-card links meant "beside", not "inside". Convert

@@ -21,7 +21,7 @@ import { gcJunctions, scheduleSaveBoard } from '../data/board.js';
 export function mkNode(fields: Partial<MindNode> = {}): MindNode {
   const id = 'n' + (state.idSeq++);
   touch(id);   // not in state.nodes yet → before-image is null (undo of a create = remove it)
-  return {
+  const n: MindNode = {
     id, file:null,
     x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false, done:false, checklist:false,
     title:'', color:'', keepStatus:'', tags:[], body:'',
@@ -29,6 +29,8 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
     dirty:true, dirtyLayout:true,
     ...fields,
   };
+  if (n.type === 'frame' && !n.label) n.label = { x: n.x, y: n.y };   // a frame's title starts where it was made
+  return n;
 }
 // The height a FRESH card lays out at, before it has an element to measure (layoutH's own fallback is
 // the same number). Only useful as half of the centring below — a card's real height is measured.
@@ -119,6 +121,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist,
     type: s.type, layout: s.layout,
     w: s.w, h: s.h,   // a frame/image card's own box size
+    label: s.label ? { x: s.label.x + x - s.x, y: s.label.y + y - s.y } : undefined,
     // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
     // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
     // visibly on an image card, whose fold is its icon). titleGap rides along with the body it
@@ -406,9 +409,9 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
   return cards.length;
 }
 
-// A frame lives by what it holds (docs/spec-goo-groups.md): the LAST card dragged out takes the frame
-// with it, whatever was written on it. Down to ONE child, a frame with nothing authored — no title,
-// colour or tags — dissolves too and the child steps up to where the frame sat. Walks up like
+// A frame lives by what it holds (docs/spec-goo-groups.md) — or by its name: down to ONE child or none,
+// a frame with nothing authored on it (no title, colour or tags) dissolves and the child steps up to
+// where the frame sat, while a named or coloured one stays, as a bubble around its label if need be. Walks up like
 // since the parent may be thin now as well.
 export function dissolveThinFrames(ids: Iterable<string | null | undefined>): void {
   if (state.readOnly) return;
@@ -417,8 +420,7 @@ export function dissolveThinFrames(ids: Iterable<string | null | undefined>): vo
       const f = state.nodes.get(id);
       if (!f || f.type !== 'frame' || boxIsViewport(f)) break;
       const kids = childrenOf(f.id);
-      if (kids.length > 1) break;
-      if (kids.length === 1 && (frameLabelled(f) || f.color || f.tags.length)) break;
+      if (kids.length > 1 || frameLabelled(f) || f.color || f.tags.length) break;
       touch(f.parent);
       for (const k of kids) { touch(k.id); k.parent = f.parent; k.dirty = true; k.dirtyLayout = true; }
       if (state.selId === f.id) selectNode(null);

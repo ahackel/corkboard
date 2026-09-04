@@ -227,7 +227,8 @@ function setType(type: NodeType): void {
       // card/annotation/stack: the height is never authored — and the width goes too if we're
       // leaving a 2D box, whose width described its contents rather than its own text.
       if (!isBoxType(type)) { n.h = undefined; if (isBoxType(n.type)) n.w = undefined; }
-      if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
+      if (type === 'frame') { n.label = { x: n.x, y: n.y }; fitFrameToContent(n, true); }   // its title stays put as the label; the box encloses its children
+      else n.label = undefined;
       if (type === 'query' && (n.w == null || n.h == null)) { n.w = QUERY_W; n.h = QUERY_H; }
       n.type = type;
       // keep the current arrangement if the new type still supports it (e.g. free across card↔frame);

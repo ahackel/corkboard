@@ -141,15 +141,19 @@ outline row like a nested stack does (see the stack section). Three render sites
 so kept drawing a tab for it; they go through `rendersAsFrame` now (`isFrameBox || isFrameFold`), which is
 the same question spelled once: does this node draw a frame at all.
 
-**A `frame`'s BOUNDS include its title tab.** The title renders as a folder tab above the box's top-left
-corner (`.node.frame > .title-row`, absolutely positioned) and `n.x/n.y/w/h` cover it: `n.y` is the **tab's**
-top edge, the box element paints `FRAME_TAB_DROP` (= `FRAME_TAB_H - 1`, the tab less its 1px overlap into
-the border) lower, and its inline height is `n.h` minus that drop. The tab therefore sits at a fixed offset
-from `n.y` in **both** collapse states — a folded frame is nothing but that tab (`.frame-folded`,
-`isFrameFold`, rounded all round, `nodeH` = `FRAME_TAB_H`, width measured) — so folding never moves the
-title. `FRAME_TAB_H` is **40px**, a normal card's padding and title metric, and it must equal what the CSS
-renders, so the tab's `padding`/`font-size`/`line-height` are pinned in `styles.css` rather than inherited
-from `.node .title`.
+**A frame's TITLE is a LABEL inside its bubble, and a member of it.** The title row
+(`.node.frame.hulled > .title-row`) renders as bare text at `n.label` (world coords, `main.ts` writes it as
+`--lx/--ly` off the box), and `view/hull.ts labelRect` feeds that rect to the hull beside the cards — so the
+goo wraps the label wherever it is dragged, and a NAMED frame with no cards is a small bubble around its name
+(`layoutSubtree` runs `fitFrame` for it; `dissolveThinFrames` keeps it). `label` is what the frame's
+`mm_position_x/y` persists (`commitRel` measures the frame and its children's offsets from it; load seeds it
+from the read position), while `x/y/w/h` are the DERIVED box. Every mover shifts both through `setPos`; only
+`fitFrame` writes the box alone. Dragging the label (`drag.ts startLabelDrag`) moves the label only; a click
+selects, a double-click renames; an UNTITLED frame shows a faint "Name…" row while selected. A FOLDED frame is
+its label pill, at `label` (`layoutSubtree` syncs its x/y there). There is no tab above the box any more:
+`elTop`/`frameInsetY`/`reframeForTab` are identities kept as the one spelling. `FRAME_TAB_H` is **40px**, a
+normal card's padding and title metric, and it must equal what the CSS renders, so the row's
+`padding`/`font-size`/`line-height` are pinned in `styles.css` rather than inherited from `.node .title`.
 
 **A frame is an outline and a label, never a fill:** its label is a 2px outline in `--frame-stroke` over
 nothing — an expanded frame's tab, a folded frame's pill. `FRAME_TAB_H` is spent as `padding` + `border` + the

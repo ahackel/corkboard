@@ -35,10 +35,21 @@ import { hullBox } from './hull.js';
 export function commitRel(): void {
   for (const n of state.nodes.values()) {
     const p = parentOf(n);
-    const rx = n.x - (p ? p.x : 0), ry = n.y - (p ? p.y : 0);
+    // A frame's persisted position is its LABEL, so its children's offsets are measured from that too
+    // (load resolves them against the position it read, before any box was derived).
+    const o = p ? (p.label ?? p) : { x: 0, y: 0 }, me = n.label ?? n;
+    const rx = me.x - o.x, ry = me.y - o.y;
     if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) n.dirtyLayout = true;
     n.rx = rx; n.ry = ry;
   }
+}
+
+// Move a node to (x,y) as one thing: a frame's label rides along at its offset. Every mover that
+// shifts a node by a delta goes through here; fitFrame alone writes a frame's x/y directly, since the
+// box following its cards is not the frame moving.
+export function setPos(n: MindNode, x: number, y: number): void {
+  if (n.label) { n.label.x += x - n.x; n.label.y += y - n.y; }
+  n.x = x; n.y = y;
 }
 
 const LANDING_GAP = 40;   // gap below/beside the hovered card a drag-reparented child/sibling snaps to
@@ -452,8 +463,8 @@ export function frameLabelled(f: MindNode): boolean { return !!(f.title.trim() |
 // (main.ts's place/frameContentEl/followEdges). A FRAME's bounds also cover its title tab, which sits
 // above the box (FRAME_TAB_DROP, main.ts); a stack has no tab. Keyed on `type`, not isFrame, so a paint
 // landing mid-collapse can't flip the inset under a hosted child.
-export function frameInsetY(f: MindNode): number {
-  return FRAME_BORDER + (f.type === 'frame' && frameLabelled(f) ? FRAME_TAB_DROP : 0);
+export function frameInsetY(_f: MindNode): number {
+  return FRAME_BORDER;   // a frame's title is a label INSIDE its bubble now, never a tab above the box
 }
 // Where a frame's content starts VERTICALLY: one uniform pad below its BOX's top edge (elTop), matching
 // the `ax + FRAME_PAD` the other sides use from the box's outer edge. A nested frame's own tab lives
@@ -495,7 +506,7 @@ function shiftSubtree(node: MindNode, dx: number, dy: number): void {
     // Skip hidden nodes (a collapsed branch is re-laid on expand) — EXCEPT frame-contained ones,
     // which are free and must keep tracking their frame even while folded.
     if (isHidden(n) && !insideFrame(n)) continue;
-    n.x += dx; n.y += dy; n.dirtyLayout = true;
+    setPos(n, n.x + dx, n.y + dy); n.dirtyLayout = true;
   }
 }
 // A node's EFFECTIVE child-arrangement — one of free/line/fan. A card's `inherit` (the default)
@@ -716,20 +727,26 @@ export function reorderDraggedParents(movedIds: Iterable<string>): void {
 // The frame's box is the bubble's bounding box (view/hull.ts), not the children's padded union: the
 // spline bulges past the padded corners, and a press on that bulge has to land on the frame.
 function fitFrame(f: MindNode, kids: MindNode[]): void {
-  const b = hullBox(kids), inset = frameInsetY(f);
+  const b = hullBox(f, kids), inset = frameInsetY(f);
   const x = b.x - FRAME_BORDER, y = b.y - inset;
   const w = b.w + 2 * FRAME_BORDER, h = b.h + inset + FRAME_BORDER;
   if (f.x === x && f.y === y && f.w === w && f.h === h) return;
   f.x = x; f.y = y; f.w = w; f.h = h; f.dirtyLayout = true;
 }
 function layoutSubtree(node: MindNode): void {
-  if (node.collapsed) return;
+  // A FOLDED frame is its label pill, so that is where its geometry sits.
+  if (node.collapsed) { if (node.label) { node.x = node.label.x; node.y = node.label.y; } return; }
   // annotations opt out of layout: never ordered, spaced, or flowed — they stay where dragged and
   // float on top (they still ride shiftSubtree when an ancestor moves, so they track their parent).
   const kids = childrenOf(node.id).filter(k => !isHidden(k) && !isAnnotation(k));
   // An empty STACK still owes itself a height — its box auto-fits its outline, and with no rows that
   // outline is just its own (possibly wrapped) title.
-  if (!kids.length) { if (isStack(node)) sizeEmptyStack(node); return; }
+  // …and an EMPTY frame with a name is a bubble around its label alone.
+  if (!kids.length) {
+    if (isStack(node)) sizeEmptyStack(node);
+    else if (isFrame(node) && !boxIsViewport(node) && frameLabelled(node)) fitFrame(node, kids);
+    return;
+  }
   // lay out each child's own subtree first, so subtreeBox() reflects the grandchildren
   for (const k of kids) layoutSubtree(k);
   // A frame's BOUNDS follow its children (docs/spec-goo-groups.md, step 2): the box is the padded
@@ -772,7 +789,7 @@ function layoutSubtree(node: MindNode): void {
         shiftSubtree(k, x - b.x0, cy - b.y0);
         cy += (b.y1 - b.y0) + STACK_GAP;
       } else {
-        k.x = x; k.y = cy; k.dirtyLayout = true;
+        setPos(k, x, cy); k.dirtyLayout = true;
         paintNode(k);
         cy += layoutH(k) + STACK_GAP;
       }

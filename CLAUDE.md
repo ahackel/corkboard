@@ -63,9 +63,9 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
   (folding legacy `image`/`stack` → `card`). Kinds: card, frame, annotation, query — a card with
   children IS the outliner.
-- **A card/annotation MEASURES both its width and height; a frame DERIVES its box from its children**
-  (`fitFrame`; `docs/spec-goo-groups.md`). `n.w`/`n.h` are authored only for query, an EMPTY frame and an
-  IMAGE card — a note that is one `![](…)`: no padding, aspect-locked resize, a 40px icon when folded.
+- **A card/annotation MEASURES its size; a frame DERIVES its box from its children AND its label**
+  (`fitFrame`; `docs/spec-goo-groups.md`); a frame's `mm_position` is its LABEL (`n.label`, moved by `setPos`).
+  `n.w`/`n.h` are authored only for query and an IMAGE card — one `![](…)`: no padding, aspect-locked, a 40px icon folded.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
   open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`**; `state.readOnly` and `store.isOpen === false` (demo mode)
@@ -85,7 +85,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 
 ## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
-- Frames — "A `frame`'s BOUNDS include its title tab" · "A container's two side wrappers are
+- Frames — "A frame's TITLE is a LABEL inside its bubble" · "A container's two side wrappers are
   LIFECYCLE-managed" · "A frame can be OPENED, and then the canvas IS its interior" · "An OPENED CARD is
   its note" (scope, crumbs, canvas colour, `detachParentId`). Tab groups are gone: `mm_layout: tabs` folds to `free`.
 - Outlines — "A `stack` is an OUTLINER" (now: any card with children); files — "A body-less note is MIGRATED on load" · "A note that is

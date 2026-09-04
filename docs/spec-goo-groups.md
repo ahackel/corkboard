@@ -29,8 +29,8 @@ Each was a question with alternatives; the alternatives are under "Rejected" bel
 - **Frames become blobs, and the two other frame faces go.** `mm_layout: tabs` folds to a plain frame on
   load (`foldTypeLayout`), and opening a frame (the canvas IS its interior) is retired. One concept.
 - **A frame's bounds are DERIVED from its children.** `mm_w`/`mm_h` are no longer read or written for
-  frames (still the file format, still honoured for `query` and image cards). An empty frame cannot exist
-  except transiently. There is no empty interior to drop into: dropping NEAR is the gesture.
+  frames (still the file format, still honoured for `query` and image cards). A NAMED or coloured empty
+  frame is a bubble around its label (revised 2026-09-04); an unauthored one dissolves. There is no empty interior to drop into: dropping NEAR is the gesture.
 - **Joining is automatic, by the BUBBLE, during the drag.** A card whose rect overlaps a frame's resting
   hull (`hullGap` = 0) becomes a member — anywhere in the goo, not only next to another card; the hull
   grows to include it while the pointer is still down. Leaving needs `LEAVE_GAP` clear of the hull's edge
@@ -49,8 +49,9 @@ Each was a question with alternatives; the alternatives are under "Rejected" bel
 - **The hull is a tight metaball union**: one rounded rect per child plus smooth necks between neighbours.
   Cards far apart inside one frame show a thin bridge, which is the honest picture. Pure SVG paths, no
   raster `feGaussianBlur`: crisp at every zoom, exportable.
-- **The title is a label inside the hull padding**, top-left, part of the fill. Untitled frames show none.
-  The title tab and its bounds arithmetic ("A `frame`'s BOUNDS include its title tab") go away.
+- **The title is a label INSIDE the bubble, and a member of it** (revised 2026-09-04): bare text at the
+  frame's `mm_position`, draggable about the goo, renamed by double-click; the hull wraps it like a card.
+  Untitled frames show a faint "Name…" row while selected. The title tab and its bounds arithmetic go away.
 - **An untitled frame is a neutral canvas tint** until a colour is authored via the palette. Ink and
   scrim derive from the fill as for every node (`utils/ink.ts`).
 - **Folded frame = one small blob** carrying the title and the existing `.hidden-count` chip. Children hide

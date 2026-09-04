@@ -63,6 +63,10 @@ export interface MindNode {
   y: number;
   rx: number;                      // persisted as mm_position_x/y
   ry: number;
+  // A FRAME's title sits where you put it inside its bubble: `label` is that spot (world coords), and it
+  // is what the frame's mm_position_x/y persists — its x/y/w/h are DERIVED from what it holds
+  // (view/layout.ts fitFrame) and written only as a convenience. Moving a frame moves both (setPos).
+  label?: { x: number; y: number };
   parent: string | null;           // parent node id (resolved from mm_parent path at load)
   _parentPath?: string;            // transient: the mm_parent path, resolved to `parent` post-load
   collapsed: boolean;
