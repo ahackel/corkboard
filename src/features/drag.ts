@@ -9,7 +9,7 @@
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId, isReadingRoot } from '../nav/scope.js';
-import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
+import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, rowStackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
@@ -17,7 +17,7 @@ import { paintEdges } from '../view/edges.js';
 import { snapTo } from '../utils/num.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, frameLabelW, FRAME_TAB_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
+import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, activateTab, activateRow, openRow, unfoldLeftDeck, frameLabelW, FRAME_TAB_H, STACK_PAD, selJoin, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge, dockFrames, dissolveEmptyTabGroups, reanchorContents, interiorAtHome } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -521,6 +521,10 @@ function dragPointerUp(): void {
         // is for. Before the selection branch below, so it happens on the FIRST click, whether or not
         // this tab was already the selected node. Locked tabs included (see activateTab).
         if (isDockedTab(n) && !state.readOnly) activateTab(n);
+        // …and clicking a card in a STACK deals it to the top, by the same rule and for the same
+        // reason. ⌘-click is excluded on purpose: it is the "add to selection" gesture, and building
+        // a multi-selection out of a stack must not refold the stack under the pointer as you go.
+        else if (!drag.meta && !state.readOnly) activateRow(n);
         if (drag.meta) toggleSel(n.id);                 // ⌘/Ctrl-click: add/remove from selection
         else if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);   // reduce a multi-selection to this card
         // A click only ever SELECTS. Editing in place is the double-click's job (main.ts
@@ -634,6 +638,7 @@ function dragPointerUp(): void {
             if (!r?.parent) continue;
             const rp = state.nodes.get(r.parent);
             const rInFrame = !!(rp && isContainer(rp)) && !isAnnotation(r);   // frame/stack; annotations detach by rip only
+            const wasRow = !!rowStackOf(r);   // …and whether it's a card of a DECK, asked before the cut
             const rOut = rInFrame && !centreInFrame(r, rp!);
             if (!shift && (rInFrame ? rOut : (alt || distanceRip(r)))){
               // UNDOCK: a tab dragged clear of its group's bounds becomes an ordinary frame again — it
@@ -654,6 +659,7 @@ function dragPointerUp(): void {
                 reanchorContents(r, lent!, drag.start.get(r.id) ?? r);
                 emptied.push(rp!.id);
               }
+              if (wasRow) unfoldLeftDeck(r);   // dragged off the deck: face up, same rule as the tab above
               detached++; if (rOut) leftFrame++;
             }
           }
@@ -1106,6 +1112,7 @@ export function reparentOnly(childId: string, newParentId: string, afterId?: str
   if (!child || !newParent || childId === newParentId) return false;
   if (isLockedEffective(child) || isLockedEffective(newParent)) return false;   // locked: no move in or out
   if (isAncestor(childId, newParentId)) return false; // would create a cycle
+  const wasRow = !!rowStackOf(child);                  // …a deck it may be leaving — asked BEFORE the cut
   touch(childId, child.parent, newParentId);          // pre-images incl. both parents' kidOrder
   child.parent = newParentId;
   // `mm_parent` lives in the NOTE, so a reparent is a note write — `dirtyLayout` alone (which is what
@@ -1116,5 +1123,10 @@ export function reparentOnly(childId: string, newParentId: string, afterId?: str
   child.dirtyLayout = true;
   if (isManagedLayout(newParent))
     newParent.kidOrder = insertedKidOrder(newParent, childId, afterId);
+  // Dropped into a STACK: the newcomer is the card you just placed, so it is the one that's open —
+  // every other row folds. Flags only (openRow), since this runs inside the drop's own undo step and
+  // is called once per root of a multi-card drop. Dealt OUT of one instead, it comes back face up.
+  openRow(child);
+  if (wasRow) unfoldLeftDeck(child);
   return true;
 }

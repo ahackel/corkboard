@@ -22,7 +22,7 @@ import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand, readingBand } from './view/camera.js';
-import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
+import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, rowStackOf, stackOutline, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -159,7 +159,7 @@ function nodeEl(n: MindNode): HTMLElement {
     e.stopPropagation();
     if (a.classList.contains('wikilink')){
       e.preventDefault();
-      focusByTitle(a.dataset.target ?? '');
+      focusByTitle(a.dataset.target ?? '', n);
     }
   });
   // task checkboxes: toggle the matching [ ]/[x] in the body and persist
@@ -597,6 +597,7 @@ export function paintNode(n: MindNode): void {
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
     + (isQueryBox(n) ? ' query-card' : '')
     + (isAnnotation(n) ? ' annotation' : '')
+    + (isTile(n) ? ' tile' : '')   // the plain fixed-size card (styles.css clips its text to it)
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
     + (collapsed ? ' collapsed' : '')
@@ -700,6 +701,10 @@ export function paintNode(n: MindNode): void {
   // Resolved once up front, not inside the `else if`: nodeW() would run the same ancestor walk a
   // second time to answer the same question. The earlier branches can't be rows, so they skip it.
   const rowW = isBoxNode(n) || isFrameFold(n) || isStack(n) ? null : stackRowW(n);
+  // A card that is no longer a row of any deck drops the --deck-z the stack loop dealt it (view/
+  // layout.ts) — otherwise a card dragged out of a stack keeps floating over its old neighbours.
+  // Rows are left alone here: that loop owns the value, and it runs before this paint, not after.
+  if (!rowStackOf(n)) el.style.removeProperty('--deck-z');
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
@@ -740,12 +745,12 @@ export function paintNode(n: MindNode): void {
     // an OUTLINE ROW — a narrower test than inStack(n), which also catches an annotation parented to a
     // stack; the outline skips those, so they keep their own shrink-to-fit width via the branch below
     el.style.width = rowW + 'px';        // stretched to the row width its depth allows (stackRowW)
-    if (el.style.height) el.style.height = '';
+    el.style.height = nodeH(n) + 'px';   // declared by the deck: a folded band, or a whole card
     el.style.removeProperty('--frame-stroke');
     clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
-  } else {
-    // A plain card or an annotation: an authored width if it has one (else back to the CSS-fixed
-    // card / the annotation's shrink-to-fit), never an inline height.
+  } else if (isMeasuredH(n)) {
+    // An annotation or the card being READ: an authored width if it has one (else the annotation's
+    // shrink-to-fit), never an inline height — these are the kinds that still measure themselves.
     const authored = n.w != null || isReadingRoot(n);
     el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
@@ -753,6 +758,13 @@ export function paintNode(n: MindNode): void {
     el.classList.toggle('w-set', authored);
     el.style.removeProperty('--frame-stroke');
     ensureResizeHandles(n, EW_DIRS);
+  } else {
+    // A plain card: the one fixed tile. Neither axis is authored, so there is nothing to drag.
+    el.style.width = NODE_W + 'px';
+    el.style.height = NODE_H + 'px';
+    el.classList.remove('w-set');
+    el.style.removeProperty('--frame-stroke');
+    clearResizeHandles(el);
   }
   // Same rule the outline-row arm states, and it has to sit AFTER the whole chain because a stack, a
   // frame and a plain card each hand out their own handles: a DERIVED size isn't resizable. The card
@@ -980,7 +992,11 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   if (isLockedEffective(n)) return '';
   return 'fold';
 }
-export const NODE_W = 200;
+// A plain card is ONE FIXED TILE, both axes: no authored size, no measuring, no resize handles —
+// every card on the board is the same rectangle, and its text is clipped to it (styles.css .tile).
+// The other kinds keep their own rule: a frame/query/image card is its own box, a stack auto-fits
+// its children, an annotation shrink-wraps its text, an opened card takes the reading width.
+export const NODE_W = 200, NODE_H = 140;
 // world-px grid dragged positions AND frame/image-card sizes snap to — tracks the visible grid's
 // own cell size (state.gridSize, view/grid.ts); 0 (grid off) disables snapping rather than
 // collapsing every position to the origin.
@@ -1016,7 +1032,23 @@ export const STACK_W = NODE_W;   // a stack STARTS the same width as a normal ca
 export const STACK_HEADER = 36;  // title strip reserved above the stacked children
 export const STACK_PAD = 6;      // inset from the border to the content — half a normal card's
                                  // padding, so full-width child cards still fit in the narrow box
-export const STACK_GAP = 8;      // vertical gap between stacked children
+export const STACK_GAP = 8;      // vertical gap a card dragged into a stack is seeded at
+// How far a row is tucked under the row below it. The rows of a stack are a DECK of cards, not a
+// list — they overlap, which is what hides the rounded bottom corners of the card above and makes
+// the column read as one stack of cards rather than a column of separate ones.
+// A folded row PAYS FOR the band it loses: styles.css gives it exactly this much extra bottom padding
+// (`.node.stack-child.collapsed`), so the part that disappears under the next card is padding and
+// never the title. The two numbers must agree — same pact as FRAME_BORDER and FRAME_TAB_H.
+// Only a folded row is tucked under: the one OPEN card in the deck is shown in full, which is the
+// whole point of it being the open one.
+export const STACK_OVERLAP = 8;
+// The band a FOLDED row of a deck actually SHOWS: its halved padding (--pad-y:5px on
+// .node.stack-child, styles.css), one title line, that padding again — with room for the checklist
+// box, the tallest thing the row can carry (14px + its 3px offset). DECLARED, never measured, which
+// is the whole point: every folded card in a deck is exactly as tall as every other one whatever is
+// written in it, and a title can't be clipped by a band that shrank to fit some other card's text.
+// The row's ELEMENT is this plus STACK_OVERLAP — the strip the next card of the deck rides over.
+export const STACK_FOLD_H = 28;
 // Whether a node currently renders as a frame BOX. A collapsed frame folds to its bare title tab
 // (isFrameFold below), so it has no box at all — and neither does a frame DOCKED as a tab, open or
 // not: the box belongs to its group, which is exactly what docking means. Shared by the geometry
@@ -1171,7 +1203,7 @@ export function nodeW(n: MindNode): number {
   const row = stackRowW(n); if (row != null) return row;             // outline row — derived, not authored
   if (isStack(n)) return n.w ?? STACK_W;
   if (isAnnotation(n)) return n.w ?? ((n.el && n.el.offsetWidth) || NODE_W);
-  return n.w ?? NODE_W;
+  return NODE_W;
 }
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
 // stack's height is its auto-fitted box (n.h, set by layout) — not its card.
@@ -1183,16 +1215,37 @@ export function nodeH(n: MindNode): number {
   if (isImageFold(n)) return IMAGE_FOLD;
   if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured
   if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
+  // A ROW of a deck: folded, the fixed band plus the strip the next card rides over; open, a whole
+  // card. Ahead of the tile arm because only the folded half differs — and it is the half that has
+  // to be identical from row to row.
+  if (stackRowW(n) != null) return n.collapsed ? STACK_FOLD_H + STACK_OVERLAP : NODE_H;
+  if (!isMeasuredH(n)) return NODE_H;   // a plain card is a fixed tile — its text is clipped, not grown
   return (n.el && n.el.offsetHeight) || 64;
 }
-// Height used for LAYOUT geometry. Identical to nodeH for every kind whose height is DECLARED
-// (box / folded frame / stack), so it defers to it rather than restating the ladder — a new kind
-// added to nodeH must not have to be remembered here too. The two differ only for a MEASURED card:
-// nodeH treats a zero-height element as unrendered and falls back to 64, while layout wants the real
-// 0 (the selection affordances — + and the "add note" bubble — are absolutely positioned and
-// overhang, so they never inflate the measurement either way).
+// The kinds whose height comes from the DOM rather than from a declaration, now that a plain card is
+// a fixed tile: an annotation shrink-wraps its text, the card being READ takes the window, and a
+// COLLAPSED card folds to its title, which is one line (styles.css clamps its body to one, and it
+// keeps its own fold chip). A collapsed card with children lands here rather than in isStack, which
+// tests !collapsed; every other kind's fold is already answered above (isFrameFold / isImageFold).
+// A stack ROW is never here, folded or not: a deck gives its cards BOTH axes (the width from
+// stackRowW, the height from nodeH's own row arm), so nothing about a row is left to its content.
+function isMeasuredH(n: MindNode): boolean {
+  return (isAnnotation(n) || isReadingRoot(n) || n.collapsed) && stackRowW(n) == null;
+}
+// A card at its FIXED TILE size: none of the kinds above, folded or measured. Named here for the
+// class list, which needs the answer before paintNode's size chain reaches it — and which can't read
+// that chain's last arm anyway, since an open stack ROW is a tile too but takes the row arm (its
+// width is the stack's to give, its height is the tile's).
+function isTile(n: MindNode): boolean {
+  return !isBoxNode(n) && !isFrameFold(n) && !isImageFold(n) && !isStack(n) && !isMeasuredH(n);
+}
+// Height used for LAYOUT geometry. Identical to nodeH for every DECLARED height, so it defers to it
+// rather than restating the ladder — a new kind added to nodeH must not have to be remembered here
+// too. The two differ only for a MEASURED card: nodeH treats a zero-height element as unrendered and
+// falls back to 64, while layout wants the real 0 (the selection affordances — + and the "add note"
+// bubble — are absolutely positioned and overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
-  if (isBoxNode(n) || isFrameFold(n) || isStack(n) || isImageFold(n)) return nodeH(n);
+  if (!isMeasuredH(n)) return nodeH(n);
   const el = n.el; if (!el) return 64;
   return el.offsetHeight;
 }
@@ -1810,6 +1863,46 @@ function openTabFlags(t: MindNode): boolean {
   }
   return changed;
 }
+// Clicking a card in a stack DEALS IT TO THE TOP: it expands, and every other row folds to its
+// title. A card stack shows one card at a time, which is the same one-open-at-a-time rule a tab
+// group follows — hence the deliberate mirror of activateTab/openTabFlags above. ⌘-click skips it
+// (see the click branch in features/drag.ts): adding a card to a multi-selection must not reshuffle
+// what is open under the pointer.
+export function activateRow(n: MindNode): void {
+  const stack = rowStackOf(n); if (!stack) return;
+  const rows = stackOutline(stack).map(r => r.node);
+  if (!n.collapsed && rows.every(k => k === n || k.collapsed)) return;   // already the open one
+  record(rows.map(k => k.id), () => withLayoutAnimation(() => openRow(n)));
+  scheduleSave();
+}
+// The flag half of "open this row", with no history/save/paint of its own — so a caller with a step
+// already open (reparentOnly, dealing a freshly dropped card to the top) can fold it into that step.
+// Its ANCESTORS inside the stack stay open too, or the row just opened would be folded away inside
+// one of them; the stack's own header card is not a row and is never touched. A node that isn't a
+// stack row at all is a no-op, which is what lets the drop path call it unconditionally.
+export function openRow(n: MindNode): boolean {
+  const stack = rowStackOf(n); if (!stack) return false;
+  const keep = new Set<string>([n.id]);
+  for (let p = parentOf(n); p && p.id !== stack.id; p = parentOf(p)) keep.add(p.id);
+  let changed = false;
+  for (const { node: k } of stackOutline(stack)) {
+    const want = !keep.has(k.id);
+    if (k.collapsed !== want) { touch(k.id); k.collapsed = want; k.dirty = true; changed = true; }
+    k.dirtyLayout = true;
+  }
+  return changed;
+}
+// …and the other direction: a card that has LEFT a deck comes out FACE UP. The fold was the DECK's
+// doing — a row takes its turn folded so the open card can be read — so it must not follow the card
+// onto the canvas, where a folded leaf is a one-line stub with no fold chip to open it again. Exactly
+// the rule an UNDOCKED TAB already follows (features/drag.ts): leave the container, lose the state
+// the container imposed. Callers pass a card that WAS a row; still being one makes this a no-op, so
+// an ordinary move between two frames never unfolds anything the user folded by hand.
+export function unfoldLeftDeck(n: MindNode): boolean {
+  if (!n.collapsed || rowStackOf(n)) return false;
+  touch(n.id); n.collapsed = false; n.dirty = true; n.dirtyLayout = true;
+  return true;
+}
 export function toggleCollapse(id: string): void {
   const n = state.nodes.get(id); if (!n) return;
   // A docked tab doesn't fold — it OPENS, closing its siblings (there's always exactly one open tab).
@@ -2000,10 +2093,24 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
 // The way to be exact is the PATH form, `[[Frames/Notes]]` or `[[Notes 2]]`, matched against the node's
 // file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
 // there rather than in some new syntax.
-function focusByTitle(title: string): void {
+function focusByTitle(title: string, from?: MindNode): void {
   const hits = resolveWikilink(title);
   const target = hits[0];
-  if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
+  // A link to a card that isn't there yet WRITES it — the link is the note-taking gesture, not an
+  // error. The new card lands beside the one you clicked from, free-standing (createNode's own
+  // `?? detachParentId()` puts it on whatever canvas you're on): a wikilink is a relation, and
+  // relations in this app are lines, not containment, so linking must never nest.
+  // Only the TITLE form can be created. The PATH form names a FILE in a folder, and nothing here
+  // chooses a node's folder — a card titled `Frames/Notes` would slug to `Frames-Notes.md` and the
+  // link that asked for it would still be dead, so say so instead of making one.
+  if (!target){
+    if (!from || state.readOnly || title.includes('/')){
+      setStatus(`No node titled “${title}” in this map`); return;
+    }
+    const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
+    if (createNode({ x: at.x, y: at.y, title, edit: false })) setStatus(`Created “${title}”`);
+    return;
+  }
   popScopeFor(target);
   focusNode(target);
   if (hits.length > 1)

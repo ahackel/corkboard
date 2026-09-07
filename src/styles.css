@@ -508,12 +508,9 @@ svg#edges path, svg#dragEdges path { fill:none; stroke:var(--edge); stroke-width
    stay pixel-for-pixel identical at any zoom level. */
 svg#dragEdges path.ghost-edge { stroke-width:2; }
 
-/* A card SHRINKS TO FIT its text — it is its content and nothing more, so a one-line note is a one-line
-   card. There is no minimum: the 10px/12px padding is the floor (a card can't measure 0, which matters,
-   because nodeH reads a zero offsetHeight as "not rendered yet" and substitutes 64). Only the WIDTH is
-   fixed, and only until the user drags an edge (n.w). The `min-height:64px` this replaces predated
-   untitled cards and had already been switched off for the bodyless case (`.node.no-body`), so the two
-   halves of a card now behave the same way: whatever is in it decides how tall it is. */
+/* A plain card is ONE FIXED TILE — NODE_W x NODE_H in main.ts, which paintNode writes inline on every
+   tile, so this width is only the fallback the other kinds start from (an annotation's shrink-to-fit
+   cap, a row before layout hands it a width). Kept equal to NODE_W so the two never disagree. */
 .node {
   position:absolute; width:200px;
   background: var(--card, var(--node)); border:none;
@@ -532,6 +529,13 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
      fading in behind an already-ringed tab. */
   transition: opacity .2s ease;
 }
+/* Every card is the same rectangle, so its TEXT has to give: the tile is a flex column whose body is
+   the one part allowed to shrink, and what doesn't fit is clipped. Clipped on .body and never on the
+   node itself, for the reason .node.image-card states further down — the tag row and the add-note
+   button deliberately float outside the card's border and must not be clipped along with it. */
+.node.tile { display:flex; flex-direction:column; }
+.node.tile > .title-row { flex:none; }
+.node.tile > .body { flex:0 1 auto; min-height:0; overflow:hidden; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .node.lt-anim { transition: opacity .2s ease,
   left .3s cubic-bezier(.22,1,.36,1), top .3s cubic-bezier(.22,1,.36,1); }
@@ -1238,6 +1242,23 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    width — desyncing every consumer of it (edges, marquee, subtreeBox). The inline width also beats
    the editing width above, so a resized annotation keeps its size while its body is edited. */
 .node.annotation.w-set { max-width:none; }
+/* A stack's rows OVERLAP (STACK_OVERLAP, view/layout.ts), so each one needs a visible edge or a run
+   of same-coloured cards merges into one block. The shadow is cast UPWARDS — the card is lit from
+   where it sits, on top of the one above it — which is the whole of what makes the column read as a
+   deck rather than a list. Before .node.sel on purpose: a SELECTED row shows the ring instead and
+   lifts out of the deck, which is what you want of the card you just opened. */
+/* A FOLDED row is STACK_FOLD_H + STACK_OVERLAP tall, declared by main.ts, and the card below rides
+   up over that last strip — so what the overlap covers is empty padding and the rounded bottom
+   corners, never a pixel of the title. Which is the whole trick that makes a column of cards look
+   like a stack of them, and why the band must not depend on what's written in the card: ONE line,
+   ellipsised, so a longer name can never wrap the row taller than the band declared for it. */
+.node.stack-child.collapsed .title { white-space:nowrap; text-overflow:ellipsis; }
+.node.stack-child { box-shadow:0 -1px 0 rgba(0,0,0,.14), 0 -5px 10px -5px rgba(0,0,0,.30);
+  /* …and which card of the deck is on top: 2 + its position in the outline, dealt by the stack's
+     layout loop. The fallback is a plain card's own z-index, for the frame between a card joining a
+     stack and that loop running. `.node.dragging` below overrides it — a card in hand leaves the
+     deck — which is why this is a variable here and not an inline style on the element. */
+  z-index:var(--deck-z, 2); }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 /* while editing a title/body/query in place, drop the card's selection ring so only the editor's
    own outline shows */
@@ -1658,6 +1679,11 @@ body.zoom-far .node > .addnote { display:none !important; }
    lines (a 16px heading's, or a 12px paragraph's) so nothing can spill however it renders. The two levels
    of "first" cover a leading LIST, whose text is really in its `<li>`. */
 .node.collapsed > .body { max-height:max(var(--h1-lh), var(--body-lh)); overflow:hidden; }
+/* …and a TITLED collapsed card is its title and nothing else: ONE line. The clamped first body line
+   above is only there for the UNTITLED case, where that line IS the card's name (nodeLabel's own
+   fallback order) and hiding it would fold the card down to a blank stub — which is exactly what the
+   `display:none` this replaces used to do back when a title was a separate element. */
+.node.collapsed:not(.no-title) > .body { display:none; }
 .node.collapsed > .body > :first-child,
 .node.collapsed > .body > :first-child > li:first-child {
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
