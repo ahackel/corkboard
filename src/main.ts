@@ -159,7 +159,7 @@ function nodeEl(n: MindNode): HTMLElement {
     e.stopPropagation();
     if (a.classList.contains('wikilink')){
       e.preventDefault();
-      focusByTitle(a.dataset.target ?? '');
+      focusByTitle(a.dataset.target ?? '', n);
     }
   });
   // task checkboxes: toggle the matching [ ]/[x] in the body and persist
@@ -2000,10 +2000,20 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
 // The way to be exact is the PATH form, `[[Frames/Notes]]` or `[[Notes 2]]`, matched against the node's
 // file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
 // there rather than in some new syntax.
-function focusByTitle(title: string): void {
+function focusByTitle(title: string, from?: MindNode): void {
   const hits = resolveWikilink(title);
   const target = hits[0];
-  if (!target){ setStatus(`No node titled “${title}” in this map`); return; }
+  // A link to a card that isn't there yet WRITES it (Obsidian's gesture): the new card lands beside
+  // the one you clicked from, free-standing — a wikilink is a relation, never containment. Only the
+  // TITLE form can be created: the PATH form names a folder nothing here chooses.
+  if (!target){
+    if (!from || state.readOnly || title.includes('/')){
+      setStatus(`No node titled “${title}” in this map`); return;
+    }
+    const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
+    if (createNode({ x: at.x, y: at.y, title, edit: false })) setStatus(`Created “${title}”`);
+    return;
+  }
   popScopeFor(target);
   focusNode(target);
   if (hits.length > 1)
