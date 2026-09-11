@@ -15,9 +15,9 @@ import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode 
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, parentOf, ancestors } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
-import { orderedKids, rowStackOf } from '../view/layout.js';
+import { orderedKids } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, unfoldLeftDeck, toggleDone, checklistProgress, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
+import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, checklistProgress, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
 import { createNode, addChild, deleteNode, duplicateSelection, discardNewCard } from './crud.js';
@@ -695,10 +695,8 @@ function seedUnderParent(child: MindNode, parent: MindNode, reveal = true): bool
 // children while one is open (detachParentId, nav/scope.ts), so dropping a row beside a top row puts
 // it where the outline says it went.
 function makeRoot(n: MindNode, dy = 0): void {
-  const wasRow = !!rowStackOf(n);   // a deck it may be leaving — asked before the cut
   touch(n.id, n.parent);
   n.parent = detachParentId(); n.dirty = true; n.dirtyLayout = true;   // mm_parent is in the note
-  if (wasRow) unfoldLeftDeck(n);    // off the deck, face up — see main.ts
   shiftWhole(n, 0, dy);
   relayout(); scheduleSave(); commitStep();
 }

@@ -1242,23 +1242,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    width — desyncing every consumer of it (edges, marquee, subtreeBox). The inline width also beats
    the editing width above, so a resized annotation keeps its size while its body is edited. */
 .node.annotation.w-set { max-width:none; }
-/* A stack's rows OVERLAP (STACK_OVERLAP, view/layout.ts), so each one needs a visible edge or a run
-   of same-coloured cards merges into one block. The shadow is cast UPWARDS — the card is lit from
-   where it sits, on top of the one above it — which is the whole of what makes the column read as a
-   deck rather than a list. Before .node.sel on purpose: a SELECTED row shows the ring instead and
-   lifts out of the deck, which is what you want of the card you just opened. */
-/* A FOLDED row is STACK_FOLD_H + STACK_OVERLAP tall, declared by main.ts, and the card below rides
-   up over that last strip — so what the overlap covers is empty padding and the rounded bottom
-   corners, never a pixel of the title. Which is the whole trick that makes a column of cards look
-   like a stack of them, and why the band must not depend on what's written in the card: ONE line,
-   ellipsised, so a longer name can never wrap the row taller than the band declared for it. */
-.node.stack-child.collapsed .title { white-space:nowrap; text-overflow:ellipsis; }
-.node.stack-child { box-shadow:0 -1px 0 rgba(0,0,0,.14), 0 -5px 10px -5px rgba(0,0,0,.30);
-  /* …and which card of the deck is on top: 2 + its position in the outline, dealt by the stack's
-     layout loop. The fallback is a plain card's own z-index, for the frame between a card joining a
-     stack and that loop running. `.node.dragging` below overrides it — a card in hand leaves the
-     deck — which is why this is a variable here and not an inline style on the element. */
-  z-index:var(--deck-z, 2); }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 /* while editing a title/body/query in place, drop the card's selection ring so only the editor's
    own outline shows */

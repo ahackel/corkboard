@@ -13,7 +13,7 @@ import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
 import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { snapTo } from '../utils/num.js';
-import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP, STACK_OVERLAP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, NODE_W, gridSnap, paintNode, elTop, frameLabelW, FRAME_BORDER, FRAME_TAB_H, FRAME_TAB_DROP, STACK_HEADER, STACK_PAD, STACK_GAP } from '../main.js';
 import { clamp } from '../utils/num.js';
 
 // ---------- absolute <-> relative position ----------
@@ -681,14 +681,6 @@ export function stackOf(node: MindNode): MindNode | null {
   const h = hostFrame(node);
   return h && isStack(h) ? h : null;
 }
-// …and the stack whose outline this node is a ROW OF: the same answer minus the self case, since a
-// stack is not one of its own rows. That distinction is the whole of what the accordion needs —
-// clicking a stack's own header card must not fold the rows inside it (main.ts openRow).
-// An ANNOTATION is excluded for the reason stackRowW excludes it: it floats ON TOP of a row rather
-// than being one (stackOutline skips it), so it has no turn to take.
-export function rowStackOf(node: MindNode): MindNode | null {
-  return isStack(node) || isAnnotation(node) ? null : stackOf(node);
-}
 function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
   const tie = (n: MindNode) => n.file || n.title || n.id;
   const cmpTie = (a: MindNode, b: MindNode) => (tie(a) < tie(b) ? -1 : tie(a) > tie(b) ? 1 : 0);
@@ -904,39 +896,25 @@ function layoutSubtree(node: MindNode): void {
     let cy = ay + stackHeaderH(node);
     // Walk the SHARED outline (stackOutline) rather than a private DFS, so the drop resolver
     // (stackDropTarget) and this layout pass can never disagree about a row's order or depth.
-    // Rows OVERLAP: each advances by its own height LESS STACK_OVERLAP, so the next card is drawn
-    // over its bottom edge and the column reads as a deck of cards rather than a list. Which way the
-    // overlap points — later rows on top — is the `--deck-z` below, written here because this loop is
-    // the only place that knows a row's position in the deck. A VARIABLE and not an inline z-index:
-    // the stacking order is documented in one place in styles.css, and an inline value would outrank
-    // `.node.dragging`'s own z-index and sink a card being dragged out of the stack behind the canvas.
-    // paintNode drops it again the moment a card stops being a row (see its size chain).
-    let tuck = 0;   // how far THIS row rides up under the one above it — set by that row, not this one
-    for (const [i, { node: k, depth }] of rows.entries()) {
-      const x = innerLeft + depth * STACK_INDENT, y = cy - tuck;
+    for (const { node: k, depth } of rows) {
+      const x = innerLeft + depth * STACK_INDENT;
       if (isContainer(k) || k.collapsed) {
         // one opaque row: its own box/fold owns its contents, so move the whole subtree with it
         paintNode(k);
         const b = subtreeBox(k);
-        shiftSubtree(k, x - b.x0, y - b.y0);
-        cy = y + (b.y1 - b.y0);
+        shiftSubtree(k, x - b.x0, cy - b.y0);
+        cy += (b.y1 - b.y0) + STACK_GAP;
       } else {
-        k.x = x; k.y = y; k.dirtyLayout = true;
+        k.x = x; k.y = cy; k.dirtyLayout = true;
         paintNode(k);
-        cy = y + layoutH(k);
+        cy += layoutH(k) + STACK_GAP;
       }
-      // A FOLDED row is one title line, and the next card rides up over the rest of it — that overlap
-      // is what makes the column a deck. The OPEN card is not tucked under at all: it is the one card
-      // of the deck you are meant to read, so the next row starts flush at its bottom edge.
-      tuck = k.collapsed ? STACK_OVERLAP : 0;
-      k.el?.style.setProperty('--deck-z', String(2 + i));
     }
-    // cy is the last row's BOTTOM (nothing rides up over it), so the box just insets from there by the
-    // SAME amount as the sides. A row's left edge sits at FRAME_BORDER + STACK_PAD from the box's
-    // outer edge, and borders are inside the box (box-sizing:border-box), so the bottom needs both
-    // terms too — with STACK_PAD alone the gap under the last row read visibly tighter than the ones
-    // beside it.
-    node.h = cy - ay + STACK_PAD + FRAME_BORDER;
+    // Drop the trailing gap, then inset the bottom by the SAME amount as the sides. A row's left edge
+    // sits at FRAME_BORDER + STACK_PAD from the box's outer edge, and borders are inside the box
+    // (box-sizing:border-box), so the bottom needs both terms too — with STACK_PAD alone the gap
+    // under the last row read visibly tighter than the ones beside it.
+    node.h = (cy - STACK_GAP) - ay + STACK_PAD + FRAME_BORDER;
     return;
   }
 

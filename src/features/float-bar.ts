@@ -23,7 +23,7 @@ import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
-import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
+import { selectedIds, selectNode, canFold, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -484,7 +484,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
   if (!multi)
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id),
-      disabled: locked || (!childrenOf(n.id).length && !(n.body && n.body.trim())) });
+      disabled: locked || !canFold(n) });
   // Opening a frame mutates nothing, so it belongs in this read-only-safe block — and it's the one
   // way IN while read-only, since a double-click there still folds instead (activateNode). Routed
   // through actionTarget, so right-clicking a tab GROUP's box opens the tab that's showing.

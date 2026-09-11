@@ -22,7 +22,7 @@ import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand, readingBand } from './view/camera.js';
-import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, rowStackOf, stackOutline, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
+import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
 import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -568,7 +568,7 @@ export function paintNode(n: MindNode): void {
   const editingBody = ui.bodyEdit && ui.bodyEdit.id === n.id;    // body editor open on this card
   const hasBody = editingBody || !!(n.body && n.body.trim());  // keep the body slot while editing
   const collapsedKids = n.collapsed && hasKids;            // hidden children → +N chip
-  const collapsed = n.collapsed && (hasKids || hasBody);   // folded to just its title
+  const collapsed = n.collapsed && canFold(n, hasKids, hasBody);   // folded to just its title
   const showDone = showsDoneCheckbox(n);                   // checklist item of a checklist parent
   // selected card gets an inline "+" at the end of its tag row (features/tags.ts's openEmojiPicker) —
   // frames have no natural place for a tag row at all (see the tag-row comment below). Only the
@@ -701,10 +701,6 @@ export function paintNode(n: MindNode): void {
   // Resolved once up front, not inside the `else if`: nodeW() would run the same ancestor walk a
   // second time to answer the same question. The earlier branches can't be rows, so they skip it.
   const rowW = isBoxNode(n) || isFrameFold(n) || isStack(n) ? null : stackRowW(n);
-  // A card that is no longer a row of any deck drops the --deck-z the stack loop dealt it (view/
-  // layout.ts) — otherwise a card dragged out of a stack keeps floating over its old neighbours.
-  // Rows are left alone here: that loop owns the value, and it runs before this paint, not after.
-  if (!rowStackOf(n)) el.style.removeProperty('--deck-z');
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
@@ -745,7 +741,8 @@ export function paintNode(n: MindNode): void {
     // an OUTLINE ROW — a narrower test than inStack(n), which also catches an annotation parented to a
     // stack; the outline skips those, so they keep their own shrink-to-fit width via the branch below
     el.style.width = rowW + 'px';        // stretched to the row width its depth allows (stackRowW)
-    el.style.height = nodeH(n) + 'px';   // declared by the deck: a folded band, or a whole card
+    // …but its HEIGHT is its own: the tile's, expanded, and its one folded line otherwise
+    el.style.height = isMeasuredH(n) ? '' : nodeH(n) + 'px';
     el.style.removeProperty('--frame-stroke');
     clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
   } else if (isMeasuredH(n)) {
@@ -975,13 +972,7 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   }
   if (isTabsFrame(n)) return collapsed ? 'count' : '';
   if (collapsed) return 'count';
-  // A FRAME's own body is never rendered (styles.css — its name is a folder tab), so only CHILDREN make
-  // one collapsible. Every other kind, a STACK now included, can also fold its text down to one line:
-  // a stack's header IS its rendered body these days, so there is something there to fold. Deliberately
-  // a test on the KIND and not isContainer/isFrame/isStack: those also carry state (a collapsed frame, a
-  // stack demoted to a row inside another stack) that has no bearing on whether the body is drawn.
-  const foldable = rendersAsFrame(n) ? hasKids : (hasKids || hasBody);
-  if (!foldable) return '';
+  if (!canFold(n, hasKids, hasBody)) return '';
   // An annotation IS its body (no title row at all), so folding it would leave an empty shell —
   // it keeps double-click/X but is never invited to. A query card is a box whose whole content is the
   // point, and its corner is already spoken for by the results. An IMAGE card is invited: it folds to
@@ -1032,23 +1023,7 @@ export const STACK_W = NODE_W;   // a stack STARTS the same width as a normal ca
 export const STACK_HEADER = 36;  // title strip reserved above the stacked children
 export const STACK_PAD = 6;      // inset from the border to the content — half a normal card's
                                  // padding, so full-width child cards still fit in the narrow box
-export const STACK_GAP = 8;      // vertical gap a card dragged into a stack is seeded at
-// How far a row is tucked under the row below it. The rows of a stack are a DECK of cards, not a
-// list — they overlap, which is what hides the rounded bottom corners of the card above and makes
-// the column read as one stack of cards rather than a column of separate ones.
-// A folded row PAYS FOR the band it loses: styles.css gives it exactly this much extra bottom padding
-// (`.node.stack-child.collapsed`), so the part that disappears under the next card is padding and
-// never the title. The two numbers must agree — same pact as FRAME_BORDER and FRAME_TAB_H.
-// Only a folded row is tucked under: the one OPEN card in the deck is shown in full, which is the
-// whole point of it being the open one.
-export const STACK_OVERLAP = 8;
-// The band a FOLDED row of a deck actually SHOWS: its halved padding (--pad-y:5px on
-// .node.stack-child, styles.css), one title line, that padding again — with room for the checklist
-// box, the tallest thing the row can carry (14px + its 3px offset). DECLARED, never measured, which
-// is the whole point: every folded card in a deck is exactly as tall as every other one whatever is
-// written in it, and a title can't be clipped by a band that shrank to fit some other card's text.
-// The row's ELEMENT is this plus STACK_OVERLAP — the strip the next card of the deck rides over.
-export const STACK_FOLD_H = 28;
+export const STACK_GAP = 8;      // vertical gap between stacked children
 // Whether a node currently renders as a frame BOX. A collapsed frame folds to its bare title tab
 // (isFrameFold below), so it has no box at all — and neither does a frame DOCKED as a tab, open or
 // not: the box belongs to its group, which is exactly what docking means. Shared by the geometry
@@ -1215,10 +1190,6 @@ export function nodeH(n: MindNode): number {
   if (isImageFold(n)) return IMAGE_FOLD;
   if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured
   if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
-  // A ROW of a deck: folded, the fixed band plus the strip the next card rides over; open, a whole
-  // card. Ahead of the tile arm because only the folded half differs — and it is the half that has
-  // to be identical from row to row.
-  if (stackRowW(n) != null) return n.collapsed ? STACK_FOLD_H + STACK_OVERLAP : NODE_H;
   if (!isMeasuredH(n)) return NODE_H;   // a plain card is a fixed tile — its text is clipped, not grown
   return (n.el && n.el.offsetHeight) || 64;
 }
@@ -1227,15 +1198,14 @@ export function nodeH(n: MindNode): number {
 // COLLAPSED card folds to its title, which is one line (styles.css clamps its body to one, and it
 // keeps its own fold chip). A collapsed card with children lands here rather than in isStack, which
 // tests !collapsed; every other kind's fold is already answered above (isFrameFold / isImageFold).
-// A stack ROW is never here, folded or not: a deck gives its cards BOTH axes (the width from
-// stackRowW, the height from nodeH's own row arm), so nothing about a row is left to its content.
+// An outline ROW is NOT here while it is expanded: a stack lends a row its width, but a card is the
+// same card inside a stack as it is on the canvas, so its height is still the tile's. Only its
+// FOLDED state measures, by the collapsed term above — same one line as anywhere else.
 function isMeasuredH(n: MindNode): boolean {
-  return (isAnnotation(n) || isReadingRoot(n) || n.collapsed) && stackRowW(n) == null;
+  return isAnnotation(n) || isReadingRoot(n) || n.collapsed;
 }
 // A card at its FIXED TILE size: none of the kinds above, folded or measured. Named here for the
-// class list, which needs the answer before paintNode's size chain reaches it — and which can't read
-// that chain's last arm anyway, since an open stack ROW is a tile too but takes the row arm (its
-// width is the stack's to give, its height is the tile's).
+// class list, which needs the answer before paintNode's size chain reaches it.
 function isTile(n: MindNode): boolean {
   return !isBoxNode(n) && !isFrameFold(n) && !isImageFold(n) && !isStack(n) && !isMeasuredH(n);
 }
@@ -1863,45 +1833,22 @@ function openTabFlags(t: MindNode): boolean {
   }
   return changed;
 }
-// Clicking a card in a stack DEALS IT TO THE TOP: it expands, and every other row folds to its
-// title. A card stack shows one card at a time, which is the same one-open-at-a-time rule a tab
-// group follows — hence the deliberate mirror of activateTab/openTabFlags above. ⌘-click skips it
-// (see the click branch in features/drag.ts): adding a card to a multi-selection must not reshuffle
-// what is open under the pointer.
-export function activateRow(n: MindNode): void {
-  const stack = rowStackOf(n); if (!stack) return;
-  const rows = stackOutline(stack).map(r => r.node);
-  if (!n.collapsed && rows.every(k => k === n || k.collapsed)) return;   // already the open one
-  record(rows.map(k => k.id), () => withLayoutAnimation(() => openRow(n)));
-  scheduleSave();
-}
-// The flag half of "open this row", with no history/save/paint of its own — so a caller with a step
-// already open (reparentOnly, dealing a freshly dropped card to the top) can fold it into that step.
-// Its ANCESTORS inside the stack stay open too, or the row just opened would be folded away inside
-// one of them; the stack's own header card is not a row and is never touched. A node that isn't a
-// stack row at all is a no-op, which is what lets the drop path call it unconditionally.
-export function openRow(n: MindNode): boolean {
-  const stack = rowStackOf(n); if (!stack) return false;
-  const keep = new Set<string>([n.id]);
-  for (let p = parentOf(n); p && p.id !== stack.id; p = parentOf(p)) keep.add(p.id);
-  let changed = false;
-  for (const { node: k } of stackOutline(stack)) {
-    const want = !keep.has(k.id);
-    if (k.collapsed !== want) { touch(k.id); k.collapsed = want; k.dirty = true; changed = true; }
-    k.dirtyLayout = true;
-  }
-  return changed;
-}
-// …and the other direction: a card that has LEFT a deck comes out FACE UP. The fold was the DECK's
-// doing — a row takes its turn folded so the open card can be read — so it must not follow the card
-// onto the canvas, where a folded leaf is a one-line stub with no fold chip to open it again. Exactly
-// the rule an UNDOCKED TAB already follows (features/drag.ts): leave the container, lose the state
-// the container imposed. Callers pass a card that WAS a row; still being one makes this a no-op, so
-// an ordinary move between two frames never unfolds anything the user folded by hand.
-export function unfoldLeftDeck(n: MindNode): boolean {
-  if (!n.collapsed || rowStackOf(n)) return false;
-  touch(n.id); n.collapsed = false; n.dirty = true; n.dirtyLayout = true;
-  return true;
+// Is there anything for a fold to DO — the one spelling, read by the corner chip, by X and by ←/→,
+// so they can never disagree about what counts. The two flags are only there to be PASSED IN by
+// paintNode, which has them already: childrenOf walks every node, and this runs per card per paint.
+//
+// A FRAME's own body is never rendered (styles.css — its name is a folder tab), so only CHILDREN make
+// one collapsible. Deliberately a test on the KIND and not isContainer/isFrame/isStack: those also
+// carry state (a collapsed frame, a stack demoted to a row inside another stack) that has no bearing
+// on whether the body is drawn.
+//
+// Every other kind folds its text down to one line, and a TITLE ALONE is enough to be worth folding
+// now that an expanded card is a fixed NODE_H tile — a one-line note used to fold to exactly what it
+// already looked like, which is why this asked for a body; today it goes from a 140px card to its one
+// line, in a stack and on the canvas alike. Only a card with nothing in it at all still refuses:
+// its fold is an empty stub, not a title.
+export function canFold(n: MindNode, hasKids = childrenOf(n.id).length > 0, hasBody = !!n.body.trim()): boolean {
+  return rendersAsFrame(n) ? hasKids : (hasKids || hasBody || !!n.title.trim());
 }
 export function toggleCollapse(id: string): void {
   const n = state.nodes.get(id); if (!n) return;
@@ -1909,9 +1856,7 @@ export function toggleCollapse(id: string): void {
   // Before the lock check: opening a tab is allowed even when it's locked (see activateTab).
   if (isDockedTab(n)) { activateTab(n); return; }
   if (isLockedEffective(n)) { setStatus('Locked — can’t collapse/expand'); return; }
-  const hasKids = childrenOf(n.id).length > 0;
-  const hasBody = !!(n.body && n.body.trim());
-  if (!hasKids && !hasBody) return;   // nothing to fold: no children and no body
+  if (!canFold(n)) return;
   // animate the reflow; withLayoutAnimation paints, measures heights, and lays out the children
   record([id], () => withLayoutAnimation(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
   scheduleSave();
@@ -1922,8 +1867,8 @@ export function toggleCollapse(id: string): void {
   setStatus(n.collapsed ? `Collapsed “${nodeLabel(shown)}”` : `Expanded “${nodeLabel(shown)}”`);
 }
 // Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
-// Only foldable cards (children or a body) count; the group lands on one shared state — expand
-// if they're all collapsed already, otherwise collapse them all.
+// Only cards that canFold count; the group lands on one shared state — expand if they're all
+// collapsed already, otherwise collapse them all.
 // Which of `ids` can actually be folded — the one filter both the toggling and the directional paths
 // below share, so the chip, X and ←/→ can't disagree about what counts.
 function foldableSelection(ids: Iterable<string>): MindNode[] {
@@ -1936,7 +1881,7 @@ function foldableSelection(ids: Iterable<string>): MindNode[] {
     .map(n => (isDockedTab(n) && !n.collapsed ? tabGroupOf(n) ?? n : n))
     .filter(n => !isDockedTab(n))
     .filter(n => !isLockedEffective(n))
-    .filter(n => childrenOf(n.id).length > 0 || !!(n.body && n.body.trim()));
+    .filter(n => canFold(n));
 }
 // Apply one shared fold state to a whole set, as ONE undo step and one animated reflow.
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
