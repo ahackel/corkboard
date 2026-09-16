@@ -2,16 +2,19 @@
 // MapRefs ARE the recents list. Directory handles still live in IndexedDB (not serializable
 // to JSON) under the ref's id. Plus the one-time "seen" set (so the first-open auto-arrange
 // never fires twice).
-import { idbDel } from '../utils/idb.js';
+import { idbDel, idbGet } from '../utils/idb.js';
 import { readMaps, upsertMap, removeMapRef } from './maps.js';
 import { readJSON, writeJSON } from '../utils/local-json.js';
 
-// Record a (re)opened FSA folder: de-dupe by folder name (a reopen mints a fresh handle key),
-// dropping the superseded refs' stored handles so they don't strand in IndexedDB.
-export function rememberFolder(key: string, name: string): void {
-  for (const m of readMaps()) if (m.kind === 'folder' && m.name === name && m.id !== key) {
+// A picker returns a new key every time. Collapse only entries for the same directory; names are
+// not identities, so two folders called "notes" must both remain reopenable.
+export async function rememberFolder(key: string, name: string, handle: FileSystemDirectoryHandle): Promise<void> {
+  for (const m of readMaps()) {
+    if (m.kind !== 'folder' || m.id === key) continue;
+    const prior = await idbGet(m.id).catch(() => undefined) as FileSystemDirectoryHandle | undefined;
+    if (!prior || !(await handle.isSameEntry(prior))) continue;
     removeMapRef(m.id);
-    void idbDel(m.id).catch(() => {});
+    await idbDel(m.id).catch(() => {});
   }
   upsertMap({ id: key, kind: 'folder', name, when: Date.now() });
 }

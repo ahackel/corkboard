@@ -45,20 +45,13 @@ import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
 import { showStart, openHelpTab, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingRootNode, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
-import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt, type Drag } from './core/ui-state.js';
+import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
 import { snapTo, clamp } from './utils/num.js';
-
-declare global {
-  interface Window { __dbg: { readonly state: typeof state; readonly drag: Drag | null }; }
-}
-
-
-window.__dbg = { get state(){ return state; }, get drag(){ return ui.drag; } };   // TEMP debug hook
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupTheme();
@@ -636,7 +629,7 @@ export function paintNode(n: MindNode): void {
   // styles.css lifts it out of flow and pays for the overlap with a right inset on the first line.
   el.classList.toggle('has-progress', !!progress);
   // Which frame (if any) hosts this card's element — settled outside gestures (see settledHost).
-  const host = settledHost(n);
+  settledHost(n);
   // During drag: keep left/top frozen at the pre-drag origin and move via transform (compositor-
   // only) — the SAME scheme applyDragTransform (drag.ts) uses on every pointermove. Doing it here
   // too means a mid-drag repaint (e.g. drop-target / rip colour change) can't desync the card from

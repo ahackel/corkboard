@@ -9,7 +9,7 @@
 import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId, isReadingRoot } from '../nav/scope.js';
-import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackOf, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
+import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';

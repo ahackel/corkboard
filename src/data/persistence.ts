@@ -14,8 +14,8 @@ import { applyLayouts, collapseAtDepth, commitRel } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
-import { opfsStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
-import { paintAll, selectNode, colorFill, NODE_W } from '../main.js';
+import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import { paintAll, selectNode, NODE_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad } from '../nav/scope.js';
 import { paintStrokes } from '../features/sketch.js';
@@ -51,6 +51,22 @@ export async function switchToDeviceMap(ref: MapRef): Promise<void> {
   s.openMap(ref.id, ref.name);
   await s.pick();
   useStore(s, { kind: 'device', id: ref.id });
+}
+
+// Open a registry-backed map for URL/history restoration. Device maps can always be reopened;
+// local folders only switch when their existing permission grant can be resumed silently.
+export async function openMapRef(ref: MapRef): Promise<boolean> {
+  if (currentMap?.kind === ref.kind && currentMap.id === ref.id && store.isOpen) return true;
+  if (ref.kind === 'device') {
+    await switchToDeviceMap(ref);
+    await loadFromDir();
+    return true;
+  }
+  await settleSave();
+  if (!fsaStore.resume || !(await fsaStore.resume(ref.id))) return false;
+  useStore(fsaStore, { kind: 'folder', id: ref.id });
+  await loadFromDir();
+  return true;
 }
 
 // ---- import / export as .zip (move a map between devices / back it up) ----

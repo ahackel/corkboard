@@ -40,7 +40,6 @@ export function commitRel(): void {
   }
 }
 
-const LANDING_GAP = 40;   // gap below/beside the hovered card a drag-reparented child/sibling snaps to
 // Where `dragged` will land if dropped onto `target` in the given mode — CHILD (edge zone of the
 // card, attaching on whichever side the drop point is near) or SIBLING (centre zone, adopts
 // target's parent and lands on target's side). Shared by the drop-target ghost preview
@@ -143,7 +142,6 @@ function simulateLanding(dragged: MindNode, governor: MindNode, afterId?: string
 //   · fan  — children spread ACROSS the direction at one distance (the classic mindmap branch)
 // `layoutDir` (left/right/top/bottom) picks the side. Line/fan nodes OWN their children's
 // positions, so layout re-runs after every structural or drag change (there's no manual Tidy).
-const LAYOUT_CROSS = 22;   // gap between FANNED sibling subtrees (spread across the side)
 // gap between CHAINED sibling subtrees (a line along the direction) — must clear a card's own
 // tag row, which floats OUTSIDE the card's border and overhangs ~11px past its bottom edge (see
 // .node .tag-row in styles.css): anything tighter and the next chained card's opaque background

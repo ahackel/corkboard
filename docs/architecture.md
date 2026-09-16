@@ -476,8 +476,8 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   outside the scope and vanish. One helper, read at all five.
 - **You can't drag a card out of the frame you're in**: `centreInFrame` returns true for the scope root (its
   interior is the whole canvas, so there's nowhere visible to rip to), and one guard keeps the rip preview and
-  the commit agreeing. The way out is to leave first, or the outline's map-wide "Move to…" picker — moving a
-  card out is a thing you asked for, dragging into nowhere isn't.
+  the commit agreeing. Leave the frame before moving a card out; dragging into nowhere remains intentionally
+  unavailable while scoped inside it.
 - **Search and the outline are scoped; query cards, wikilinks and undo are not.** Search finds what's on the
   canvas, so every hit can be shown and selected, and `sortedRoots` makes the outline's top level the open
   frame's children (which is also what makes dropping a row beside a top row mean "put it here"). The map-wide

@@ -10,7 +10,7 @@
 // arrangement of it. `mm_parent` is the deliberate exception (see docs/architecture.md) — keeping
 // membership in the note is what lets a folder stand on its own if this file is lost.
 // ============================================================
-import { state, setStatus, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type Stroke, type BoardEdge, type EdgeCap, type EdgeSide, type Junction, type MindNode } from '../core/state.js';
+import { state, setStatus, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type Stroke, type BoardEdge, type EdgeCap, type EdgeSide, type Junction } from '../core/state.js';
 import { store } from './persistence.js';
 import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';

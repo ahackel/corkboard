@@ -225,7 +225,7 @@ body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag 
    z-index above #outline (21) and everything in its drawer — unlike #toolbar/#searchWrap (which
    the outline drawer is meant to cover, see #outline's comment), the home button must stay
    reachable/visible even while outline rows scroll past underneath it. Still below true modals
-   (#ctxMenu/#startScreen/#editorSheet/#movePicker: z:40+). */
+   (#ctxMenu/#startScreen/#editorSheet: z:40+). */
 /* ONE PILL, like #toolbar: a single --panel capsule holding the home button and every path segment,
    all of them borderless and transparent until hovered. Not a capsule per segment — nothing else in
    the app looks like that, and a path is one thing. The pill also does real work now the canvas can be
@@ -2294,9 +2294,6 @@ body.readonly .ol-row { cursor:default; }   /* no drag-to-reorder in read-only *
    with a repeating gradient along the bar's long axis. */
 .ol-insert { position:fixed; height:3px; z-index:30; pointer-events:none;
   background:repeating-linear-gradient(90deg, #fff 0 6px, transparent 6px 11px); }
-/* colour dot — used by the Move-to picker rows (outline rows carry the card colour as their bg) */
-.ol-dot { flex:none; width:11px; height:11px; border-radius:50%; margin-right:10px;
-  background:var(--ol-c, var(--node-border)); }
 .ol-title { flex:1 1 auto; min-width:0; padding:2px 4px; margin:-2px -4px; font-size:14px; font-weight:600;
   color:inherit; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:inherit; border-radius:4px; }
 body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in read-only: view the note sheet */
@@ -2440,30 +2437,6 @@ body.sheet-open #editorSheet { display:flex; }
   font:inherit; font-size:15px; line-height:1.5;
   background:var(--panel); color:var(--text); border:none; border-radius:var(--r-ctl); }
 #shBody:focus { box-shadow:0 0 0 2px var(--accent); }
-
-/* ---- "Move to…" picker (outline reparenting): full-screen filterable target list ---- */
-#movePicker { position:fixed; top:0; left:0; width:100%; height:100vh; height:100dvh; z-index:45;
-  display:none; flex-direction:column; gap:8px; background:var(--bg);
-  padding:calc(12px + var(--sa-t)) calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l)); }
-#movePicker.open { display:flex; }
-#movePicker .mp-head { display:flex; align-items:center; gap:8px; }
-#mpFilter { flex:1 1 auto; min-width:0; height:44px; padding:0 12px; font-size:15px;
-  background:var(--panel); color:var(--text); border:none; border-radius:var(--r-full); }
-#mpFilter:focus { box-shadow:0 0 0 2px var(--accent); }
-#mpCancel { flex:none; height:44px; padding:0 16px; border:none; border-radius:var(--r-full);
-  background:var(--panel); color:var(--muted); font-size:14px; cursor:pointer; }
-#mpCancel:hover { color:var(--text); }
-#mpList { flex:1 1 auto; min-height:0; overflow:hidden auto; -webkit-overflow-scrolling:touch;
-  max-width:640px; width:100%; margin:0 auto; }
-.mp-label { margin:6px 12px; color:var(--muted); font-size:11px;
-  text-transform:uppercase; letter-spacing:.5px; }
-.mp-item { display:block; width:100%; padding:9px 12px; border:0; border-radius:var(--r-ctl);
-  background:transparent; text-align:left; cursor:pointer; }
-.mp-item:hover { background:color-mix(in srgb, var(--accent) 12%, transparent); }
-.mp-item .mp-title { display:flex; align-items:center; gap:9px;
-  color:var(--text); font-size:15px; font-weight:500; }
-.mp-item .mp-crumb { padding-left:20px; color:var(--muted); font-size:12px;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* ---- reading view: an OPENED card is its note, at reading width ----
    The element here is THE CARD — the same one paintNode paints on the canvas, so its fill, its

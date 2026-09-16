@@ -13,11 +13,11 @@
 // read-only behave the same as on the canvas.
 import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
-import { nodeLabel, childrenOf, isAncestor, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, parentOf, ancestors } from '../utils/model.js';
+import { nodeLabel, childrenOf, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, ancestors } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
 import { orderedKids } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
-import { selectNode, focusNode, effectiveColor, colorClass, colorFill, applyColorVars, subtreeIds, nodeH, nodeW, toggleCollapse, toggleDone, checklistProgress, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
+import { selectNode, focusNode, effectiveColor, colorClass, applyColorVars, subtreeIds, nodeH, toggleCollapse, toggleDone, checklistProgress, setLockedSelection, LOCK_BADGE_SVG, FOLD_CHIP_SVG, relayout, showsDoneCheckbox } from '../main.js';
 import { openBranchEditor, closeBranchEditor, branchEditorOpen, addToBranch } from './branch-editor.js';
 import { openEditorSheet } from './editor-sheet.js';
 import { createNode, addChild, deleteNode, duplicateSelection, discardNewCard } from './crud.js';
@@ -701,7 +701,7 @@ function makeRoot(n: MindNode, dy = 0): void {
   relayout(); scheduleSave(); commitStep();
 }
 
-// Apply a drop: nest under a card (same path as the Move-to picker), or slot before/after a
+// Apply a drop: nest under a card, or slot before/after a
 // reference row under that row's parent — reparenting first when the parent differs, then
 // committing the order via reorderSiblings (one undo step for the whole gesture).
 function commitRowDrop(n: MindNode, drop: RowDrop): boolean {
@@ -744,89 +744,17 @@ function dropAtRootLevel(n: MindNode, ref: MindNode, pos: 'before' | 'after'): b
   return true;
 }
 
-// ---- "Move to…" picker (reparent without drag) ----
-// A full-screen filterable list of every valid target (own subtree and current parent
-// excluded — same cycle guard as drag), each with its ancestor breadcrumb, plus "Make root".
-const picker = document.createElement('div');
-picker.id = 'movePicker';
-picker.innerHTML =
-  `<div class="mp-head">
-     <input id="mpFilter" type="text" placeholder="Move to…" autocomplete="off" spellcheck="false" aria-label="Filter target cards">
-     <button id="mpCancel">Cancel</button>
-   </div>
-   <div id="mpList"></div>`;
-document.body.appendChild(picker);
-const mpFilter = picker.querySelector('#mpFilter') as HTMLInputElement;
-const mpList = picker.querySelector('#mpList') as HTMLElement;
-let moveSrc: string | null = null;
-
-function openMovePicker(n: MindNode): void {
-  moveSrc = n.id;
-  mpFilter.value = '';
-  renderPicker();
-  picker.classList.add('open');
-  mpFilter.focus();
-}
-function closePicker(): void { picker.classList.remove('open'); moveSrc = null; }
-
-function crumbFor(n: MindNode): string {
-  return [...ancestors(n)].reverse().map(p => nodeLabel(p)).join(' › ');
-}
-function renderPicker(): void {
-  const src = moveSrc ? state.nodes.get(moveSrc) : undefined;
-  if (!src) return;
-  const q = mpFilter.value.trim().toLowerCase();
-  mpList.textContent = '';
-  const label = document.createElement('div');
-  label.className = 'mp-label';
-  label.textContent = `Move “${nodeLabel(src)}” under…`;
-  mpList.appendChild(label);
-  const item = (title: string, crumb: string, color: string | null, run: () => void): void => {
-    const b = document.createElement('button');
-    b.className = 'mp-item'; b.type = 'button';
-    const t = document.createElement('span'); t.className = 'mp-title';
-    const dot = document.createElement('span'); dot.className = 'ol-dot';
-    // colorFill, not `var(--pal-${color})`: a custom colour IS the hex and has no --pal-* to name.
-    const fill = color ? colorFill(color) : null;
-    if (fill) dot.style.setProperty('--ol-c', fill);
-    t.append(dot, title);
-    b.appendChild(t);
-    if (crumb) { const c = document.createElement('span'); c.className = 'mp-crumb'; c.textContent = crumb; b.appendChild(c); }
-    b.onclick = run;
-    mpList.appendChild(b);
-  };
-  if (src.parent && !q) item('⌂ Make root', 'detach from its parent', null, () => moveTo(src, null));
-  // Each candidate's label is derived ONCE and carried into the filter, the sort and the row — this
-  // whole pass re-runs on every keystroke in the filter box, and asking again per sort COMPARISON put
-  // an O(body) read on an n·log n path.
-  const targets: { n: MindNode; label: string }[] = [];
-  for (const c of state.nodes.values()){
-    if (c.id === src.id || c.id === src.parent || isAncestor(src.id, c.id) || isLeafType(c)) continue;   // leaves can't be parents
-    if (isLockedEffective(c)) continue;   // locked cards never adopt new children
-    const l = nodeLabel(c);
-    if (q && !l.toLowerCase().includes(q)) continue;
-    targets.push({ n: c, label: l });
-  }
-  targets.sort((a, b) => a.label.localeCompare(b.label));
-  for (const t of targets) item(t.label, crumbFor(t.n), effectiveColor(t.n), () => moveTo(src, t.n));
-}
+// Shared by an outline row's child-drop. The old picker used this too; keeping the small mutation
+// kernel here makes the drag path explicit without retaining an unreachable UI.
 function moveTo(src: MindNode, target: MindNode | null, reveal = true): void {
-  closePicker();
   if (state.readOnly) return;
   if (target) {
     if (!seedUnderParent(src, target, reveal)) return;
-    // Slot it LAST among its new siblings.
     const others = orderedKids(target, childrenOf(target.id)).filter(s => s.id !== src.id);
-    reorderSiblings(target, [...others, src]);   // relayouts + saves + commits
+    reorderSiblings(target, [...others, src]);
     setStatus(`Moved “${nodeLabel(src)}” → “${nodeLabel(target)}”`);
   } else {
     makeRoot(src);
     setStatus(`“${nodeLabel(src)}” is now a root`);
   }
 }
-mpFilter.addEventListener('input', renderPicker);
-(picker.querySelector('#mpCancel') as HTMLButtonElement).onclick = closePicker;
-picker.addEventListener('keydown', (e) => {
-  e.stopPropagation();
-  if (e.key === 'Escape') { e.preventDefault(); closePicker(); }
-});

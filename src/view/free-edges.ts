@@ -21,7 +21,7 @@ import { isStack, insideStack, isDockedTab } from './layout.js';
 import { isReadingRoot } from '../nav/scope.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
-import { nodeW, nodeH, colorFill, elTop, canvasSurface, snapPt } from '../main.js';
+import { nodeW, nodeH, colorFill, elTop, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
 
@@ -127,7 +127,6 @@ export function nearestSide(n: MindNode, p: Pt): EdgeSide {
 // The two facing ports for a pair of cards, for an edge that hasn't chosen yet (⌘L, or the backfill
 // of an edge stored before ports were).
 export function facingSides(a: MindNode, b: MindNode): { from: EdgeSide; to: EdgeSide } {
-  const ca = { x: a.x + nodeW(a)/2, y: a.y + nodeH(a)/2 };
   const cb = { x: b.x + nodeW(b)/2, y: b.y + nodeH(b)/2 };
   const from = nearestSide(a, cb);
   // The facing port, except on a card that doesn't offer it (portSides) — there the line takes the

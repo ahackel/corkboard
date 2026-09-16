@@ -20,7 +20,9 @@ export const fsaStore = {
   _key: null as string | null,                      // the open folder's registry/handle key
   get isOpen(){ return !!this._dir; },
   get name(){ return this._dir ? this._dir.name : ''; },
-  get seenKey(){ return this.name; },
+  // The registry key distinguishes two folders with the same display name. It is assigned before
+  // loading, so first-open layout state cannot leak from one "notes" folder into another.
+  get seenKey(){ return 'folder:' + (this._key ?? this.name); },
   // Which map (registry id) the last pick/openRecent/resume landed on — callers use this
   // as the MapRef id instead of guessing it back out of the registry.
   get currentKey(){ return this._key; },
@@ -83,7 +85,7 @@ export const fsaStore = {
   async _remember(handle: FileSystemDirectoryHandle){
     const key = 'dir:' + handle.name + ':' + Date.now();
     await idbPut(key, handle);                 // store the actual handle
-    rememberFolder(key, handle.name);          // registry entry (de-dupes by folder name)
+    await rememberFolder(key, handle.name, handle); // registry entry (de-dupes by handle identity)
     this._key = key;
     notifyRecentsChanged();                    // main re-renders the recents UI
   },

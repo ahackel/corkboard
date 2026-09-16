@@ -2,11 +2,10 @@
 // URL hash reflects navigable state: current map + selected node, view mode, camera, the
 // search query, and read-only — so browser back/forward, reload, and bookmarks restore the
 // same view. Node identity in the hash is the note's FILE PATH (the real, stable identity
-// per CLAUDE.md), never the in-memory id, which is re-minted on every load. The map segment
-// is checked against the currently open map's name; opening a DIFFERENT map from a link
-// isn't wired up yet (that needs boot.ts's map-switching flow) — a later slice.
+// per CLAUDE.md), never the in-memory id, which is re-minted on every load. Registry-backed
+// maps use their stable kind/id pair, so a bookmark can switch away from the currently open map.
 //
-// Shape: #/<map-slug>/<node-file-path>?mode=outline&open=&x=&y=&k=&q=&ro=1
+// Shape: #/<map-kind>/<map-id>/<node-file-path>?mode=outline&open=&x=&y=&k=&q=&ro=1
 //
 // `open` is the frame you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
 // navigable VIEW state like mode=outline rather than identity. Only the INNERMOST level is carried;
@@ -20,8 +19,9 @@
 // instead (scheduleUrlSync, debounced) — they tag along with wherever you last navigated
 // rather than creating their own back-stops.
 // ============================================================
-import { state } from '../core/state.js';
-import { store } from '../data/persistence.js';
+import { state, setStatus } from '../core/state.js';
+import { store, currentMap, openMapRef } from '../data/persistence.js';
+import { readMaps, type MapKind } from '../store/index.js';
 import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
@@ -52,7 +52,8 @@ export function updateDocumentTitle(): void {
 function buildHash(): string {
   if (!store.isOpen) return '';
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
-  const parts = [slugify(store.name)];
+  // Help has no registry entry, so retain a name segment for its own in-tab navigation.
+  const parts = currentMap ? [currentMap.kind, encodeURIComponent(currentMap.id)] : [slugify(store.name)];
   if (node?.file) parts.push(encodeFilePath(node.file));
   const params = new URLSearchParams();
   if (outlineActive()) params.set('mode', 'outline');
@@ -96,17 +97,34 @@ export function scheduleUrlSync(): void {
 }
 
 // Read the current hash and apply everything it encodes: select the node, and restore
-// mode/camera/search/read-only. Safe to call on boot and on popstate; the node/map lookup
-// is a no-op if the hash is absent, malformed, or points at a map that isn't open — but
-// mode/camera/search/read-only still apply as long as SOME hash for the open map is present,
-// since those don't depend on a node being named.
-export function applyUrlFromHash(): void {
+// mode/camera/search/read-only. Safe to call on boot and on popstate; registry-backed hashes
+// switch to their map first, while legacy name-based hashes work only for the map already open.
+export async function applyUrlFromHash(): Promise<void> {
   const hash = location.hash;
   if (!hash || hash.length < 2) return;
   const [pathPart, queryPart = ''] = hash.slice(2).split('?');   // drop the leading '#/'
   const segs = pathPart.split('/').filter(Boolean);
-  const [mapSlug, ...pathSegs] = segs;
-  if (!mapSlug || !store.isOpen || slugify(store.name) !== mapSlug) return;
+  const [mapPart, mapId, ...rest] = segs;
+  if (!mapPart || !store.isOpen) return;
+
+  let pathSegs: string[];
+  if ((mapPart === 'device' || mapPart === 'folder') && mapId) {
+    let id: string;
+    try { id = decodeURIComponent(mapId); }
+    catch { setStatus('That link has an invalid map identifier.'); return; }
+    const kind = mapPart as MapKind;
+    const ref = readMaps().find(m => m.kind === kind && m.id === id);
+    if (!ref) { setStatus('That map is not available on this device.'); return; }
+    if (!(await openMapRef(ref))) {
+      setStatus('That local folder needs to be opened from Home before this link can restore it.');
+      return;
+    }
+    pathSegs = rest;
+  } else {
+    // Backward compatibility for pre-ID hashes: restore only when their named map is already open.
+    if (slugify(store.name) !== mapPart) return;
+    pathSegs = mapId ? [mapId, ...rest] : [];
+  }
 
   applying = true;
   try {
@@ -134,10 +152,12 @@ export function applyUrlFromHash(): void {
     // side effects (reloads from disk, discards in-memory-only collapses) that shouldn't
     // happen silently just because a URL lacks `ro=1`.
     if (params.get('ro') === '1' && !state.readOnly) { state.readOnly = true; applyReadOnly(); }
+  } catch {
+    setStatus('That link contains an invalid card path.');
   } finally {
     applying = false;
   }
   lastHash = hash;
 }
 
-window.addEventListener('popstate', applyUrlFromHash);
+window.addEventListener('popstate', () => { void applyUrlFromHash(); });
