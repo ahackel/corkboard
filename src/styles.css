@@ -918,18 +918,17 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body li.task > :is(ul, ol) { flex-basis:100%; padding-left:calc(14px + 1.9em); }
 /* A nested list's spacing is its items' own; the block margin above is for a list among paragraphs. */
 .node .body li > :is(ul, ol) { margin:0; }
-/* A checkbox is drawn in the card's own DERIVED pair, never a fixed colour: an OUTLINE in the ink at half
-   strength, over a faint wash of the SCRIM — the colour on the far side of the ink (utils/ink.ts), so a
-   light lift on a pale card and a dark one on a dark card. Ticked, it fills with the full scrim and the
-   tick is drawn in the ink: a bright box with a crisp mark on a pale card, where the old 50% black fill
-   punched a dark hole in it. And a done item's text recedes, the way every checklist shows "done". */
-.node .body li.task .taskbox { -webkit-appearance:none; appearance:none; width:14px; height:14px; border:none; outline:none; border-radius:4px; background:color-mix(in srgb, var(--scrim, rgba(255,255,255,.62)) 45%, transparent); box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--ink, #fff) 55%, transparent); cursor:pointer; flex:none; position:relative; }
+/* A checkbox is a FILLED square in the card's own ink, never a fixed colour, and with no border: 20% of
+   the ink empty, 40% ticked. The ink is by construction the colour with contrast against the fill
+   (utils/ink.ts), so the box reads on any card, pale or dark. The tick is the ink at FULL strength on
+   top of that 40%, so the mark is always the strongest thing in the box. A done item's text recedes. */
+.node .body li.task .taskbox { -webkit-appearance:none; appearance:none; width:14px; height:14px; border:none; outline:none; border-radius:4px; background:color-mix(in srgb, var(--ink, #fff) 20%, transparent); cursor:pointer; flex:none; position:relative; }
 /* Sits 1px below the line box's top, which centres the 14px box on the first line's CAP BAND — the
    band the eye reads as "the text". flex-start (not center) is what keeps it on line ONE when the
    item wraps. px, not em: a checkbox's em is the
    UA's control font (13.333px Arial), NOT the card's body. (19.6px line − 14px box) / 2 ≈ 3px. */
 .node .body li.task .taskbox { margin:3px 0 0; }
-.node .body li.task .taskbox:checked { background:var(--scrim, rgba(255,255,255,.62)); }
+.node .body li.task .taskbox:checked { background:color-mix(in srgb, var(--ink, #fff) 40%, transparent); }
 .node .body li.task .taskbox:checked::after { content:""; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid var(--ink, #fff); border-width:0 2px 2px 0; transform:rotate(45deg); }
 .node .body li.task .taskbox:checked + .task-text { opacity:.6; }
 .node .body strong { font-weight:700; }
