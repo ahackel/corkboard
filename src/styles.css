@@ -394,9 +394,10 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
      2     every .node                — the cards themselves
      3     a card's own chrome        — tag row, add-note bubble, fold arrow, resize handles
      4     a frame's TAB              — its title tab, lock badge: still the card
-     5     the ring overlay (#toggles)— the rings a new line starts from, endpoint handles, the drop
-                                        target's outline: above every CARD, so they're always grabbable
      6     EVERY LINE THE APP DRAWS   — free edges (#freeEdges)
+     7     the port overlay (#toggles)— the ports a new line starts from, a selected line's end handles,
+                                        the drop target's outline: above every card AND line, so a
+                                        handle sits ON the line it moves and is always grabbable
      8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
      9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
    EDGES ABOVE CARDS (6 > 4) is the rule that shapes the middle of the ladder: a line is the thing the
@@ -415,10 +416,9 @@ svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:6; p
    behaviour from when the whole layer sat behind them. */
 svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
 .node { z-index:2; }                               /* the cards */
-/* The ring overlay (view/free-edges.ts: rings, endpoint handles, the drop target): above every CARD
-   layer, so a ring shows on whatever it is fitted to. The layer takes no events; the rings and handles
-   re-enable their own. */
-svg#toggles { z-index:5; pointer-events:none; }
+/* The port overlay (view/free-edges.ts: ports, endpoint handles, the drop target): above every card and
+   every line (see the ladder). The layer takes no events; the ports and handles re-enable their own. */
+svg#toggles { z-index:7; pointer-events:none; }
 /* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
 /* 3px (STROKE_W, view/free-edges.ts): FigJam's connector weight against a sticky — a deliberate line,
    not a hairline, and lighter than the notes it joins. */
