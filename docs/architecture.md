@@ -724,6 +724,10 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
 - **The renderer nests lists by indentation** (`renderList`): deeper than the open level opens a list inside
   the item above, shallower closes back to the level it matches, a marker change at one level starts a
   sibling list. Tasks stay bullets-only, numbered in body order, because `toggleTask` counts `- [ ]` lines.
+- **What else the renderer reads**: `---`/`***`/`___` is a RULE even straight under a line of text (not
+  CommonMark's setext heading — nobody heads a note that way, everybody draws a line that way), an ordered list
+  starts at its first number, code fences are ``` or ~~~, `<https://…>` is a link, and `==text==` is Obsidian's
+  highlight. Highlight and checkbox colours come from the card's derived `--scrim`, so they hold on any fill.
 
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;

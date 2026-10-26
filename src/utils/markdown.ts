@@ -18,15 +18,16 @@ function mdEmphasis(s: string): string {
     .replace(/__([^_]+)__/g,     '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>')
     .replace(/(^|[^_\w])_([^_\s][^_]*?)_/g,  '$1<em>$2</em>')
-    .replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+    .replace(/==([^=\s][^=]*?)==/g, '<mark>$1</mark>');            // Obsidian's highlight
 }
 // Links/wikilinks within a text run; emphasis is applied to the gaps and link labels.
 //   ![alt](src)                  → image (vault-relative path, or a remote/data URL)
-//   [text](url) / bare https?:// → external link (new tab)
+//   [text](url) / <https://…> / bare https?:// → external link (new tab)
 //   [[Note]] or [[Note|alias]]   → wikilink → focuses that node in the map
 // NOTE: the image alternative comes first so ![..](..) isn't mis-read as a link with a stray "!".
 function mdLinks(text: string): string {
-  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(https?:\/\/[^\s)]+)/g;
+  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s)]+)/g;
   let out = '', last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))){
@@ -34,7 +35,8 @@ function mdLinks(text: string): string {
     if (m[2])      out += imgTag(m[2], m[1]);                                                         // ![alt](src)
     else if (m[4]) out += `<a class="lk" href="${esc(m[4])}" target="_blank" rel="noopener">${mdEmphasis(m[3])}</a>`;
     else if (m[5]) out += `<a class="lk wikilink" data-target="${esc(m[5].trim())}">${esc((m[6]||m[5]).trim())}</a>`;
-    else           out += `<a class="lk" href="${esc(m[7])}" target="_blank" rel="noopener">${esc(m[7])}</a>`;
+    else { const u = m[7] ?? m[8];                                                                    // <url> or a bare one
+           out += `<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`; }
     last = re.lastIndex;
   }
   out += mdEmphasis(text.slice(last));
@@ -198,6 +200,9 @@ const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+/;
 function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: number } {
   let html = '';
   const open: { indent: number; tag: 'ul' | 'ol' }[] = [];
+  // an ordered list starts at its FIRST item's number (`3.` → 3), as in CommonMark; later numbers are ignored
+  const opener = (tag: 'ul' | 'ol', marker: string): string =>
+    tag === 'ol' && parseInt(marker, 10) !== 1 ? `<ol start="${parseInt(marker, 10)}">` : `<${tag}>`;
   const li = (body: string, tag: 'ul' | 'ol'): string => {
     const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(.*)$/);
     if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
@@ -211,10 +216,10 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
     while (open.length > 1 && indent < open[open.length - 1].indent) html += `</li></${open.pop()!.tag}>`;
     const top = open[open.length - 1];
     if (!top || indent > top.indent){                         // a new level, inside the open item
-      html += `<${tag}>`; open.push({ indent, tag });
+      html += opener(tag, m[2]); open.push({ indent, tag });
     } else {
       html += '</li>';
-      if (tag !== top.tag){ html += `</${top.tag}><${tag}>`; top.tag = tag; }
+      if (tag !== top.tag){ html += `</${top.tag}>` + opener(tag, m[2]); top.tag = tag; }
     }
     html += li(m[3], tag);
   }
@@ -222,18 +227,24 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
   return { html, taskIdx };
 }
 
+// A thematic break: three or more `-`, `*` or `_`, spaces allowed between. It ENDS a text run too, so a
+// `---` straight under a line of text is a rule — CommonMark would make that line a "setext" heading,
+// but nobody writes headings that way in a note, and everybody draws a line that way.
+const HR = /^\s*(?:[-*_]\s*){3,}$/;
+
 // Block-level pass: headings, lists, blockquotes, fenced code, rules, tables, paragraphs.
 export function renderBodyHTML(md: string | null | undefined): string {
   const src = (md || '').replace(/\r\n?/g, '\n').trim();
   if (!src) return '';                 // empty body → nothing (no stray blank line under the title)
   const lines = src.split('\n');
   let html = '', i = 0, taskIdx = 0;   // taskIdx: nth checkbox in the body, for write-back on toggle
-  const BLOCK = /^(#{1,6}\s|```|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
+  const BLOCK = /^(#{1,6}\s|```|~~~|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
   while (i < lines.length){
     const line = lines[i];
-    if (/^```/.test(line)){                                   // fenced code block
+    const fence = line.match(/^(```|~~~)/);
+    if (fence){                                               // fenced code block, ``` or ~~~
       i++; const code: string[] = [];
-      while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]);
+      while (i < lines.length && !lines[i].startsWith(fence[1])) code.push(lines[i++]);
       i++;                                                    // skip closing fence
       html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; continue;
     }
@@ -241,7 +252,7 @@ export function renderBodyHTML(md: string | null | undefined): string {
     if ((h = line.match(/^(#{1,6})\s+(.*)$/))){               // heading
       html += `<h${h[1].length}>${mdInline(h[2])}</h${h[1].length}>`; i++; continue;
     }
-    if (/^\s*(?:[-*_]\s*){3,}$/.test(line)){ html += '<hr>'; i++; continue; }   // horizontal rule
+    if (HR.test(line)){ html += '<hr>'; i++; continue; }      // horizontal rule
     const cols = tableAt(lines, i);                            // pipe table (header + delimiter row)
     if (cols){ const t = renderTable(lines, i, cols); html += t.html; i = t.next; continue; }
     if (/^\s*>/.test(line)){                                   // blockquote
@@ -251,7 +262,7 @@ export function renderBodyHTML(md: string | null | undefined): string {
     }
     if (LIST_ITEM.test(line)){                                 // list: bullets, numbers, [ ]/[x] tasks, nested
       const items: string[] = [];
-      while (i < lines.length && LIST_ITEM.test(lines[i])) items.push(lines[i++]);
+      while (i < lines.length && LIST_ITEM.test(lines[i]) && !HR.test(lines[i])) items.push(lines[i++]);
       const r = renderList(items, taskIdx);
       html += r.html; taskIdx = r.taskIdx; continue;
     }
@@ -265,7 +276,7 @@ export function renderBodyHTML(md: string | null | undefined): string {
     // Within a paragraph a single newline still breaks the line (<br>), which is the one place the
     // author's Return is taken literally, and the behaviour every card on every existing map has.
     const run: string[] = [];
-    while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) run.push(lines[i++]);
+    while (i < lines.length && !BLOCK.test(lines[i]) && !HR.test(lines[i]) && !tableAt(lines, i)) run.push(lines[i++]);
     let para: string[] = [];
     const flushPara = (): void => {
       if (para.length) html += `<p>${para.map(mdInline).join('<br>')}</p>`;
