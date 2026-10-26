@@ -28,7 +28,7 @@ export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.
 // tie-break so the sequence can't reshuffle between two reads of the same map. Roots have no parent
 // to hold a kidOrder (unlike orderedKids), so this is what stands in for it: the outline's top-level
 // list and the arrow-key walk (main.ts navSiblings) both read it, which is what makes them agree.
-// `keep` narrows it — the outline drops annotations and the row being dragged.
+// `keep` narrows it — the outline drops the row being dragged.
 export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
   return [...state.nodes.values()].filter(n => isRoot(n) && (!keep || keep(n)))
     .sort((a, b) => a.y - b.y || a.x - b.x || (a.file ?? a.title).localeCompare(b.file ?? b.title));

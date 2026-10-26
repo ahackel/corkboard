@@ -4,7 +4,7 @@
 // elsewhere calls scheduleSave(); a burst coalesces into one write ~400ms later.
 // `store` is the active backend (reassigned by useStore); main holds the open() flows.
 // ============================================================
-import { state, world, setStatus, isBoxType, isAnnotation, type MindNode } from '../core/state.js';
+import { state, world, setStatus, isBoxType, type MindNode } from '../core/state.js';
 import { parseMd, serializeMd, fileStem } from '../utils/frontmatter.js';
 import { safeName, slugStem, desiredFileFor, retargetLinks } from '../utils/filenames.js';
 import { soleImage } from '../utils/markdown.js';
@@ -193,14 +193,13 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
   // width from a time when `n.w` also held derived values (a stack outline row's stretched width, for
   // one). Those are all NARROWER than a normal card, and a card/stack can only ever be widened past
-  // its default, so anything under the default is junk from that era: drop it. Two kinds of note
-  // legitimately go narrower and are exempt: an annotation (which shrink-wraps its text, and never
-  // had a width written back then), and an IMAGE card — a small picture is a small card, and one
+  // its default, so anything under the default is junk from that era: drop it. One kind of note
+  // legitimately goes narrower and is exempt: an IMAGE card — a small picture is a small card, and one
   // that used to carry `mm_type: image` now loads as an ordinary card (foldTypeLayout), so without
   // this its authored size would be read as junk from that era and thrown away.
   const authoredW = (w: number | null | undefined, type: MindNode['type'], isImage: boolean): number | undefined => {
     if (w == null) return undefined;
-    if (isBoxType(type) || type === 'annotation' || isImage) return w;
+    if (isBoxType(type) || isImage) return w;
     return w >= NODE_W ? w : undefined;
   };
   for (const { rel, parsed } of entries) {
@@ -331,7 +330,6 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
 //   · anything under a COLLAPSED ancestor — those children are invisible right now, and making them
 //     top-level would pop the whole hidden subtree onto the canvas. Left nested, a collapsed branch
 //     looks exactly as it did, and expanding it simply reveals the new outline.
-//   · an ANNOTATION, which is pinned to its parent rather than laid out beside it.
 // Returns how many branches were converted.
 function flattenLegacyBranches(wasStack: Set<string>): number {
   // Which nodes were OUTLINED by a legacy stack — the old insideStack, read off `wasStack` because
@@ -359,7 +357,7 @@ function flattenLegacyBranches(wasStack: Set<string>): number {
   for (const n of [...state.nodes.values()]) {
     const p = parentOf(n);
     if (!p || p.type !== 'card') continue;          // roots, and frame children, stay as they are
-    if (isAnnotation(n) || outlined.has(n.id) || collapsedAbove(n)) continue;
+    if (outlined.has(n.id) || collapsedAbove(n)) continue;
     const host = containerAbove(n);
     n.parent = host ? host.id : null;
     // x/y are already absolute and final; re-derive the stored offset against the NEW anchor so the

@@ -58,14 +58,14 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   its own box; free edges live in `board.json`, may end at a junction POINT, and mean nothing structural.
 - **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`, `mm_locked`, `mm_done`, `mm_checklist`,
-  `mm_query`, `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
+  `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
-  (folding legacy `image`/`stack` → `card`). Kinds: card, frame, annotation, query — a card with
+  (folding legacy `image`/`stack`/`annotation`/`query` → `card`). Kinds: card, frame — a card with
   children IS the outliner.
-- **`n.w` is always AUTHORED; `n.h` only for frame/query and an IMAGE card** — a card whose note is
+- **`n.w` is always AUTHORED; `n.h` only for a frame and an IMAGE card** — a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
-  Derived from the text (`isImageCard`), never a kind. Card/annotation measure their height.
+  Derived from the text (`isImageCard`), never a kind. A card measures its height.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
   open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)

@@ -5,7 +5,7 @@
 // image either MOVES into the card released on (dashed .drop-merge highlight) or becomes a fresh
 // image-only card on empty canvas. Escape / released-nowhere-valid still creates the card at the
 // drop point (a canvas drop); pointercancel or a no-move press leaves the card untouched.
-import { state, isImageCard, isAnnotation, type MindNode } from '../core/state.js';
+import { state, isImageCard, type MindNode } from '../core/state.js';
 import { isFrame } from '../view/layout.js';
 import { isLockedEffective } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
@@ -26,7 +26,7 @@ function setHover(el: Element | null): void {
   hoverEl?.classList.add('drop-merge');
 }
 // The card under a screen point that this image can MOVE into: a plain body card, never the source,
-// an image card, a frame, or an annotation. The floating preview is hidden for the hit-test so it
+// an image card or a frame. The floating preview is hidden for the hit-test so it
 // never shadows the card beneath it.
 function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLElement): { el: HTMLElement; id: string } | null {
   preview.style.display = 'none';
@@ -36,7 +36,7 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   const id = cardEl?.dataset.id;
   if (!cardEl || !id || id === sourceId) return null;
   const node = state.nodes.get(id);
-  if (!node || isImageCard(node) || isFrame(node) || isAnnotation(node) || isLockedEffective(node)) return null;
+  if (!node || isImageCard(node) || isFrame(node) || isLockedEffective(node)) return null;
   return { el: cardEl, id };
 }
 export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, sx: number, sy: number): void {

@@ -36,7 +36,7 @@ export interface Drag {
   alt: boolean; shift: boolean; cloned: boolean; rip: boolean;
   meta: boolean; touch: boolean;
   clones?: MindNode[] | null;
-  // Alt-dragging CARD(s)/annotation(s) over another card: the target card's id to fold their notes
+  // Alt-dragging CARD(s) over another card: the target card's id to fold their notes
   // into on drop (crud.ts mergeCardsInto) instead of reparenting. Set by updateDropTarget, consumed
   // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
   // dropTarget stays null and every other preview stands down.

@@ -105,6 +105,10 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\n---\n\n# Find ideas\n\nnotes\n');
   });
 
+  it('opens a retired annotation as a plain card', () => {
+    expect(parseMd('---\nmm_type: annotation\nmm_parent: Card.md\n---\n\nremark').mm).toMatchObject({ type: 'card', parent: 'Card.md' });
+  });
+
   it('reads frontmatter from a file with Windows line endings', () => {
     const p = parseMd('---\r\ndate: 2026-01-02\r\ntags: [a]\r\n---\r\n\r\n# Title\r\n\r\nBody\r\n');
     expect(p.title).toBe('Title');

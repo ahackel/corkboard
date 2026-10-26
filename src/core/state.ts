@@ -12,11 +12,8 @@ import { soleImage } from '../utils/markdown.js';
 //                  them inside its own box (view/layout.ts isStack). There is no `stack` kind — having
 //                  children is the whole condition. See docs/spec-edges-and-containment.md.
 //   · frame      — a resizable container box (mm_w/mm_h) that adopts cards dropped inside.
-//   · annotation — a leaf note pinned to its parent: no title, no children, doesn't take part in
-//                  layout, and renders ON TOP of everything (never clipped by a frame's mask). Its
-//                  own colour drives its always-dotted connector; it never inherits a background.
 // Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
-export type NodeType = 'card' | 'frame' | 'annotation';
+export type NodeType = 'card' | 'frame';
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
 //   · card  → none: a card with children OUTLINES them inside its own box, so there is nothing to
 //             choose. `inherit`/`free`/`line`/`fan` survive in the type only to read old notes;
@@ -25,7 +22,6 @@ export type NodeType = 'card' | 'frame' | 'annotation';
 //             down), vertical (auto-flow columns: top→bottom, wrap right), tabs (its child FRAMES
 //             are docked as tabs: their title tabs flow along the frame's top band and whichever
 //             tab is open borrows the whole box — see isTabsFrame in view/layout.ts).
-//   · annotation → none (a leaf; `layout` is unused, kept `free`).
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
 export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'tabs';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
@@ -74,7 +70,7 @@ export interface MindNode {
   checklist: boolean;              // Trello-style: treat my DIRECT children as a checklist — each
                                     // gets a done checkbox and I show their `n/m` progress. Doesn't
                                     // cascade further down; a child can run its own checklist too.
-  type: NodeType;                  // card | frame | annotation | query (persisted as mm_type)
+  type: NodeType;                  // card | frame (persisted as mm_type)
   layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
   // Resizable box size (world px). `w` is authored by every kind; `h` only by a frame (the box
   // whose interior adopts cards dropped in) and an IMAGE card — a card holding nothing but one `![alt](src)`,
@@ -116,13 +112,6 @@ export interface MindNode {
 // an editor", the two states where a card shows something other than its picture.
 export function isImageCard(n: MindNode | null | undefined): boolean {
   return !!n && n.type === 'card' && !n.title.trim() && !!soleImage(n.body);
-}
-// An annotation: a title-less leaf note pinned on top of its parent (see NodeType above).
-export function isAnnotation(n: MindNode | null | undefined): boolean { return n?.type === 'annotation'; }
-// Leaf kinds that cannot hold children (annotation). Card/frame can — an image card
-// included, it being an ordinary card wearing a picture.
-export function isLeafType(n: MindNode | null | undefined): boolean {
-  return n?.type === 'annotation';
 }
 
 export interface View { x: number; y: number; k: number; }
@@ -224,19 +213,15 @@ export const state: AppState = {
 
 export const world = byId('world');
 export const stage = byId('stage');
-export const edgesSvg = byId<SVGSVGElement>('edges');
 // The free edges the user drew — see BoardEdge above and view/free-edges.ts.
 export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');
 // …and the layer BEHIND the cards that holds nothing but those edges' click targets — see index.html
 // and view/free-edges.ts for why the two halves of one edge live on opposite sides of the cards.
 export const freeEdgeHitsSvg = byId<SVGSVGElement>('freeEdgeHits');
 export const togglesSvg = byId<SVGSVGElement>('toggles');
-// Top overlay for drag-time edges (dragged card's connectors + reparent preview) — see view/edges.ts.
-export const dragEdgesSvg = byId<SVGSVGElement>('dragEdges');
-// Group-opacity layer for the CURRENTLY DRAGGED items: while a drag is live the dragged cards and
-// their connectors are re-parented in here so the whole set composites as one translucent group
-// (see #dragLayer in styles.css / dragRoot() in main.ts). dragLayerEdges holds their connectors.
+// Group-opacity layer for the CURRENTLY DRAGGED items: while a drag is live the dragged cards are
+// re-parented in here so the whole set composites as one translucent group
+// (see #dragLayer in styles.css / dragRoot() in main.ts).
 export const dragLayer = byId('dragLayer');
-export const dragLayerEdges = byId<SVGSVGElement>('dragLayerEdges');
 export const statusEl = byId('status');
 export const setStatus = (t: string): void => { statusEl.textContent = t; };

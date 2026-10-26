@@ -154,7 +154,7 @@ function fmRemove(entries: FmEntry[], key: string): void {
 }
 
 // Resolve a note's kind + child-arrangement from frontmatter, folding legacy tokens.
-// CURRENT format: `mm_type` (card|frame|annotation, default card) + `mm_layout`.
+// CURRENT format: `mm_type` (card|frame, default card) + `mm_layout`.
 // LEGACY (no mm_type): a single `mm_layout` token conflated both — split it here so old vaults
 // keep working: none/''→card·inherit, free/line/fan→card·*, two-sided/grid→card·fan,
 // frame(+mm_arrange flow-h/flow-v)→frame·free|horizontal|vertical, frame-h/-v→frame·*.
@@ -166,12 +166,14 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // (view/layout.ts isStack), so the kind said nothing the child list didn't already say.
 // `query` (a live search-results box) is CUT (docs/PRODUCT.md): such a note opens as a plain card with
 // its title and body; its `mm_query` search text is dropped the next time the note is written.
+// `annotation` (a title-less note pinned over its parent) is CUT the same way: it opens as an ordinary
+// card, so as a child it becomes a row in the card it was pinned to.
 function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayout; wasStack: boolean } {
   const t = fmValue(entries, 'mm_type');
   if (t === 'image') return { type: 'card', layout: 'free', wasStack: false };
   if (t === 'stack') return { type: 'card', layout: 'inherit', wasStack: true };
-  if (t === 'query') return { type: 'card', layout: 'inherit', wasStack: false };
-  if (t === 'frame' || t === 'card' || t === 'annotation')
+  if (t === 'query' || t === 'annotation') return { type: 'card', layout: 'inherit', wasStack: false };
+  if (t === 'frame' || t === 'card')
     return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout, wasStack: false };
   // legacy: infer both from the combined mm_layout token
   const v = fmValue(entries, 'mm_layout');
@@ -274,7 +276,6 @@ export function serializeMd(n: MindNode): string {
   if (!n.title.trim() && !n.body.trim()) entries.push({ key:'mm_blank', lines:['mm_blank: true'] });
   if (n.type !== 'card') entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
   // Only card/frame carry a layout; omit it when it's the type's default (card→inherit, frame→free).
-  // an annotation is a leaf with no layout, so it never writes mm_layout.
   const layoutDefault = n.type === 'frame' ? 'free' : 'inherit';
   if ((n.type === 'card' || n.type === 'frame') && n.layout !== layoutDefault)
     entries.push({ key:'mm_layout', lines:[`mm_layout: ${n.layout}`] });

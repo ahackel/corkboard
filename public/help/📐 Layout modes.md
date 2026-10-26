@@ -34,7 +34,7 @@ Set how a card arranges its children (side panel chips):
 by dragging:
 
 - **Drag a frame onto another frame's tab** to dock it there. The two names become two tabs on the same box, and the frame you dropped is the one showing.
-- **A plain card works too** — dropped on a tab it becomes a frame and joins the row, bringing its children along. (A frame shows no note text, so a card's note waits out of sight until you turn it back into a card.) Images, annotations and stacks can't be tabs; drop one on a tab and it simply goes into the box.
+- **A plain card works too** — dropped on a tab it becomes a frame and joins the row, bringing its children along. (A frame shows no note text, so a card's note waits out of sight until you turn it back into a card.) Images and stacks can't be tabs; drop one on a tab and it simply goes into the box.
 - **Click a tab** to show that frame's contents — the others are put away, not deleted. Double-click it to rename it, like any frame tab.
 - **Drag a tab sideways** along the row to reorder it; a line shows the gap it will drop into.
 - **Drag a tab off the box** to give it its own frame back, at the size and with the contents it had. Take the last one out and the empty box goes with it — that's how you undo tabs.

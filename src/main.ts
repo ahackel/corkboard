@@ -17,19 +17,19 @@ import { renderBodyHTML, esc } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
 import { childrenOf, isHidden, nodeLabel, descendantCount, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
-import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation } from './core/state.js';
+import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand, readingBand } from './view/camera.js';
+import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand } from './view/camera.js';
 import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW, isTabsFrame, isDockedTab, tabGroupOf, tabsOf, activeTab, tabStripRect, normalizeTabs, actionTarget } from './view/layout.js';
-import { paintEdges } from './view/edges.js';
+import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
-import { createNode, createDetachedNode, createAnnotationHere, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
+import { createNode, createDetachedNode, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
 import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
@@ -50,7 +50,7 @@ import type { MindNode } from './core/state.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
-import { snapTo, clamp } from './utils/num.js';
+import { snapTo } from './utils/num.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupTheme();
@@ -263,7 +263,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // a hit inside a DOM-nested child card can't be read as a hit on its host's title.
   const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
   // startInlineEdit is the single rename funnel: it redirects a tab group to its open tab, an
-  // annotation to its body, and refuses a locked node.
+  // and refuses a locked node.
   if (onTitle || n.collapsed) { startInlineEdit(n); return; }
   // A frame's interior OPENS it (nav/scope.ts) — the folder metaphor's own gesture, and the only one
   // that reads as "go in". Putting a card inside it kept Tab, the ⋯ menu and the canvas right-click.
@@ -305,10 +305,6 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
 // to grey, so it gets the same neutral card bg as an explicit grey rather than going transparent.
 // Explicit 'none' still short-circuits below (it's truthy), so "no colour" stays transparent.
 export function effectiveColor(n: MindNode): string {
-  // An annotation never inherits a background — only its OWN colour counts (drives its dotted
-  // connector + the anchor dot on its parent); with none ('inherit') it takes the THEME'S CONTRAST
-  // colour — white on the dark canvas, black on the light one — so it always stands out on top.
-  if (isAnnotation(n)) return n.color || (document.body.classList.contains('light') ? 'black' : 'white');
   // A tab GROUP's box belongs to whichever tab is OPEN, so it takes that tab's colour — switching tabs
   // re-tints the box (and its border, its incoming edge and its outline swatch, which all read from
   // here). Unconditionally, since from the user's side there IS no group to have a colour of its own; a
@@ -345,27 +341,14 @@ export function effectiveColor(n: MindNode): string {
 // A card shows a done checkbox only if its PARENT has `checklist` on — Trello-style: the
 // setting lives on the parent ("treat my children as a checklist"), not on the item itself, and
 // doesn't cascade past that one level (a checklist item can run its own checklist for its kids).
-// …except on an ANNOTATION, which can never carry one: an annotation IS its body — it has no title row
-// for a checkbox to sit in (styles.css hides the row outright) — and it's a remark pinned to a card, not
-// an item on that card's list. Refused HERE rather than in CSS, because the class this gates does more
-// than show the box: `.show-done > .body` also indents the text to clear the box's column, so an
-// annotation under a checklist parent was shifted sideways to make room for a control it never had.
-// It also keeps the `.done` strikethrough and the query-result row's checkbox off annotations.
-// Exported because the OUTLINE asks the same question of the same nodes: it used to keep its own copy,
-// and the annotation rule above landed in only one of the two.
+// Exported because the OUTLINE asks the same question of the same nodes.
 export function showsDoneCheckbox(n: MindNode): boolean {
-  if (isAnnotation(n)) return false;
   const p = parentOf(n);
   return !!(p && p.checklist);
 }
 // The "n/m" a checklist owner shows over its own children: how many are done, out of how many CAN
-// be. Deliberately NOT `childrenOf().length` — an ANNOTATION never gets a checkbox (showsDoneCheckbox
-// refuses it above, and the float bar hides the toggle for the same reason: a title-less leaf that can
-// never have children has no subtree to check off), so counting one left a card holding one real item
-// and one margin note reading "1/2" for ever, with nothing on screen to tick down. Counted through
-// showsDoneCheckbox itself rather than a private `!isAnnotation`, so the readout is drawn from exactly
-// the set of boxes that exist and cannot drift from them if that predicate ever gains a term.
-// null = no readout at all, which also covers a checklist whose only child is an annotation.
+// be — counted through showsDoneCheckbox, so the readout is drawn from exactly the set of boxes that
+// exist and cannot drift from them if that predicate ever gains a term. null = no readout at all.
 // The ONE spelling: the canvas card and the outline row both show this (features/outline.ts).
 // `kids` is passed in wherever the caller already has it — paintNode and the outline row both do, and
 // childrenOf is a full spread of the node map, so re-deriving it here put a second O(nodes) scan on
@@ -403,7 +386,7 @@ export function paintNode(n: MindNode): void {
   // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
+  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   // A frame's title paints on no fill of its own (styles.css: neither the tab nor the folded pill has
@@ -422,7 +405,6 @@ export function paintNode(n: MindNode): void {
     + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
     + (inFrame(n) ? ' frame-child' : '')   // …and a card inside a frame's box, by the same step
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
-    + (isAnnotation(n) ? ' annotation' : '')
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
     + (collapsed ? ' collapsed' : '')
@@ -445,7 +427,7 @@ export function paintNode(n: MindNode): void {
     // editor calls paintAll() itself right after opening.
     + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
-    + (isFrameBox(n) || isStack(n) || isAnnotation(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
+    + (isFrameBox(n) || isStack(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
     + (showDone ? ' show-done' : '')
     + (showDone && n.done ? ' done' : '')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
@@ -493,13 +475,7 @@ export function paintNode(n: MindNode): void {
     // frame's overflow:hidden wrapper (place()). isFrameBox covers frames (image cards are leaves).
     const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
-    if (isAnnotation(n)) {
-      // An annotation always renders directly under #world at absolute coords — never nested in its
-      // parent nor in a frame's overflow:hidden wrapper — so a high z-index (styles.css) floats it on
-      // TOP of everything and no frame mask ever clips it. It still tracks its parent: layout keeps
-      // n.x/n.y = parent + offset, and drag carries it (it's in the parent's subtreeIds → own transform).
-      place(el, np.x, np.y, null);
-    } else if (p && !isContainerBox(p) && !isContainerBox(n)) {
+    if (p && !isContainerBox(p) && !isContainerBox(n)) {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
@@ -519,7 +495,7 @@ export function paintNode(n: MindNode): void {
   }
   // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card
   // is its own 2D box (8 handles). Everything else authors only a WIDTH (2 side handles):
-  // a stack's height is auto-fitted by layout, and a card's/annotation's comes from its content, so
+  // a stack's height is auto-fitted by layout, and a card's comes from its content, so
   // their inline height is always cleared and left to CSS. The one node that ISN'T resizable is an
   // outline row inside a stack — its width is derived from the stack's, so it gets the width but no
   // handles (see nodeW / stackRowW).
@@ -563,20 +539,17 @@ export function paintNode(n: MindNode): void {
     frameContentEl(n);                   // clipping content wrapper
     ensureResizeHandles(n, EW_DIRS);
   } else if (rowW != null) {
-    // an OUTLINE ROW — a narrower test than inStack(n), which also catches an annotation parented to a
-    // stack; the outline skips those, so they keep their own shrink-to-fit width via the branch below
+    // an OUTLINE ROW
     el.style.width = rowW + 'px';        // stretched to the row width its depth allows (stackRowW)
     if (el.style.height) el.style.height = '';
     el.style.removeProperty('--frame-stroke');
     clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
   } else {
-    // A plain card or an annotation: an authored width if it has one (else back to the CSS-fixed
-    // card / the annotation's shrink-to-fit), never an inline height.
+    // A plain card: an authored width if it has one (else back to the CSS-fixed card width), never an
+    // inline height.
     const authored = n.w != null || isReadingRoot(n);
     el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
-    // an annotation's CSS max-width would otherwise cap — and so desync — an authored width
-    el.classList.toggle('w-set', authored);
     el.style.removeProperty('--frame-stroke');
     ensureResizeHandles(n, EW_DIRS);
   }
@@ -660,9 +633,7 @@ export function paintNode(n: MindNode): void {
     }
   }
   // tag pills — skipped for frames (whose fixed box (n.h) holds arbitrary child cards rather than
-  // its own content, so there's no natural place for a tag row to live) and for annotations (no
-  // room on a title-less pinned note, and their frontmatter's own `tags` — if any, e.g. inherited
-  // from converting an existing card — is deliberately ignored, never rendered or editable here).
+  // its own content, so there's no natural place for a tag row to live).
   // Image cards ARE shown despite also being fixed-size boxes — the whole row floats outside
   // the card's own border (styles.css), so it doesn't compete for interior space either way. The
   // row is pinned to the card's bottom-right corner; a leading "+" (only present on the selected
@@ -676,7 +647,7 @@ export function paintNode(n: MindNode): void {
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
   // isDockedTab: a strip of tabs has no room for pills hanging off each label (they'd overlap the
   // next tab), and a tab is a handle on a box rather than a note you'd tag.
-  const noTagRow = isFrameBox(n) || isAnnotation(n) || isDockedTab(n);
+  const noTagRow = isFrameBox(n) || isDockedTab(n);
   const tagsKey = noTagRow ? '' : n.tags.join(' ') + (showAddTag ? ' +' : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
@@ -785,10 +756,8 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   // stack demoted to a row inside another stack) that has no bearing on whether the body is drawn.
   const foldable = rendersAsFrame(n) ? hasKids : (hasKids || hasBody);
   if (!foldable) return '';
-  // An annotation IS its body (no title row at all), so folding it would leave an empty shell —
-  // it keeps double-click/X but is never invited to. An IMAGE card is invited: it folds to
-  // a 40px icon of its own picture (isImageFold), which is a thumbnail rather than an empty shell.
-  if (isAnnotation(n)) return '';
+  // An IMAGE card is invited: it folds to a 40px icon of its own picture (isImageFold), which is a
+  // thumbnail rather than an empty shell.
   // toggleCollapse refuses a locked node, so it must not offer a button that does nothing. Its
   // folded COUNT above is unaffected: that's information, not a control.
   if (isLockedEffective(n)) return '';
@@ -915,8 +884,8 @@ function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n)
 function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(n) || isDockedTab(n); }
 // Does this card live inside a stack's outliner? True when its nearest CONTAINER ancestor is a
 // stack (a frame in between governs instead) — covers the stack's direct children AND deeper rows.
-// Used for the .stack-child tint. For "is this actually an outline ROW" (which drives the row width
-// and excludes annotations) use stackRowW instead — see the sizing branch above.
+// Used for the .stack-child tint. For "is this actually an outline ROW" (which drives the row width)
+// use stackRowW instead — see the sizing branch above.
 // containerHost, not hostFrame: this is the TONE question (whose fill am I sitting on), which an
 // OPEN frame still governs even though it hosts no elements — see containerHost in view/layout.ts.
 function inStack(n: MindNode): boolean {
@@ -929,9 +898,7 @@ function inStack(n: MindNode): boolean {
 // and vanishes into it. Nearest container only, so a card in a stack in a frame stays a stack row.
 // Plain cards only: every other kind is a shape with its own fill rules — a nested stack already
 // steps DOWN inside a frame, a nested frame's fill is tied to the --frame-stroke its border and title
-// tab share, an image card is deliberately image-only, and an annotation never
-// inherits a colour in the first place (it takes the theme's contrast colour, which the tint would
-// wash out).
+// tab share, and an image card is deliberately image-only.
 // containerHost again, and here it MATTERS rather than merely reading better: an OPEN frame hosts no
 // elements, so hostFrame would drop the tint from exactly the cards that need it most — the ones on a
 // canvas now painted the frame’s own fill (syncCanvasBackground), which they’d otherwise vanish into.
@@ -943,7 +910,7 @@ function inStack(n: MindNode): boolean {
 // a washed-out fill (the active tab, being expanded, was fine — which is what made it look like an
 // inactive-tab opacity bug). Together the two tests mean "a frame in any state".
 function inFrame(n: MindNode): boolean {
-  if (isContainer(n) || isFrameFold(n) || isImageBox(n) || isAnnotation(n)) return false;
+  if (isContainer(n) || isFrameFold(n) || isImageBox(n)) return false;
   const h = containerHost(n);
   return !!h && isFrame(h);
 }
@@ -951,12 +918,11 @@ function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRA
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
 // A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
 // mm_w — and every kind can carry one: a frame/image card sizes its whole box with it, while a
-// card/annotation/stack authors only this axis (their height comes from content/outline instead).
+// card/stack authors only this axis (their height comes from content/outline instead).
 // The two widths that are NOT authored come first, so they win: an outline ROW inside a stack is
 // stretched to the width its indent depth allows (stackRowW, derived — a row can't be resized, and a
 // card keeps whatever width it authored OUTSIDE the stack for when it's dragged back out), and a
-// folded frame's tab shrink-wraps its title. An annotation shrinks to fit its text (styles.css)
-// unless a width was authored, so it's measured live off the element rather than assumed.
+// folded frame's tab shrink-wraps its title.
 // A BOX that is a stack ROW is given its width by the STACK, like every other row: the outline owns
 // the width (stackRowW — the stack's own, less its border/padding and one indent per depth), whatever
 // the kind sitting in it. The box kinds are the ones that would otherwise insist on their own, being
@@ -981,7 +947,6 @@ export function nodeW(n: MindNode): number {
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
   const row = stackRowW(n); if (row != null) return row;             // outline row — derived, not authored
   if (isStack(n)) return n.w ?? STACK_W;
-  if (isAnnotation(n)) return n.w ?? ((n.el && n.el.offsetWidth) || NODE_W);
   return n.w ?? NODE_W;
 }
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
@@ -1050,35 +1015,7 @@ function dragRoot(): HTMLElement { return (ui.drag && ui.drag.moved) ? dragLayer
 // `?? n` rather than `?? {x: n.x, y: n.y}`: a MindNode already IS a Pt structurally, and this runs
 // 2-4× per node per repaint — the object literal was pure allocation on the paint path.
 function paintPos(n: MindNode): Pt {
-  const p = ui.drag?.origins?.get(n.id) ?? n;
-  const x = readingShiftX(n, p.x);
-  return x === p.x ? p : { x, y: p.y };
-}
-// An ANNOTATION pulled inside the window while a card is open, and NOTHING ELSE — identity for every
-// other node and whenever nothing is open, so this costs one type test on the paint path.
-//
-// A card opens at a fixed reading width in the middle of the screen; its margin notes were placed
-// against its width on the BOARD, so a note that sat comfortably beside a 900px card is off the side
-// of a 680px one. Their x is therefore DERIVED here rather than moved: `mm_position_x` on disk is
-// untouched, so leaving the card puts every note back exactly where it was authored — the same
-// contract opening a frame keeps ("opening and leaving move NOTHING").
-// Exported because `view/edges.ts` draws the tether from the note to its parent and has to start it
-// where the note is actually painted, or the line would point off the screen at a card that isn't
-// there. Hit-testing still uses the authored x, so a marquee reaches a shifted note by its board
-// position — the one seam this leaves, and much the lesser evil against writing positions to disk.
-const READING_ANNO_PAD = 12;
-export function readingShiftX(n: MindNode, x: number): number {
-  if (!isAnnotation(n)) return x;
-  // Lazily built if this is the first paint of an open — the band is measured post-paint
-  // (syncScopeChrome), and nothing it holds can change within one pass.
-  const b = readingBand() ?? (refreshReadingBand(), readingBand());
-  if (!b) return x;
-  // The window's own edges, in WORLD coordinates — taken from the band the camera clamp was measured
-  // with rather than from state.view.x, so a paint that happens before (or during) the camera glide
-  // clamps against the same window the camera is about to show.
-  const lo = b.worldLeft + READING_ANNO_PAD;
-  const hi = lo + b.vw - nodeW(n) - 2 * READING_ANNO_PAD;
-  return hi < lo ? lo : clamp(x, lo, hi);
+  return ui.drag?.origins?.get(n.id) ?? n;
 }
 // Where a node's ELEMENT paints, given a bounds-top y: the SINGLE authority for the tab drop. The same
 // y for everything except a frame BOX, whose element is the box alone — one tab BELOW the bounds top
@@ -1246,31 +1183,12 @@ function frameContentEl(f: MindNode): HTMLElement {
 export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
 // An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
 // (startNodeResize below), so there is no smaller expanded size to clamp at.
-// The one exception to "a kind's default width is its floor": an annotation shrink-wraps its text
-// (styles.css), so it has no fixed natural width to floor at — it can be narrowed too, down to
-// something still readable.
-const MIN_ANNO_W = 80;
-// An annotation's UN-AUTHORED width: what the element measures with no authored width in play. Its
-// current offsetWidth is useless as a floor once a width HAS been authored (it just reports that
-// width back), so strip both halves of the authored sizing for one measurement and put them straight
-// back. The `w-set` class matters as much as the inline width: it's what lifts the shrink-to-fit
-// max-width cap, and measuring with the cap still lifted returns the full one-line text width — which
-// as a floor would mean a widened annotation could never be narrowed again.
-function naturalW(n: MindNode): number {
-  const el = n.el; if (!el) return NODE_W;
-  const prev = el.style.width, hadSet = el.classList.contains('w-set');
-  el.style.width = ''; el.classList.remove('w-set');
-  const w = el.offsetWidth;
-  el.style.width = prev; el.classList.toggle('w-set', hadSet);
-  return Math.max(MIN_ANNO_W, w);
-}
 // A width-only kind can only ever get WIDER than the width it has by default — the whole point is
 // trading height for width on a card whose text wraps badly, so its natural size is the floor. That
 // floor is NODE_W for a plain card, a stack (STACK_W is NODE_W) and a frame alike, so they share the
 // one fall-through rather than three aliases that had to be kept equal by hand.
 function minWOf(n: MindNode): number {
   if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
-  if (isAnnotation(n)) return naturalW(n);
   return NODE_W;
 }
 function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) ? IMAGE_FOLD : MIN_FRAME_H; }
@@ -1280,7 +1198,7 @@ const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 // …and the bottom edge alone, for a box whose width and position are the stack outline's (see paintNode).
 const S_DIRS = ['s'] as const;
 type FrameDir = typeof FRAME_DIRS[number];
-// …and the width-only set: a card / annotation / stack authors a WIDTH but never a height (its
+// …and the width-only set: a card / stack authors a WIDTH but never a height (its
 // height stays whatever its content measures, or — for a stack — whatever its outline needs), so it
 // gets the two side bands and no corners.
 const EW_DIRS = ['e', 'w'] as const;
@@ -1323,7 +1241,7 @@ function imageAspect(n: MindNode): number {
 function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   if (state.readOnly || isLockedEffective(n)) return;
   e.stopPropagation(); e.preventDefault();
-  // Does this kind author its own HEIGHT, or only a width? A card/annotation measures its height from
+  // Does this kind author its own HEIGHT, or only a width? A card measures its height from
   // its content and a stack derives its own from its outline, so for those the resize writes w only.
   // A FOLDED image card counts as a box here even though isBoxNode says no: its 40px icon is the small
   // end of its own size range, and scaling it back up is how you unfold it (see `fold` in resize()).
@@ -1342,26 +1260,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
   const sx = e.clientX, sy = e.clientY;
   const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
-  // Attached annotations ride the BORDER they sit on. An annotation is pinned on top of its parent at
-  // an offset, so a resize that moves an edge it was hugging would otherwise leave it stranded mid-card
-  // (or hanging off the end). Latch each one to its nearer edge on each axis NOW, at the size the user
-  // grabbed, and move it by whatever that edge ends up doing — including the BOTTOM edge of a
-  // width-only card, whose height changes on its own as the text re-wraps.
-  const annos = childrenOf(n.id).filter(isAnnotation).map(a => ({
-    a, x0: a.x, y0: a.y,
-    toRight:  Math.abs((a.x + nodeW(a)) - right0)  < Math.abs(a.x - left0),
-    toBottom: Math.abs((a.y + nodeH(a)) - bottom0) < Math.abs(a.y - top0),
-  }));
-  const shiftAnnos = (): void => {
-    for (const t of annos) {
-      t.a.x = t.x0 + (t.toRight  ? (n.x + nodeW(n)) - right0  : n.x - left0);
-      t.a.y = t.y0 + (t.toBottom ? (n.y + nodeH(n)) - bottom0 : n.y - top0);
-      t.a.dirty = true;
-      paintNode(t.a);
-    }
-  };
   touch(n.id);
-  for (const t of annos) touch(t.a.id);   // one undo step covers the box AND the annotations it carried
   let lastDx = 0, lastDy = 0;
   let subtreeRAF: number | null = null;
   const g = gridSnap();
@@ -1422,9 +1321,8 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   const move = (ev: PointerEvent): void => {
     lastDx = (ev.clientX - sx) / state.view.k; lastDy = (ev.clientY - sy) / state.view.k;
     resize(snap);
-    paintNode(n);        // paint FIRST: shiftAnnos reads back the re-wrapped height for a bottom latch
-    shiftAnnos();
-    paintEdges();
+    paintNode(n);
+    paintFreeEdges();
     // A flow frame (frame-h/frame-v) arranges its children by wrapping them into the box's own
     // width/height — reflow them live as that box changes size, not just once on release, so the
     // wrap point visibly updates while dragging. Coalesced to once per animation frame (applyLayouts
@@ -1455,13 +1353,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // the final delta; the size was already on the grid throughout
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
-    // a redundant mm_w on every card the user so much as nudges. For an annotation that also restores
-    // its shrink-to-fit sizing, which an explicit width would otherwise pin forever.
+    // a redundant mm_w on every card the user so much as nudges.
     if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
     // paint BEFORE laying out: a width-only node's height (and a stack's title-row header, which is
     // measured) only matches the snapped width once the DOM has it — see prepRow in view/layout.ts.
     paintNode(n);
-    shiftAnnos();        // settle the latched annotations against the snapped edges
     // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
     // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
     relayout(); scheduleSave(); commitStep();
@@ -1471,7 +1367,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
 }
 export function paintAll(): void {
   for (const n of state.nodes.values()) paintNode(n);
-  paintEdges();   // tethers + free edges (view/edges.ts pairs them)
+  paintFreeEdges();
   updateEmptyHints();
   renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
   syncScopeChrome();   // crumbs + reading class + the recovery when the frame you were inside has gone
@@ -1538,9 +1434,9 @@ function followEdges(tok: number, ms: number): void {
       // boundsTop as well: `top` holds a frame's BOX top, while n.y is its bounds (tab) top.
       n.y = py ? boundsTop(n, o ? py + o.y : py) : n.y;
     }
-    paintEdges();
+    paintFreeEdges();
     for (const [n,x,y] of saved){ n.x = x; n.y = y; }   // restore logical (final) positions
-    if (now - t0 < ms) requestAnimationFrame(tick); else paintEdges();
+    if (now - t0 < ms) requestAnimationFrame(tick); else paintFreeEdges();
   };
   requestAnimationFrame(tick);
 }
@@ -1570,7 +1466,7 @@ function withLayoutAnimation(mutate: () => void): void {
 function animateReflow(before: Map<string, Pt>): void {
   const visible = [...state.nodes.values()].filter(m => m.el && !isHidden(m));
   const tok = ++ui.animToken;                           // supersede any in-flight animation
-  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeNodeEl(m); } paintEdges(); return; }
+  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeNodeEl(m); } paintFreeEdges(); return; }
   // 1) park every visible card at its STARTING spot with no transition; just-revealed cards
   //    also start invisible so they fade in (covers free layouts where nothing reflows)
   for (const m of visible){
@@ -1585,7 +1481,7 @@ function animateReflow(before: Map<string, Pt>): void {
   for (const m of visible){ m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);
-  setTimeout(() => { if (tok !== ui.animToken) return; for (const m of visible) m.el && m.el.classList.remove('lt-anim'); paintEdges(); }, DUR + 60);
+  setTimeout(() => { if (tok !== ui.animToken) return; for (const m of visible) m.el && m.el.classList.remove('lt-anim'); paintFreeEdges(); }, DUR + 60);
 }
 
 
@@ -1713,10 +1609,6 @@ function navArrow(key: string): void {
 // Exported: the outline row list shows the same donebox/progress readout (features/outline.ts).
 export function toggleDone(n: MindNode): void {
   if (state.readOnly || isLockedEffective(n)) return;
-  // An annotation has no checkbox to reflect it (showsDoneCheckbox), so setting the flag would write an
-  // `mm_done: true` to disk that nothing draws and nothing can clear again. The checkbox's own change
-  // handler can't reach here for one, but a shortcut or a menu entry could.
-  if (isAnnotation(n)) return;
   record([n.id], () => { n.done = !n.done; n.dirty = true; });
   paintNode(n);
   const p = parentOf(n); if (p) paintNode(p);
@@ -1907,7 +1799,7 @@ function growToFitContents(f: MindNode): void {
   if (state.readOnly || f.type !== 'frame' || isLockedEffective(f)) return;
   if (frameFlow(f) || isTabsFrame(f)) return;
   const box = containerBox(f);
-  const out = childrenOf(f.id).filter(k => !isHidden(k) && !isAnnotation(k)).some(k => {
+  const out = childrenOf(f.id).filter(k => !isHidden(k)).some(k => {
     const b = subtreeBox(k);
     return isFinite(b.x0) && (b.x0 < box.x || b.y0 < box.y || b.x1 > box.x + box.w || b.y1 > box.y + box.h);
   });
@@ -2144,7 +2036,7 @@ export function syncCanvasBackground(): void {
 function syncScopeChrome(): void {
   renderCrumbs();
   // The `reading` body class sits here, beside the `scoped` one renderCrumbs keeps, because it is the
-  // same fact about the same state — and the BAND the camera clamp and the annotation shift read is
+  // same fact about the same state — and the BAND the camera clamp reads is
   // measured in the same breath, since this is the one place per paint that knows the scope settled.
   document.body.classList.toggle('reading', readingActive());
   refreshReadingBand();
@@ -2255,7 +2147,7 @@ export function applyColorVars(el: HTMLElement, c: string): void {
 // bakes them in as literal hex (edges, swatches). The two themes now SHARE one --pal-* set, so the
 // re-read is a no-op in practice — kept because it costs nothing and keeps this correct if a theme
 // ever overrides a colour again. The repaint is not optional either way: what still differs per theme
-// is effectiveColor's own fallback (an uncoloured card, an annotation's default) and .c-none's ink.
+// is effectiveColor's own fallback (an uncoloured card) and .c-none's ink.
 export function refreshPalette(): void {
   for (const c of SWATCH_KEYS) SWATCH_BG[c] = pal(c);
   THEME_BG = themeBg();   // …and this one is genuinely per-theme — behindFill's fallback surface
@@ -2444,14 +2336,6 @@ window.addEventListener('keydown', (e) => {
   if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection(); return; }
   if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: auto-size selected frames to fit
   if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
-  // A -> create an annotation at the cursor (mirrors Space's new-card tap). If a card is selected
-  // the annotation becomes its child; otherwise it's a root. ⇧A is auto-size (handled just above).
-  if (key === 'a' && !e.shiftKey && !mod && !outlineActive()){
-    e.preventDefault();
-    const p = ui.lastMouse ? screenToWorld(ui.lastMouse.x, ui.lastMouse.y) : screenToWorld(window.innerWidth/2, window.innerHeight/2);
-    createAnnotationHere(p.x - 80, p.y - 16);
-    return;
-  }
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
   // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
   if (key === 'c' && mod && state.sel.size){ e.preventDefault(); void copySelection(); return; }

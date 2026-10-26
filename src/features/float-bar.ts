@@ -7,7 +7,7 @@
 // existing generic context menu (openMenu, features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, isBoxType, isAnnotation, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, stage, setStatus, isBoxType, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -32,9 +32,6 @@ const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbType = byId<HTMLButtonElement>('fbType');
 const fbLayout = byId<HTMLButtonElement>('fbLayout');
 const fbChecklist = byId<HTMLInputElement>('fbChecklist');
-// the <label> wrapping the toggle (markup: <label class="fb-toggle"><input id="fbChecklist">...) —
-// hidden entirely for an annotation selection, see markChips below.
-const fbChecklistLabel = fbChecklist.parentElement!;
 const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbMore = byId<HTMLButtonElement>('fbMore');
@@ -79,12 +76,10 @@ const TYPE_ICONS: Record<NodeType, string> = {
   // something"; the dashed `inherit` layout chip is the only other hollow rect and stays distinct.
   card: SVG_OPEN + '<rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>',
   frame: SVG_OPEN + FOLDER_PATH + '</svg>',
-  annotation: SVG_OPEN + '<path d="M4 4l3.5 3.5" stroke-dasharray="2 2"/><rect x="8" y="8" width="12" height="9" rx="2"/><path d="M10.5 12h7"/></svg>',
 };
 const NODE_TYPES: { key: NodeType; label: string; icon: string }[] = [
   { key:'card',  label:'Card — an ordinary note',                                        icon: TYPE_ICONS.card },
   { key:'frame', label:'Frame — a resizable box; drag cards inside to hold them, out to release', icon: TYPE_ICONS.frame },
-  { key:'annotation', label:'Annotation — a title-less note pinned on top of its parent, ignored by layout', icon: TYPE_ICONS.annotation },
 ];
 // An ARRANGEMENT, one glyph per layout key — deliberately generic: none of them draws the container
 // it sits in, so the same chip means the same thing whichever kind offers it (`free` is shared by
@@ -119,10 +114,9 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
     // group can't be selected at all (main.ts selTarget) — and markChips hides this whole row for the
     // one group that still can be, the folded pill.
   ],
-  annotation: [],
 };
 // The default layout for a freshly-set type — omitted from frontmatter (see serializeMd).
-const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', annotation: 'free' };
+const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free' };
 // Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
 // no children it's left as-is, or given the default size when `orDefault` (used when a card first
@@ -136,7 +130,7 @@ const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: '
 const FRAME_FIT_PAD = 16;
 function frameFitTop(): number { return FRAME_TAB_DROP + FRAME_FIT_PAD; }
 export function fitFrameToContent(n: MindNode, orDefault = false): void {
-  const kids = childrenOf(n.id).filter(k => !isHidden(k) && !isAnnotation(k));   // annotations don't size the frame
+  const kids = childrenOf(n.id).filter(k => !isHidden(k));
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -220,11 +214,6 @@ function rebuildLayoutChips(type: NodeType): void {
 // Change the KIND of the selection: seed/reset the box, drop a now-invalid layout, reseed order.
 function setType(type: NodeType): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
-  // an annotation is a leaf — refuse to flip a card that already has children into one
-  if (type === 'annotation' && ids.some(id => childrenOf(id).length)) {
-    setStatus('An annotation can’t have children — move or delete them first');
-    return;
-  }
   record(ids, () => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n || n.type === type) continue;
@@ -232,7 +221,7 @@ function setType(type: NodeType): void {
       // (the new kind measures or derives its own), and so does the width — a frame's box is sized to
       // enclose its children, which says nothing about how wide its own title/body wants to be, and
       // silently keeping it would turn a converted 800px frame into an 800px card.
-      // card/annotation/stack: the height is never authored — and the width goes too if we're
+      // card/stack: the height is never authored — and the width goes too if we're
       // leaving a 2D box, whose width described its contents rather than its own text.
       // A tab group is a FRAME with layout tabs; leaving `frame` behind dissolves the group, so its
       // tabs need their own boxes back (same as switching the layout away — see undockAllTabs).
@@ -294,7 +283,7 @@ function setLayout(layout: NodeLayout): void {
 }
 // Reflect the selection's current type + layout in both popovers AND their trigger icons. A single
 // type shows its chip active and its layout set; a mixed-type selection leaves both blank. The
-// layout picker is rebuilt for the selected type and hidden entirely for leaves (image/annotation).
+// layout picker is rebuilt for the selected type and hidden entirely for leaves (image).
 function markChips(): void {
   const ids = selectedIds();
   const typeSet = new Set(ids.map(id => state.nodes.get(id)?.type ?? 'card'));
@@ -302,10 +291,6 @@ function markChips(): void {
   edTypes.querySelectorAll<HTMLElement>('.layoutchip').forEach(c =>
     c.classList.toggle('active', c.dataset.type === type));
   fbType.innerHTML = type ? TYPE_ICONS[type] : TYPE_ICONS.card;
-
-  // a checklist is meaningless on an annotation (a title-less leaf that can never have children —
-  // no subtree to check off) — hide the toggle entirely rather than leave a no-op control in the bar.
-  fbChecklistLabel.style.display = type === 'annotation' ? 'none' : '';
 
   // ⤢ go IN. The test lives in features/reading.ts beside the click that uses it: single selection
   // (you can only stand in one place, same as ↑), a kind that HAS an interior, and not the card you
@@ -448,8 +433,6 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   // group actions (Duplicate/Cut/Copy/Export/Share/Auto-size) act on state.sel via selectedIds();
   // when the target isn't already part of the selection, select it first so they act on IT.
   const selectTargetFirst = () => { if (!multi) selectNode(n.id); };
-  const isAnno = isAnnotation(n);   // a leaf with a body but no title, no children
-  const isLeaf = isAnno;   // can't hold children
   const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
   const p = parentOf(n);
   const parentLocked = !!p && isLockedEffective(p);
@@ -458,14 +441,12 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   const entries: MenuEntry[] = [];
   if (!state.readOnly){
     if (!multi){
-      if (!isAnno) entries.push({ label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked });
-      entries.push({ label:'Edit note', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });   // annotation keeps its body
+      entries.push({ label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked });
+      entries.push({ label:'Edit note', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
       entries.push({ label:'Insert image…', run: () => pickImagesForNode(n.id), disabled: locked });
-      if (!isLeaf){
-        entries.push('sep');
-        entries.push({ label:'Add child', shortcut:'Tab', run: () => addChild(n.id), disabled: locked });
-        entries.push({ label:'Paste as child', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, n.id); }, disabled: locked });
-      }
+      entries.push('sep');
+      entries.push({ label:'Add child', shortcut:'Tab', run: () => addChild(n.id), disabled: locked });
+      entries.push({ label:'Paste as child', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, n.id); }, disabled: locked });
       entries.push({ label:'Add sibling', shortcut:'Enter', run: () => createSibling(n.id), disabled: parentLocked });
     }
     entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
@@ -529,7 +510,7 @@ function anchorNode(): MindNode | undefined {
 // rename/recolour — centred on a wide box it drifts far from the tab it acts on. Via actionTarget, so a
 // selected tab GROUP (which shows no title of its own) uses its OPEN TAB's label, the same node its
 // colour/rename/delete already land on. labelEl (main.ts) owns WHICH element that is, so the folded /
-// docked case needs no second spelling here; an image card / annotation renders its title row empty,
+// docked case needs no second spelling here; an image card renders its title row empty,
 // hence the width guard falling back to the whole box.
 function labelRect(n: MindNode): DOMRect {
   const t = actionTarget(n);

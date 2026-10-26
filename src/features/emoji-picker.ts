@@ -12,7 +12,7 @@
 // input is the fallback for anything outside that set (there's no embeddable browser emoji-picker
 // API, so it leans on the OS picker — Cmd+Ctrl+Space / Win+. — or paste) and takes its first
 // grapheme cluster as the tag.
-import { state, isAnnotation } from '../core/state.js';
+import { state } from '../core/state.js';
 import { setTagOnNodes, tagPillHTML } from './tags.js';
 import { placeInViewport } from '../utils/dom.js';
 
@@ -83,10 +83,7 @@ export function openEmojiPicker(anchor: HTMLElement, targetIds: string[], onChan
   const wasOpenForSameAnchor = pop.classList.contains('open') && openAnchor === anchor;
   close();
   if (wasOpenForSameAnchor) return;
-  // annotations can never carry emoji (no tag row, see main.ts's noTagRow) — drop them here too, so
-  // a multi-selection "current" check isn't thrown off by one that'll silently be skipped anyway
-  // (tags.ts's setTagOnNodes filters them out of the actual mutation).
-  const ids = targetIds.filter(id => { const n = state.nodes.get(id); return !!n && !isAnnotation(n); });
+  const ids = targetIds.filter(id => { const n = state.nodes.get(id); return !!n; });
   if (!ids.length) return;
   const current = (tag: string): boolean => ids.every(id => state.nodes.get(id)!.tags.includes(tag));
   const mru = loadMru();

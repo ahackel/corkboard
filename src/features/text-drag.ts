@@ -43,7 +43,7 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
   if (n?.id === sourceId) return null;                   // its own card (editor or not): a native move
   if (!n) return { container: null };                    // open canvas → a sibling of the source
   if (isLockedEffective(n)) return null;                 // locked: no drop, no hint
-  if (canMerge(n)) return { into: n };                    // a card or annotation swallows the text
+  if (canMerge(n)) return { into: n };                    // a card swallows the text
   if (isContainer(n)) return { container: contentParent(n) };   // a frame/stack takes a card of its own
   // Anything else under the cursor (an image card, a folded frame or a docked tab) has no
   // note to take the text and no interior to hold a card, so it counts as canvas — the new card

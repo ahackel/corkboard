@@ -8,7 +8,7 @@
 // see docs/spec-edges-and-containment.md.
 //
 // layoutH/NODE_W/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
-import { state, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
+import { state, type MindNode } from '../core/state.js';
 import type { Seg } from '../core/ui-state.js';
 import { childrenOf, isHidden, isRoot, parentOf, ancestors } from '../utils/model.js';
 import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
@@ -66,11 +66,6 @@ export function commitRel(): void {
 // `afterId` is the explicit insertion anchor when the caller resolved one (`null` = front of
 // the order, `undefined` = default: after `target` in sibling mode, append in child mode).
 export function dropLanding(dragged: MindNode, target: MindNode, mode: 'child' | 'sibling' | 'reorder', afterId?: string | null): { x: number; y: number } {
-  // An ANNOTATION lands where you dropped it, full stop. It's a remark placed AGAINST a card at a
-  // spot you chose by dragging — it takes no part in layout and has no side to dock against — so
-  // re-pinning it must change its parent and nothing else. Every other kind gets a landing computed
-  // from the target, which for an annotation would fling it below the card you aimed at.
-  if (isAnnotation(dragged)) return { x: dragged.x, y: dragged.y };
   const governor = mode === 'child' || mode === 'reorder' ? target : parentOf(target) ?? target;
   // Landing inside a stack's outliner: a row is `free` (the stack owns every position), so there's no
   // managed simulation to run — put it one indent under the governing row, below its current subtree.
@@ -179,9 +174,7 @@ export function subtreeBox(node: MindNode){
   // Otherwise a fan/line/grid parent would size a frame child by its content and re-space it (and
   // shift the frame's children with it) whenever the frame is expanded or its content changes.
   const walk = (n: MindNode): void => {
-    // annotations don't contribute to layout — they float on top and are sized/placed on their own,
-    // so a fan/line parent or a frame's auto-fit must not count their extent.
-    if (isHidden(n) || isAnnotation(n)) return;
+    if (isHidden(n)) return;
     x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
     x1 = Math.max(x1, n.x + nodeW(n)); y1 = Math.max(y1, n.y + layoutH(n));
     if (isContainer(n)) return;   // a frame/stack footprint = its own box; its children are contained within it
@@ -213,19 +206,15 @@ export function isFrame(node: MindNode): boolean {
 export function insideStack(node: MindNode): boolean {
   for (let p = parentOf(node); p; p = parentOf(p)) {
     // The first CARD ancestor outlines us — a card with children IS an outline, so being a card's
-    // child is the whole test. hasRows guards the one case where it isn't trivially true: an
-    // ANNOTATION child, which floats on top of its parent rather than stacking into it, and so
-    // doesn't make its parent an outline (see hasRows).
+    // child is the whole test.
     if (p.type === 'card') return !p.collapsed && hasRows(p);
     if (p.type !== 'frame') return false;
   }
   return false;
 }
-// Does this node have children that OUTLINE — i.e. any child that isn't an annotation? An annotation
-// is pinned on top of its parent and takes no part in layout, so a card whose only child is one is
-// still a plain card, not a container.
+// Does this node have children that OUTLINE?
 export function hasRows(node: MindNode): boolean {
-  return childrenOf(node.id).some(k => !isAnnotation(k));
+  return childrenOf(node.id).length > 0;
 }
 // A CARD WITH CHILDREN frames its whole subtree as an OUTLINER (one full-width column, each level
 // indented) inside an auto-sized, non-resizable box. This is what replaced the branch line: a child
@@ -271,7 +260,7 @@ export function activeTab(g: MindNode): MindNode | null {
 }
 // What can be dropped on a frame's tab to become a tab of it. A frame already is one; a plain CARD is
 // turned into a frame on the way in (crud.ts dockFrames), since that's what a tab is. The other kinds
-// keep out: an annotation is a note pinned on top of something else and holds nothing, a stack's whole
+// keep out: a stack's whole
 // nature is its outliner box, and an image card is a leaf whose box IS its content.
 export function canBeTab(n: MindNode): boolean { return n.type === 'frame' || n.type === 'card'; }
 // The node a user-facing action on `n` should actually hit. A tab group doesn't exist from the outside:
@@ -364,7 +353,6 @@ export function isContainer(node: MindNode): boolean { return isFrame(node) || i
 // (drop a 400px card into a stack and it must come back out at 400px, not at the row width). Mirrors
 // the stack branch's own arithmetic; the two must agree, which is why they read the same constants.
 export function stackRowW(node: MindNode): number | null {
-  if (isAnnotation(node)) return null;   // stackOutline skips annotations — they float, they don't stack
   let depth = 0;
   for (let p = parentOf(node); p; p = parentOf(p)) {
     // isStack(p), not p.type — a stack nested in another stack is itself just a row of the outer one
@@ -431,7 +419,7 @@ function sizeEmptyStack(stack: MindNode): void {
 export function stackOutline(stack: MindNode, skip?: Set<string>): { node: MindNode; depth: number }[] {
   const out: { node: MindNode; depth: number }[] = [];
   const walk = (parent: MindNode, depth: number): void => {
-    const kids = childrenOf(parent.id).filter(k => !isHidden(k) && !isAnnotation(k) && !skip?.has(k.id));
+    const kids = childrenOf(parent.id).filter(k => !isHidden(k) && !skip?.has(k.id));
     for (const k of orderedKids(parent, kids)) {
       out.push({ node: k, depth });
       if (!isContainer(k) && !k.collapsed) walk(k, depth + 1);
@@ -462,9 +450,8 @@ export function stackDropTarget(stack: MindNode, dragged: MindNode, skip: Set<st
   let i = 0;
   while (i < rows.length && midOf(rows[i].node) < mid) i++;
   const prev = i > 0 ? rows[i - 1] : null, next = rows[i] ?? null;
-  // 2) the depth at that gap, from the dragged card's left edge. A leaf can't adopt children, so it
-  //    never offers the deeper slot.
-  const maxDepth = prev ? prev.depth + (isLeafType(prev.node) ? 0 : 1) : 0;
+  // 2) the depth at that gap, from the dragged card's left edge.
+  const maxDepth = prev ? prev.depth + 1 : 0;
   const minDepth = next ? next.depth : 0;
   const depth = clamp(Math.round((dragged.x - innerLeft) / STACK_INDENT), minDepth, maxDepth);
   // 3) parent + anchor: one level deeper means "first child of the row above"; otherwise walk up from
@@ -521,7 +508,6 @@ export function hostFrame(node: MindNode): MindNode | null {
 // which the open frame still governs — more than ever, since the canvas now wears its colour). Used
 // by main.ts's inStack/inFrame for exactly that.
 export function containerHost(node: MindNode): MindNode | null {
-  if (isAnnotation(node)) return null;   // annotations render on top, under #world — never hosted/clipped by a frame
   for (let p = parentOf(node); p; p = parentOf(p))
     if (isContainer(p)) return p;   // a frame OR a stack hosts/clips its children's elements + edges
   return null;
@@ -841,9 +827,7 @@ export function reorderDraggedParents(movedIds: Iterable<string>): void {
 // CURRENT positions, so dragging a child past a sibling reorders them on the next pass.
 function layoutSubtree(node: MindNode): void {
   if (node.collapsed) return;
-  // annotations opt out of layout: never ordered, spaced, or flowed — they stay where dragged and
-  // float on top (they still ride shiftSubtree when an ancestor moves, so they track their parent).
-  const kids = childrenOf(node.id).filter(k => !isHidden(k) && !isAnnotation(k));
+  const kids = childrenOf(node.id).filter(k => !isHidden(k));
   // An empty STACK still owes itself a height — its box auto-fits its outline, and with no rows that
   // outline is just its own (possibly wrapped) title.
   if (!kids.length) { if (isStack(node)) sizeEmptyStack(node); return; }
@@ -889,7 +873,7 @@ function layoutSubtree(node: MindNode): void {
   if (type === 'stack') {
     const innerLeft = ax + FRAME_BORDER + STACK_PAD;
     const rows = stackOutline(node);
-    // no visible rows (every child hidden or an annotation) — same case as a childless stack above
+    // no visible rows (every child hidden) — same case as a childless stack above
     if (!rows.length) { sizeEmptyStack(node); return; }
     let cy = ay + stackHeaderH(node);
     // Walk the SHARED outline (stackOutline) rather than a private DFS, so the drop resolver

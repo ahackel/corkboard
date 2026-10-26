@@ -51,8 +51,8 @@ export function isReadingRoot(n: MindNode): boolean {
   return n.id === scope.rootId && n.type === 'card';
 }
 // …and the same question asked of the SCOPE rather than of a node: the card being read, or null.
-// Every "is a card open" test in the app goes through one of these two — the camera clamp, the
-// annotation shift, the canvas-colour owner, the body class, openFrame's own two consequences — so
+// Every "is a card open" test in the app goes through one of these two — the camera clamp,
+// the canvas-colour owner, the body class, openFrame's own two consequences — so
 // widening what reads as a page (an image card, say) stays the one edit isReadingRoot promises.
 export function readingRootNode(): MindNode | null {
   const n = scopeRootNode();
@@ -98,7 +98,6 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 // canvas, a card's interior is its NOTE, read at full width (features/reading.ts). Same navigation
 // either way — one level on the stack, one crumb, ↓ to leave — which is the whole reason reading a
 // long note is a place you GO rather than a second panel you look at.
-// An ANNOTATION has no interior (it is a margin note pinned on its parent), so it doesn't open.
 export function canOpen(n: MindNode | null | undefined): boolean {
   return n?.type === 'frame' || n?.type === 'card';
 }

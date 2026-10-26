@@ -6,14 +6,14 @@
 // auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
-import { state, stage, world, setStatus, isLeafType, isAnnotation, isImageCard, type MindNode } from '../core/state.js';
+import { state, stage, world, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
 import { detachParentId, isReadingRoot } from '../nav/scope.js';
 import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth, isTabsFrame, isDockedTab, canBeTab, tabGroupOf, tabBandRect, tabDropTarget, activeTab, TAB_GAP } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
-import { paintEdges } from '../view/edges.js';
+import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
 import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
@@ -113,7 +113,7 @@ const outsideWindow = (x: number, y: number): boolean =>
 
 // Recompute whether the dragged card is currently ripped off its parent (distanceRip: pulled clear
 // of the parent's footprint by half the base threshold — see that helper). Must be called before
-// paintEdges() so the hidden-edge rendering reads the latest state.
+// paintFreeEdges() so the hidden-edge rendering reads the latest state.
 function updateRip(drag: Drag): void {
   // Runs for a multi-selection too (all roots move by the same delta, so the anchor's rip state is
   // the whole group's) — dragPointerUp detaches every dragged root that this gesture pulls off.
@@ -129,10 +129,8 @@ function updateRip(drag: Drag): void {
   // dragPointerUp commits on. Sharing drag.rip means effectiveColor previews the detach colour the
   // instant it crosses out, exactly as a distance-rip does for a non-frame child.
   const parent = parentOf(act);
-  // An annotation is never "in" a frame for rip purposes — it renders on top, not inside the box —
-  // so it detaches ONLY by being dragged past the rip threshold, never by leaving a frame's bounds.
   // isContainer covers a stack too: its child detaches by leaving the stack box, same as a frame.
-  const inFrame = !!(parent && isContainer(parent)) && !isAnnotation(act);
+  const inFrame = !!(parent && isContainer(parent));
   if (act.parent && !reordering) {
     if (inFrame) {
       rip = !centreInFrame(act, parent!);
@@ -221,7 +219,7 @@ function flushDragPaint(): void {
     updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
   }
   updateRip(drag);
-  paintEdges();   // n.x/y is current, so edges track the dragged nodes correctly
+  paintFreeEdges();   // n.x/y is current, so edges track the dragged nodes correctly
   if (drag.moved && !ui.autoPanRAF) ui.autoPanRAF = requestAnimationFrame(autoPanStep);
 }
 function stopAutoPan(): void { if (ui.autoPanRAF){ cancelAnimationFrame(ui.autoPanRAF); ui.autoPanRAF = null; } }
@@ -264,7 +262,7 @@ function autoPanStep(): void {
     applyDragTransform(drag, (drag.cx - drag.sx) / state.view.k, (drag.cy - drag.sy) / state.view.k);
     updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
     updateRip(drag);
-    paintEdges();   // redraw edges every auto-pan frame so they follow the moving nodes
+    paintFreeEdges();   // redraw edges every auto-pan frame so they follow the moving nodes
   }
   ui.autoPanRAF = requestAnimationFrame(autoPanStep);
 }
@@ -633,7 +631,7 @@ function dragPointerUp(): void {
             const r = state.nodes.get(rootId);
             if (!r?.parent) continue;
             const rp = state.nodes.get(r.parent);
-            const rInFrame = !!(rp && isContainer(rp)) && !isAnnotation(r);   // frame/stack; annotations detach by rip only
+            const rInFrame = !!(rp && isContainer(rp));   // frame/stack
             const rOut = rInFrame && !centreInFrame(r, rp!);
             if (!shift && (rInFrame ? rOut : (alt || distanceRip(r)))){
               // UNDOCK: a tab dragged clear of its group's bounds becomes an ordinary frame again — it
@@ -787,7 +785,7 @@ function dragFollow(): void {
   if (!drag) return;
   applyDragTransform(drag, (drag.cx - drag.sx)/state.view.k, (drag.cy - drag.sy)/state.view.k);
   if (drag.moved) updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
-  paintEdges();   // modifier changed mid-drag — always repaint (infrequent)
+  paintFreeEdges();   // modifier changed mid-drag — always repaint (infrequent)
 }
 // Update the detach preview the instant Alt is pressed/released mid-drag, even if the pointer
 // isn't moving: repaint the dragged subtree (its colour previews the detached result) and re-resolve
@@ -873,7 +871,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   }
   clearDropTarget();
   const drag = ui.drag;
-  // ⌥-dragging CARD(s)/annotation(s) over another card MERGES them into it: their notes fold into its
+  // ⌥-dragging CARD(s) over another card MERGES them into it: their notes fold into its
   // body and the cards go (crud.ts mergeCardsInto). Resolved during the drag and taken as exclusive:
   // while poised over a valid card the merge supersedes the reparent a plain drag would do, and with
   // nothing valid under the cursor ⌥ keeps its ordinary meaning (detach to root) — which is what makes
@@ -912,29 +910,9 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   } else if (hovered && sub.has(hovered)){
     setStatus(`Can't parent "${nodeLabel(dragged)}" onto its own child/descendant`);
   } else if (mergeDrag) {
-    // Only an unlocked card or annotation can swallow a note (canMerge). Over anything else nothing is
+    // Only an unlocked card can swallow a note (canMerge). Over anything else nothing is
     // set, so every preview stands down and the release falls through to ⌥'s detach.
     if (hovered && canMerge(state.nodes.get(hovered)!)) fuseTarget = hovered;
-  } else if (isAnnotation(dragged)) {
-    // A PINNED annotation MOVES FREELY over its own card: it's a remark placed against one card, so
-    // dragging it about is how you position it, and passing over a neighbouring card on the way must
-    // not silently hand it to that card. What frees it is the distance RIP — the same threshold that
-    // already previews "about to become a root" (distanceRip / updateRip above, and why an annotation
-    // is exempt from the frame-bounds rip as well). PAST it, the gesture has clearly left the card it
-    // belongs to, so a card under the cursor is a re-pin: one drag to move a remark from one card to
-    // another, where it used to take two (out to the top level, then back onto the new one). Short of
-    // it, nothing is offered and the drop is a plain reposition.
-    // A ROOT annotation is ripped by definition — it's pinned to nothing, so landing it on a node is
-    // the only way it could ever acquire a parent.
-    // Either way it can't be reordered and never adopts siblings, so there's no sibling/reorder
-    // preview: the candidate parent is just highlighted (dashed ghost outline) below. And it lands
-    // exactly where it was dropped — dropLanding returns an annotation's own position.
-    if (hovered && (dragged.parent == null || distanceRip(dragged))) {
-      const hn = state.nodes.get(hovered)!;
-      // Never onto another annotation (it holds nothing), and never onto a LOCKED card — every other
-      // drop refuses one, and this branch runs ahead of the shared lock check below.
-      if (!isAnnotation(hn) && !isLockedEffective(hn)) { target = hovered; mode = 'child'; }
-    }
   } else if (hovered && isLockedEffective(state.nodes.get(hovered)!)) {
     // A locked card (or a locked descendant) is never a valid drop target — no child, sibling, or
     // reorder preview. `target` stays null, so the commit falls through to a plain reposition
@@ -1002,10 +980,8 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
         const sibParent = hoveredNode.parent;
         if (sibParent !== dragged.id && !sub.has(sibParent)) { target = hovered; mode = 'sibling'; }
       }
-      // Edge zone (or no valid sibling target) -> child-of-hovered. Image/annotation are leaves —
-      // they never adopt children, so they're not valid child-drop targets (sibling-mode above
-      // still is).
-      if (!target && !isLeafType(hoveredNode)) target = hovered;
+      // Edge zone (or no valid sibling target) -> child-of-hovered.
+      if (!target) target = hovered;
     }
   }
   // An inheriting card's colour depends on its parent chain (effectiveColor), and while poised
@@ -1035,11 +1011,6 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     // is the whole affordance for both, since neither is a reparent (`target` stayed null), so
     // there's no landing ghost or insertion bar to draw.
     state.nodes.get(fuseTarget)!.el?.classList.add('drop-merge');
-    hideLandingGhost();
-  } else if (target && isAnnotation(dragged)) {
-    // Annotation reparent: only a dashed ghost-colour outline on the candidate parent — no landing
-    // ghost and no insertion bar.
-    state.nodes.get(target)!.el?.classList.add('anno-drop-target');
     hideLandingGhost();
   } else if (target) {
     const targetNode = state.nodes.get(target)!;
@@ -1089,8 +1060,8 @@ function stackFirstRowSeg(n: MindNode): Seg {
   return { x0: n.x + STACK_PAD, y0: y, x1: n.x + nodeW(n) - STACK_PAD, y1: y };
 }
 function clearDropTarget(): void {
-  document.querySelectorAll('.node.drop-target, .node.drop-sibling, .node.anno-drop-target, .node.drop-merge')
-    .forEach(el => el.classList.remove('drop-target', 'drop-sibling', 'anno-drop-target', 'drop-merge'));
+  document.querySelectorAll('.node.drop-target, .node.drop-sibling, .node.drop-merge')
+    .forEach(el => el.classList.remove('drop-target', 'drop-sibling', 'drop-merge'));
 }
 // Mutates `child`'s parent + the new parent's kidOrder only — no layout/paint/status. Callers
 // batch layout/paint once for the whole dragged group (see dragPointerUp) rather than per root.

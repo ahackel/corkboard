@@ -89,8 +89,7 @@ function ringMid(n: MindNode): number {
 // bounds include that tab, which is a separate shape hanging above the box (elTop / FRAME_TAB_DROP),
 // so a port on the bounds' top edge would sit up on the tab — or in the empty gap beside it — rather
 // than on the box the edge is pointing at. elTop shifts nothing for everything else, a FOLDED frame
-// and a docked tab included: there the tab IS the body. Same reasoning as the annotation tethers'
-// anchor (view/edges.ts), and the one place the port geometry is spelled — portPoint, socketPoints
+// and a docked tab included: there the tab IS the body. And the one place the port geometry is spelled — portPoint, socketPoints
 // and nearestSide all read it, so a port, its ring and the side a drop picks can't disagree.
 function portRect(n: MindNode): { x: number; y: number; w: number; h: number } {
   const top = elTop(n, n.y);
@@ -399,11 +398,7 @@ export function edgeGeometry(e: BoardEdge): { a: Pt; b: Pt; d: string; pts: Pt[]
 // (utils/model.ts isHidden: a collapsed ancestor, or the open-frame scope). An edge whose other end
 // is inside a collapsed branch simply isn't there; nothing counts it, and the hidden-count chip on a
 // card keeps counting CARDS, which is the only thing a reader can go looking for.
-// Whether a node can be a free edge's endpoint at all. An ANNOTATION cannot: it is a note pinned to
-// one card and its single dashed tether to that card (view/edges.ts) is the whole of what it says.
-// Giving it ports as well would offer two different ways to attach the same sticky note, one of them
-// structural and one not — the exact confusion the containment model exists to remove. So an
-// annotation shows no rings, refuses a drop, and any edge already touching one stays hidden.
+// Whether a node can be a free edge's endpoint at all.
 export function connectable(id: string): boolean {
   const e = endOf(id);
   if (!e) return false;
@@ -412,7 +407,7 @@ export function connectable(id: string): boolean {
   // the canvas, so there is nothing left to draw a line TO. Four rings offering a connection the canvas
   // can't complete is worse than no rings — and this being the shared gate means the drop refuses it in
   // the same breath, so nothing can be dragged onto it either.
-  return e.n.type !== 'annotation' && !isReadingRoot(e.n);
+  return !isReadingRoot(e.n);
 }
 // Whether a junction is on screen — DERIVED from the edges', not a second gate of its own: a point is
 // only ever the place some lines meet, so it is visible exactly while one of them is (a collapsed
@@ -422,15 +417,12 @@ export function junctionShown(id: string): boolean {
   return state.edges.some(e => (e.from === id || e.to === id) && edgeVisible(e));
 }
 export function edgeVisible(e: BoardEdge): boolean {
-  // An annotation is never a free edge's endpoint (connectable, just above), so an edge that
-  // touches one is a leftover — from before that rule, or from a card RETYPED into an annotation.
-  // Hiding it is what makes "an annotation has exactly one line, to its parent" true on every map.
   // A JUNCTION end passes on its own: it exists or it doesn't (there is no fold to be inside of, and
   // the open-frame scope is about cards). Resolved ONCE per end — asking endOf and then connectable
   // would put the same id through the same lookup twice.
   const shown = (id: string): boolean => {
     const x = endOf(id);
-    return !!x && (!!x.j || (!isHidden(x.n) && x.n.type !== 'annotation'));
+    return !!x && (!!x.j || !isHidden(x.n));
   };
   return shown(e.from) && shown(e.to);
 }

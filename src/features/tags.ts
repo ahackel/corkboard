@@ -6,7 +6,7 @@
 // opening the shared MRU popover (features/emoji-picker.ts). This module owns the mutation
 // (setTagOnNodes), the shared pill markup, and the card-rendered row's own click-to-remove / add
 // wiring.
-import { state, setStatus, isAnnotation, type MindNode } from '../core/state.js';
+import { state, setStatus, type MindNode } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -25,14 +25,12 @@ export function tagPillHTML(tag: string, extraAttrs = ''): string {
 
 // ---- shared "add/remove tag on a set of node ids" mutation — the one path both the emoji picker
 // and the card's own pill click funnel through, so the two always produce identical results. Skips
-// locked nodes (like every other per-card mutation, e.g. properties.ts's colour swatch) and
-// annotations — a title-less pinned note has no room for a tag row and can never carry emoji, so a
-// multi-card "add emoji" that happens to include one just leaves it untouched rather than erroring. ----
+// locked nodes (like every other per-card mutation, e.g. properties.ts's colour swatch). ----
 export function setTagOnNodes(ids: string[], tag: string, on: boolean): void {
   if (state.readOnly) return;
   const targets = ids.filter(id => {
     const n = state.nodes.get(id);
-    return !!n && !isLockedEffective(n) && !isAnnotation(n);
+    return !!n && !isLockedEffective(n);
   });
   if (!targets.length) return;
   record(targets, () => {

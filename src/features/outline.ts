@@ -11,7 +11,7 @@
 // mm_collapsed, so jumping around the tree doesn't silently expand/save a pile of ancestors. All
 // edits reuse the existing kernels (crud / drag reparent / history), so undo, autosave and
 // read-only behave the same as on the canvas.
-import { state, setStatus, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
+import { state, setStatus, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { nodeLabel, childrenOf, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, ancestors } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
@@ -98,13 +98,13 @@ function endRowTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   renderOutline();                                      // restore the canonical (plain-text) row
 }
 
-// The outline's TOP LEVEL, in its canonical order, less annotations (which the outline never lists).
+// The outline's TOP LEVEL, in its canonical order.
 // Normally that's the map's roots (rootsInOrder). While a frame is OPEN, it's that frame's own
 // children instead — the outline shows what the canvas shows, so the two agree about where you are,
 // and dropping a row beside a top row means "put it here" rather than "throw it out of the frame"
 // (makeRoot reads the same rule via detachParentId).
 function sortedRoots(exclude?: string): MindNode[] {
-  const keep = (n: MindNode): boolean => n.id !== exclude && !isAnnotation(n);
+  const keep = (n: MindNode): boolean => n.id !== exclude;
   const open = scopeRootNode();
   if (!open) return rootsInOrder(keep);
   return orderedKids(open, childrenOf(open.id).filter(n => !isHidden(n) && keep(n)));
@@ -168,7 +168,7 @@ function matchesOutlineQuery(n: MindNode, q: string): boolean {
 function outlineSearchVisible(q: string): Set<string> {
   const visible = new Set<string>();
   for (const n of state.nodes.values()) {
-    if (isAnnotation(n) || !matchesOutlineQuery(n, q)) continue;
+    if (!matchesOutlineQuery(n, q)) continue;
     visible.add(n.id);
     for (const p of ancestors(n)) visible.add(p.id);
   }
@@ -262,7 +262,7 @@ export function renderOutline(): void {
 }
 function walk(n: MindNode, depth: number, visible: Set<string> | null): void {
   if (visible && !visible.has(n.id)) return;
-  const kids = childrenOf(n.id).filter(k => !isAnnotation(k));   // annotations aren't listed in the outliner
+  const kids = childrenOf(n.id);
   rowsEl.appendChild(rowFor(n, depth, kids, !!visible));
   if (visible ? false : isFolded(n)) return;
   for (const k of orderedKids(n, kids)) walk(k, depth + 1, visible);
@@ -272,7 +272,7 @@ function walk(n: MindNode, depth: number, visible: Set<string> | null): void {
 const ROW_CONTROLS = '.ol-done, .ol-open, .ol-more, .ol-chip';
 // Which face the row's corner bubble wears — the outliner's counterpart of paintNode's chipFace, and
 // deliberately its own (simpler) predicate: a row lists a TITLE, never a body, so only children make
-// one foldable, and none of the canvas' kind cases (annotation / image / tab group) survive
+// one foldable, and none of the canvas' kind cases (image / tab group) survive
 // into a flat list. Same two faces and the same lock rule, though:
 //   'count' — folded: the "+N" that's tucked underneath. Shown even on a locked row: information.
 //   'fold'  — open and collapsible: the chevron, revealed on hover or while SELECTED (styles.css).
@@ -420,14 +420,11 @@ outlineScrollEl.addEventListener('click', (e) => {
 const olAddBtn = byId<HTMLButtonElement>('olAddBtn');
 const olAddPlus = olAddBtn.querySelector('.ol-add-plus') as HTMLElement;
 function searchIsActive(): boolean { return document.activeElement === olSearchInput || !!outlineQuery; }
-// The card a new one goes UNDER, or null for "make it a root". A LEAF kind can never hold children,
-// so it counts as no target rather than making the button do nothing (only reachable when the
-// selection was made on the canvas — the outliner lists no annotations, and images/queries are
-// leaves too). A LOCKED card deliberately stays the target: addChild refuses it with a status, which
+// The card a new one goes UNDER, or null for "make it a root". A LOCKED card deliberately stays the target: addChild refuses it with a status, which
 // is the honest answer — quietly dropping a root card somewhere else instead would not be.
 function addTarget(): MindNode | null {
   const n = state.selId ? state.nodes.get(state.selId) : null;
-  return n && !isLeafType(n) ? n : null;
+  return n ?? null;
 }
 function updateAddBtnMode(): void {
   const active = searchIsActive();

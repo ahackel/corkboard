@@ -98,7 +98,8 @@ keep that property when touching `parseFM`/`fmSet`/`fmRemove`.
 
 **A node's KIND is `mm_type`; its child ARRANGEMENT is `mm_layout`** — two axes, both resolved by
 `foldTypeLayout`, which also folds legacy spellings so old vaults keep loading. Kinds: `card` (default,
-omitted), `frame`, `stack`, `annotation`, `query`. Only card and frame carry a layout (card:
+omitted) and `frame`; `stack`, `image`, `annotation` and `query` are retired and fold to `card` (the last
+two were cut — docs/PRODUCT.md). Only card and frame carry a layout (card:
 `inherit`/`free`/`line`/`fan`; frame: `free`/`horizontal`/`vertical`/`tabs`); the rest never write
 `mm_layout`. The pickers in `features/float-bar.ts` are driven by `NODE_TYPES` + `LAYOUTS_BY_TYPE`; a kind
 with an empty layout set hides the layout trigger entirely.
@@ -195,22 +196,6 @@ frame, a folded group's pill. Four knock-ons:
   wrapper by `frameContentEl`), so a tab's straight left side meets the box flush. An untabbed frame is
   rounded all round like every other box.
 
-**An annotation RE-PINS in one drag, once it's past the rip threshold.** Over its own card it moves
-freely — a remark is positioned by dragging, so passing over a neighbour must not silently hand it over —
-but the distance RIP (`distanceRip`, the same threshold that already previews "about to become a root")
-means the gesture has clearly left the card it belongs to. Past it, a card under the cursor is a re-pin:
-one drag to move a remark from one card to another, where it used to take two (out to the top level, then
-back in). A ROOT annotation is ripped by definition, which is why the two cases now read as one condition.
-It lands exactly where it was dropped — `dropLanding` returns an annotation's own position rather than a
-spot computed off the target, which for a remark would fling it below the card you aimed at — and a LOCKED
-target refuses it, as every other drop does (this branch runs ahead of the shared lock check).
-
-An ANNOTATION pinned to a frame anchors on the BOX, never the tab: its connector runs to the closest point
-on the parent, and that clamp takes its top edge from `elTop` rather than the bounds (`view/edges.ts`) — the
-tab is a separate shape hanging above the box, half the strip beside it isn't drawn at all, and a dot parked
-up there reads as pointing at nothing. `elTop` is 0 for every other kind, a FOLDED frame and a docked tab
-included, where the tab IS the body.
-
 Two more consequences: the tab must stay a single ellipsised line (a wrapping one would make the box's
 position depend on a live measurement — hence the hover tooltip in `paintNode`), and the vertical projection
 of a hosted child into its host goes through `frameInsetY` rather than a bare `FRAME_BORDER` —
@@ -237,13 +222,8 @@ a card, or a stack demoted to a row inside another stack).
 ## Stacks
 
 **A checklist's "n/m" counts the children that CAN be ticked** (`checklistProgress` in `main.ts`) — not
-`childrenOf().length`. An ANNOTATION never gets a checkbox: `showsDoneCheckbox` refuses it and the float bar
-hides the toggle for the same reason (a title-less leaf that can never have children has no subtree to check
-off), and the outliner leaves it out of its rows too. Counting one anyway left a card holding one real item
-and one margin note reading "1/2" for ever, with nothing on screen to tick it down to "2/2". The count runs
-THROUGH `showsDoneCheckbox` rather than a private `!isAnnotation`, so the readout is drawn from exactly the
-set of boxes that exist; null when nothing can be ticked, which also covers a checklist whose only child is
-an annotation. One spelling, because the canvas card and the outline row both show it (`features/outline.ts`).
+`childrenOf().length`. The count runs THROUGH `showsDoneCheckbox`, so the readout is drawn from exactly the
+set of boxes that exist; null when nothing can be ticked. One spelling, because the canvas card and the outline row both show it (`features/outline.ts`).
 
 **A `stack` is an OUTLINER**, and the second container kind besides `frame`. It renders its whole subtree as
 one indented, full-width column inside a box that is **width-resizable** (`n.w`, defaulting to `STACK_W` =
@@ -265,11 +245,8 @@ picks the DEPTH there — so a straight drag only re-slots and nesting takes a d
   so there's nothing to outline; only containers become rows). As a row the stack gives them the width
   (`stackBoxRow`, `main.ts`), so a 600px photo dropped into a 420px stack fits the outline instead of
   hanging out of it, and comes back out at its own width when dragged clear. The HEIGHT stays each kind's
-  own business: an image row derives it from the picture's ratio (`boxAspect`), a query row keeps the one
-  it authors. Two knock-ons in the same spirit:
-  - **A row offers only the handles it actually authors.** An image row gets none; a query row gets the
-    SOUTH edge alone — dragging the top would move a `y` the outline owns and re-places on the next pass,
-    which reads as the box snapping back.
+  own business: an image row derives it from the picture's ratio (`boxAspect`). Two knock-ons in the same spirit:
+  - **A row offers only the handles it actually authors.** An image row gets none.
   - **A resize must not write a width it was given.** `startNodeResize` wrote `n.x`/`n.w` unconditionally,
     so a south-edge drag — which moves no horizontal edge at all — still replaced an authored width with
     the row's the moment you made the box taller. It's gated on the same `stackBoxRow` question now.
@@ -358,8 +335,7 @@ last term and re-slotting a tab — a gesture that doesn't change the box at all
 sideways. A docked frame's own `mm_w`/`mm_h` are never touched, which lets it come back out at the size it
 went in at. A group left with no children dissolves. What may become a tab is `canBeTab`: a frame, or a plain
 CARD, which `dockFrames` turns into a frame on the way in (`asFrame`). Other kinds fall through to the
-ordinary drop and land in the box as content — an annotation holds nothing, and a stack/query is a box whose
-own shape IS the point. An image card goes in as an ordinary card would (`asFrame` makes it a frame, whose
+ordinary drop and land in the box as content — a stack is a box whose own shape IS the point. An image card goes in as an ordinary card would (`asFrame` makes it a frame, whose
 body is never drawn — so the picture is out of sight while it serves as a tab, and back when it isn't).
 
 ## Open frames (scope)
@@ -491,8 +467,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   re-points the stack by FILE before the first layout — deliberately not cleared like the undo history, since a
   background refocus reload must not kick you out of the frame you're working in.
 - **The mechanism is kind-agnostic:** `canOpen` is the one kind test — widen it there, never at a call site.
-  Frames and CARDS are in (see below); an ANNOTATION has no interior,
-  so it doesn't open. Opening a tab GROUP opens its OPEN TAB and the crumbs skip the group.
+  Frames and CARDS are in (see below). Opening a tab GROUP opens its OPEN TAB and the crumbs skip the group.
 
 **An OPENED CARD is its note** (`features/reading.ts`, `.node.reading-root`, `isReadingRoot` in
 `nav/scope.ts`) — the other half of "you can open things". A frame's interior is the CANVAS; a card's
@@ -528,10 +503,9 @@ text at all.
 - **All of it is measured ONCE per paint, into a band** (`refreshReadingBand`/`readingBand` in
   `view/camera.ts`, refreshed from `syncScopeChrome` and on a resize). The window's size, the strip's width
   and the card's own measured height are invariant for a whole pass, while `applyView` runs per pan frame
-  and `paintPos` two to four times per node — reading them there put an `offsetHeight` per frame and an
-  `innerWidth` per annotation *inside* the paint loop's own style writes, which is a forced reflow each
-  time. The band also carries `worldLeft` (the window's left edge in world coordinates), so the camera
-  clamp and the annotation shift share the one derivation instead of computing it in two files.
+  and `paintPos` two to four times per node — reading them there put an `offsetHeight` per frame
+  *inside* the paint loop's own style writes, which is a forced reflow each time. The band also carries
+  `worldLeft` (the window's left edge in world coordinates).
 - **"Fixed position and zoom" is the CAMERA, clamped in one place.** `clampReadingView` in `view/camera.ts`
   pins `k` to 1 and `x` so the strip stays centred; `y` is left free, and vertical panning IS the scroll.
   It sits at the top of `applyView` because that is the single place every pan/zoom path ends up — wheel,
@@ -567,12 +541,6 @@ text at all.
 - **A resize re-runs the LAYOUT, not just the camera.** `readingWidth()` follows the window, so the box, its
   rows and the centring all change with it — the resize handler calls `relayout()` + `applyView()`
   immediately for a read card rather than debouncing `refreshScopeRect` the way an open frame does.
-- **Annotations are pulled inside the window, derived** (`readingShiftX`). A margin note placed against a
-  900px card on the board is off the side of a 680px strip. Its x is shifted at PAINT time only —
-  `mm_position_x` is untouched, so leaving puts every note back where it was authored. Computed from the
-  strip's world position rather than from `state.view.x`, so a paint during the opening glide clamps against
-  the same window the camera is about to show. `view/edges.ts` reads the same function for the tether's
-  start, or the line would point off-screen; hit-testing still uses the authored x, which is the one seam.
 - **A read card has NO HOST, and this one is a trap.** `hostFrame` returns null for it. Every container
   above it is out of scope, hidden, and has already had its content wrapper dropped by `paintNode` — and a
   node whose host wrapper is gone rides along DETACHED with it. Without the guard, opening a card that lives
@@ -613,16 +581,14 @@ text at all.
 dragging its left/right edge, and `n.w` (→ `mm_w`) is that dragged width and nothing else — never a value a
 layout pass computed. Two axes' worth of handles come off that split (`ensureResizeHandles`, `main.ts`):
 
-- `frame`/`query` are **2D boxes** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
+- `frame` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
   `isBoxType`). For a **frame** these are its BOUNDS, i.e. they include the title tab: `mm_position_y` is the
   tab's top edge and the box starts `FRAME_TAB_DROP` lower.
 - An **IMAGE card** is the third, and the one that isn't a kind: see below.
-- `card`/`annotation`/`stack` are **width-only** — 2 side zones (`EW_DIRS`), and their height is never
-  authored, written inline or persisted: a card/annotation measures it from its content (`nodeH` →
+- `card`/`stack` are **width-only** — 2 side zones (`EW_DIRS`), and their height is never
+  authored, written inline or persisted: a card measures it from its content (`nodeH` →
   `offsetHeight`) and a stack derives it from its outline. Minimum width is the kind's own natural width, so a
   card only ever gets *wider*; drag back to it and `n.w` is dropped rather than persisting a redundant `mm_w`.
-  An annotation is the exception that can also be narrowed — it shrink-wraps its text, so it has no fixed
-  natural width, and it's measured with the authored sizing stripped.
 
 **A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
 in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
@@ -676,9 +642,7 @@ other follows and the picture never distorts or crops. Four things follow:
   taken that wrong ratio into its aspect-locked resize.
 
 Widening a width-only node changes its measured height as text re-wraps, so the resize gesture paints *then*
-re-lays-out on every frame (the same paint-before-measure rule as `prepRow`), and any **annotation** attached
-to it is latched to the nearer border on each axis at pointerdown and rides that edge — including the bottom
-edge, which moves on its own as the card re-wraps.
+re-lays-out on every frame (the same paint-before-measure rule as `prepRow`).
 
 ## Storage and boot
 
@@ -812,8 +776,7 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
   nothing but the `data-chip` it writes (`'count'`/`'fold'`/absent), and *no per-kind rule may hide the
   bubble*: `.node[data-chip="fold"]:hover:not(:has(.node:hover))` out-specifies any plain class selector, so a
   rule like `.node.locked > .hidden-count { display:none }` silently loses on hover. Anything that shouldn't
-  offer the button is refused in `chipFace` instead — annotations (an annotation IS its body, so folding
-  leaves an empty shell) and **locked** nodes (`toggleCollapse` refuses them, so the
+  offer the button is refused in `chipFace` instead — **locked** nodes (`toggleCollapse` refuses them, so the
   control would do nothing; their folded *count* still shows, being information rather than a control). A
   frame's/stack's own body is never rendered, so only children make one collapsible.
 - **Both faces live in the button permanently** (`nodeEl` bakes the chevron in beside a `.cnt` span) and
@@ -843,7 +806,7 @@ double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers
 the exemption `openFrame` itself takes: looking inside something isn't changing it.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
 `.title-row` (a card's title row, a frame's folder tab, a docked tab's whole label) renames via
-`startInlineEdit` — the single rename funnel, so the tab-group/annotation/query redirects, the CONTAINER
+`startInlineEdit` — the single rename funnel, so the tab-group redirect, the CONTAINER
 hand-off and the lock refusal come for free; anything else
 on a card edits its note (on a card those two are the same editor with the caret in a different place). A
 FRAME's interior gets a new card WHERE YOU POINTED (`addChild`, which routes a group to its open tab, refuses
@@ -862,7 +825,7 @@ that frame (`detachParentId`). Four things hold it together:
   On touch it's worse, since each ancestor keeps its OWN tap counter. A container's children are exempt by
   construction — they live in its sibling `.frame-content` / `.tab-strip` wrapper, not inside its element.
 - **`NODE_CONTROLS`** (`main.ts`) is the one list of things that act on a SINGLE click — chip, checkboxes,
-  links, `.addnote`, query input, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
+  links, `.addnote`, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
   counter bail on it, or the second click would fire the button AND open the card.
 - **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on it
   renames — otherwise a double-click would open an editor inside a hidden `.body`.
@@ -893,11 +856,8 @@ delete, a break is a body edit plus a create.
   `mergeCardsInto` in `crud.ts`). The card you dropped ONTO survives — its id, file, colour, size and flags —
   and each dragged note folds into its body as `## Title` then its text, in selection order. Tags are unioned
   in; their CHILDREN come up onto the target rather than going with them, since merging notes must never take
-  a branch with it. `canMerge` is the ONE kind test and answers for both sides: a plain card or an annotation
-  (which contributes text and no heading, and takes none either). Every other kind is a box or a leaf whose
-  shape is the point. Merging INTO an annotation needs its own line (`kidHome`): an annotation is a LEAF
-  (`isLeafType`, it never adopts children), so the swallowed cards' children go to the card that annotation is
-  PINNED to, or the top level.
+  a branch with it. `canMerge` is the ONE kind test and answers for both sides: a plain card. Every other kind
+  is a box whose shape is the point.
 - **⌥ is affordable here** because the modifier's ordinary (detach to root) applies when there's nothing valid under the cursor, so nothing was displaced —
   plain drag still reparents, ⇧ clones, ⌘ toggles the selection. The centre/edge zones on a card were already
   spoken for (sibling/child), which is why this needs a modifier at all. One knock-on: `paintDetachPreview` (⌥
@@ -905,7 +865,7 @@ delete, a break is a body edit plus a create.
   next mouse jiggle.
 - **Dragging a card's selected text OUT of its editor BREAKS it apart** (`features/text-drag.ts` →
   `dropCardText`), after Heptabase's whiteboard gesture: drop it on empty canvas and it becomes a card of its
-  own, in a container and it becomes a card THERE, on another card (or an annotation) and it's appended to that
+  own, in a container and it becomes a card THERE, on another card and it's appended to that
   note. Always a MOVE — the text leaves the source, whose editor is DROPPED rather than ended, since
   `endBodyEdit` would write the editor's stale value back over what was just cut. `TextSource`
   (`{id, start, end}`) is the range, captured at `dragstart` and read back live at the drop (`liveText`), since
@@ -991,7 +951,7 @@ stays put.
 **ONE card palette for both themes.** `body.light` overrides no `--pal-*` value, so a card is the same colour
 wherever the map is opened — and therefore has one ink, decided by the colour itself. `refreshPalette` still
 re-reads on a theme toggle (a no-op now, kept so a future per-theme colour would work) and still repaints,
-because what *does* differ per theme is `effectiveColor`'s fallback for an uncoloured card / an annotation, plus
+because what *does* differ per theme is `effectiveColor`'s fallback for an uncoloured card, plus
 `c-none`'s ink.
 
 **A card's text colour is DERIVED from its fill, never authored.** The palette hexes are the `--pal-*` custom
@@ -1001,11 +961,11 @@ computed: `utils/ink.ts` measures WCAG contrast and `main.ts`'s `deriveInk` inje
 (its text colour) and **`--scrim`** (what an in-place editor paints *behind* that ink). Four rules follow:
 
 - **No rule anywhere may name a colour key to fix its text.** One `color: var(--ink)` per surface that wears a
-  `.c-*` class (`.node`, `.query-item`, `.oc-card`, `.ol-row`) covers every colour in both themes — that
+  `.c-*` class (`.node`, `.oc-card`, `.ol-row`) covers every colour in both themes — that
   replaced four hand-maintained exception lists that all had to agree, and it's what lets an off-palette colour
   work with no new CSS.
 - **`--scrim` is paired with the ink, not fixed.** Every editor backdrop (`.title.editing`, `.body-edit`,
-  `.query-input`, `.oc-title:focus`, `.ol-title.editing`) uses it: a hardcoded dark scrim under dark ink is
+  `.oc-title:focus`, `.ol-title.editing`) uses it: a hardcoded dark scrim under dark ink is
   unreadable. Same reason the body's marks (`code`, `pre`, `blockquote`, `hr`, image placeholders) tint with
   `color-mix(… var(--ink) …)` instead of a literal white/black.
 - **Ink is a property of the CARD, not of the theme** — which is why the ink hexes are fixed and `body.light`
@@ -1022,8 +982,7 @@ computed: `utils/ink.ts` measures WCAG contrast and `main.ts`'s `deriveInk` inje
   none on a pale one (the light theme's default card is `#f2f4f7`, whose row came out flat). That the visible
   steps didn't change is structural: `INK_MIN` hands out dark ink only *below* its contrast floor, i.e. on
   exactly the fills too pale for a white step to show, so the two switch over together. Only plain cards take the
-  tint (`inFrame` refuses the rest) — a nested container already owns its tone, and an annotation never inherits
-  a colour to begin with.
+  tint (`inFrame` refuses the rest) — a nested container already owns its tone.
 
 The bias is deliberate: light ink is kept unless its contrast falls below `INK_MIN` (**2.5**) rather than always
 taking the higher contrast, and that one number serves both themes. It's pinned low enough that **every palette

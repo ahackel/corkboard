@@ -2,7 +2,7 @@
 // Every node is one .md file; ids are ephemeral (minted in mkNode). All create/duplicate paths go
 // through mkNode so the node schema stays in one place. Each mutation schedules a save. Re-parenting
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
-import { state, setStatus, isLeafType, isAnnotation, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, setStatus, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, isAncestor, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
@@ -54,7 +54,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   // No parent asked for means "the top level", and while a frame is OPEN its interior IS the top
   // level (detachParentId, nav/scope.ts) — a genuine root would land outside the scope and simply
   // vanish. That's what makes this ONE line cover every create path: the canvas double-click, Space,
-  // both "New card here" menus, an annotation with nothing selected, a paste, a dropped image.
+  // both "New card here" menus, a paste, a dropped image.
   const parentId = opts.parent ?? detachParentId();
   if (parentId) {
     const p = state.nodes.get(parentId);
@@ -66,7 +66,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     parent: parentId,
     // A fresh card is UNTITLED — it has no name until the first line of its text is a `# ` heading
     // (utils/frontmatter.ts splitHeading), and its file is slugged off that text instead. This is
-    // where "New Card 1" and the minted "Annotation 7" used to come from: both existed only so the
+    // where the minted "New Card 1" used to come from: it existed only so the
     // node had a unique filename, which is no longer the title's job.
     title: opts.title ?? '',
     color: opts.color ?? '',
@@ -81,15 +81,6 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   else commitStep();   // no rename session follows, so the create step ends here
   scheduleSave();
   return n;
-}
-// Create an annotation at (x,y). If a card is selected it becomes that card's child (the primary
-// selection anchor — as long as it can hold children); otherwise it's a root. Shared by the 'A'
-// shortcut and the "Create annotation here" context-menu entry.
-export function createAnnotationHere(x: number, y: number): MindNode | undefined {
-  const sel = state.selId ? state.nodes.get(state.selId) : null;
-  // an annotation can pin to anything EXCEPT another annotation (images included — you can annotate them)
-  const parent = sel && !isAnnotation(sel) ? sel.id : null;
-  return createNode({ x, y, type:'annotation', parent });
 }
 // Make a new unconnected node at (x,y) and render it, but DON'T select / rename / save yet — the
 // caller drives it (e.g. the ghost-card drag rides it under the cursor, then renames on drop or
@@ -184,7 +175,6 @@ export function addChild(parentId: string, at?: Pt): void {
   if (state.readOnly) return;
   const parent0 = state.nodes.get(parentId); if (!parent0) return;
   const parent = contentParent(parent0); parentId = parent.id;
-  if (isLeafType(parent)) return;   // image/annotation are leaves — they can't have children
   if (isLockedEffective(parent)) { setStatus('Locked — can’t add a child'); return; }
   touch(parentId);   // the reveal below (and a line/fan kidOrder change) belong to the create step
   if (parent.collapsed){ parent.collapsed = false; } // reveal so the new child is visible
@@ -362,13 +352,13 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
 }
 
 // ---------- merging cards into one ----------
-// What can FUSE with another note, on EITHER side of the gesture: a plain card or an annotation —
-// the two kinds whose whole content is a body (a card just also has a title above it). Every other
+// What can FUSE with another note, on EITHER side of the gesture: a plain card — the kind whose whole
+// content is a body (with a title above it). Every other
 // kind is a box or a leaf whose own shape is the point (a frame, a stack, an image),
 // so folding it into a body would throw away exactly what it is. One predicate rather than a
 // source/target pair, because the answer really is the same question both ways round.
 export const canMerge = (n: MindNode): boolean =>
-  (n.type === 'card' || n.type === 'annotation') && !isLockedEffective(n);
+  n.type === 'card' && !isLockedEffective(n);
 // ⌥-drop card(s) onto another card (features/drag.ts): fold each dragged note into the target's
 // body — `## Title` then its text, in the order they were selected — and let the now-redundant cards
 // go. The target is the card that SURVIVES, so it keeps its own id, file, colour, size and flags;
@@ -385,15 +375,14 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
     .filter((n): n is MindNode => !!n && n.id !== targetId && canMerge(n));
   if (!cards.length) return 0;
   touch(targetId);
-  // An annotation IS its body — it has no title worth a heading — so it contributes just its text. So
-  // does an UNTITLED card, for the same reason and by the same test: `n.title` is empty exactly when the
+  // An UNTITLED card contributes just its text: `n.title` is empty exactly when the
   // note carries no `# ` line, and inventing a heading here (from its first line, say) would put words
   // in the note that nobody wrote. A titled card contributes `## Title` — one level under the `# ` line
   // that is now the target's own title, which is what makes the merged note a correctly nested document.
   const section = (c: MindNode): string => {
     const body = (c.body || '').trim();
     const title = c.title.trim();
-    if (isAnnotation(c) || !title) return body;
+    if (!title) return body;
     return body ? `## ${title}\n\n${body}` : `## ${title}`;
   };
   appendToBody(target, cards.map(section).filter(Boolean).join('\n\n'));
@@ -401,11 +390,8 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
   for (const c of cards) for (const t of c.tags) tags.add(t);
   target.tags = [...tags];
   target.dirty = true;
-  // Where the swallowed cards' children land. Normally the target — but an ANNOTATION is a leaf
-  // (isLeafType: it never adopts children, and nothing would draw them), so a merge into one hands
-  // them to the card that annotation is pinned to instead, which is where they'd have gone had the
-  // annotation not been in the way. Pinned to nothing → the top level, i.e. the open frame.
-  const kidHome = isAnnotation(target) ? (target.parent ?? detachParentId()) : targetId;
+  // The swallowed cards' children land on the target.
+  const kidHome = targetId;
   // No kidOrder splice for the adopted children: orderedKids already slots a reparented-but-unlisted
   // child by position (same as deleteSelectionKeepChildren).
   for (const c of cards){

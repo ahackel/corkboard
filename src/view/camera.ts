@@ -67,16 +67,14 @@ const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; 
 export const READ_PAD_TOP = 56;
 const READ_PAD_BOTTOM = 24;
 
-// Everything the reading clamp and the annotation shift need, measured ONCE per paint instead of per
+// Everything the reading clamp needs, measured ONCE per paint instead of per
 // frame and per node. Every input is invariant for a whole pass — the window's size, the strip's
 // width, the card's own measured height — while `applyView` runs on every pan frame and `paintPos`
-// two to four times per node. Reading them there meant an offsetHeight per frame and an innerWidth
-// per annotation, i.e. a forced reflow interleaved with the paint loop's own style writes.
+// two to four times per node. Reading them there meant an offsetHeight per frame,
+// i.e. a forced reflow interleaved with the paint loop's own style writes.
 // A plain object rebuilt on demand rather than a closure: it holds five numbers, and nothing else
 // should be able to keep the node it was measured from alive.
-// `worldLeft` is the window's left edge in WORLD coordinates — the one derivation both consumers
-// want, so neither has to reach for the root node again (and the annotation shift can't trip over a
-// scope that has just been left while the band it was measured with is still here).
+// `worldLeft` is the window's left edge in WORLD coordinates.
 export interface ReadingBand { left: number; worldLeft: number; width: number; vw: number; vh: number; top: number; h: number }
 let band: ReadingBand | null = null;
 // Called from the paint (syncScopeChrome) and on a resize — the two moments any of it can change.
