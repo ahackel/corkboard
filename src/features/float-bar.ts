@@ -17,6 +17,7 @@ import { settleFrames } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
 import { pasteFromClipboard } from './attachments.js';
+import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
@@ -28,6 +29,7 @@ const bar = byId('floatBar');
 const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbColorDot = byId('fbColorDot');
 const fbLock = byId<HTMLButtonElement>('fbLock');
+const fbTidy = byId<HTMLButtonElement>('fbTidy');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbMore = byId<HTMLButtonElement>('fbMore');
@@ -151,6 +153,7 @@ export function groupSelectionIntoFrame(): void {
 // ⤢ go IN: shown only when the selection can be opened (canOpenSelection below).
 function markOpen(): void {
   fbOpen.style.display = canOpenSelection() ? '' : 'none';
+  fbTidy.style.display = canTidy() ? '' : 'none';
   const n = anchorNode();
   const oneFrame = state.sel.size === 1 && n?.type === 'frame';
   fbTitle.style.display = oneFrame ? '' : 'none';
@@ -309,6 +312,13 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   }
   return entries;
 }
+// ▦ — several selected: Tidy up, align, distribute, same width (features/tidy.ts)
+fbTidy.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closePopovers();
+  const r = fbTidy.getBoundingClientRect();
+  openMenu(tidyMenuEntries(), r.left, r.bottom + 8);
+});
 fbMore.addEventListener('click', (e) => {
   e.stopPropagation();
   const id = state.selId; const n = id ? state.nodes.get(id) : undefined;
@@ -357,9 +367,25 @@ function labelRect(n: MindNode): DOMRect {
 function positionBar(): boolean {
   if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return true; }   // CSS docks it to the bottom
   const n = anchorNode(); const el = n?.el; if (!n || !el) return false;
-  const r = el.getBoundingClientRect();
+  let r: DOMRect | { left: number; top: number; right: number; bottom: number; width: number; height: number } = el.getBoundingClientRect();
   if (!r.width && !r.height) return false;   // hidden (display:none) — nothing to hang off
-  const lr = labelRect(n);
+  let lr: { left: number; top: number; width: number } = labelRect(n);
+  // Several selected: over the WHOLE selection (labels included), centred on it — FigJam's — so the
+  // bar never sits on one of the cards it acts on.
+  if (state.sel.size > 1) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const id of state.sel) {
+      const m = state.nodes.get(id); if (!m?.el) continue;
+      for (const b of [m.el.getBoundingClientRect(), labelRect(m)]) {
+        if (!b.width && !b.height) continue;
+        x0 = Math.min(x0, b.left); y0 = Math.min(y0, b.top); x1 = Math.max(x1, b.right); y1 = Math.max(y1, b.bottom);
+      }
+    }
+    if (isFinite(x0)) {
+      r = { left: x0, top: y0, right: x1, bottom: y1, width: x1 - x0, height: y1 - y0 };
+      lr = { left: x0, top: y0, width: x1 - x0 };
+    }
+  }
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   const left = lr.left + lr.width / 2 - bw / 2;
   // Over whichever is higher, the box or its label: a frame's label hangs ABOVE its box (outside its

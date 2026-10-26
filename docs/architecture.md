@@ -844,6 +844,17 @@ the bar's full height with 6px either side; the colour dropdown is flat until ho
 face then a grey chevron (`chevron()` in view/icons.ts for faces rebuilt in JS) — the colour dots, ⋯,
 the edge bar's line style (a Solid/Dashed popover, `ebDashPop`) and ends, the dock's canvas colour and grid.
 
+**Tidy-up runs only when asked** (docs/PRODUCT.md, principle 2): the float bar's ▦ dropdown (shown for two
+or more selected), ⌘K, and FigJam's shortcuts (`⌃⌥T` tidy, `⌥A/H/D/W/V/S` align, `⌃⌥H/V` space evenly —
+matched by `e.code`, since ⌥ rewrites letters on a Mac and Alt+D still reads `d` elsewhere). The geometry is
+pure (`utils/tidy.ts`, pinned by tests/tidy.test.ts); `features/tidy.ts` applies it to the top-level
+selected nodes (a frame carries its cards) as one undo step with the reflow glide. **Tidy up** reads the rows
+the selection already forms (`rowsOf`: a box joins the row above when it overlaps it vertically at all and
+shares no column with a box in it — so a messy column stays a column, a drifting row a row) and lays them
+out as a grid: columns as wide as their widest box, `SPACING` gaps, from the selection's snapped top-left,
+order kept. A frame's box counts its label. With several selected, the float bar sits above the whole
+selection, not over one card of it.
+
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
 board's canvas colour and grid, and ⌘K, in groups split by hairlines. Its buttons are ordinary
 `.floating-btn`s that drop their own chrome inside it, and every popover/menu they open is placed from the

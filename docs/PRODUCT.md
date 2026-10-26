@@ -49,7 +49,7 @@ What it has been used for, and what it must stay good at:
 ## Features
 
 **Core — keep, and make each feel great:** cards with Markdown, free placement, frames to group
-cards, colour and tags, simple lines between cards, search, undo, pasted images, a pasted list
+cards, colour and tags, simple lines between cards, tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
 becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
 card or frame to work inside it, and the ⌘K command palette — every action, with its shortcut, in
 one searchable list.
@@ -64,7 +64,7 @@ one searchable list.
   resize or draw the frame over it. A frame grows to hold what you drop into it, so nothing is hidden
   past its edge.
 
-**To build, in order:** tidy-up of a selection (only on request) · frame titles that grow readable when
+**To build, in order:** frame titles that grow readable when
 zoomed out · emoji tags presented as stamps · export a selection or board as PNG · phone inbox.
 
 **Cut — and why:**

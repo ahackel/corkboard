@@ -45,6 +45,7 @@ import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingA
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
+import { tidyShortcut, TIDY_ACTIONS } from './features/tidy.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
@@ -1024,7 +1025,8 @@ function layoutSnapshot(): Map<string, Pt> {
   for (const m of state.nodes.values()) if (m.el && !isHidden(m)) before.set(m.id, { x:m.x, y:m.y });
   return before;
 }
-// Run a structural change (a collapse toggle) and CSS-animate the resulting reflow.
+// Run a structural change (a collapse toggle, a tidy-up) and CSS-animate the resulting reflow.
+export function animateLayout(mutate: () => void): void { withLayoutAnimation(mutate); }
 function withLayoutAnimation(mutate: () => void): void {
   const before = layoutSnapshot();
   mutate();
@@ -1748,6 +1750,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (typing) return;
+  if (tidyShortcut(e)) return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
   // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
   if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey){
@@ -1898,6 +1901,8 @@ function paletteCommands(): Command[] {
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
+    ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
+      when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
     { label: 'Collapse all cards', keywords: 'fold every', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all cards', keywords: 'unfold every', when: () => foldScope().some(n => n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), false) },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
