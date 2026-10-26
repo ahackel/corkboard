@@ -62,7 +62,7 @@
   --r-ctl: 10px;    /* inputs, list rows, small controls */
   --r-full: 999px;  /* pills + fully round icon buttons */
 
-  /* every bar (#floatBar, .floating-btn, .oc-back) shares one icon-button
+  /* every bar (#floatBar, .floating-btn) shares one icon-button
      size — redefined below for coarse pointers, so every consumer picks up the bigger touch
      target automatically with no per-selector overrides. The layout popover's chips use this same
      scale (see .layoutchip below) so it's the same height as #floatBar itself; the colour popover's
@@ -126,8 +126,7 @@ body.light {
    fill's WCAG contrast and injects a --pal-ink-* plus --pal-scrim-* pair per key (utils/ink.ts) —
    so ink is a property of the CARD's colour, not of the theme and not of an enumerated exception
    list. That's why nothing below this line ever names a colour key to fix its text: one
-   `color: var(--ink)` on each surface that wears a .c-* class (.node, .oc-card,
-   .ol-row) replaces the four per-surface "which keys are exceptions" lists that used to have to
+   `color: var(--ink)` on each surface that wears a .c-* class (.node) replaces the four per-surface "which keys are exceptions" lists that used to have to
    agree with each other, and an off-palette colour gets legible text for free. */
 .c-slate  { --card:var(--pal-slate);  --ink:var(--pal-ink-slate);  --scrim:var(--pal-scrim-slate); }
 .c-red    { --card:var(--pal-red);    --ink:var(--pal-ink-red);    --scrim:var(--pal-scrim-red); }
@@ -225,8 +224,7 @@ button:disabled { opacity:.45; cursor:default; }
 .floating-btn:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, var(--panel)); }
 .floating-btn svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 /* canvas kebab — the ONLY thing in the top-right corner. Unlike them it stays
-   visible AND above the outliner at every width — z-index above #outline (21), mirroring #homeBar's
-   own exception on the opposite corner. Still below true modals (#ctxMenu/#startScreen/etc: z:40+). */
+   visible at every width. Still below true modals (#ctxMenu/#startScreen/etc: z:40+). */
 #canvasMenuBtn { top:calc(12px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:30; }
 /* …and it is a TOUCH affordance only. It exists because iOS Safari's synthesized contextmenu on the
    empty canvas is unreliable (see index.html), which a mouse never needs: a right-click on the canvas
@@ -235,10 +233,7 @@ button:disabled { opacity:.45; cursor:default; }
    which owns that corner while it is open). */
 @media (pointer: fine) { #canvasMenuBtn { display:none; } }
 /* home / storage — floating bar in the top-left; the loaded-folder name sits BESIDE the button.
-   z-index above #outline (21) and everything in its drawer — unlike #searchWrap (which
-   the outline drawer is meant to cover, see #outline's comment), the home button must stay
-   reachable/visible even while outline rows scroll past underneath it. Still below true modals
-   (#ctxMenu/#startScreen/#editorSheet: z:40+). */
+   Below true modals (#ctxMenu/#startScreen: z:40+). */
 /* ONE PILL: a single --panel capsule holding the home button and every path segment,
    all of them borderless and transparent until hovered. Not a capsule per segment — nothing else in
    the app looks like that, and a path is one thing. The pill also does real work now the canvas can be
@@ -302,8 +297,6 @@ body.scoped #scopeBar { display:flex; }
   #scopeBar > .sc-sep:first-child { display:none; }
   .sc-crumb { max-width:130px; }
 }
-/* …and follow #homeBar's own retreat while an outline row is being edited. */
-@media (max-width:700px){ body.ol-editing #scopeBar { display:none; } }
 /* find / jump-to-card — opened with / or from the palette, top centre. #searchClear stays visible
    unconditionally: empty, it closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
    field IS the bar (see #searchBox), not an inset box floating in one. */
@@ -1033,7 +1026,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
 /* inline title rename (double-click / F2 / on-create): edit the card's title in place.
    --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
-   as .oc-title/.oc-note in the outliner below, which take the same variable. */
+   as the card editor, which takes the same variable. */
 /* Only a CONTAINER's label is ever `.editing` now — a frame's folder tab, a stack's
    header (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
    is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
@@ -1289,7 +1282,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node .hidden-count.wide { width:auto; min-width:16px; padding:0 5px; }
 .node .hidden-count svg { width:11px; height:11px; display:block; }
 /* ── NUMERIC BADGES: centre the DIGITS, not the font's line box ────────────────────────────────
-   Every white pill that holds a number — this chip's "+N", the outline row's own .ol-chip, the grid-size
+   Every white pill that holds a number — this chip's "+N", the grid-size
    button — was centring its text with `align-items:center`, which centres the text's LINE BOX. That
    box reserves the font's full DESCENT under a "12" that has none, so the digits sat ~1px low in a
    16px pill and the badge read as sagging. Line-height is not the lever it looks like: grow the box
@@ -1301,7 +1294,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
    the block form for the other two (align-content centres a block's own line box, and neither of
    them holds an icon, so neither needed to be flex). .tag-pill is deliberately left out: an emoji
    has no cap height to trim to. Where text-box is unsupported a badge just keeps the old 1px sag. */
-.node .hidden-count .cnt, .ol-chip .cnt { text-box:trim-both cap alphabetic; }
+.node .hidden-count .cnt { text-box:trim-both cap alphabetic; }
 /* Both faces live in the button permanently (nodeEl bakes the chevron into the template, so paintNode
    never rewrites its innerHTML) — data-chip picks which one is visible, the same single switch that
    decides whether the button shows at all. */
@@ -1435,8 +1428,7 @@ body.readonly #canvasColorBtn { display:none; }
 
 /* emoji tag picker popover (features/emoji-picker.ts): a Slack-reaction-style grid of recent +
    curated + vault-wide emoji, opened off whichever ".tag-add-btn" triggered it — the selected
-   card's own bottom-left button on the canvas (main.ts), or the outline properties sheet's tag row
-   (properties.ts). Unlike the float bar's own colour/type/layout popovers (.fb-pop, fixed to the
+   card's own bottom-left button on the canvas (main.ts). Unlike the float bar's own colour/type/layout popovers (.fb-pop, fixed to the
    bar's own height) this one wraps to multiple rows, so it owns its own box rather than reusing
    that class. */
 #emojiPop {
@@ -1456,9 +1448,7 @@ body.readonly #canvasColorBtn { display:none; }
   background:var(--bg); border:1px solid var(--node-border); color:var(--text);
 }
 .emoji-input:focus { border-color:var(--accent); outline:none; }
-/* the outline properties sheet's tag row: existing pills (click to remove) + a trailing "+" that
-   opens #emojiPop — same shape as the canvas card's own .tag-row, just with the add button appended. */
-.tag-row-edit { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+/* the "+" that opens #emojiPop */
 .tag-add-btn {
   flex:none; width:20px; height:20px; padding:0; border:1px dashed var(--node-border);
   border-radius:var(--r-full); background:transparent; color:var(--muted); cursor:pointer;
@@ -1472,8 +1462,7 @@ body.readonly #canvasColorBtn { display:none; }
 /* ---- floating selection bar: a compact pill of icon buttons anchored next to the selected
    card (position set by features/float-bar.ts's rAF follow loop, tracking pan/zoom/drag) ---- */
 #floatBar {
-  position:fixed; top:0; left:0; z-index:20;   /* left/top overwritten per-frame in JS; BELOW #outline (21) —
-    the outline drawer covers it where they overlap, same as #homeBar/#searchWrap (also z:20) */
+  position:fixed; top:0; left:0; z-index:20;   /* left/top overwritten per-frame in JS */
   display:flex; align-items:center; gap:2px; padding:4px;
   background:var(--panel); border-radius:var(--r-full);
   opacity:0; pointer-events:none; transition:opacity .15s ease;
@@ -1589,8 +1578,7 @@ body.canvas-interacting .addnote { display:none !important; }
 .swatches { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
 /* the row break: a zero-height item that eats a whole flex line, so the wrap lands exactly here
    instead of wherever the container's width happens to run out. Needs the container to have a
-   DEFINITE width to resolve against — see #fbColorPop's .swatches below; in the outline's branch
-   sheet the row is block-width already. */
+   DEFINITE width to resolve against — see #fbColorPop's .swatches below. */
 .swatch-break { flex:0 0 100%; height:0; margin:0; }
 /* colour chips: a fixed size */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
@@ -1711,7 +1699,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 
 /* ---- coarse pointer (touch) : slightly larger hit targets than desktop ----
    Bar/icon-button sizing itself comes from --bar-btn/--bar-icon being redefined at :root above —
-   every bar (#floatBar, .floating-btn, .oc-back, .layoutchip) picks that up for free. */
+   every bar (#floatBar, .floating-btn, .layoutchip) picks that up for free. */
 @media (pointer: coarse) {
   #searchBox { height:calc(var(--bar-btn) + 10px); }
   .node .addnote { width:28px; height:28px; right:-14px; }
@@ -1723,7 +1711,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   .swatch { flex:none; width:22px; height:22px; }
   /* wrap so swatches never escape the sidebar on narrow panels */
   .swatches { flex-wrap:wrap; }
-  /* context-menu rows big enough for a finger (also used by the outline's ⋯ menu) */
+  /* context-menu rows big enough for a finger */
   #ctxMenu .cm-item { padding:10px 12px; font-size:14px; }
   /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
      border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
@@ -1752,355 +1740,6 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   #folderName { display:none; }
 }
 
-
-/* ---- outline mode: the map as a collapsible tree list (body.outline, toggled in
-   features/outline.ts). Rows render into #outline. Two treatments, split at the same 700px
-   breakpoint as the bottom-sheet panel:
-     · narrow (phone portrait, or any shrunk-narrow session) → full-screen; the canvas + its
-       chrome hide entirely (see the max-width:700px block below)
-     · wide  (desktop/tablet, or a phone rotated to landscape) → a drawer sliding in from the
-       right OVER a still-visible canvas, mirroring the storage sidebar's left drawer.
-   On a phone the mode itself is locked to orientation (features/outline.ts's phoneWantsOutline)
-   rather than user-toggled. */
-/* above #searchWrap (z:20): the drawer covers them where it overlaps, rather than the
-   app chrome floating over its edge. #homeBar is the one exception (z:30, see its own rule) —
-   the home button stays reachable even under the drawer / above scrolling outline rows. */
-#outline { position:fixed; z-index:21; }
-/* the ACTUAL scrolling box, filling #outline — kept separate so #ocBack/#olCloseBtn/#olAddBtn
-   (siblings, see index.html) can sit put at the panel's own edges without scrolling away with the
-   list (a position:absolute descendant of #outline that's ALSO the scroll container scrolls right
-   along with it — this is what bit #ocBack when it first lived inside here). */
-.ol-scroll { position:absolute; inset:0; overflow:hidden auto; -webkit-overflow-scrolling:touch; }
-/* Canvas tools are hidden in outline mode. The outliner is a drawer over a
-   still-visible canvas, so a card can stay selected there — the floating edit bar stays hidden
-   too since it would float over the drawer. Once open, #olCloseBtn
-   (the drawer's top-LEFT, sharing #ocBack's spot) is the way to close it. #canvasMenuBtn is the
-   deliberate exception (see its own z-index rule) — it must stay reachable from the outliner too. */
-body.outline #gridBtn, body.outline #paletteBtn,
-body.outline #canvasColorBtn,
-body.outline #floatBar { display:none !important; }
-
-/* Below the 700px breakpoint (MUST match NARROW_MQ), outline goes full-screen instead of a
-   drawer — there's no room to keep the canvas visible alongside it. This is reachable again on a
-   phone in portrait (features/outline.ts forces outline on there) and, as before, on any other
-   narrow-width session (e.g. a shrunk desktop window) that happens to have outline toggled on. */
-@media (max-width: 700px) {
-  /* nothing to act on behind a full-screen outline — hide the canvas and its chrome too */
-  body.outline #stage, body.outline #ghostCard, body.outline #ghostHint { display:none !important; }
-  /* fill the whole screen and inset the content from the top instead of parking the panel below
-     the header — so cards scroll UP UNDER the floating home / + buttons (iOS-style) rather than
-     being clipped at a fixed top edge. */
-  #outline { top:0; left:0; right:0; bottom:0; display:none; }
-  /* top clearance (for the floating home / + buttons) moves onto .ol-heading below instead of
-     living here as blank padding — the heading now occupies that reserved band. */
-  .ol-scroll { padding:0 calc(10px + var(--sa-r)) calc(80px + var(--sa-b)) calc(10px + var(--sa-l)); }
-  body.outline #outline { display:block; }
-}
-
-@media (min-width: 701px) {
-  /* full-height right drawer; parked off-screen (and click-through) until outline is active */
-  #outline { top:0; right:0; bottom:0; width:380px; max-width:90vw;
-    background:var(--panel); border-left:1px solid var(--grid);
-    box-shadow:-8px 0 24px rgba(0,0,0,.25);
-    transform:translateX(calc(100% + 30px)); transition:transform .22s ease;
-    pointer-events:none; }
-  /* top clearance (for #olCloseBtn) moves onto .ol-heading below instead of living here as blank
-     padding — the heading now occupies that reserved band. */
-  .ol-scroll { padding:0 calc(12px + var(--sa-r)) calc(16px + var(--sa-b)) 12px; }
-  body.outline #outline { transform:translateX(0); pointer-events:auto; }
-}
-@media (prefers-reduced-motion: reduce) { #outline { transition:none; } }
-
-/* ---- outline branch editor: this card + its siblings as full editable cards (features/
-   branch-editor.ts) ---- Rendered into #olCards inside the outline panel; body.ol-editing swaps
-   the row list for it INSTANTLY (no slide). Colour/tags/checklist live in the bottom
-   properties sheet (#branchProps); duplicate/delete stay in the row ⋯ menu. */
-.ol-cards { display:none; max-width:640px; margin:0 auto; }
-/* hide the row list while editing; the + button (in .ol-head) stays — it adds a card to the group */
-body.ol-editing .ol-rows { display:none; }
-body.ol-editing .ol-cards { display:flex; flex-direction:column; gap:12px; }
-/* #olScroll's own top padding was moved onto .ol-heading (see its comment) so the row list could
-   reuse that reserved band — but .ol-heading hides in THIS view, so the top card needs its own
-   clearance again here, for #ocBack / #olClose (both top-left, mutually exclusive), still floating
-   over this same band. Same numbers .ol-scroll used to carry for both views. */
-@media (max-width: 700px) { .ol-cards { padding-top:calc(58px + var(--sa-t)); } }
-@media (min-width: 701px) { .ol-cards { padding-top:60px; } }
-/* on a phone the branch editor is full-screen with its own back arrow (top-left) — the home button
-   would collide with it, so hide the home bar while editing here (desktop keeps it: the editor is
-   a right drawer, well clear of the top-left home button). */
-@media (max-width: 700px) { body.ol-editing #homeBar { display:none; } }
-/* back arrow — a persistent element (index.html), NOT inside .ol-scroll (see its comment above),
-   pinned to the panel's own top-left corner regardless of scroll; returns to the row view. Only
-   shown while the branch editor is open. */
-.oc-back { display:none; position:absolute; top:10px; left:12px; z-index:5;
-  width:var(--bar-btn); height:var(--bar-btn); padding:0;
-  align-items:center; justify-content:center;
-  border:none; border-radius:var(--r-full); background:var(--node); color:var(--text); cursor:pointer; }
-body.ol-editing .oc-back { display:inline-flex; }
-/* full-screen outliner → the panel's left edge IS the screen's, so clear a landscape cutout.
-   (In the wide drawer it's the drawer's own edge and needs nothing — see .ol-head's twin rule.) */
-@media (max-width: 700px) { .oc-back { left:calc(12px + var(--sa-l)); } }
-.oc-back:hover { background:color-mix(in srgb, var(--text) 8%, var(--node)); }
-.oc-back svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-/* each card looks like a canvas card: the palette tint AND the ink that goes with it, both via the
-   shared .c-* classes — exactly like .node / .ol-row, and with no per-colour text rules of its own
-   (see the .c-* block up top). c-none is the one that differs: an outline card isn't on the canvas,
-   so it fills with --node instead of going transparent. Its ink already follows the theme. */
-.oc-card { display:flex; flex-direction:column; gap:6px; padding:12px 14px;
-  border-radius:var(--r-card); background:var(--card, var(--node)); color:var(--ink); }
-.oc-card.c-none { background:var(--node); }
-/* title + note edit in place; transparent fields so the card's own tint shows through */
-.oc-title, .oc-note { width:100%; background:transparent; border:none; color:inherit;
-  font-family:inherit; padding:2px 4px; border-radius:var(--r-inner); }
-.oc-title { font-size:16px; font-weight:600; }
-/* editing a field darkens its background + shows an accent ring — the same treatment as the
-   in-card title/body editors on the canvas (.node .title.editing / .body-edit). */
-.oc-title:focus, .oc-note:focus { outline:2px solid var(--accent); outline-offset:1px;
-  background:var(--scrim); }
-.oc-note { resize:none; overflow:hidden; min-height:1.4em; line-height:1.5; font-size:13px;
-  opacity:.92; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
-.oc-note::placeholder { color:inherit; opacity:.5; }
-/* empty-note affordance: the same accent pill the canvas card shows (.node .addnote) */
-.oc-addnote { align-self:flex-start; height:22px; line-height:22px; padding:0 10px; border:none;
-  border-radius:11px; background:var(--accent); color:#fff; font-size:11px; font-weight:600; cursor:pointer; }
-.oc-addnote:hover { filter:brightness(1.08); }
-/* the branch card the properties sheet is currently targeting */
-.oc-card.active { box-shadow:0 0 0 2px var(--accent); }
-
-/* ---- branch-view properties sheet (features/branch-editor.ts + properties.ts) ----
-   Colour / tags / checklist for the active card. Kept OUTSIDE #outline so its
-   position:fixed pins to the VIEWPORT bottom (a fixed child of the transformed, scrolling drawer
-   rides the scroll instead of staying put). Phone → spans the screen bottom; desktop → aligned to
-   the outliner drawer (see the min-width:701 rule below). Parked below (translateY) until
-   body.branch-props-open; the handle drags it down to dismiss. Swatch/checkbox base styles are
-   shared with the canvas sidebar (.swatches / .swatch above). */
-#branchProps {
-  position:fixed; left:0; right:0; bottom:0; z-index:22;   /* above #outline (21) — it's the branch editor's own sheet */
-  display:flex; flex-direction:column; gap:10px;
-  padding:6px calc(16px + var(--sa-r)) calc(14px + var(--sa-b)) calc(16px + var(--sa-l));
-  background:var(--panel); border-top:1px solid var(--grid);
-  border-radius:var(--r-panel) var(--r-panel) 0 0;
-  box-shadow:0 -8px 28px rgba(0,0,0,.28);
-  transform:translateY(110%); transition:transform .2s ease;
-}
-/* desktop: sit within the outliner drawer (matches #outline's width/right in the min-width:701
-   block) instead of spanning the whole viewport. */
-@media (min-width: 701px) {
-  #branchProps { left:auto; right:0; width:380px; max-width:90vw;
-    border-left:1px solid var(--grid); }
-}
-body.branch-props-open #branchProps { transform:translateY(0); }
-#branchProps.bp-dragging { transition:none; }   /* track the finger while dragging the handle */
-@media (prefers-reduced-motion: reduce) { #branchProps { transition:none; } }
-/* grab handle: a centred pill (mirrors the phone edit-sheet handle) */
-#branchProps .bp-handle { align-self:center; flex:none; width:40px; height:5px; margin:2px 0 4px;
-  border:none; padding:0; border-radius:3px; background:var(--muted); opacity:.5;
-  cursor:grab; touch-action:none; }
-#branchProps .bp-handle:hover { opacity:.8; }
-#branchProps.bp-dragging .bp-handle { cursor:grabbing; }
-#branchProps .fgroup { display:flex; flex-direction:column; gap:6px; }
-#branchProps label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
-#branchProps .bp-toggles { display:flex; gap:16px; flex-wrap:wrap; }
-#branchProps label.checkbox-label { display:flex; align-items:center; gap:6px; cursor:pointer;
-  font-size:13px; color:var(--text); text-transform:none; letter-spacing:0; }
-#branchProps label.checkbox-label input[type="checkbox"] { width:14px; height:14px; margin:0; cursor:pointer; }
-#branchProps input[type="text"] { background:var(--bg); color:var(--text); border:none;
-  border-radius:var(--r-ctl); padding:8px 10px; font-size:13px; font-family:inherit; width:100%; }
-#branchProps input[type="text"]:focus { outline:none; box-shadow:0 0 0 2px var(--accent); }
-/* keep the tail of the card list reachable above the raised sheet */
-body.branch-props-open #olCards { padding-bottom:42vh; }
-/* scrolls away with the list — a plain sibling of #olRows inside #olScroll, not a sticky header.
-   padding-top reclaims the space #olScroll used to reserve (blank) for the floating home/close
-   buttons above it (see the two @media blocks above), so the heading fills a band that was
-   already there rather than pushing the first row further down. On wide screens that band is
-   shared with #olCloseBtn (top:10px, height:var(--bar-btn)) — line-height is set explicitly so
-   padding-top can be solved to put the text's vertical centre exactly on the button's, i.e. on
-   the same line at scrollTop 0: 10 + btn/2 = padding-top + line-height/2. */
-.ol-heading { max-width:640px; margin:0 auto; padding:0 6px 14px; font-size:16px; line-height:20px; font-weight:700; color:var(--text); }
-@media (max-width: 700px)  { .ol-heading { padding-top:calc(24px + var(--sa-t)); } }
-@media (min-width: 701px)  { .ol-heading { padding-top:16px; } }   /* centres on a 32px #olCloseBtn (fine-pointer --bar-btn) */
-body.ol-editing .ol-heading { display:none; }
-/* padding-top is the FIRST row's clearance for its corner bubble (.ol-chip hangs 8px above the row):
-   the reserved band above the list was sized for the row itself, and #canvasMenuBtn — the one
-   floating button that stays above the outliner at every width, top-right, i.e. exactly where the
-   bubble sits — was covering it, leaving the top row's fold button unclickable. Rows still scroll UP
-   under the floating buttons (iOS-style); this only clears the resting position. */
-.ol-rows { max-width:640px; margin:0 auto; padding-top:24px; }
-.ol-none { padding:10px 6px; font-size:13px; color:var(--muted); text-align:center; }
-/* Rows read like the canvas cards: same --card palette background (via the shared .c-* classes),
-   white text on coloured cards, theme-dependent text on none/white/grey — mirrors .node. */
-/* Content-hugging (no forced min-height) — a list row, not a full-size card. Vertical padding
-   sets the row's height (160% of the original compact pass); horizontal padding stays tight so
-   the title keeps most of the width. */
-/* position:relative so .ol-chip can straddle the top-right corner, like .node .hidden-count on
-   the canvas. margin-bottom is deliberately generous — the reorder insert line (.ol-insert) needs
-   real room in the gap between rows to read clearly, not squeeze in behind the row above/below. */
-.ol-row { display:flex; align-items:center; box-sizing:border-box; position:relative;
-  padding:8px 6px 8px 12px; margin-bottom:12px; cursor:grab;
-  border-radius:var(--r-card); background:var(--card, transparent); color:var(--ink); }
-body.readonly .ol-row { cursor:default; }   /* no drag-to-reorder in read-only */
-/* the same ring the canvas card wears (.node.sel) — a row is selectable now, and that selection IS
-   what reveals its fold chevron where there's no hover (see .ol-chip below). Kept off a row being
-   renamed, whose own outline says the same thing louder. */
-.ol-row.sel { box-shadow:0 0 0 2px var(--node-sel); }
-.ol-row.sel:has(.ol-title.editing) { box-shadow:none; }
-.ol-row.done .ol-title { text-decoration:line-through; opacity:.65; }
-.ol-row.flash { animation:ol-flash 1.2s ease-out; }
-@keyframes ol-flash {
-  0%, 55% { box-shadow:0 0 0 3px #fff; }
-  100%    { box-shadow:none; }
-}
-@media (prefers-reduced-motion: reduce) { .ol-row.flash { animation:none; } }
-/* the row being drag-reordered floats above its siblings and rides the pointer (transform) */
-.ol-row.ol-dragging { position:relative; z-index:10; opacity:.85; cursor:grabbing; }
-/* the row a dragged card would NEST under (middle-of-row hover) */
-.ol-row.ol-drop { box-shadow:0 0 0 2px var(--accent); }
-/* insertion indicator while drag-reordering — the SAME white dashed bar the canvas draws for a
-   reorder drop (see features/drag.ts showInsertLine): a div can't dash a background, so fake it
-   with a repeating gradient along the bar's long axis. */
-.ol-insert { position:fixed; height:3px; z-index:30; pointer-events:none;
-  background:repeating-linear-gradient(90deg, #fff 0 6px, transparent 6px 11px); }
-.ol-title { flex:1 1 auto; min-width:0; padding:2px 4px; margin:-2px -4px; font-size:14px; font-weight:600;
-  color:inherit; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:inherit; border-radius:4px; }
-body.readonly .ol-title { cursor:pointer; }   /* the only click-through left in read-only: view the note sheet */
-/* inline rename (⋯ menu → Rename, F2, or on-create) — same treatment as the canvas' .node .title.editing */
-.ol-title.editing { outline:2px solid var(--accent); outline-offset:0; cursor:text;
-  white-space:pre-wrap; overflow:visible; background:var(--scrim); }
-/* checklist item: the same donebox the canvas shows next to a checklist parent's children */
-.ol-done { -webkit-appearance:none; appearance:none; width:14px; height:14px; margin:0 5px 0 0;
-  border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
-.ol-done:checked { background:var(--accent); }
-.ol-done:checked::after { content:""; position:absolute; left:4px; top:1px; width:4px; height:8px;
-  border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
-/* checklist owner: this row's own "n/m" progress over its direct children — mirrors .node .progress */
-.ol-progress { flex:none; margin:0 4px; font-size:11px; font-weight:600; opacity:.7; }
-/* open the single-card editor (note / colour / tags / …) — a right-pointing chevron */
-.ol-open { flex:none; width:26px; height:32px; padding:0; border:0; border-radius:var(--r-ctl);
-  background:transparent; color:inherit; opacity:.5; display:flex; align-items:center; justify-content:center; cursor:pointer; }
-.ol-open svg { width:15px; height:15px; display:block; }
-.ol-open:hover { opacity:1; }
-body.readonly .ol-open { display:none; }
-/* The fold bubble — the canvas card's own corner control (.node .hidden-count), on a row: same spot,
-   same size, same two faces, same single-click behaviour. A perfect 16px circle for the chevron;
-   only the counting face opts into `.wide` and grows for its digits (`right` pins the right edge, so
-   growing leftwards never moves the corner). Digit centring comes from the numeric-badge rule up
-   next to .hidden-count. */
-.ol-chip { position:absolute; right:-8px; top:-8px;
-  box-sizing:border-box; width:16px; height:16px; padding:0;
-  -webkit-appearance:none; appearance:none; border:none; font-family:inherit;
-  background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
-  line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
-.ol-chip.wide { width:auto; min-width:16px; padding:0 5px; }
-.ol-chip svg { width:11px; height:11px; display:block; }
-/* WHICH face exists is decided in ONE place (features/outline.ts's rowChipFace, via data-chip),
-   exactly like the canvas'. The folded "+N" always shows; the chevron shows on hover, or while the
-   row is SELECTED — that second half is the whole touch story, since a phone has no hover: tap the
-   row, tap the bubble. No `:has(.node:hover)` guard needed here — rows are siblings, never nested. */
-.ol-row[data-chip="count"] > .ol-chip,
-.ol-row[data-chip="fold"]:hover > .ol-chip,
-.ol-row[data-chip="fold"].sel > .ol-chip { display:inline-flex; }
-/* READ-ONLY shows the chevron unconditionally — collapsing is the one thing the mode allows, and tapping a row there opens the note sheet over the list rather
-   than just selecting it, so "select, then press the bubble" isn't a route you can take. Nothing
-   competes for the space either: no drag, no rename, no ⋮/chevron buttons in this mode. */
-body.readonly .ol-row[data-chip="fold"] > .ol-chip { display:inline-flex; }
-/* mid-drag, and while the title is being renamed in place, the chevron is just noise (mirrors the
-   canvas' body.grabbing / .title.editing rules) — a folded row keeps its count, the only thing
-   showing what's tucked underneath. */
-.ol-row.ol-dragging[data-chip="fold"] > .ol-chip,
-.ol-row[data-chip="fold"]:has(.ol-title.editing) > .ol-chip { display:none; }
-/* locked row: the same padlock badge as the canvas card, upper-LEFT corner — mirrors .ol-chip. */
-.ol-lock { position:absolute; left:-8px; top:-8px;
-  box-sizing:border-box; width:16px; height:16px;
-  color:inherit;
-  display:inline-flex; align-items:center; justify-content:center; }
-.ol-lock svg { width:100%; height:100%; }
-.ol-more { flex:none; width:26px; height:32px; padding:0; border:0;
-  border-radius:var(--r-ctl); background:transparent; color:inherit; opacity:.6;
-  font-size:20px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
-.ol-more:hover { opacity:1; }
-body.readonly .ol-more { display:none; }
-/* search field + new-card button, side by side at the BOTTOM of the OUTLINER (not the screen,
-   iOS Notes-style): a descendant of #outline (see index.html), so `position:absolute` resolves
-   against the drawer's own width on a wide screen instead of the full viewport — same trick as
-   #ocBack/#olCloseBtn. Gated behind outline-active + not-read-only. */
-.ol-head { display:none; }
-body.outline:not(.readonly) .ol-head {
-  display:flex; align-items:center; gap:10px;
-  position:absolute; left:0; right:0; bottom:calc(12px + var(--sa-b)); z-index:22;
-  padding:0 14px;
-  transition:top .18s ease, bottom .18s ease;   /* tracks the keyboard, see armKeyboardTracking */
-}
-/* …and where the outliner IS the screen (the full-screen phone case), those left/right edges are
-   the SCREEN's, so the pill owes the safe area what every other bottom-edge control owes it.
-   Deliberately not applied in the drawer case: there it's the drawer's own width it spans, well
-   clear of any cutout, and an inset would just pull it inward for nothing. Written here rather
-   than up in the max-width block that owns full-screen mode because the rule above it would
-   otherwise win on source order alone. */
-@media (max-width: 700px) {
-  body.outline:not(.readonly) .ol-head { padding:0 calc(14px + var(--sa-r)) 0 calc(14px + var(--sa-l)); }
-}
-/* icon sits INSIDE the pill, left-inset — mirrors #searchWrap's own icon placement (same trick:
-   .ic is display:contents, so size/position must target the svg itself, not the span; leaving
-   top/transform unset lets the flex container's align-items:center place it, since an absolutely
-   positioned flex item still resolves its static position from the flex alignment). */
-.ol-search { position:relative; flex:1 1 auto; min-width:0; display:flex; align-items:center; }
-.ol-search > .ic svg, .ol-search > [data-icon] svg { position:absolute; left:14px; width:14px; height:14px;
-  display:block; color:var(--muted); pointer-events:none; flex:none; }
-#olSearch { width:100%; min-width:0; box-sizing:border-box; height:40px; padding:0 12px 0 34px;
-  border:none; border-radius:var(--r-full); background:var(--node); color:var(--text); font-size:15px;
-  -webkit-appearance:none; appearance:none; }   /* type=search for the nicer "Search" return key; we draw our own icon/clear button, so strip iOS's own */
-#olSearch:focus { outline:none; box-shadow:0 0 0 2px var(--accent); }
-#olSearch::-webkit-search-decoration, #olSearch::-webkit-search-cancel-button, #olSearch::-webkit-search-results-button { display:none; -webkit-appearance:none; }
-#olAddBtn { flex:none; width:40px; height:40px; padding:0; border:none; border-radius:50%;
-  display:inline-flex; align-items:center; justify-content:center;
-  background:var(--accent); color:#fff; cursor:pointer; }
-#olAddBtn:hover { filter:brightness(1.08); }
-.ol-add-plus { font-size:22px; font-weight:400; line-height:1; }
-/* search active (focused or has a query): the + becomes a × that clears/cancels the search,
-   styled as a secondary action (not the accent "create" colour) — see updateAddBtnMode(). */
-#olAddBtn.ol-clear-mode { background:var(--node); color:var(--muted); }
-#olAddBtn.ol-clear-mode:hover { color:var(--text); }
-#olAddBtn.ol-clear-mode .ol-add-plus { font-size:18px; }
-/* docked flush against the keyboard (features/outline.ts's armKeyboardTracking): just a size trim
-   (no background) — a flat panel and a frosted/blurred one were both tried and looked like a
-   rectangle pasted over the keyboard, so it stays transparent, same as the idle floating pill. */
-body.outline:not(.readonly) .ol-head.kb-docked { padding:6px 10px; gap:8px; }
-.ol-head.kb-docked #olSearch { height:36px; }
-.ol-head.kb-docked #olAddBtn { width:36px; height:36px; }
-/* close outline — the drawer's top-LEFT corner, the exact same spot/size as #ocBack (so there's
-   one consistent top-left control), and mutually exclusive with it: #ocBack shows while the
-   branch editor is open (body.ol-editing), this shows the rest of the time — visible in read-only
-   too, since closing isn't a mutating action. Hidden on narrow screens, where outline is
-   forced/non-closable — there's nothing to close back TO on a phone. */
-.ol-close { display:none; position:absolute; top:10px; left:12px; z-index:5;
-  width:var(--bar-btn); height:var(--bar-btn); padding:0; border:none; border-radius:var(--r-full);
-  align-items:center; justify-content:center;
-  background:var(--node); color:var(--muted); font-size:16px; cursor:pointer; }
-body.outline .ol-close { display:flex; }
-body.ol-editing .ol-close { display:none; }
-.ol-close:hover { color:var(--text); }
-@media (max-width: 700px) { .ol-close { display:none !important; } }
-
-/* ---- full-screen editor sheet (phone / outline): title + note body + explicit Done.
-   Replaces the in-card editors where they fight the on-screen keyboard — see
-   features/editor-sheet.ts (keyboard safety via visualViewport). ---- */
-#editorSheet { position:fixed; top:0; left:0; width:100%; height:100vh; height:100dvh; z-index:50;
-  display:none; flex-direction:column; gap:10px; background:var(--bg);
-  padding:calc(12px + var(--sa-t)) calc(12px + var(--sa-r)) calc(12px + var(--sa-b)) calc(12px + var(--sa-l)); }
-body.sheet-open #editorSheet { display:flex; }
-#editorSheet .sheet-head { display:flex; align-items:center; gap:8px; }
-#shCancel { flex:none; width:44px; height:44px; padding:0; border:none; border-radius:var(--r-full);
-  background:var(--panel); color:var(--muted); font-size:17px; cursor:pointer; }
-#shCancel:hover { color:var(--text); }
-#shTitle { flex:1 1 auto; min-width:0; height:44px; padding:0 12px; font-size:16px; font-weight:600;
-  background:var(--panel); color:var(--text); border:none; border-radius:var(--r-full); }
-#shTitle:focus { box-shadow:0 0 0 2px var(--accent); }
-#shDone { flex:none; height:44px; padding:0 18px; border:none; border-radius:var(--r-full);
-  background:var(--accent); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
-#shBody { flex:1 1 auto; min-height:0; resize:none; padding:10px 12px;
-  font:inherit; font-size:15px; line-height:1.5;
-  background:var(--panel); color:var(--text); border:none; border-radius:var(--r-ctl); }
-#shBody:focus { box-shadow:0 0 0 2px var(--accent); }
 
 /* ---- reading view: an OPENED card is its note, at reading width ----
    The element here is THE CARD — the same one paintNode paints on the canvas, so its fill, its

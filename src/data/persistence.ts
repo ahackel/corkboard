@@ -536,9 +536,7 @@ export async function reloadFromDisk(): Promise<void> {
   // if we just wrote, the focus event is almost certainly our own round-trip — skip
   if (Date.now() - (state.lastSelfWrite || 0) < 600) return;
   const selBefore = state.selId;
-  // Don't yank the rug out while the user is actively typing in the panel or renaming a card.
-  // ui.sheetEdit counts even when no field is focused — on iOS the keyboard can be dismissed
-  // while the editor sheet still holds uncommitted text.
+  // Don't yank the rug out while the user is actively typing in a card or renaming a frame.
   if (editSessionActive() || isTypingInField()) return;
   reloading = true;
   try {

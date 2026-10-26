@@ -32,7 +32,6 @@ import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleIn
 import { createNode, createDetachedNode, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
-import { renderOutline, toggleOutlineView, outlineActive } from './features/outline.js';   // also wires the outline toggle button
 import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -66,9 +65,8 @@ setupCanvasColor();
 
 
 // ---------- rendering ----------
-// small closed-padlock badge shown at a locked card's upper-left corner; exported for the outline
-// row (features/outline.ts), the float bar's lock toggle (features/float-bar.ts) and the read-only
-// toolbar button (applyReadOnly, further down) — all four share this one glyph.
+// small closed-padlock badge shown at a locked card's upper-left corner; exported for the
+// float bar's lock toggle (features/float-bar.ts), which shares this one glyph.
 export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
 // line-smiley glyph for the card's own "add emoji tag" button (bottom-left, next to .addnote) —
 // same hand-drawn-icon style (stroke=currentColor) as LOCK_BADGE_SVG above.
@@ -87,8 +85,6 @@ const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 // innerHTML: re-parsing this <svg> for every foldable node on every paint is real work, and paintAll
 // runs per animation FRAME for the length of a resize drag.
 const FOLD_PLUS = '+';
-// exported: the outliner's rows carry the very same bubble (features/outline.ts), so the chevron is
-// drawn from one glyph rather than two that could drift apart.
 export const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
@@ -181,9 +177,8 @@ function nodeEl(n: MindNode): HTMLElement {
   return el;
 }
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
-// what a Space tap used to. Refuses in the outline view, which has no canvas to drop it onto.
+// what a Space tap used to.
 function newCardAtPointer(): void {
-  if (outlineActive()) return;
   if (ui.lastMouse) createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
   else createNode();
 }
@@ -1207,7 +1202,6 @@ export function paintAll(): void {
   for (const n of state.nodes.values()) paintNode(n);
   paintFreeEdges();
   updateEmptyHints();
-  renderOutline();   // keep the outline list in sync (no-op while the canvas view is active)
   syncScopeChrome();   // crumbs + reading class + the recovery when the frame you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
@@ -2061,14 +2055,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (typing) return;
-  // ←→↑↓ walk / fold the tree (navArrow). Canvas only: the outline view is its own tree widget with
-  // its own fold state (outlineFold), so arrows there are a separate concern. No modifiers — ⇧/⌘
+  // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
-  if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey && !outlineActive()){
+  if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey){
     e.preventDefault(); navArrow(key); return;
   }
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
-  if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
@@ -2213,7 +2205,6 @@ function paletteCommands(): Command[] {
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
-    { label: outlineActive() ? 'Back to the canvas' : 'Outline view', shortcut: 'O', keywords: 'list tree', run: toggleOutlineView },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: document.body.classList.contains('light') ? 'Dark theme' : 'Light theme', keywords: 'theme colour mode', run: toggleTheme },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },

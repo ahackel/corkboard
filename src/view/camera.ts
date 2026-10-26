@@ -150,10 +150,8 @@ export function zoomAt(mx: number, my: number, factor: number): void {
   applyView();
 }
 
-// Stage dimensions for camera math. While OUTLINE mode is active #stage is display:none and
-// its rect is 0×0 — a fit()/frameBox() run then (e.g. loadFromDir on a boot that restores
-// outline mode) would compute k=0 and scale every card away. The stage is position:fixed
-// inset:0, so the window size is exactly what its rect would be.
+// Stage dimensions for camera math. The stage is position:fixed inset:0, so the window size is
+// exactly what its rect would be — and is right even before the stage has laid out.
 export function stageSize(): { width: number; height: number } {
   const r = stage.getBoundingClientRect();
   return { width: r.width || window.innerWidth, height: r.height || window.innerHeight };

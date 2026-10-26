@@ -15,12 +15,10 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
-import { outlineActive, startRowTitleEdit } from './outline.js';
 import { frameLabelled } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure, reframeForTab } from '../main.js';
-import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
 import { extractToChild, discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
 
@@ -37,17 +35,6 @@ const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.tit
 export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
-  // In outline mode (which includes every phone-width screen — outline is forced on below
-  // that breakpoint) the title is renamed right on its row (features/outline.ts), mirroring the
-  // canvas' in-place rename. This is the single choke point, so F2 / double-click / add child / add
-  // sibling / context menu all follow. The one exception: the single-card editor is already open
-  // (e.g. "+" while viewing a card adds a child) — its row doesn't exist in the (hidden) list, so
-  // the rename happens on the open card itself instead.
-  if (outlineActive()) {
-    if (branchEditorOpen()) openBranchEditor(n.id, 'title');
-    else startRowTitleEdit(n, { isNew });
-    return;
-  }
   // A FRAME's label can't live in the card editor — it's a folder TAB of fixed height, and the frame's own
   // `.body` is display:none, so a textarea in there couldn't be focused (see ui-state.ts TitleEdit). Its
   // tab is renamed on itself instead. A STACK is NOT in this bucket any more: its header is its rendered
@@ -178,7 +165,6 @@ type Caret = 'title' | 'end';
 function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
   if (isLockedEffective(n)) { setStatus('Locked — can’t edit'); return; }
-  if (outlineActive()) { openBranchEditor(n.id, caret === 'title' ? 'title' : 'body'); return; }   // see startInlineEdit
   if (!n.el) return;
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) return;          // already editing this card
   if (ui.bodyEdit) endBodyEdit();                              // close any other open editor

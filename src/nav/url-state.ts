@@ -25,7 +25,6 @@ import { readMaps, type MapKind } from '../store/index.js';
 import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
-import { outlineActive, setOutline } from '../features/outline.js';
 import { searchBox, openSearch, runSearch } from '../features/search.js';
 import { nodeLabel } from '../utils/model.js';
 
@@ -56,7 +55,6 @@ function buildHash(): string {
   const parts = currentMap ? [currentMap.kind, encodeURIComponent(currentMap.id)] : [slugify(store.name)];
   if (node?.file) parts.push(encodeFilePath(node.file));
   const params = new URLSearchParams();
-  if (outlineActive()) params.set('mode', 'outline');
   const open = scopeRootFile();
   if (open) params.set('open', encodeFilePath(open));
   params.set('x', Math.round(state.view.x).toString());
@@ -140,7 +138,6 @@ export async function applyUrlFromHash(): Promise<void> {
       const target = [...state.nodes.values()].find(n => n.file === file);
       if (target) selectNode(target.id);
     }
-    if (params.get('mode') === 'outline' && !outlineActive()) setOutline(true, false);
     const x = Number(params.get('x')), y = Number(params.get('y')), k = Number(params.get('k'));
     if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(k) && k > 0) {
       state.view.x = x; state.view.y = y; state.view.k = k;

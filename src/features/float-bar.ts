@@ -12,7 +12,6 @@ import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
 import { subtreeBox } from '../view/layout.js';
-import { outlineActive } from './outline.js';
 import { FOLDER_PATH } from '../view/icons.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
@@ -553,10 +552,6 @@ function followLoop(): void {
 window.addEventListener('resize', () => { closePopovers(); placeBar(); });
 
 // ---------- visibility ----------
-// Outline mode only hides the bar on a narrow/phone screen, where the outliner replaces the
-// canvas entirely (no card left to anchor to). On a wide screen the outliner is a drawer over a
-// still-visible canvas, so a selected card can keep its bar.
-//
 // Showing the bar is debounced a touch (SHOW_DELAY) — hiding is not. A double-click both selects
 // (click 1) AND folds the card (the dblclick itself, which doesn't touch selection) in quick
 // succession; without the delay the bar would flash on right on click 1 only to have nothing
@@ -569,7 +564,7 @@ let showTimer: number | null = null;
 const SHOW_DELAY = 180;
 export function syncFloatBar(): void {
   closePopovers();
-  const visible = state.sel.size > 0 && !state.readOnly && !(outlineActive() && NARROW_MQ.matches);
+  const visible = state.sel.size > 0 && !state.readOnly;
   if (showTimer != null) { clearTimeout(showTimer); showTimer = null; }
   if (!visible) {
     bar.classList.remove('open');
@@ -586,7 +581,7 @@ export function syncFloatBar(): void {
   showTimer = window.setTimeout(() => {
     showTimer = null;
     // the selection this was scheduled for may already be gone by the time the delay elapses
-    if (!(state.sel.size > 0 && !state.readOnly && !(outlineActive() && NARROW_MQ.matches))) return;
+    if (!(state.sel.size > 0 && !state.readOnly)) return;
     bar.classList.add('open');
     syncControls();
     placeBar();

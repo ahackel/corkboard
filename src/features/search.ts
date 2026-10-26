@@ -9,7 +9,6 @@ import { esc } from '../utils/markdown.js';
 import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible } from '../utils/model.js';
 import { outOfScope } from '../nav/scope.js';
 import { paintAll, focusNode } from '../main.js';
-import { outlineActive, revealInOutline } from './outline.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { byId } from '../utils/dom.js';
 
@@ -78,8 +77,7 @@ function clearSearch(): void {
 function gotoHit(id: string): void {
   const n = state.nodes.get(id); if (!n) return;
   closeSearch();   // jumping to a card dismisses the search bar
-  if (outlineActive()) revealInOutline(id);   // unfold ancestors + scroll the row into view
-  else focusNode(n, true);   // reveal ancestors level by level AND open the hit itself
+  focusNode(n, true);   // reveal ancestors level by level AND open the hit itself
 }
 searchBox.addEventListener('input', runSearch);
 searchBox.addEventListener('focus', () => { if (searchBox.value.trim()) runSearch(); });

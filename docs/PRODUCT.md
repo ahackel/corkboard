@@ -63,6 +63,8 @@ zoomed out · emoji tags presented as stamps · export a selection or board as P
   Lines that reroute themselves broke principle 2.
 - *The permanent toolbar* — replaced by ⌘K and the selection bar.
 - *The help map* — the palette lists every action with its shortcut; that is the reference.
+- *Outline view (and its phone editor)* — built for working on a phone; the phone is an inbox now,
+  search finds things, and Obsidian is the reading view.
 
 ## Known friction to fix (from daily use)
 

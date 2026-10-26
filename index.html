@@ -91,65 +91,8 @@
     </div>
   </div>
 
-  <!-- outline mode: the map as a collapsible tree list (body.outline; features/outline.ts) -->
-  <div id="outline">
-    <!-- back arrow (features/branch-editor.ts), close-outline button, and new-card button: all
-         siblings of the SCROLLING #olScroll below, not children of it — #outline's own transform
-         (desktop drawer) makes it the containing block for a position:absolute descendant, and if
-         that descendant also lived inside the scrolling box, it would scroll away with the list
-         instead of staying put. Being #outline's own descendants (not fixed to the viewport) also
-         means all three centre/anchor on the DRAWER's own width on a wide screen, not the whole
-         screen. #ocBack / #olCloseBtn share the same top-left spot and are mutually exclusive
-         (styles.css): the back arrow only while the branch editor is open, the close button
-         otherwise (wide screens only — on a phone the outline is forced full-screen and can't be
-         closed; visible in read-only too, since closing
-         isn't a mutating action). -->
-    <button id="ocBack" class="oc-back" title="Back to list" aria-label="Back to list">
-      <span class="ic" data-icon="back"></span></button>
-    <button id="olCloseBtn" class="ol-close" aria-label="Close outline" title="Close outline">✕</button>
-    <div class="ol-head">
-      <div class="ol-search">
-        <span class="ic" data-icon="search"></span>
-        <input id="olSearch" type="search" enterkeyhint="search" placeholder="Search" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Search cards">
-      </div>
-      <button id="olAddBtn" title="New card — child of the selected card (Tab)" aria-label="New card">
-        <span class="ol-add-plus">+</span></button>
-    </div>
-    <div class="ol-scroll" id="olScroll">
-      <!-- scrolls away with the list (a normal sibling of #olRows inside the scroll box), not a
-           sticky header — hidden with the row list while the single-card editor is open. -->
-      <h1 class="ol-heading"></h1>
-      <div class="ol-rows" id="olRows"></div>
-      <!-- branch editor: tapping a row shows this card + its siblings as full editable cards
-           (title + note), rendered by features/branch-editor.ts. Toggled via body.ol-editing. -->
-      <div class="ol-cards" id="olCards"></div>
-    </div>
-  </div>
-
-  <!-- properties for the active branch card: colour / tags / checklist (the same
-       shared control logic as the canvas float bar, features/properties.ts). Kept OUTSIDE #outline — like the
-       New-card button above — so its position:fixed resolves against the VIEWPORT and pins to the
-       bottom (a fixed child of the transformed, scrolling drawer would ride the scroll instead). On
-       desktop it's aligned to the outliner drawer's width; on phone it spans the screen bottom.
-       Drag the handle down to dismiss it. -->
-  <div id="branchProps" aria-label="Card properties">
-    <div class="bp-handle" role="button" tabindex="0" aria-label="Dismiss properties" title="Drag down to dismiss"></div>
-    <div class="fgroup fg-color">
-      <label>Color</label>
-      <div id="bpColors" class="swatches"></div>
-    </div>
-    <div class="bp-toggles">
-      <label class="checkbox-label"><input id="bpChecklist" type="checkbox"> Checklist</label>
-    </div>
-    <div class="fgroup fg-tags">
-      <label>Tags</label>
-      <div id="bpTagRow" class="tag-row-edit"></div>
-    </div>
-  </div>
-
   <!-- starts closed (no "open" class) so it doesn't flash in before syncFloatBar() runs.
-       Canvas-only; floats next to the selected card (features/float-bar.ts). In outline mode
-       editing happens in the branch editor (#olCards). -->
+       Floats next to the selected card (features/float-bar.ts). -->
   <div id="floatBar">
     <button id="fbColor" class="fb-swatch swatch inherit" title="Colour — click for the full palette" aria-label="Colour"></button>
     <button id="fbType" class="fb-icon" title="Type — card / frame" aria-label="Type"></button>
@@ -194,18 +137,6 @@
   </div>
   <!-- thin stem bridging an open popover to the bar — see .fb-pop-connector in styles.css -->
   <div id="fbPopConnector" class="fb-pop-connector"></div>
-
-  <!-- full-screen editor sheet (phone / outline): title + note body, explicit Done.
-       Shown via body.sheet-open; driven by features/editor-sheet.ts -->
-  <div id="editorSheet" role="dialog" aria-label="Edit card">
-    <div class="sheet-head">
-      <button id="shCancel" title="Cancel (Esc)" aria-label="Cancel">✕</button>
-      <input id="shTitle" type="text" autocomplete="off" spellcheck="false" aria-label="Card title">
-      <button id="shDone" title="Save & close (⌘⏎)" aria-label="Save and close">Done</button>
-    </div>
-    <textarea id="shBody" spellcheck="false" placeholder="Add note…" aria-label="Card note"></textarea>
-  </div>
-
 
   <!-- canvas menu: floating top-right, left of the outline button — a permanent kebab so canvas
        actions (new card, insert image, paste, fit view) are reachable without a right-click / long-press

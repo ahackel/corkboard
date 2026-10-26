@@ -57,14 +57,6 @@ export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLT
 // No `orig`: unlike a card's editor there is nothing to compare against on commit — an empty label
 // falls back to what the node had, and the element's own text is the only value read.
 export interface TitleEdit { id: string; el: HTMLElement; isNew?: boolean; }
-// A full-screen editor-sheet session (features/editor-sheet.ts) — the phone/outline replacement
-// for the in-card editors. Same contract: while set, persistence defers the file rename and the
-// focus-reload (the sheet holds uncommitted text even when the field itself is blurred on iOS).
-export interface SheetEdit { id: string; origTitle: string; origBody: string; isNew?: boolean; }
-// A panel title/body editing session (outline mode edits in the right/left edit panel, not the
-// full-screen sheet) — same shape as SheetEdit and the same contract: while set, persistence
-// freezes the node's filename (rename lands on blur) and skips the focus-reload so live typing
-// isn't clobbered.
 export interface PanState { sx: number; sy: number; ox: number; oy: number; }
 export interface Marquee { sx: number; sy: number; add: boolean; base: Set<string>; moved: boolean;
   // When a marquee is started from an unselected FRAME (drag inside it rubber-band-selects its
@@ -100,10 +92,6 @@ export const ui = {
   // At most one of the two is ever set — each opener closes the other.
   bodyEdit: null as BodyEdit | null,
   titleEdit: null as TitleEdit | null,
-  // ---- full-screen editor sheet (features/editor-sheet.ts) ----
-  sheetEdit: null as SheetEdit | null,
-  // ---- panel title/body editing (outline mode; wired in main.ts) ----
-  panelEdit: null as SheetEdit | null,
   // ---- animated relayout (main) ----
   animToken: 0,
   // ---- last known mouse position (window pointermove, main) ----
@@ -118,7 +106,7 @@ export const gPointers = new Map<number, Pt>();
 // ---- edit-session predicates (shared by persistence.ts) ----
 // One source of truth for "is some editor holding uncommitted text", so the save loop and the
 // disk-reload guard can't drift as editors are added (in-card title/body + the full-screen sheet).
-export function editSessionActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit || ui.sheetEdit || ui.panelEdit); }
+export function editSessionActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
 // "Is an IN-PLACE editor open" — the two on-canvas sessions only (a card's one text field, a
 // container's label), as against editSessionActive's four. Named here rather than spelled out as
 // `ui.bodyEdit || ui.titleEdit` at each of its call sites — the render core, drag's tap/pointerdown
@@ -137,8 +125,6 @@ export function inPlaceEditOn(id: string): boolean {
 export function frozenFileNodeId(): string | null {
   if (ui.bodyEdit) return ui.bodyEdit.id;
   if (ui.titleEdit) return ui.titleEdit.id;
-  if (ui.sheetEdit) return ui.sheetEdit.id;
-  if (ui.panelEdit) return ui.panelEdit.id;
   return null;
 }
 
@@ -152,14 +138,6 @@ const COARSE_MQ = matchMedia('(pointer: coarse)');
 // editors (see features/inline-edit.ts).
 export function phoneMode(): boolean { return COARSE_MQ.matches && NARROW_MQ.matches; }
 
-// "Phone", orientation-independent (features/outline.ts's canvas/outline split): coarse pointer
-// AND a SHORT axis — either dimension at or under the 700px breakpoint, so an iPhone reads as a
-// phone in both portrait AND landscape (it's still short sideways), while a tablet (large in both
-// dimensions) or a narrowed desktop window (fine pointer) stay excluded. The two `max-*` clauses
-// MUST match NARROW_MQ's own 700px breakpoint.
-export const PHONE_MQ = matchMedia(
-  '(pointer: coarse) and (max-width: 700px), (pointer: coarse) and (max-height: 700px)'
-);
 export const PORTRAIT_MQ = matchMedia('(orientation: portrait)');
 
 // True when focus is in a text field (sidebar input/textarea) or a contenteditable (the in-card

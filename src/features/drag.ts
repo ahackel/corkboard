@@ -12,10 +12,9 @@ import { detachParentId, isReadingRoot } from '../nav/scope.js';
 import { reorderDraggedParents, dropLanding, isManagedLayout, frameFlow, flowReorderTarget, isFrame, isContainer, isStack, stackDropTarget, hostFrame, centreInFrame, insertedKidOrder, ancestorDepth } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
-import { ui, NARROW_MQ, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
+import { ui, inPlaceEditOn, type Pt, type Seg, type Drag } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
-import { outlineActive } from './outline.js';
 import { beginMarqueeFromNode } from './gestures.js';
 import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, STACK_PAD, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
@@ -25,10 +24,6 @@ import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
 import { guidePull, hideGuides } from './guides.js';
 
-// The #outline drawer overlays the canvas from the right on wide screens; cache it too so
-// auto-pan can treat it as a right obstruction (see autoPanStep).
-let _outline: HTMLElement | null = null;
-function outlineEl(): HTMLElement | null { return _outline ??= document.getElementById('outline'); }
 
 // Lazily-created phantom card that previews where the dragged card will actually LAND once
 // dropped (not where the cursor currently is) while poised over a valid reparent target. The
@@ -241,12 +236,6 @@ function autoPanStep(): void {
   // the cursor slips BEHIND the outline drawer to the true window edge.
   const r = stage.getBoundingClientRect();
   let right = r.right;
-  // The outline drawer is a right obstruction only while OPEN on a wide screen (narrow hides
-  // #stage, and a parked drawer's transform leaves it off-screen only once its slide settles —
-  // so gate on the class, not the live geometry).
-  const ol = outlineEl();
-  if (ol && outlineActive() && !NARROW_MQ.matches)
-    right = Math.min(right, ol.getBoundingClientRect().left);
   const M = 56, MAX = 16;   // edge band (px) and max pan speed (px/frame)
   let vx = 0, vy = 0;
   const x = drag.cx, y = drag.cy;
@@ -967,7 +956,6 @@ function clearDropTarget(): void {
 // the parent's order (`null` = at the front), matching the preview that triggered the mode (see
 // dropLanding). Re-setting the SAME parent (a reorder) is fine — only kidOrder changes.
 // Returns whether the reparent actually happened, so callers can count/chain successful ones.
-// Exported: the outline's "Move to…" picker reuses it (features/outline.ts).
 export function reparentOnly(childId: string, newParentId: string, afterId?: string | null): boolean {
   if (state.readOnly) return false;
   const child = state.nodes.get(childId);

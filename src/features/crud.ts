@@ -164,8 +164,7 @@ function copyNode(s: MindNode): MindNode {
 }
 // Duplicate every selected card (or just the one). Each copy keeps its source's parent, so it
 // stays connected. One card → open its rename like a fresh node; many → select the new copies.
-// `edit:false` skips the rename (outline duplicate just drops the copy into the list, selected —
-// see features/outline.ts) so it doesn't yank the user into an editor.
+// `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor.
 export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): MindNode[] | undefined {
   if (state.readOnly) return;
   const ids = selectedIds();
@@ -482,8 +481,8 @@ export function deleteNode(id: string): void {
 // either: the pending step still holds this card's before-image (null, from mkNode), so deleting it
 // here nets null→null and commitStep DISCARDS the whole step — neither the create nor the delete is
 // left behind for ⌘Z to walk back through. `status` is passed where the user did something explicit
-// (Escape); a card abandoned by clicking away goes quietly. Shared by all four editors that can open
-// on a brand-new card (features/inline-edit.ts ×2, the outline row, the phone editor sheet), which
+// (Escape); a card abandoned by clicking away goes quietly. Shared by both editors that can open
+// on a brand-new card (features/inline-edit.ts), which
 // each used to spell out these three lines and half of the reasoning.
 export function discardNewCard(id: string, status?: string): void {
   deleteNode(id);

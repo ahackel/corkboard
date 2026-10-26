@@ -36,7 +36,7 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
   `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
-  text-drag, attachments, clipboard, search, outline, float-bar, properties, breadcrumbs, history, …
+  text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
   `palette.ts` is ⌘K, the ONLY list of every action (no toolbar) — add a new action to `paletteCommands` (main.ts).
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry: the render core (`paintNode`/`paintAll`/`effectiveColor`), selection, read-only

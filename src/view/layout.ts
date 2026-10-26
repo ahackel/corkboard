@@ -592,7 +592,6 @@ function kidsByPosition(node: MindNode, kids: MindNode[]): string[] {
 // A parent's child order is STORED (in memory) and only changes when a child is directly
 // dragged — never on an incidental relayout. So moving a parent, editing text, or collapsing
 // never reshuffles children; order is seeded from saved positions the first time it's needed.
-// Exported: the outline view renders siblings in exactly this order (features/outline.ts).
 export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
   const have = new Set(kids.map(k => k.id));
   let order = (node.kidOrder || []).filter(id => have.has(id));   // drop removed children
