@@ -49,6 +49,12 @@ interface CreateOpts {
   w?: number; h?: number;
   edit?: boolean;   // false = don't open the inline rename (e.g. paste — the content is final)
 }
+// A new card pops in (styles.css card-pop) — only one the user just made, never on a load. A data
+// attribute, not a class: paintNode rewrites className wholesale.
+function popIn(n: MindNode): void {
+  const el = n.el;
+  if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
+}
 export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   if (state.readOnly) return;
   // No parent asked for means "the top level", and while a frame is OPEN its interior IS the top
@@ -77,13 +83,40 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout(); selectNode(id);
-  // A new card pops in (styles.css card-pop) — only one the user just made, never on a load.
-  const el = n.el;
-  if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
+  popIn(n);
   if (opts.edit !== false) startInlineEdit(n, { isNew: opts.isNew ?? true });
   else commitStep();   // no rename session follows, so the create step ends here
   scheduleSave();
   return n;
+}
+// Many cards at once — a pasted list (utils/paste-list.ts), one card per item — in a neat column
+// whose top-left is `at`, in ONE undo step. Each text splits like a card's own (splitHeading).
+// The column is stacked from MEASURED heights, so it has to paint first: lay out, read each card's
+// height, then restack with an even gap. Under a parent the cards become its children, in order.
+const LIST_GAP = 12;
+export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
+  if (state.readOnly || !texts.length) return [];
+  const parentId = parent ?? detachParentId();
+  const p = parentId ? state.nodes.get(parentId) : undefined;
+  if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return []; }
+  const made: MindNode[] = [];
+  record([parentId], () => {
+    if (p?.collapsed) p.collapsed = false;   // reveal the new children
+    texts.forEach((t, i) => {
+      const { title, body } = splitHeading(t);
+      const n = mkNode({ x: at.x, y: at.y + i * (NEW_CARD_H + LIST_GAP), parent: parentId, title, body });
+      state.nodes.set(n.id, n);
+      made.push(n);
+    });
+    remeasure();
+    let y = at.y;
+    for (const n of made) { n.y = y; y += nodeH(n) + LIST_GAP; }
+    relayout();
+    setSelectionSet(made.map(n => n.id));
+    made.forEach(popIn);
+    scheduleSave();
+  });
+  return made;
 }
 // Make a new unconnected node at (x,y) and render it, but DON'T select / rename / save yet — the
 // caller drives it (e.g. the ghost-card drag rides it under the cursor, then renames on drop or
@@ -183,6 +216,7 @@ export function addChild(parentId: string, at?: Pt): void {
   applyLayouts();        // a line/fan parent immediately slots the new child into place
   paintAll();
   selectNode(id);
+  popIn(n);
   startInlineEdit(n, { isNew: true });   // drop straight into renaming the fresh card; Esc cancels creation
   scheduleSave();
 }
@@ -192,7 +226,21 @@ export function addChild(parentId: string, at?: Pt): void {
 export function createSibling(refId: string){
   if (state.readOnly) return;
   const ref = state.nodes.get(refId); if (!ref) return;
-  if (ref.parent == null) return createNode({ x: ref.x, y: ref.y + nodeH(ref) + 40 });
+  if (ref.parent == null) {
+    // The next card in its column: just below, or below whatever already sits there — Enter, Enter,
+    // Enter down a column of cards appends to it rather than stacking on the card underneath.
+    const w = ref.w ?? NODE_W;
+    let y = ref.y + nodeH(ref) + LIST_GAP;
+    for (let moved = true; moved;) {
+      moved = false;
+      for (const o of childrenOf(null)) {
+        const oh = nodeH(o);
+        if (o === ref || o.x >= ref.x + w || o.x + (o.w ?? NODE_W) <= ref.x || o.y >= y + NEW_CARD_H || o.y + oh <= y) continue;
+        y = o.y + oh + LIST_GAP; moved = true;
+      }
+    }
+    return createNode({ x: ref.x, y });
+  }
   const parent = state.nodes.get(ref.parent); if (!parent) return;
   if (isLockedEffective(parent)) { setStatus('Locked — can’t add a sibling'); return; }
   touch(parent.id);   // the kidOrder change (and a possible reveal) belong to the create step
@@ -206,6 +254,7 @@ export function createSibling(refId: string){
   parent.kidOrder = insertedKidOrder(parent, n.id, ref.id);   // directly after the reference
   relayout();
   selectNode(n.id);
+  popIn(n);
   startInlineEdit(n, { isNew: true });   // drop straight into renaming the fresh card; Esc cancels creation
   scheduleSave();
 }

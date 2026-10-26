@@ -8,7 +8,8 @@ import { ui, isTypingInField } from '../core/ui-state.js';
 import { store, scheduleSave, IMAGE_FILE_RE } from '../data/persistence.js';
 import { screenToWorld } from '../view/camera.js';
 import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
-import { createNode, centredAt } from './crud.js';
+import { createNode, createCards, centredAt } from './crud.js';
+import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { nodeLabel } from '../utils/model.js';
 import { autosizeBody } from './inline-edit.js';
@@ -244,6 +245,15 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
       relayout(); scheduleSave();
       setStatus('Pasted image link');
     });
+    return;
+  }
+  // A LIST — bullets, numbers, or bare short lines — is many thoughts: one card per item, in a column
+  // whose top-left sits where a single card would have (utils/paste-list.ts says what counts).
+  const items = splitPastedList(text);
+  if (items){
+    const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
+    const made = createCards(items, at, opts.parent);
+    if (made.length) setStatus(`Pasted ${made.length} cards`);
     return;
   }
   // Pasted text is a card's text, so it splits the way a card's own does (splitHeading): a leading

@@ -290,10 +290,9 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     discardNewCard(n.id);
     return;
   }
-  if (cancel && be.isNew){                              // Esc on a freshly-created card = cancel creation
-    discardNewCard(n.id, 'Cancelled new card');
-    return;
-  }
+  // …and one with text in it is KEPT, whichever way the edit ends: Esc on a fresh card is "done
+  // typing", not "throw this away" (capture costs nothing — docs/PRODUCT.md). ⌘Z still removes it.
+  if (be.isNew) cancel = false;
   const changed = !cancel && be.ta.value !== be.orig;
   if (changed){
     // No sweeping-up of a bare `# ` first line here either: nothing puts one there but the user now,

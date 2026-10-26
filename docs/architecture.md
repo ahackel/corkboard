@@ -577,6 +577,16 @@ own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`set
 reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
 it used to read over an edit made just before switching away (it cancelled the queued save instead).
 
+**A pasted LIST is many cards; capture never throws typing away.** `splitPastedList`
+(`utils/paste-list.ts`, pinned by `tests/paste-list.test.ts`) decides whether a ⌘V of plain text is
+a list: Markdown items (`-`/`*`/`1.`…, indented lines riding along as the item's body), or two or
+more short bare lines with no blank line. Then `createCards` (`features/crud.ts`) makes one card per
+item in a column under the pointer, stacked from MEASURED heights with `LIST_GAP`, in one undo step.
+Anything with a heading, paragraphs or a lead-in line is a note and stays one card. Enter on a
+top-level card puts the next card below it, below whatever already sits there, so Enter-Enter-Enter
+builds a column. Every new card pops in (`popIn`, `data-pop`). Esc on a fresh card with text KEEPS
+it (only an empty fresh card is discarded): Esc means "done typing"; ⌘Z is how a card is unmade.
+
 **A status message is a TOAST, and most messages are not shown.** `setStatus` (`core/state.ts`) pops
 `#status` at the bottom for about two seconds — for what the canvas can't show by itself: a refusal
 ("Locked — can't delete"), an action with nothing to see (Copied, Exported, Nothing to undo), a warning.
