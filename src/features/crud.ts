@@ -6,7 +6,7 @@ import { state, setStatus, type MindNode, type NodeType } from '../core/state.js
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
-import { applyLayouts, frameInterior, holderOf } from '../view/layout.js';
+import { applyLayouts, frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -15,6 +15,7 @@ import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING } from '../utils/guides.js';
 import { growFramesToHold } from './float-bar.js';
+import { settleFrames } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
@@ -85,7 +86,8 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout();
-  if (growFramesToHold([id])) relayout();   // a card made past its frame's edge is shown, not clipped
+  // a card made past its frame's edge is shown, not clipped; a new FRAME takes in what it covers
+  if (growFramesToHold([id, ...(n.type === 'frame' ? settleFrames([id]) : [])])) relayout();
   selectNode(id);
   popIn(n);
   if (opts.edit !== false) startInlineEdit(n, { isNew: opts.isNew ?? true });
@@ -221,7 +223,8 @@ export function addCardInside(frameId: string, at?: Pt): void {
 export function newFrameAt(p: Pt): void {
   if (state.readOnly) return;
   const at = snapPt({ x: p.x - FRAME_W / 2, y: p.y - FRAME_H / 2 });
-  createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H });
+  // in the frame under the pointer, if any — the same drop rule a card gets
+  createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, parent: frameAt(p.x, p.y, new Set())?.id });
 }
 // The next card after `refId`, in the same place it lives (the top level, or the same frame): just
 // below it, or below whatever already sits under it — Enter, Enter, Enter down a column of cards

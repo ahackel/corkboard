@@ -5,7 +5,7 @@ import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { readingRootNode, readingWidth, readingLeft } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { nodeW, nodeH, elTop } from '../main.js';
+import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
@@ -83,7 +83,7 @@ export function refreshReadingBand(): void {
   if (!root) { band = null; return; }
   const left = readingLeft();
   band = { left, worldLeft: root.x - left, width: readingWidth(), vw: window.innerWidth,
-           vh: window.innerHeight, top: elTop(root, root.y), h: nodeH(root) };
+           vh: window.innerHeight, top: root.y, h: nodeH(root) };
 }
 export function readingBand(): ReadingBand | null { return band; }
 

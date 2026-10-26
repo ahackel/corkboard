@@ -126,81 +126,64 @@ sit wherever they were put: there are no arrangements, no outliner, no checklist
   itself around them, deepest first. That needs measured heights, so affected nodes are unfolded and painted
   with the scope set aside, then folded back. Every load runs it; a migrated map has nothing left to convert.
 
-**A frame wears only its OWN colour** (`effectiveColor`): an uncoloured one is the neutral surface (white /
-charcoal). Inheriting made a frame nested in a blue frame blue, and so invisible. Cards still inherit from
-the frame they sit in, and step a little off its fill (`.frame-child`) so they don't vanish into it.
+**A frame wears only its OWN colour** (`effectiveColor`): an uncoloured one is the neutral white surface.
+Inheriting made a frame nested in a blue frame blue, and so invisible. Cards still inherit from the frame
+they sit in, in its FULL colour — which reads because the box wears a PALE wash of it (below).
+
+**A frame COLLECTS what it covers** (`settleFrames`, features/drag.ts) — the drop rule run from the frame's
+side, the way a FigJam section behaves. After a frame is moved, resized or made (createNode, Group), every
+card whose centre is now in it is reparented to it (`frameAt`, so the innermost frame still wins), and every
+card of its own whose centre is now outside goes to whatever it is over — a shrink lets go of a card rather
+than hiding it under the clip. A FRAME is only collected when its whole box is inside: by its centre alone a
+big frame could be swallowed by a small one laid across it. Locked and hidden things stay put. A move or a
+create then grows frames around what they took in (`growFramesToHold`); a resize doesn't — the user just
+chose that size — but a card it let go of grows the frame it landed in.
 
 ## Frames
 
-**A frame's note is drawn on its TAB: the name, and its DESCRIPTION under it.** The `# ` heading is the
+**A frame looks like a FigJam SECTION: a pale box, its name on a pill ABOVE it.** The box is the frame's
+colour washed 68% toward white (`color-mix`, `FRAME_WASH`/`paleFill` in `utils/ink.ts` for the one JS reader,
+the open frame's canvas) with a 1px rim a step darker than the colour (`FRAME_BORDER` = 1). The label is a
+pill filled with the frame's full colour, so its text takes that colour's own `--ink` like any card.
+
+**A frame's BOUNDS are its box; the label hangs OUTSIDE them.** `n.x/n.y/w/h` are the box, and the pill sits
+7px above its top-left corner (`.node.frame > .title-row`, `bottom:calc(100% + 7px)`), growing upward. So
+naming, renaming, describing or un-naming a frame never moves the box or anything in it, and nothing in
+the geometry (interior, drops, lines, the reading view) has to know about the label. What does: anything
+that FITS a box around frames — `subtreeBox` counts `frameLabelH` (the pill's measured height + its gap)
+above an expanded labelled frame, so Auto-size, grow-to-hold, Group and the load migration's column leave
+a nested frame's name room instead of clipping it. Folded, a frame is nothing but its pill at `n.y`
+(`.frame-folded`, `isFrameFold`, `nodeH` = `FRAME_TAB_H` = 40px: 20px line + 9px padding + 1px border, top
+and bottom — pinned in CSS, since `nodeH` asserts it rather than measuring).
+
+**A frame's note is drawn on its LABEL: the name, and its DESCRIPTION under it.** The `# ` heading is the
 name; the rest of the note is the description (`frameDescription`), one muted ellipsised line under the
-name (`.frame-desc`, `FRAME_DESC_H` = 16px). `frameTabDrop` is the single spelling of how far the box sits
-below the bounds top: 0 with no text, `FRAME_TAB_DROP` with a name, one `FRAME_DESC_H` more with a
-description — `elTop`, `frameInsetY` and `reframeForTab` all read it. The frame's editor is the tab itself:
-Enter finishes, ⇧Enter adds a line, and line breaks are kept (read while the editor is still pre-wrap).
+name (`.frame-desc`). Each stays one line (hence the hover tooltip in `paintNode`). The frame's editor is the
+label itself: Enter finishes, ⇧Enter adds a line, and line breaks are kept (read while the editor is still
+pre-wrap).
 
-**A frame with nothing written on it draws NO TAB** (`frameLabelled`), and its bounds stop reserving the
-strip one would sit in, so an unnamed frame's bounds ARE its box. An empty folder
-tab is a label that says nothing while costing the box 39px. Four things hold it together:
-- **The RIM writes on a frame.** Double-clicking its border — measured geometrically (`onFrameRim`),
-  since the content wrapper is click-through and a hit anywhere inside comes back as the frame's own
-  element — opens its text editor, whether or not it is named. That is the only chrome a frame has that
-  isn't its interior (which OPENS it) or its tab (which an unnamed one hasn't got), and it means one
-  gesture rather than one per state. The band includes the resize zones lying over that border, which is
-  why this is the one gesture allowed past the `NODE_CONTROLS` bail — a double-click means nothing on a
-  handle, which acts on a drag.
-- **An empty commit is accepted now.** A frame used to keep a REQUIRED name (an empty tab was nothing to
-  grab the box by); the rim carries that job, so clearing a frame's text is an ordinary edit.
-- **Naming, un-naming or describing holds the BOX still** (`reframeForTab`): the bounds gain or lose the
-  tab's height at the top, so `n.y`/`n.h` shift by the change in `frameTabDrop` in the opposite direction and
-  nothing on screen — the box, or the children sitting in it — moves. Folded is left alone: the pill sits AT
-  `n.y`, so moving the bounds there would move the thing on screen instead of holding it still.
-- **FOLDED, it's a bare stub — and the CHIP is what keeps it usable.** No text means no label in the pill
-  either, so the row goes invisible rather than `display:none`: `.hidden-count` lives inside that row, and
-  hiding it would leave a nameless frame with no way to open again (the same trap an image card's zeroed
-  row avoids). Expanded, that invisible row also collapses onto the BOX's top edge, so the chip hangs off
-  the corner the way a card's does instead of floating where the tab used to be. The stub asserts its 40px
-  (`min-height`, `--frame-tab-h`): an empty title has no line box, and `nodeH` reserves `FRAME_TAB_H` for a
-  folded frame regardless.
-  While its editor is open the row is revealed regardless (`ui.titleEdit`), or the editor would open on an
-  invisible element and swallow every keystroke.
+**A frame with nothing written on it shows NO LABEL** (`frameLabelled`) — delete its text and it's an
+untitled box, like an untitled FigJam section. Three ways back to writing on it:
+- **The toolbar's title button (T)** (`editFrameTitle`): on an untitled frame it seeds `# Frame` and selects
+  the word, so typing replaces it and keeps the heading; on a named one it opens the label with the text
+  selected. Esc on a seeded name leaves the frame untitled.
+- **The RIM.** Double-clicking its border — measured geometrically (`onFrameRim`), since the content
+  wrapper is click-through and a hit anywhere inside comes back as the frame's own element — opens its
+  text editor, named or not. The band includes the resize zones lying over that border, which is why this
+  is the one gesture allowed past the `NODE_CONTROLS` bail — a double-click means nothing on a handle.
+- **F2 / Rename** in the menu.
+FOLDED, an untitled frame is a bare stub — and the CHIP is what keeps it usable. The row goes invisible
+rather than `display:none`: `.hidden-count` lives inside it, and hiding it would leave a nameless frame with
+no way to open again. Expanded, that invisible row collapses onto the BOX's top edge, so the chip hangs off
+the corner the way a card's does. The stub asserts its 40px (`min-height`, `--frame-tab-h`). While its editor
+is open the row is revealed regardless (`ui.titleEdit`), or the editor would open on an invisible element.
 
-**A `frame`'s BOUNDS include its title tab.** The title renders as a folder tab above the box's top-left
-corner (`.node.frame > .title-row`, absolutely positioned) and `n.x/n.y/w/h` cover it: `n.y` is the **tab's**
-top edge, the box element paints `FRAME_TAB_DROP` (= `FRAME_TAB_H - 1`, the tab less its 1px overlap into
-the border) lower, and its inline height is `n.h` minus that drop. The tab therefore sits at a fixed offset
-from `n.y` in **both** collapse states — a folded frame is nothing but that tab (`.frame-folded`,
-`isFrameFold`, rounded all round, `nodeH` = `FRAME_TAB_H`, width measured) — so folding never moves the
-title. `FRAME_TAB_H` is **40px**, a normal card's padding and title metric, and it must equal what the CSS
-renders, so the tab's `padding`/`font-size`/`line-height` are pinned in `styles.css` rather than inherited
-from `.node .title`.
+**`isFrame` means an EXPANDED frame** (`view/layout.ts` tests `!collapsed`), and so does every question built
+on it; a rule that must also reach the folded pill keys on the raw `n.type === 'frame'`.
 
-**A frame is an outline and a label** — its title tab and its folded pill are a 2px outline in
-`--frame-stroke` over nothing. Knock-ons:
-
-- **`FRAME_TAB_H` is spent exactly.** Widths are MEASURED off the element (`nodeW`) and `nodeH` just asserts
-  `FRAME_TAB_H`, so `box-sizing:border-box` + nothing setting a height means `padding` + `border` + the 20px
-  line must total 40: `8px/2px` for a pill. (2px, not the box's 4px: a 4px rim eats most of the label.)
-- **A title with no fill under it is inked against what's BEHIND the frame** (`--tab-ink` ← `behindFill`,
-  written by `paintNode` on every frame), not against the frame's own colour: `var(--ink)` answers "what
-  reads on this fill", the wrong question once the fill is gone. `behindFill` walks out through the
-  containers that actually paint one (authorship-tested like `canvasFill`, since `.c-none` is transparent),
-  stops at the open frame, and falls back to canvas → map colour → `THEME_BG`.
-- **`isFrame` means an EXPANDED frame** (`view/layout.ts` tests `!collapsed`), and so does every question
-  built on it. Both rules above must reach the FOLDED half too, which is why `paintNode` writes `--tab-ink`
-  off the raw `n.type === 'frame'` and `inFrame` bails on the raw type as well. Get the second wrong and a folded frame falls through to the plain-card branch and takes
-  the `.frame-child` tint — whose `(0,3,0)` selector out-specifies `.node.frame-folded`'s own
-  `background:none`, so the pill meant to read as a bare outline wears a washed-out fill.
-Two more consequences: the name and the description must each stay a single ellipsised line (a wrapping
-one would make the box's position depend on a live measurement — hence the hover tooltip in `paintNode`), and the vertical projection
-of a hosted child into its host goes through `frameInsetY` rather than a bare `FRAME_BORDER` —
-`frameInterior`, `place`, `frameContentEl` and `followEdges` share it (the X axis has no such helper), with
-`elTop` the one place that applies the drop.
-
-**Anything that writes a node's `left`/`top` must go through `placeSelf` + `elTop`**, not a bare `place()` —
-that is the pair `paintNode`'s final branch uses, and the relayout ANIMATION (`placeNodeEl`/`setNodeElXY`)
-writes left/top too, since interpolating them IS the animation. Skipping `elTop` parks a frame's box at its
-bounds top instead of one tab lower for the transition.
+**Anything that writes a node's `left`/`top` must go through `placeSelf`**, not a bare `place()` — that is
+what `paintNode`'s final branch uses, and the relayout ANIMATION (`placeNodeEl`/`setNodeElXY`) writes left/top
+too, since interpolating them IS the animation; `placeSelf` keeps a hosted card in its container's wrapper.
 
 **A frame's content wrapper is LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
 `hostsContent(n)` (an expanded frame box) — `paintNode` drops it the moment that stops
@@ -263,8 +246,9 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   frames): on a reload there's nothing to transition FROM, so the fade reads as flashing the wrong background,
   and on a back/forward step the camera and selection jump too. Only when the colour is **authored** somewhere
   up the chain (`hasAuthoredColor`): `effectiveColor` falls back to the theme's neutral card fill for a frame
-  nobody coloured, and painting the whole canvas *that* is a lie, and in the light theme a near-white that
-  swallows the chrome floating on it. Authorship, not the hex — a frame explicitly coloured white still tints.
+  nobody coloured, and painting the whole canvas *that* is a lie, and a near-white that swallows the chrome
+  floating on it. Authorship, not the hex — a frame explicitly coloured white still tints. A FRAME's canvas is
+  its PALE fill (`paleFill`), the same wash its box wears, so the full-colour cards it holds read on it.
 - **At the TOP level that same variable carries the MAP's own colour** — `state.canvasColor`, per-map in
   `settings.json` beside the grid, so it travels with the vault rather than the browser. One resolver answers
   both, `canvasFill`, off `canvasOwner`: the open frame, or `null` for "the map". The
@@ -285,11 +269,8 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   `#grid` declares `--grid-ink` from — the theme's recipe with the canvas fill standing in for `--grid` and
   `inkFor(fill)` for `--text`, so an arbitrary picked colour needs no special case; without it a strong canvas
   colour either swallows the grid or turns it harsh).
-- **`hostFrame` and `containerHost` are two different questions.** `hostFrame` is a DOM fact — whose wrapper
-  is my element inside — and it stops at the scope root, which hosts nothing. `containerHost` is a TONE fact —
-  whose fill am I sitting on — and the open frame governs that all the more now the canvas is painted its
-  colour. `inFrame` (the `.frame-child` step) must use `containerHost`, or the cards
-  in an open frame lose their step and vanish into a canvas painted the very colour they inherit.
+- **`hostFrame` stops at the scope root**, which hosts nothing; `containerHost` (layout.ts) is the same walk
+  without that exception.
 - **`hostFrame` stopping at the scope root** is what makes "the box isn't there" true of the DOM and not only
   of the paint: its children are placed straight under `#world`, unclipped. The `.frame-content` wrapper is
   dropped by the existing ONE drop in `paintNode` (it's `isHidden`, so `hostsContent` goes false), and
@@ -363,7 +344,7 @@ text at all.
   drag-pan, pinch, `⌘±`, `F`/fit, a glide — so one clamp constrains all of them instead of a guard per
   gesture, and `⌘±`/`F` become inert rather than needing to be caught. It writes `state.view` ITSELF and not
   just the transform: `screenToWorld` reads the model, and painting at k=1 while hit-testing at some other k
-  is how a click lands on the wrong card. Opening sets only `y` (`READING_TOP - elTop(t, t.y)`), clear of
+  is how a click lands on the wrong card. Opening sets only `y` (`READING_TOP - t.y`), clear of
   the crumb bar.
 - **A scope LEVEL, deliberately not a panel beside the canvas.** One entry on the same stack, one crumb, `↓` /
   a crumb / `Esc` to leave, the file path in the same `open=` hash term — so back/forward, reload and
@@ -401,8 +382,7 @@ text at all.
   through `effectiveColor`, so an uncoloured parent keeps walking up. A root-level card has no parent, so the
   map's own colour shows — exactly what was behind the card before it was opened. And when the parent has no
   authored colour ANYWHERE up its chain, `canvasFill` falls through to the map's own canvas colour rather
-  than to nothing: the same rule `behindFill` already states for containers ("what's behind an uncoloured
-  container is whatever is behind IT"). Without that, going into a card on a teal board turned the board
+  than to nothing: what's behind an uncoloured container is whatever is behind IT. Without that, going into a card on a teal board turned the board
   grey and coming out turned it teal again — and the identical discard applied to an uncoloured open FRAME.
 - **The chrome it drops is dropped in JS, not shouted down in CSS.** `chipFace` returns `''` for it (no
   fold chip — folding the card you are standing inside would leave you looking at nothing) and the resize
@@ -428,8 +408,7 @@ dragging its left/right edge, and `n.w` (→ `mm_w`) is that dragged width and n
 layout pass computed. Two axes' worth of handles come off that split (`ensureResizeHandles`, `main.ts`):
 
 - `frame` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
-  `isBoxType`). For a **frame** these are its BOUNDS, i.e. they include the title tab: `mm_position_y` is the
-  tab's top edge and the box starts `frameTabDrop` lower.
+  `isBoxType`). For a **frame** these are its box; its label hangs outside, above it.
 - An **IMAGE card** is the third, and the one that isn't a kind: see below.
 - `card` is **width-only** — 2 side zones (`EW_DIRS`), and its height is never authored, written inline
   or persisted: a card measures it from its content (`nodeH` → `offsetHeight`). Minimum width is the kind's own natural width, so a
@@ -664,7 +643,7 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
 - **The chip lives INSIDE `.title-row`** (hence the `> .title-row >` in every one of its selectors), which
   puts both faces in the same spot in every state — hanging 8px off the TITLE's top-right corner — so folding
   never moves the button: the row is the containing block exactly when it's positioned, i.e. when it's a
-  frame's title TAB, so a frame's chip rides its tab instead of sitting `FRAME_TAB_DROP` lower on the box, and
+  frame's label pill, so a frame's chip rides its label instead of sitting on the box, and
   a folded frame (whose label IS the element) needs no special case. Where the row is in flow (a card) the
   offsets resolve against the node's own padding box.
 - The hover rule needs `:not(:has(.node:hover))` because child cards are DOM-nested (a deep hover would
@@ -812,17 +791,17 @@ stays put.
 
 ## Colour and zoom
 
-**ONE card palette for both themes.** `body.light` overrides no `--pal-*` value, so a card is the same colour
-wherever the map is opened — and therefore has one ink, decided by the colour itself. `refreshPalette` still
-re-reads on a theme toggle (a no-op now, kept so a future per-theme colour would work) and still repaints,
-because what *does* differ per theme is `effectiveColor`'s fallback for an uncoloured FRAME (white / charcoal),
-plus `c-none`'s ink. The palette is bright sticky-note pastels that all take DARK ink, and an uncoloured CARD
-falls back to `amber`, the sticky yellow — derived, never written, so the note on disk stays uncoloured. The
-keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
+**ONE theme, FigJam's.** There is no light/dark switch: a pale grey board (`--bg` #f5f5f5) with a dot grid,
+white chrome on a soft shadow (`--shadow-ui`), Figma blue (#0d99ff) for selection, and DARK islands for the
+object toolbar, its popovers and the context menu (`--bar-*`). One theme means a map looks the same
+everywhere, and a colour has exactly one ink. The card palette is FigJam's sticky pastels (approximated),
+which all take DARK ink; an uncoloured CARD falls back to `amber`, the sticky yellow — derived, never
+written, so the note on disk stays uncoloured — and an uncoloured FRAME to `white`. The keys (`amber`,
+`slate`, …) are the file format; only the hexes in `styles.css` may change.
 
-**The look: a paper board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
-(bundled latin subset, `src/assets/fonts`, OFL). Everything at rest is FLAT — no shadows; only a card in hand casts
-one (`.dragging`). Motion uses the `scale` property, never `transform` (the drag and
+**The look: a FigJam board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
+(bundled latin subset, `src/assets/fonts`, OFL). Cards at rest are FLAT — no shadows; only a card in hand casts
+one (`.dragging`), and only the floating chrome sits on a soft shadow. Motion uses the `scale` property, never `transform` (the drag and
 the relayout animation own that): a new card pops in via a `data-pop` attribute (a class would be wiped by
 paintNode's wholesale `className` rewrite), and a card in hand lifts by a SHADOW only (never a scale, so
 the smart guides line up with the edges you see). The pop stands down under reduced motion.
@@ -834,39 +813,24 @@ computed: `utils/ink.ts` measures WCAG contrast and `main.ts`'s `deriveInk` inje
 (its text colour) and **`--scrim`** (what an in-place editor paints *behind* that ink). Four rules follow:
 
 - **No rule anywhere may name a colour key to fix its text.** One `color: var(--ink)` per surface that wears a
-  `.c-*` class (`.node`, `.oc-card`, `.ol-row`) covers every colour in both themes — that
+  `.c-*` class covers every colour — that
   replaced four hand-maintained exception lists that all had to agree, and it's what lets an off-palette colour
   work with no new CSS.
 - **`--scrim` is paired with the ink, not fixed.** Every editor backdrop (`.title.editing`, `.body-edit`,
   `.oc-title:focus`, `.ol-title.editing`) uses it: a hardcoded dark scrim under dark ink is
   unreadable. Same reason the body's marks (`code`, `pre`, `blockquote`, `hr`, image placeholders) tint with
   `color-mix(… var(--ink) …)` instead of a literal white/black.
-- **Ink is a property of the CARD, not of the theme** — which is why the ink hexes are fixed and `body.light`
-  overrides text nowhere. `c-none` is the one exception, by construction: with no fill there's nothing to
-  measure, so it takes `var(--text)` and has its scrim flipped by hand. Ink is computed from a frame's *own*
-  fill; the `93%`-toward-`--ink` step a frame's cards take is not re-measured (it stays legible).
-- **A card inside a frame steps one notch off its host's fill** — `.frame-child` (`inFrame`, nearest frame
-  ancestor by
-  **`containerHost`**, deliberately not `hostFrame`, so an OPEN frame still steps its cards though it hosts no
-  elements). A card INHERITS its colour from its frame, so one dropped into a coloured frame resolves to the
-  frame's own fill and vanishes into it. The step is `93%` toward that card's own **`--ink`**, not a
-  literal `#fff`: `--ink` is by construction the direction that HAS contrast against this fill, and white has
-  none on a pale one (the light theme's default card is `#f2f4f7`, whose row came out flat). That the visible
-  steps didn't change is structural: `INK_MIN` hands out dark ink only *below* its contrast floor, i.e. on
-  exactly the fills too pale for a white step to show, so the two switch over together. Only plain cards take the
-  tint (`inFrame` refuses the rest) — a nested container already owns its tone.
+- **Ink is a property of the CARD's fill.** `c-none` is the one exception, by construction: with no fill
+  there's nothing to measure, so it takes `var(--text)` and has its scrim set by hand.
 
 The bias is deliberate: light ink is kept unless its contrast falls below `INK_MIN` (**2.5**) rather than always
-taking the higher contrast, and that one number serves both themes. It's pinned low enough that **every palette
-colour keeps the ink it had before any of this existed** (the lowest being the dark theme's amber at 2.85), so
-dark ink is reserved for fills genuinely too pale for white — the off-palette case this is all for. No single
-threshold can also flip the light theme's pale fills, so its slate takes white ink, accepted rather than worked
-around.
+taking the higher contrast. With FigJam's pastels every palette colour falls below it and takes dark ink
+(`#1e1e1e`) except `black`; the bias matters for an off-palette custom colour.
 
 **A colour VALUE is a palette key OR an authored `#rrggbb`.** `n.color` (and `effectiveColor`'s result) is `''`
 (inherit), `'none'`, a key, or a custom hex from the colour popover's spectrum chip — and **nothing branches on
 which**, because three resolvers in `main.ts` absorb it: `colorFill` (the hex JS tints with — edges,
-`--frame-stroke`; `null` for none/inherit, which every caller already falls back to `--edge` for), `colorClass`
+the canvas; `null` for none/inherit, which every caller already falls back to `--edge` for), `colorClass`
 (`c-<key>`, or `c-custom` — a hex can't be a class name) and `colorVars`/`applyColorVars` (that node's
 `--card`/`--ink`/`--scrim` written inline, since the set of custom colours is open-ended and only a class can
 carry pre-computed ones). Use them at **every** site that turns a colour into a class or a tint — the class

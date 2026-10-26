@@ -70,7 +70,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
   layout pass reads `offsetHeight`, so it needs current DOM (the paint-before-measure rule).
-- **Anything writing a node's `left`/`top` goes through `placeSelf` + `elTop`**, never bare `place()`.
+- **Anything writing a node's `left`/`top` goes through `placeSelf`**, never bare `place()`.
 - **A colour is a palette key OR an authored `#rrggbb`**, and nothing branches on which: go through
   `colorFill` / `colorClass` / `applyColorVars`, never build `c-${color}` by hand. Ink and scrim are
   DERIVED from the fill (`utils/ink.ts`), never authored, and no CSS rule may name a colour key to fix
@@ -82,11 +82,11 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 
 ## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
-- Frames — "A `frame`'s BOUNDS include its title tab" · "A container's content wrapper is
+- Frames — "A frame COLLECTS what it covers" · "A frame's BOUNDS are its box" · "A container's content wrapper is
   LIFECYCLE-managed" · "A frame can be OPENED, and
   then the canvas IS its interior" · "An OPENED CARD is its note" (scope, crumbs, canvas colour, `detachParentId`).
 - The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
-  note is drawn on its TAB"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
+  note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
@@ -94,5 +94,5 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
   fallback, FSA) · "Boot order" · "External-change reload".
-- Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its
-  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a paper board of sticky notes".
+- Colour and zoom — "ONE theme, FigJam's" · "A card's text colour is DERIVED from its
+  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".

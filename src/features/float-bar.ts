@@ -10,9 +10,10 @@ import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { subtreeBox, frameTabDrop } from '../view/layout.js';
+import { subtreeBox } from '../view/layout.js';
 import { createProperties, type PropertyControls } from './properties.js';
-import { startInlineEdit, startBodyEdit } from './inline-edit.js';
+import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
+import { settleFrames } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, addCardInside, createSibling, mkNode } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
 import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
@@ -20,7 +21,7 @@ import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
-import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, elTop, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, relayout } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -28,6 +29,7 @@ const bar = byId('floatBar');
 const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
+const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
 const popConnector = byId('fbPopConnector');
@@ -47,14 +49,8 @@ function props(): PropertyControls {
 // no children it's left as-is, or given the default size when `orDefault`. Shared by the Auto-size
 // action and the load migration that turns a card's old children into a frame's
 // (data/persistence.ts).
-// The TOP margin also has to carry the frame's own title tab: n.y is the tab's top edge and the box
-// starts FRAME_TAB_DROP lower (main.ts), so the pad above the content is that drop plus the same
-// margin as the other three sides. n.h then encloses the tab for free, since it measures from n.y.
-// A function, not a const: main.js's exports aren't initialized yet while this module's body runs
-// (the deliberate main↔features import cycle — see CLAUDE.md and the props() note above), so reading
-// FRAME_TAB_DROP at module scope throws "cannot access before initialization".
+// The frame's label hangs outside the box (above it), so the margin is the same on all four sides.
 const FRAME_FIT_PAD = 16;
-function frameFitTop(f?: MindNode): number { return (f ? frameTabDrop(f) : FRAME_TAB_DROP) + FRAME_FIT_PAD; }
 export function fitFrameToContent(n: MindNode, orDefault = false): void {
   const kids = childrenOf(n.id).filter(k => !isHidden(k));
   const snapStep = gridSnap();
@@ -66,7 +62,7 @@ export function fitFrameToContent(n: MindNode, orDefault = false): void {
   }
   if (!isFinite(x0)) { if (orDefault) { n.w = FRAME_W; n.h = FRAME_H; } return; }
   n.x = snap(x0 - FRAME_FIT_PAD);
-  n.y = snap(y0 - frameFitTop(n));
+  n.y = snap(y0 - FRAME_FIT_PAD);
   n.w = Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - n.x));
   n.h = Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - n.y));
 }
@@ -92,7 +88,7 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
       x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
     }
     if (!isFinite(x0)) continue;
-    const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - frameFitTop(f)));
+    const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - FRAME_FIT_PAD));
     const R = Math.max(f.x + (f.w ?? FRAME_W), up(x1 + FRAME_FIT_PAD)), B = Math.max(f.y + (f.h ?? FRAME_H), up(y1 + FRAME_FIT_PAD));
     if (L === f.x && T === f.y && R === f.x + (f.w ?? FRAME_W) && B === f.y + (f.h ?? FRAME_H)) continue;
     touch(f.id);
@@ -136,7 +132,7 @@ export function groupSelectionIntoFrame(): void {
     const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
     const fx = isFinite(x0) ? snap(x0 - FRAME_FIT_PAD) : 0;
-    const fy = isFinite(y0) ? snap(y0 - frameFitTop()) : 0;
+    const fy = isFinite(y0) ? snap(y0 - FRAME_FIT_PAD) : 0;
     const fw = isFinite(x1) ? Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - fx)) : FRAME_W;
     const fh = isFinite(y1) ? Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - fy)) : FRAME_H;
     const frame = mkNode({
@@ -148,6 +144,7 @@ export function groupSelectionIntoFrame(): void {
     frameId = frame.id;
     state.nodes.set(frameId, frame);
     for (const n of nodes) { touch(n.id); n.parent = frameId; n.dirty = true; }
+    settleFrames([frameId]);   // …and whatever else its box now covers
   });
   relayout(); selectNode(frameId); scheduleSave();
   setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a frame`);
@@ -155,7 +152,17 @@ export function groupSelectionIntoFrame(): void {
 // ⤢ go IN: shown only when the selection can be opened (canOpenSelection below).
 function markOpen(): void {
   fbOpen.style.display = canOpenSelection() ? '' : 'none';
+  const n = anchorNode();
+  fbTitle.style.display = state.sel.size === 1 && n?.type === 'frame' ? '' : 'none';
 }
+// T — a frame's TITLE. An untitled frame shows no label at all (its text was deleted, FigJam-style),
+// so this is how one comes back: it seeds a name and selects it, ready to type over. A named frame just
+// opens its label with the name selected — the same editor F2 and a double-click on the label open.
+fbTitle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closePopovers();
+  const n = anchorNode(); if (n?.type === 'frame') editFrameTitle(n);
+});
 
 // ---------- colour trigger ----------
 // The trigger button reuses the SAME .swatch/.inherit/.nofill CSS look as the popover's chips
@@ -368,10 +375,9 @@ function positionBar(): boolean {
   const lr = labelRect(n);
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   const left = lr.left + lr.width / 2 - bw / 2;
-  // Anchor on the node's BOUNDS top, not its element's: a frame box's element starts FRAME_TAB_DROP
-  // below the bounds with the title tab hanging above it (elTop, main.ts), so measuring the element
-  // would hang the bar over the tab and shift it when a frame is converted to a card or back.
-  let top = r.top - elTop(n, 0) * state.view.k - bh - GAP;
+  // Over whichever is higher, the box or its label: a frame's label hangs ABOVE its box (outside its
+  // bounds), and the bar mustn't sit on top of the name it's about to edit.
+  let top = Math.min(r.top, lr.top) - bh - GAP;
   // …flipping below the card when there isn't room above it. Measured from the SAFE top edge, not
   // the window's: under `viewport-fit=cover` the first rows of pixels can be behind the status bar
   // / notch, and a bar that "fits" there would only be clamped back down over its own card.

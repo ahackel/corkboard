@@ -15,14 +15,13 @@ import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStor
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
-import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
+import { inkFor, scrimFor, isHexColor, paleFill } from './utils/ink.js';
 import { childrenOf, isHidden, nodeLabel, descendantCount, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
-import { setupTheme, toggleTheme } from './view/theme.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand } from './view/camera.js';
-import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, isFrame, frameLabelled, frameDescription, frameTabDrop, FRAME_DESC_H } from './view/layout.js';
+import { applyLayouts, hostFrame, frameInterior, containerBox, isFrame, frameLabelled, frameDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -30,9 +29,8 @@ import './features/text-drag.js';   // registers the drag-body-text-out-of-a-car
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
-import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
+import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag, settleFrames } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
-import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, growFramesToHold, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
@@ -53,7 +51,6 @@ import { snapTo } from './utils/num.js';
 import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
-setupTheme();
 setupGrid();
 // Wiring only — it must not READ anything back out of main. Everything down here runs while main's
 // own body is still evaluating, so main's top-level consts below (SWATCH_BG, PALETTE, …) are still in
@@ -259,7 +256,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
 export function effectiveColor(n: MindNode): string {
   // A FRAME wears only its own colour: one nested in a blue frame would otherwise turn blue too and
   // vanish into it. Uncoloured, it's the neutral surface below — a box you can see inside any other.
-  if (n.type === 'frame') return n.color || (document.body.classList.contains('light') ? 'white' : 'black');
+  if (n.type === 'frame') return n.color || 'white';
   const drag = ui.drag;
   let previewId: string | null = null;
   let previewParent: MindNode | null | undefined;
@@ -276,9 +273,9 @@ export function effectiveColor(n: MindNode): string {
   // Nothing in the chain is coloured. A CARD is a sticky note, and a sticky note is yellow (docs/PRODUCT.md:
   // "a default card is a coloured sticky note") — derived here, never written, so a note on disk stays
   // uncoloured and picking a colour is still the user's own act. A FRAME is a surface cards sit ON, so it
-  // keeps a neutral fill: white on the light board, charcoal on the dark one.
+  // keeps a neutral white.
   if (n.type === 'card') return 'amber';
-  return document.body.classList.contains('light') ? 'white' : 'black';
+  return 'white';
 }
 export function paintNode(n: MindNode): void {
   const el = nodeEl(n);
@@ -309,19 +306,9 @@ export function paintNode(n: MindNode): void {
   const showAddTag = n.id === state.selId && !isFrameBox(n) && !state.readOnly && !isLockedEffective(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
-  // A frame's title paints on no fill of its own (styles.css: neither the tab nor the folded pill has
-  // a background), so its ink can't be the --ink its own colour demands — it's measured against
-  // whatever shows through behind the frame. Frames only; nothing else has a tab. Removed again on the
-  // other side, exactly as --frame-stroke is, so a retyped frame doesn't keep a stale one.
-  // The raw type, NOT isFrame: that one means "an EXPANDED frame" (it tests !collapsed), so it misses
-  // precisely the half that needs this most — every folded frame, which
-  // then fell back to var(--ink) and inked a bare outline for a fill that isn't painted.
-  if (rendersAsFrame(n)) el.style.setProperty('--tab-ink', inkFor(behindFill(n)));
-  else el.style.removeProperty('--tab-ink');
   el.className = 'node ' + colorClass(col)
     + (isReadingRoot(n) ? ' reading-root' : '')   // opened as a page: one screen-fixed strip (styles.css)
     + (isFrameBox(n) ? ' frame' : '')
-    + (inFrame(n) ? ' frame-child' : '')   // a card inside a frame's box — rendered a step off its fill
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
@@ -357,7 +344,7 @@ export function paintNode(n: MindNode): void {
   const carried = !!(drag && n.hostFrameId != null && drag.targets.has(n.hostFrameId));
   const dragOrig = !carried ? drag?.origins?.get(n.id) : undefined;
   if (dragOrig) {
-    el.style.left = dragOrig.x + 'px'; el.style.top = elTop(n, dragOrig.y) + 'px';
+    el.style.left = dragOrig.x + 'px'; el.style.top = dragOrig.y + 'px';
     el.style.transform = `translate(${n.x - dragOrig.x}px,${n.y - dragOrig.y}px)`;
     const root = dragRoot();
     if (el.parentElement !== root) root.appendChild(el);
@@ -374,14 +361,14 @@ export function paintNode(n: MindNode): void {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
-      el.style.top  = (elTop(n, np.y) - elTop(p, pp.y)) + 'px';
+      el.style.top  = (np.y - pp.y) + 'px';
       if (el.parentElement !== pEl) pEl.appendChild(el);
     } else {
       // root → #world; direct frame child → its content wrapper. A FRAME's own box always takes
       // this branch: its content wrapper is placed by the very same place()/settledHost call
       // (frameContentEl), and the two only stack correctly — wrapper above the box's own fill —
       // while they're SIBLINGS in one DOM parent.
-      placeSelf(n, np.x, elTop(n, np.y));
+      placeSelf(n, np.x, np.y);
     }
   }
   // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card
@@ -389,18 +376,13 @@ export function paintNode(n: MindNode): void {
   // its content, so its inline height is always cleared and left to CSS.
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
-    // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
-    // drop, so the box height is the bounds height less it (never re-spell the drop inline).
-    el.style.height = (nodeH(n) - elTop(n, 0)) + 'px';
-    // border matches this card's EDGE tint (same colour edges use), falling back to --edge
-    el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
+    el.style.height = nodeH(n) + 'px';
     ensureResizeHandles(n, FRAME_DIRS);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
   } else if (isFrameFold(n)) {
-    // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
-    // size, no resize zones, but it keeps --frame-stroke, which tints the tab itself.
+    // folded: the element is the bare pill, shrink-wrapped by CSS (.frame-folded) — no inline size,
+    // no resize zones.
     if (el.style.width) { el.style.width = ''; el.style.height = ''; }
-    el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
     clearResizeHandles(el);
   } else if (isImageFold(n)) {
     // folded: a fixed IMAGE_FOLD square of the picture itself (styles.css .image-card.collapsed), so
@@ -415,7 +397,6 @@ export function paintNode(n: MindNode): void {
     const authored = n.w != null || isReadingRoot(n);
     el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
-    el.style.removeProperty('--frame-stroke');
     ensureResizeHandles(n, EW_DIRS);
   }
   // After the whole chain, because a frame and a plain card each hand out their own handles: a DERIVED
@@ -435,18 +416,18 @@ export function paintNode(n: MindNode): void {
     // rules, nothing hoisted out of the note into a field of its own. So the slot stays empty (`no-title`
     // below collapses the row away, keeping only the fold chip that lives in it) and cardMarkdown feeds
     // the whole note to the body below.
-    // A FRAME's tab renders that same markdown, flattened to ONE inline line (styles.css) — so it obeys
-    // the same rule while staying a tab — plus one line of description under it when it has one. It
-    // keeps a `.title` element rather than a body because its geometry is fixed (FRAME_TAB_H, plus
-    // FRAME_DESC_H for the description), and its own `.body` is display:none because the box below
-    // holds cards, not a note.
+    // A FRAME's label renders that same markdown, flattened to ONE inline line (styles.css) — so it
+    // obeys the same rule while staying a label — plus one line of description under it when it has
+    // one. It keeps a `.title` element rather than a body because it hangs OUTSIDE the box (a pill
+    // above it, FigJam-style), and its own `.body` is display:none because the box holds cards, not a
+    // note.
     if (rendersAsFrame(n)) {
       // …and under the name, on a second muted line, its DESCRIPTION (frameDescription — the note
-      // after the heading). Only on the open box: the folded pill is one line, FRAME_TAB_H tall.
+      // after the heading). Only on the open box: the folded pill is one line, FRAME_TAB_H tall. The
+      // label grows UPWARD from the box's top edge, so a description never moves the box.
       const desc = isFrameBox(n) ? frameDescription(n) : '';
       const md = collapsed ? collapsedMarkdown(label) : desc ? joinHeading(n.title, '', false) : cardMarkdown(label);
       const full = nodeLabel(label) + (desc ? '\n' + desc : '');
-      el.style.setProperty('--tab-extra', (desc ? FRAME_DESC_H : 0) + 'px');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
       // destroys and rebuilds the tab's child nodes — where nothing about the label has changed. The
@@ -460,8 +441,8 @@ export function paintNode(n: MindNode): void {
           + (desc ? `<div class="frame-desc">${renderBodyHTML(desc)}</div>` : '');
       }
       titleEl.title = full;   // ellipsised lines, so the full text lives in the tooltip
-      // A frame with nothing written on it shows NO TITLE: expanded, that means no tab at all and no
-      // strip reserved for one (elTop/frameInsetY); FOLDED, a bare stub of a pill. Either way its fold
+      // A frame with nothing written on it shows NO TITLE: expanded, that means no label at all;
+      // FOLDED, a bare stub of a pill. Either way its fold
       // CHIP stays visible (styles.css re-shows it inside the invisible row) — hiding that would leave a
       // nameless frame with no way to open again. The rim is what you write on (onFrameRim).
       // Not while its own label editor is open, though: the row can't be invisible and be typed into.
@@ -587,24 +568,16 @@ export function gridSnap(): number { return state.gridSize || 1; }
 // than drag it: a new card at the pointer, a duplicate, a paste, an image dropped or pulled out of a
 // note. Anything the user positions ends up on the grid, however it got there.
 export function snapPt(p: Pt): Pt { const g = gridSnap(); return { x: snapTo(p.x, g), y: snapTo(p.y, g) }; }
-export const FRAME_BORDER = 4;   // must match .node.frame's CSS `border` width (styles.css)
-// Height of a frame's title TAB — the folder tab attached above the box's top-left corner
-// (styles.css `.node.frame > .title-row`). Must match the CSS (10px padding + 20px line-height + 10px
-// padding — a normal card's own padding and title metric, so the tab reads like a collapsed card),
-// which is why the tab stays a SINGLE ellipsised line: this is a constant, and the frame's
-// whole geometry hangs off it, so a wrapping tab would make the box's world position a function of
-// the rendered line count.
+export const FRAME_BORDER = 1;   // must match .node.frame's CSS `border` width (styles.css)
+// Height of a FOLDED frame's pill (styles.css .frame-folded: 8 + 20 + 8 padding/line, plus a 2px
+// border top and bottom). A constant, so the pill is one ellipsised line and never measured.
+// An EXPANDED frame's label is not part of its geometry at all: it hangs ABOVE the box, outside the
+// frame's bounds (styles.css `.node.frame > .title-row`), the way a FigJam section's name does — so
+// naming, renaming or un-naming a frame never moves its box or the cards in it, and n.y/n.h are the
+// box itself.
 export const FRAME_TAB_H = 40;
-// A frame's BOUNDS (n.x/n.y/w/h — and so mm_position_y/mm_h on disk) include that tab: n.y is the
-// TAB's top edge and the box starts FRAME_TAB_DROP lower. One tab, less the 1px the tab overlaps the
-// box's top border (styles.css), so the tab spans exactly [n.y, n.y + FRAME_TAB_H] — in BOTH states,
-// which is the point: a folded frame renders as the bare tab at n.y, so the title doesn't move when
-// the box folds away beneath it.
-export const FRAME_TAB_DROP = FRAME_TAB_H - 1;   // 39
-// Default frame container size (world px). The height is BOUNDS — a 260px box plus the tab above it —
-// so it's written as that sum rather than a literal, which is what keeps a new frame's usable
-// interior fixed when the tab height changes (declared after FRAME_TAB_DROP so the sum is in scope).
-export const FRAME_W = 360, FRAME_H = 260 + FRAME_TAB_DROP;
+// Default frame container size (world px).
+export const FRAME_W = 360, FRAME_H = 260;
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
 // Whether a node currently renders as a frame BOX. A collapsed frame folds to its bare title tab
 // (isFrameFold below), so it has no box at all. Shared by the geometry helpers below.
@@ -660,18 +633,6 @@ function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed;
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
 // below.
 function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n); }
-// A card sitting in a frame is tinted a touch off the frame's fill (.frame-child): a card INHERITS its
-// colour from its ancestors (effectiveColor), so one dropped into a coloured frame resolves to the
-// frame's own fill and would vanish into it. Plain cards only — a nested frame's fill is tied to the
-// --frame-stroke its border and tab share, and an image card is deliberately image-only.
-// containerHost, not hostFrame: an OPEN frame hosts no elements, but the canvas wears its fill
-// (syncCanvasBackground), so its cards need the tint most of all. And `type`, not isFrame, for the
-// node itself: a FOLDED frame is a bare outlined pill and must not take the tint's background.
-function inFrame(n: MindNode): boolean {
-  if (n.type === 'frame' || isImageBox(n)) return false;
-  const h = containerHost(n);
-  return !!h && isFrame(h);
-}
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
 // A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
@@ -750,32 +711,6 @@ function dragRoot(): HTMLElement { return (ui.drag && ui.drag.moved) ? dragLayer
 function paintPos(n: MindNode): Pt {
   return ui.drag?.origins?.get(n.id) ?? n;
 }
-// Where a node's ELEMENT paints, given a bounds-top y: the SINGLE authority for the tab drop. The same
-// y for everything except a frame BOX, whose element is the box alone — one tab BELOW the bounds top
-// (FRAME_TAB_DROP), with the tab itself an absolutely positioned child hanging back up over that gap
-// (styles.css). A FOLDED frame's element IS that tab, so it paints at the bounds top like any card.
-// Takes y separately from n because a mid-drag paint writes the FROZEN origin, not the live position.
-// A frame's bounds cover its tab only while it HAS one, so naming — or un-naming — one changes what its
-// stored y/h mean. Shift them by the tab's height in the opposite direction, so the BOX (the part anyone
-// is looking at, and the part its children sit in) doesn't move when the text crosses that line. Pass
-// what frameTabDrop said BEFORE the text changed — a description line appearing or going is the same
-// move, one line's worth. Folded is left alone: the pill sits AT n.y, so moving the bounds there would
-// move the thing on screen instead of holding it still.
-export function reframeForTab(n: MindNode, wasDrop: number): void {
-  if (n.type !== 'frame' || n.collapsed) return;
-  const d = frameTabDrop(n) - wasDrop;
-  if (!d) return;
-  n.y -= d;
-  if (n.h != null) n.h += d;
-}
-export function elTop(n: MindNode, y: number): number {
-  return isFrameBox(n) ? y + frameTabDrop(n) : y;
-}
-// elTop's inverse: the BOUNDS top for an element that paints at y. Only followEdges needs it — it
-// reads back interpolated left/top mid-animation to reproject them into world coordinates.
-function boundsTop(n: MindNode, y: number): number {
-  return isFrameBox(n) ? y - frameTabDrop(n) : y;
-}
 // Place an element at absolute world coords, expressed relative to its container: #world (or the drag
 // layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so
 // the offset is the host's own inset (the border, plus a frame's title tab — see frameInsetY).
@@ -838,7 +773,7 @@ function orderContentAfterBox(n: MindNode): void {
 function frameContentEl(f: MindNode): HTMLElement {
   let w = f.frameContentEl;
   if (!w) {
-    placeSelf(f, f.x, elTop(f, f.y));
+    placeSelf(f, f.x, f.y);
     w = document.createElement('div'); w.className = 'frame-content'; f.frameContentEl = w;
   }
   const box = frameInterior(f);
@@ -855,8 +790,8 @@ function frameContentEl(f: MindNode): HTMLElement {
   return w;
 }
 // ---------- resize ----------
-// a frame is never narrower than a normal card; its min HEIGHT is bounds, so it carries the tab too
-export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
+// a frame is never narrower than a normal card
+export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;
 // An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
 // (startNodeResize below), so there is no smaller expanded size to clamp at.
 // A width-only kind can only ever get WIDER than the width it has by default — the whole point is
@@ -1019,6 +954,13 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     paintNode(n);
     // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
     // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
+    // A resized FRAME takes in what it now covers and lets go of what it no longer does
+    // (settleFrames). It isn't grown back around what it took in — the user just chose its size —
+    // but a card it let go of grows the frame it landed in, as any drop does.
+    if (n.type === 'frame') {
+      const released = settleFrames([n.id]).filter(id => state.nodes.get(id)?.parent !== n.id);
+      growFramesToHold(released);
+    }
     relayout(); scheduleSave(); commitStep();
   };
   window.addEventListener('pointermove', move);
@@ -1052,12 +994,10 @@ export function updateEmptyHints(): void {
 // ---------- animated relayout (expand / collapse) ----------
 function prefersReducedMotion(): boolean { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } }
 // The animation writes left/top itself (that's what it interpolates), so it must go through the SAME
-// placement authority paintNode's own final branch uses — placeSelf + elTop — not a bare place():
-//   · elTop, or a frame's element parks at its BOUNDS top instead of one tab lower, so mid-animation
-//     the box sat up over its own tab band.
-//   · placeSelf, so a hosted card stays in its container's wrapper for the duration.
-function placeNodeEl(n: MindNode): void { if (n.el) placeSelf(n, n.x, elTop(n, n.y)); }
-function setNodeElXY(n: MindNode, x: number, y: number): void { if (n.el) placeSelf(n, x, elTop(n, y)); }
+// placement authority paintNode's own final branch uses — placeSelf, not a bare place() — so a hosted
+// card stays in its container's wrapper for the duration.
+function placeNodeEl(n: MindNode): void { if (n.el) placeSelf(n, n.x, n.y); }
+function setNodeElXY(n: MindNode, x: number, y: number): void { if (n.el) placeSelf(n, x, y); }
 // Newly revealed cards emanate from the nearest ancestor that was already on screen.
 function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
   for (const p of ancestors(node)){ const b = before.get(p.id); if (b) return b; }
@@ -1080,8 +1020,7 @@ function followEdges(tok: number, ms: number): void {
       const o = host ? frameInterior(host) : null;
       const px = parseFloat(c.left), py = parseFloat(c.top);
       n.x = px ? (o ? px + o.x : px) : n.x;
-      // boundsTop as well: `top` holds a frame's BOX top, while n.y is its bounds (tab) top.
-      n.y = py ? boundsTop(n, o ? py + o.y : py) : n.y;
+      n.y = py ? (o ? py + o.y : py) : n.y;
     }
     paintFreeEdges();
     for (const [n,x,y] of saved){ n.x = x; n.y = y; }   // restore logical (final) positions
@@ -1503,8 +1442,8 @@ export function popScopeFor(t: MindNode): void {
 // canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
 // #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
 // the grid still draws over it.
-// This is also what makes `inFrame` route through containerHost rather than hostFrame: the cards in
-// here now sit ON that fill, so they need the .frame-child step more than they did inside the box.
+// A FRAME's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
+// the cards in it, which take its full colour, read on it the same as they did inside the box.
 // …and, for a frame, only when that colour is AUTHORED somewhere up the chain. effectiveColor
 // deliberately falls back to the theme's neutral card fill for a frame nobody has coloured, and
 // painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
@@ -1536,36 +1475,18 @@ export function canvasOwner(): MindNode | null {
 // are derived from. null = none, and the theme's own background shows through as before.
 //
 // An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
-// rather than to nothing, which is the same rule behindFill states for containers: "what's behind an
-// uncoloured container is whatever is behind IT". Standing inside a frame nobody coloured, or reading
+// rather than to nothing: what's behind an uncoloured container is whatever is behind IT. Standing inside a frame nobody coloured, or reading
 // a card whose parent nobody coloured, discarded the canvas colour the map itself was painted in — so
 // going in turned a teal board grey, and coming out turned it teal again.
 export function canvasFill(): string | null {
   const owner = canvasOwner();
   if (!owner) return colorFill(state.canvasColor);
-  return hasAuthoredColor(owner) ? colorFill(effectiveColor(owner)) : colorFill(state.canvasColor);
+  if (!hasAuthoredColor(owner)) return colorFill(state.canvasColor);
+  const fill = colorFill(effectiveColor(owner));
+  return fill && owner.type === 'frame' ? paleFill(fill) : fill;
 }
-// The fill a frame's TITLE is really sitting on — the one input its ink is measured against. A frame
-// paints no background behind its title any more (styles.css: the tab is a bare label, the folded pill
-// an outline), so var(--ink) is the wrong answer twice over: it's computed against the frame's OWN
-// fill, which isn't there, and the surface that IS there belongs to something else entirely.
-// The nearest FRAME that actually paints a fill, else the canvas — an open frame's colour, the
-// map's, or the theme's own background. A walk rather than one step because only an AUTHORED colour
-// paints at all (the same test canvasFill makes: effectiveColor falls back to the theme's neutral card
-// fill for a frame nobody coloured, but .c-none renders transparent, so what's behind an uncoloured
-// container is whatever is behind IT).
-export function behindFill(n: MindNode): string {
-  for (let h = containerHost(n); h; h = containerHost(h)) {
-    const fill = hasAuthoredColor(h) ? colorFill(effectiveColor(h)) : null;
-    if (fill) return fill;
-    // Stop at the OPEN frame: nothing outside it is painted, so an ancestor's fill would be a surface
-    // that isn't on screen. Its own colour is on the canvas below anyway (syncCanvasBackground).
-    if (isScopeRoot(h)) break;
-  }
-  return canvasSurface();
-}
-// The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. The
-// end of behindFill's walk, and what a free edge's label plate is painted in — a label is a small
+// The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
+// free edge's label plate is painted in — a label is a small
 // patch of the canvas laid over the line, so its ink is measured against exactly this.
 export function canvasSurface(): string { return canvasFill() ?? THEME_BG; }
 // The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
@@ -1628,20 +1549,17 @@ window.addEventListener('resize', () => {
 
 // colour palette (keys match the .c-* CSS classes); 'grey' is the old neutral "none" look.
 // The hexes themselves live in ONE place — the --pal-* custom properties in styles.css's
-// :root/body.light — so CSS (.c-*, #ghostCard) and JS (edges/backgrounds fills, swatch dots
-// below) can never drift apart. Read from document.body (not documentElement) so the
-// body.light overrides are picked up; re-read on every theme toggle (see refreshPalette).
+// :root — so CSS (.c-*, #ghostCard) and JS (edges/backgrounds fills, swatch dots below) can never
+// drift apart.
 export const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black'];
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
 const SWATCH_KEYS = PALETTE;
 export const SWATCH_BG: Record<string, string> = Object.fromEntries(SWATCH_KEYS.map(c => [c, pal(c)]));
-// The canvas's own THEME fill, read and cached exactly like the palette above (and re-read by
-// refreshPalette on a theme toggle — this one really does differ per theme). It's behindFill's last
-// resort: what a frame's title sits on when neither a container nor the map has a colour of its own.
-// Cached rather than read live because behindFill runs per frame per paint, and paintAll runs once an
-// animation frame for the length of a resize drag.
+// The canvas's own THEME fill, read and cached exactly like the palette above. It's canvasSurface's last
+// resort, when the map has no colour of its own. Cached rather than read live because it runs on every
+// edge paint.
 const themeBg = (): string => getComputedStyle(document.body).getPropertyValue('--bg').trim();
-let THEME_BG = themeBg();
+const THEME_BG = themeBg();
 // ---------- ink: the text colour each palette fill demands ----------
 // Ink is COMPUTED from the fill (utils/ink.ts — WCAG contrast, biased toward the map's default
 // light ink), never authored, which is the point: the old scheme spelled out per-colour text
@@ -1666,7 +1584,7 @@ deriveInk();
 // `n.color` (and so effectiveColor's result) is one of: '' (inherit), 'none', a PALETTE KEY, or a
 // custom '#rrggbb' picked from the colour popover. These three resolve any of them, and every
 // consumer goes through them so "custom" never needs a branch of its own:
-//   colorFill  — the hex it paints as, for the things JS tints itself (edges, --frame-stroke).
+//   colorFill  — the hex it paints as, for the things JS tints itself (edges, the canvas).
 //                null for 'none'/inherit/unknown, which callers already fall back to --edge for.
 //   colorClass — the CSS class to hang on the element. A hex can't be a class name (and there'd be
 //                nowhere to put its hexes), so a custom colour gets .c-custom + inline variables…
@@ -1693,18 +1611,6 @@ export function applyColorVars(el: HTMLElement, c: string): void {
   } else {
     for (const prop of ['--card', '--ink', '--scrim']) el.style.removeProperty(prop);
   }
-}
-// After a theme switch: re-read the palette hexes, re-derive their inks, and repaint everything that
-// bakes them in as literal hex (edges, swatches). The two themes now SHARE one --pal-* set, so the
-// re-read is a no-op in practice — kept because it costs nothing and keeps this correct if a theme
-// ever overrides a colour again. The repaint is not optional either way: what still differs per theme
-// is effectiveColor's own fallback (an uncoloured card) and .c-none's ink.
-export function refreshPalette(): void {
-  for (const c of SWATCH_KEYS) SWATCH_BG[c] = pal(c);
-  THEME_BG = themeBg();   // …and this one is genuinely per-theme — behindFill's fallback surface
-  deriveInk();
-  refreshSwatches();
-  paintAll();
 }
 // Select everything ON THE CANVAS — which, inside an open frame, is that frame's contents and nothing
 // else. It needs no scope test of its own: isHidden already means "on the canvas right now", covering
@@ -1998,7 +1904,6 @@ function paletteCommands(): Command[] {
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
-    { label: document.body.classList.contains('light') ? 'Dark theme' : 'Light theme', keywords: 'theme colour mode', run: toggleTheme },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },
     { label: 'Canvas colour…', keywords: 'background', when: () => !state.readOnly, run: () => byId('canvasColorBtn').click() },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },

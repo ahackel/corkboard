@@ -17,7 +17,7 @@ import { isHidden, resolveWikilink } from '../utils/model.js';
 import { isReadingRoot } from '../nav/scope.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
-import { nodeW, nodeH, colorFill, elTop, canvasSurface } from '../main.js';
+import { nodeW, nodeH, colorFill, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
 
@@ -28,13 +28,11 @@ export const HANDLE_R = 7;          // endpoint grab handles, shown while one ed
 export const SOCKET_R = 6;          // the four rings on a selected card you drag a new edge from
 
 // The rectangle a line meets: the node's bounds, grown by half the selection ring (so a line ends ON
-// the rim the user reads as the card's edge) — except that a frame's title tab is left out. Its bounds
-// include the tab, a separate shape hanging above the box (elTop / FRAME_TAB_DROP), and a line should
-// meet the box it points at, not the label above it.
+// the rim the user reads as the card's edge). A frame's label hangs outside its bounds, so a line meets
+// the box it points at, not the label above it.
 const RING_MID = 1;
 function rimRect(n: MindNode): { x: number; y: number; w: number; h: number } {
-  const top = elTop(n, n.y);
-  return { x: n.x - RING_MID, y: top - RING_MID, w: nodeW(n) + 2*RING_MID, h: (n.y + nodeH(n) - top) + 2*RING_MID };
+  return { x: n.x - RING_MID, y: n.y - RING_MID, w: nodeW(n) + 2*RING_MID, h: nodeH(n) + 2*RING_MID };
 }
 function centre(n: MindNode): Pt {
   const r = rimRect(n);
@@ -142,7 +140,7 @@ function linkEdges(n: MindNode): string {
     const r = a.getBoundingClientRect();
     if (!r.width) continue;
     const p1 = screenToWorld(r.left, r.top), p2 = screenToWorld(r.right, r.bottom);
-    const y = clamp((p1.y + p2.y) / 2, elTop(n, n.y), n.y + nodeH(n));
+    const y = clamp((p1.y + p2.y) / 2, n.y, n.y + nodeH(n));
     const toRight = centre(target).x >= (p1.x + p2.x) / 2;
     const from = { x: toRight ? n.x + nodeW(n) : n.x, y };
     const s = segment(from, rimPoint(target, from), 0, ARROW_INSET);
@@ -157,7 +155,7 @@ export function paintFreeEdges(): void {
   if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
   let svg = '', hits = '', tools = '';
   // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
-  // fill exactly as a frame title's is from the surface behind it (main.ts behindFill → inkFor).
+  // fill (inkFor).
   const plate = canvasSurface(), labelInk = inkFor(plate);
   // The edge whose end is being moved is not drawn in its OLD place — the draft below IS that edge.
   const moving = ui.edgeDraw?.edgeId;

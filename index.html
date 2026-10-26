@@ -16,7 +16,7 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTEwMiIgaGVpZ2h0PSIxMDc5IiB2aWV3Qm94PSIwIDAgMTEwMiAxMDc5IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg5MCw5MCkiPgo8cGF0aCBkPSJNMjg4IDg2NUw2MjcgODY1IiBzdHJva2U9IiMzNTdFRUEiIHN0cm9rZS13aWR0aD0iNjgiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8cGF0aCBkPSJNNDYxLjUgODQ1QzQ2MS41IDczMyAzOTMgNjI1LjUgMjU1IDYyNS41QzE3OSA2MjUuNSAxMjYuNSA1ODAgMTI2LjUgNDc3LjUiIHN0cm9rZT0iIzEyQkE3QSIgc3Ryb2tlLXdpZHRoPSI2OCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxwYXRoIGQ9Ik00NjEgODE2LjVDNDYxIDcyNiA1MTYuNSA2OTYgNjE3LjUgNjk2Qzc0OC41IDY5NiA3OTMuNSA2OTUuNSA3OTMuNSA1OTMiIHN0cm9rZT0iI0VBQUUzNSIgc3Ryb2tlLXdpZHRoPSI2OCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxwYXRoIGQ9Ik00NjEgODQ3TDQ2MCAyNTgiIHN0cm9rZT0iIzM1N0VFQSIgc3Ryb2tlLXdpZHRoPSI2OCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxyZWN0IHg9IjI5LjUiIHk9IjI1My41IiB3aWR0aD0iMTk3IiBoZWlnaHQ9IjIxMCIgcng9IjQzLjUiIGZpbGw9IiMxMkJBN0EiIHN0cm9rZT0iIzEyQkE3QSIgc3Ryb2tlLXdpZHRoPSI1OSIvPgo8cmVjdCB4PSIzNjEuNSIgeT0iMjkuNSIgd2lkdGg9IjE5NyIgaGVpZ2h0PSIyMTAiIHJ4PSI0My41IiBmaWxsPSIjMzU3RUVBIiBzdHJva2U9IiMzNTdFRUEiIHN0cm9rZS13aWR0aD0iNTkiLz4KPHBhdGggZD0iTTczOSAzNzIuNUg4NDlDODczLjAyNCAzNzIuNSA4OTIuNSAzOTEuOTc2IDg5Mi41IDQxNlY1MzlDODkyLjUgNTYzLjAyNCA4NzMuMDI0IDU4Mi41IDg0OSA1ODIuNUg3MzlDNzE0Ljk3NiA1ODIuNSA2OTUuNSA1NjMuMDI0IDY5NS41IDUzOVY0MTZDNjk1LjUgMzkxLjk3NiA3MTQuOTc2IDM3Mi41IDczOSAzNzIuNVoiIGZpbGw9IiNFQUFFMzUiIHN0cm9rZT0iI0VBQUUzNSIgc3Ryb2tlLXdpZHRoPSI1OSIvPgo8L2c+Cjwvc3ZnPgo=">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#11151c">
+<meta name="theme-color" content="#f5f5f5">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Corkboard">
@@ -101,6 +101,9 @@
     <!-- go IN: the touch-reachable twin of ↑ / ⋯ → Open. The float bar is the one action surface
          that is identical on desktop and on a phone (it docks to the bottom on coarse pointers), so
          this is where "open the selected thing" has to live — see features/reading.ts. -->
+    <!-- a FRAME's title: names an untitled frame (seeding "Frame") and selects the name to type over -->
+    <button id="fbTitle" class="fb-icon" title="Title (F2)" aria-label="Title">
+      <span class="ic" data-icon="text"></span></button>
     <button id="fbOpen" class="fb-icon" title="Open (↑)" aria-label="Open">
       <span class="ic" data-icon="expand"></span></button>
     <button id="fbLock" class="fb-icon" title="Lock (L)" aria-label="Lock"></button>

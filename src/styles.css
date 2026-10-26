@@ -10,53 +10,57 @@
 }
 :root {
   --frame-tab-h:40px;   /* FRAME_TAB_H (main.ts) — the folded stub asserts it when it has no text to fill it */
-  /* tells the browser what colour to paint the viewport with BEFORE our own CSS/JS catches up
-     (e.g. the newly-exposed strip while dragging the window edge to resize) — without this the
-     browser defaults to white, which flashes at the growing edge on a dark theme. */
-  color-scheme: dark;
-  --bg: #17191f;
-  --grid: #22252d;
+  /* ONE theme, FigJam's (docs/PRODUCT.md, "Look and feel"): a pale grey board, white chrome, Figma
+     blue for selection, pastel stickies. There is no dark mode — a board looks the same everywhere. */
+  color-scheme: light;
+  --bg: #f5f5f5;
+  --grid: #e3e3e3;
   /* the visible canvas grid pattern (view/grid.ts) wants more contrast than --grid's subtle
-     border/divider use elsewhere, so blend it toward --text instead of a second hardcoded hex per
-     theme — stays correct in both themes for free. */
+     border/divider use elsewhere, so blend it toward --text instead of a second hardcoded hex. */
   --grid-pat: color-mix(in srgb, var(--grid) 55%, var(--text) 45%);
-  --node: #252932;
-  --node-border: #3a3f4b;
-  --node-sel: #5aa9ff;
-  --edge: #7d8494;
-  --text: #eceef2;
-  --muted: #959cab;
-  --accent: #5aa9ff;
-  --panel: #262a33;   /* bar/chrome surface — brighter than the canvas */
+  --node: #ffffff;
+  --node-border: #e6e6e6;
+  --node-sel: #0d99ff;
+  --edge: #757575;
+  --text: #1e1e1e;
+  --muted: #757575;
+  --accent: #0d99ff;
+  --panel: #ffffff;   /* bar/chrome surface */
+  /* the selection/object TOOLBAR (#floatBar, #edgeBar and their popovers): FigJam's dark island */
+  --bar-bg: #2c2c2c;
+  --bar-ink: #ffffff;
+  --bar-muted: #b3b3b3;
+  --bar-hover: #444444;
+  --bar-sep: #444444;
+  --shadow-ui: 0 2px 6px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.10);
 
-  /* 8-colour muted card palette + grey (the "no colour" fallback) + white/black — TRULY identical in
-     both themes: body.light overrides none of them (it used to swap in a pastel set), so a card looks
-     the same wherever the map is opened and its ink is decided once, by the colour itself.
+  /* FigJam's sticky palette (approximated) + grey + white/black. A card's ink is decided once, by the
+     colour itself.
      The SINGLE SOURCE OF TRUTH for these hexes: main.ts's SWATCH_BG reads them straight from
      here (getComputedStyle) at load, so JS (edges/backgrounds/swatch fills) and CSS (.c-*
      below, #ghostCard) never drift apart. Change a colour here only. */
-  /* Bright sticky-note fills (docs/PRODUCT.md): light enough to take DARK ink everywhere, so a board
+  /* Pastel sticky-note fills (docs/PRODUCT.md): light enough to take DARK ink everywhere, so a board
      reads like a wall of paper notes. The KEYS are the file format (`color: amber` in a note) and never
      change; only these hexes do. `amber` is the classic sticky yellow, and the default for a card with
      no colour of its own (main.ts effectiveColor). */
-  --pal-slate: #b9c3ff;
-  --pal-red: #ff9f8f;
-  --pal-amber: #ffdb6e;
-  --pal-green: #a9e4a0;
-  --pal-teal: #8fded3;
-  --pal-blue: #9fcbff;
-  --pal-violet: #cdb7ff;
-  --pal-pink: #ffb0d3;
-  --pal-grey: #dfe2e7;
+  --pal-slate: #c2cbff;
+  --pal-red: #ffafa3;
+  --pal-amber: #ffd966;
+  --pal-green: #85e0a3;
+  --pal-teal: #80e3d9;
+  --pal-blue: #80caff;
+  --pal-violet: #d9b8ff;
+  --pal-pink: #ffbdf2;
+  --pal-grey: #e6e6e6;
   --pal-white: #ffffff;
-  --pal-black: #2b2e35;
+  --pal-black: #2c2c2c;
 
   /* shared roundness scale — keep every surface on one of these steps */
   --r-card: 8px;   /* board cards + the ghost/template card, and every box kind (frame/image) */
-  /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 4px is
+  /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 1px is
      FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
      against the corners it's supposed to sit inside. */
-  --r-inner: calc(var(--r-card) - 4px);
+  --r-inner: calc(var(--r-card) - 1px);
   --r-panel: 16px;  /* floating panels (editor, start card) */
   --r-menu: 12px;   /* dropdowns / context menus */
   --r-ctl: 10px;    /* inputs, list rows, small controls */
@@ -96,30 +100,6 @@
 @media (pointer: coarse) {
   :root { --bar-btn: 36px; --bar-icon: 22px; }
 }
-/* ---- light theme: override the base variables ---- */
-body.light {
-  color-scheme: light;
-  --bg: #f4f1ea;
-  --grid: #e3ddd0;
-  /* redeclared (not just inherited) so its nested var(--grid)/var(--text) re-resolve against this
-     theme's own values — a custom property's var() substitution freezes at its declaring element,
-     so leaving this to inherit from :root would keep baking in the dark-theme colours. */
-  --grid-pat: color-mix(in srgb, var(--grid) 55%, var(--text) 45%);
-  --node: #ffffff;
-  --node-border: #ddd6c8;
-  --node-sel: #2f6fe0;
-  --edge: #8a8476;
-  --text: #24221e;
-  --muted: #6f6a60;
-  --accent: #2f6fe0;
-  --panel: #ffffff;
-
-  /* NO card-colour overrides here, deliberately: the --pal-* set above is shared by both themes, so
-     a card is the same colour (and therefore the same INK — see the .c-* block below) wherever it's
-     opened. The light theme used to swap in a brighter, pastel set; that made the same map read as
-     two different maps, and it's what forced ink to be decided per theme in the first place. */
-}
-
 /* Each palette key hands a surface three things: its FILL (--card), the INK that fill demands
    (--ink, the text colour) and the SCRIM an in-place editor paints behind that ink (--scrim).
    Only --card is authored. The other two are COMPUTED from it — main.ts's deriveInk measures the
@@ -143,8 +123,8 @@ body.light {
    selected). The one key whose ink can't be computed — there's no fill to measure, the CANVAS shows
    through — so it's the one that follows the theme instead, and its scrim has to be flipped by hand
    to stay on the far side of that. */
-.c-none   { --card:transparent; --ink:var(--text); --scrim:rgba(0,0,0,.5); }
-body.light .c-none { --scrim:rgba(255,255,255,.62); }
+.c-none   { --card:transparent; --ink:var(--text); --scrim:rgba(255,255,255,.62); }
+
 /* A colour picked from OUTSIDE the palette (`color: "#ff8800"` in the note). Same three variables,
    but there's no key to hang them on, so main.ts's colorVars/applyColorVars writes them inline per
    node — an inline custom property beats any selector, so the values below are only the safety net
@@ -218,7 +198,8 @@ button:disabled { opacity:.45; cursor:default; }
 .floating-btn {
   position:fixed; z-index:20;
   width:var(--bar-btn); height:var(--bar-btn); display:inline-flex; align-items:center; justify-content:center;
-  padding:0; border:none; border-radius:var(--r-full); background:var(--panel); color:var(--muted); cursor:pointer;
+  padding:0; border:none; border-radius:var(--r-ctl); background:var(--panel); color:var(--text); cursor:pointer;
+  box-shadow:var(--shadow-ui);
   touch-action:pan-x pan-y;   /* touch-action isn't inherited from body, and a pinch starting here must zoom the canvas */
 }
 .floating-btn:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, var(--panel)); }
@@ -241,10 +222,10 @@ button:disabled { opacity:.45; cursor:default; }
 #homeBar { position:fixed; top:calc(12px + var(--sa-t)); left:calc(12px + var(--sa-l)); z-index:30;
   display:flex; align-items:center; gap:2px;
   max-width:calc(100% - 24px - var(--sa-l) - var(--sa-r)); padding:4px 6px;
-  background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
+  background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 /* .floating-btn styles the box and the bar owns positioning — but inside the pill the button drops its
    own background, so it reads as one item in a bar rather than a capsule inside a capsule. */
-#homeBar #homeBtn { position:static; flex:none; background:transparent; }
+#homeBar #homeBtn { position:static; flex:none; background:transparent; box-shadow:none; }
 #homeBar #homeBtn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
 #folderName:empty { display:none; }   /* icon-only until a map is loaded */
 /* ---------- the open-frame path (features/breadcrumbs.ts) ----------
@@ -339,24 +320,24 @@ input::placeholder { color:var(--muted); opacity:1; }
    just its anchor point) stays on-screen even on a short landscape phone with many entries. */
 #ctxMenu { position:fixed; min-width:180px; padding:4px; display:none; z-index:40;
   max-height:calc(100vh - 8px); overflow-y:auto; overscroll-behavior:contain;
-  background:var(--panel); border:1px solid var(--node-border); border-radius:var(--r-menu);
-  box-shadow:0 8px 24px rgba(0,0,0,.25); }
+  background:var(--bar-bg); border-radius:var(--r-ctl);
+  box-shadow:var(--shadow-ui); }   /* FigJam's menus are dark islands, like its toolbar */
 #ctxMenu.open { display:block; }
 #ctxMenu .cm-item { display:flex; width:100%; align-items:center; justify-content:space-between;
-  gap:18px; padding:6px 9px; border-radius:var(--r-ctl); font-size:13px; color:var(--text);
+  gap:18px; padding:6px 9px; border-radius:6px; font-size:13px; color:var(--bar-ink);
   background:transparent; border:none; cursor:pointer; white-space:nowrap; text-align:left;
   touch-action:manipulation; }
 #ctxMenu .cm-item:hover:not(:disabled) { background:var(--accent); color:#fff; }
 #ctxMenu .cm-item:hover:not(:disabled) kbd {
   color:#fff; background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.35); }
-#ctxMenu .cm-item:disabled { color:var(--muted); cursor:default; }
+#ctxMenu .cm-item:disabled { color:#808080; cursor:default; }
 /* destructive entries (delete / remove) read red before hover too — unless disabled, which greys
    out like any other unavailable entry (e.g. a locked card's Delete/Rename/…). */
-#ctxMenu .cm-item.cm-danger:not(:disabled) { color:#e0564f; }
+#ctxMenu .cm-item.cm-danger:not(:disabled) { color:#ff7262; }
 #ctxMenu .cm-item.cm-danger:hover:not(:disabled) { background:#e0564f; color:#fff; }
-#ctxMenu .cm-item kbd { font-family:inherit; font-size:11px; color:var(--muted); }
+#ctxMenu .cm-item kbd { font-family:inherit; font-size:11px; color:var(--bar-muted); }
 /* negative side margin cancels the menu's own padding + border so the line touches both edges */
-#ctxMenu .cm-sep { height:1px; margin:4px -5px; background:var(--node-border); }
+#ctxMenu .cm-sep { height:1px; margin:4px -4px; background:var(--bar-sep); }
 
 /* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
 #stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
@@ -521,94 +502,44 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   display:none; align-items:center; justify-content:center; }
 .node .lock-badge svg { width:100%; height:100%; }
 .node.locked .lock-badge { display:inline-flex; }
-/* A frame's own element is the BOX, which starts FRAME_TAB_DROP below the frame's bounds — so the
-   offsets above would pin the badge to the box's corner, mid-frame, instead of the frame's actual
-   upper-left corner. Put it on the TITLE TAB's corner instead: the tab's left edge is the box's
-   outer edge (4px = FRAME_BORDER left of the padding box that positions both) and its top edge is
-   39px above that outer edge (FRAME_TAB_H less the 1px overlap — see the tab's own rule below), so
-   the badge moves 4px left and 43px up from the box corner (that 39 + the tab's own 4px offset from
-   the padding box). z-index matches the tab's: a frame is not a stacking context,
-   so without it the badge would be occluded by the edges layer and the cards the frame holds.
-   A FOLDED frame IS the tab and sits at the bounds top already — it keeps the offsets above.
-   …and its ink follows the TITLE's rather than the box's (--tab-ink, see the tab rule below): it hangs
-   off the tab, outside the box, so it's on the same surface the title is and its "colour inherited from
-   the card so it always matches the title text" promise above only holds if it's measured there too. */
-.node.frame > .lock-badge { left:-12px; top:calc(-51px - var(--tab-extra, 0px)); z-index:4; color:var(--tab-ink, var(--ink)); }
-/* ---------- frame: a resizable container box whose children live freely inside ---------- */
-/* z-index:auto paints it BELOW every line and below normal cards (z-index:2) — a positioned `auto`
-   element paints in the same step as z-index:0, in tree order.
-   Below the lines so a COLOURED frame's opaque fill never covers the edges drawn among its descendants
-   (they live in the global SVG layers, not inside the frame); below cards so the cards it holds render
-   inside it. Its children aren't DOM-descendants of this box — they live in
-   the sibling .frame-content wrapper (z-index:2) — so lowering the box doesn't hide them.
-   `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is
-   what lets its own title tab (below) lift above the edges/cards that would otherwise cover it.
-   Its own box size is set inline (main.ts paintNode); border tinted to the card's own colour, like
-   its edges. */
-.node.frame { z-index:auto; min-height:0; border-radius:var(--r-card);
-  border:4px solid var(--frame-stroke, var(--edge)); }
-/* (On --r-card like every other box kind; its contents step down to --r-inner.) */
-/* no padding: a frame shows nothing but its (absolutely positioned) title tab — the padding only
-   ever positioned the title back when it sat INSIDE the box. Children are placed by main.ts place()
-   relative to the interior (frameInterior), which counts the border only. */
-.node.frame { padding:0; }
-.node.frame .title, .node.frame-folded .title { font-weight:600; }
-/* an uncoloured (c-none) frame stays transparent like before — only a coloured one fills.
-   Its title needs no rule of its own either way: an untabbed frame's tab has no fill at all (see
-   below), so its title sits on whatever the tab hangs over, and .c-none's --ink is var(--text) —
-   legible on the canvas in both themes. */
-.node.frame.c-none { background:transparent; }
-/* ---------- a frame's title: a folder TAB above the box's top-left corner ---------- */
-/* Above the box, not inside it, for two reasons: the box's whole interior belongs to the cards it
-   holds (a child dropped at the top-left used to cover the title), and the box paints BELOW the edges
-   layer and below cards, so an in-box title was occluded by both. Living outside the box + a z-index
-   of its own (possible only because .node.frame is not a stacking context, see above) makes it always
-   legible. The tab is still INSIDE the frame's bounds, though: n.y is the tab's top edge and the box
-   element starts FRAME_TAB_DROP lower (main.ts elTop), which is what keeps the title in one place when
-   the box folds away beneath it (.frame-folded below).
-   Direct-child combinators throughout: a frame's own tab only, never some descendant card's title.
-   An absolutely positioned child's containing block is the PADDING box — i.e. INSIDE the 4px border
-   (FRAME_BORDER) — so both offsets add that 4px back to sit flush with the box's OUTER edge.
-   Height must stay FRAME_TAB_H (main.ts): 10 + 20 + 10 = 40px — hence the single ellipsised line below;
-   the frame's whole geometry is derived from that constant. Those are a normal card's own padding
-   (.node, 10px 12px) and title metric (14px on a pinned 20px line box), so the tab reads with the same
-   weight as a collapsed card. The line-height is written out rather than inherited from .node .title
-   on purpose: it must be pinned HERE, or a later tweak to the card title would silently desync
-   FRAME_TAB_H from what actually renders. */
-/* A frame's title carries no fill: it's a LABEL on the box, not a tab.
-   The ink can't stay var(--ink): that's computed against the frame's own FILL (white on a blue card),
-   and with the tab's fill gone the title hangs over whatever is BEHIND the frame instead. So it takes
-   --tab-ink — white or dark, measured against that surface by paintNode (see behindFill in main.ts),
-   the same two inks and the same contrast rule every card's text goes through.
-   The geometry below is unchanged from when the tab was filled — the tab still occupies exactly
-   FRAME_TAB_H, which the whole frame is measured from, and the lock badge and selection ring hang off
-   the same offsets. */
+/* ---------- frame: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
+/* The element is the box and nothing else: n.x/n.y/w/h are the box (main.ts), and the label hangs
+   outside it, above the top-left corner, the way a FigJam section's name does. So naming, renaming or
+   un-naming a frame never moves the box or the cards in it.
+   z-index:auto paints the box BELOW every line and below normal cards (z-index:2) — a positioned `auto`
+   element paints in the same step as z-index:0, in tree order. Its children aren't DOM-descendants of
+   this box — they live in the sibling .frame-content wrapper — so lowering the box doesn't hide them.
+   `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is what
+   lets its own label (below) lift above the edges/cards that would otherwise cover it.
+   The FILL is the frame's colour (--card, from its .c-* class) washed most of the way to white, and the
+   1px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
+   colour, read clearly on it. Width 1px = FRAME_BORDER (main.ts). */
+.node.frame { z-index:auto; min-height:0; padding:0; border-radius:var(--r-card);
+  background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
+  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); }
+/* ---------- a frame's label: a pill above the box ---------- */
+/* Filled with the frame's own colour, so its text takes the ink that colour demands (--ink) like any
+   card's. It grows UPWARD from 6px above the box, so a description line never moves anything.
+   Direct-child combinators throughout: a frame's own label only, never some descendant card's title.
+   An absolutely positioned child's containing block is the PADDING box, inside the 1px border, so the
+   left offset adds it back to sit flush with the box's outer edge. */
 .node.frame > .title-row {
-  /* +3px, not +4px (FRAME_BORDER): the tab's bottom row overlaps the box's top border by 1px, which is
-     what kept a hairline of canvas from showing between the two fills on a fractionally-scaled layer
-     (any non-integer canvas zoom). Nothing overlaps anything now, but this is also the 39px that leaves
-     the tab inside FRAME_TAB_H — so it stays, and the title doesn't move. */
-  position:absolute; left:-4px; bottom:calc(100% + 3px);
-  z-index:4;                    /* the frame's tab band — over the box and over cards; see the ladder */
-  max-width:calc(100% + 8px); align-items:center;
-  /* padding is a normal card's own (see FRAME_TAB_H above) — it's what makes the label's text metric
-     line up with a collapsed card's, and half of the 40px. No border-radius: with no fill there's no
-     shape to round, and the selection ring carries its own (::before below). */
-  padding:10px 12px; color:var(--tab-ink, var(--ink)); }
+  position:absolute; left:-1px; bottom:calc(100% + 7px);
+  z-index:4;                    /* over the box and over cards; see the ladder */
+  max-width:calc(100% + 2px); align-items:center;
+  padding:3px 8px; border-radius:6px;
+  background:var(--card, #fff); color:var(--ink, var(--text));
+  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); }
 .node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
-  /* The tab renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a frame whose text
-     is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1 rule
-     below, exactly as a card does. That's the whole of "a frame's tab is card text too".
-     The LINE HEIGHT is pinned at 20px and must stay: FRAME_TAB_H is 40px of exactly this padding + line
-     box, so the tab's height is independent of what it renders — a heading, a bullet or a paragraph all
-     leave the tab strip's geometry alone. */
-  margin-bottom:0; padding-right:0; font-size:12px; font-weight:400; line-height:20px;
+  /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a frame whose
+     text is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1
+     rule below, exactly as a card does. The line box is pinned at 20px: the folded pill's height is the
+     constant FRAME_TAB_H (main.ts), whatever the label renders. */
+  margin-bottom:0; padding-right:0; font-size:12px; font-weight:600; line-height:20px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-/* The markdown a tab renders has to become ONE line: every block markdown produces goes inline with its
-   margins dropped, and anything after the first block is left off (a tab shows a name, not a note — the
-   text is still all there in the file and in the editor). A heading keeps the shared heading size, so the
-   tab looks like the h1 it is; `line-height` is deliberately NOT restated, so the h1 inherits the tab's
-   pinned 20px and FRAME_TAB_H holds. */
+/* The markdown a label renders has to become ONE line: every block markdown produces goes inline with its
+   margins dropped, and anything after the first block is left off (a label shows a name, not a note — the
+   text is still all there in the file and in the editor). */
 .node.frame > .title-row > .title > *,
 .node.frame-folded > .title-row > .title > * { display:inline; margin:0; }
 .node.frame > .title-row > .title > :not(:first-child),
@@ -616,68 +547,34 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .node.frame > .title-row > .title h1,
 .node.frame-folded > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
 /* …and under the name, the frame's DESCRIPTION (main.ts paintNode, view/layout.ts frameDescription): one
-   muted, ellipsised line, its markdown flattened inline with a dot between blocks. Its 16px line box is
-   FRAME_DESC_H, which the box drops by — keep the two in step. */
+   muted, ellipsised line, its markdown flattened inline with a dot between blocks. */
 .node.frame > .title-row > .title > .frame-desc { display:block; font-size:11px; line-height:16px;
   font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .frame-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
 .frame-desc > * + *::before, .frame-desc li + li::before { content:' · '; }
-/* while renaming, let a long title wrap and spill out of the tab instead of being ellipsised */
+/* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
 .node.frame > .title-row > .title.editing,
 .node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
-/* the box's selection ring stops at its border, leaving the tab looking detached — ring it too, but
-   only on three sides: the tab's BOTTOM edge is where it joins the box, so a ring there would cut a
-   line straight through the middle of one continuous shape. Hence a pseudo-element with
-   border-bottom:none rather than a box-shadow ring (which can only go all the way round); it sits
-   2px outside the tab, so its radius is --r-card plus those 2px. (The tab paints no shape of its own
-   any more, so this ring is the only place the folder outline is drawn — it still tracks the card
-   radius, since that's what the box below it is rounded to.) */
-/* (.frame and .frame-folded are mutually exclusive — a folded frame IS the tab, so it just takes the
-   ordinary four-sided .node.sel ring.) */
-.node.frame.sel > .title-row::before {
-  /* bottom:1px, i.e. up by the tab's 1px overlap into the border (see above), so the ring's verticals
-     stop exactly at the box's outer top edge — where the box's own ring continues — instead of
-     poking 1px down into the border beside the tab. */
-  content:''; position:absolute; inset:-2px -2px 1px -2px; pointer-events:none;
-  border:2px solid var(--node-sel); border-bottom:none;
-  border-radius:calc(var(--r-card) + 2px) calc(var(--r-card) + 2px) 0 0; }
-.node.frame.sel:has(> .title-row > .title.editing) > .title-row::before { content:none; }
-/* ---------- a COLLAPSED frame: the bare tab, rounded all round like a small pill ---------- */
-/* Folding hides the box, not the title: the element IS the tab now (no .frame class, so none of the
-   box rules above apply), which is why it sits at the bounds top — exactly where the expanded frame's
-   tab hangs — and the title doesn't move a pixel when you fold or unfold. The element carries the
-   padding/radius and shrink-wraps its (single-line) title, so its .title-row goes back in flow;
-   main.ts nodeW measures that width and nodeH reports the FRAME_TAB_H constant.
-   OUTLINED, not filled — the same rule the expanded frame's label follows: a frame that's showing on
-   its own is an outline and a label, never a solid folder-tab shape. What's left of a folded frame is
-   that outline, in its own colour, so it still reads as the box it stands for rather than as a card.
-   Its ink comes from behindFill like the expanded label's, since the canvas shows straight through it.
-   This is also every DOCKED tab's base (below), where a tab is a sheet of a folder and so FILLS: the OPEN
-   one behind this same border, an inactive one at 62% and with the border dropped altogether. Either way
-   it takes its ink from that fill again.
-   The border is what makes the 40px arithmetic delicate: box-sizing is border-box and nothing sets a
-   height here (nodeH just asserts FRAME_TAB_H), so the rendered height is 20px of line + padding +
-   border and the three MUST still total FRAME_TAB_H — 8 + 20 + 8, plus 2 top and bottom. 2px, not the box's 4px: at this size a 4px rim eats most of the label.
-   Rounded all round, since a folded frame stands alone (a DOCKED tab squares off the bottom pair
-   below, where it sits on its group's box). */
+/* a selected frame rings its label too, so the two read as one selected thing */
+.node.frame.sel > .title-row { box-shadow:0 0 0 2px var(--node-sel); border-color:transparent; }
+/* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
+.node.frame > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
+/* ---------- a COLLAPSED frame: just its pill ---------- */
+/* Folding hides the box: the element IS the pill now (no .frame class, so none of the box rules above
+   apply), at the bounds top. The element carries the padding/radius and shrink-wraps its (single-line)
+   title, so its .title-row goes back in flow; main.ts nodeW measures that width and nodeH reports the
+   FRAME_TAB_H constant: nothing sets a height here, so 20px of line + 9px padding + 1px border top and
+   bottom MUST total it. */
 .node.frame-folded {
-  border:2px solid var(--frame-stroke, var(--edge)); min-height:0; padding:8px 10px;
+  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); min-height:0; padding:9px 10px;
   border-radius:var(--r-card);
-  width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling, at
-                                           exactly the same 176px text column as a collapsed card */
-  background:none; color:var(--tab-ink, var(--ink)); }
+  width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling */
+  background:var(--card, #fff); color:var(--ink, var(--text)); }
 .node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
 /* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
 .node.frame-folded > .body { display:none; }
-/* A card inside a FRAME's box steps its fill a little toward its ink (main.ts .frame-child): a card
-   inherits its colour from its ancestors (effectiveColor), so one dropped into a coloured frame
-   resolved to the frame's own --card and vanished into it. Which kinds get the class is decided in
-   inFrame (a nested frame has its own tone), which is what keeps this selector a plain one.
-   :not(.c-none) like the frame rule above: --card is `transparent` there, and mixing THAT
-   toward the ink is a faint wash, not the "no fill, show what's behind" that colour asks for. */
-.node.frame-child:not(.c-none) { background: color-mix(in srgb, var(--card, var(--node)) 93%, var(--ink, #fff)); }
 /* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
-   sized to the frame's INTERIOR (inside its 4px border — see FRAME_BORDER), holding every card (and
+   sized to the frame's INTERIOR (inside its border — see FRAME_BORDER), holding every card (and
    nested frame) it hosts as flat DOM children — same "everyone flat under one container" model the
    app already uses for #world, just re-rooted here, so nested frames/grandchildren clip for free
    too. No z-index (so it never creates its own stacking context — descendants still compete for
@@ -687,30 +584,27 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 /* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
 .frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
 .frame-content > .node { pointer-events:auto; }
-/* a frame's note is drawn on its TAB (name + description line), never in the box, which holds cards;
+/* a frame's note is drawn on its LABEL (name + description line), never in the box, which holds cards;
    and it never shows the "add note" pill (the !important beats the .solo.no-body show rule). */
 .node.frame > .body { display:none; }
 .node.frame .addnote { display:none !important; }
-/* drop-into-a-frame preview: restyle the box's OWN border to a white dash, so it reads as "the card
-   lands in here". No extra ring, no width change, no fill (see drag.ts updateDropTarget). */
-.node.frame.drop-target { border-style:dashed; border-color:#fff; }
-/* A frame with nothing written on it shows NO TITLE — see paintNode, which sets `no-title` for exactly
-   that case, and elTop/frameInsetY, which then stop reserving the 39px strip its tab would have sat in.
-   The box IS the frame there; its text is written by double-clicking the rim (onFrameRim).
+/* drop-into-a-frame preview: the box rings in the selection blue, so it reads as "the card lands in
+   here" (see drag.ts updateDropTarget). */
+.node.frame.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }
+/* A frame with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
+   that case. The float bar's title button (T) brings one back.
    NOT display:none, though: the fold CHIP lives inside this row (`> .title-row >` in every one of its
-   selectors), and hiding the row would take the only way to unfold the frame with it — the same trap an
-   image card's zeroed row avoids. So the row goes invisible and collapses onto the BOX's own top edge,
-   where the chip then hangs off the corner exactly as a card's does, and the chip is shown again. */
+   selectors), and hiding the row would take the only way to unfold the frame with it. So the row goes
+   invisible and collapses onto the BOX's own top edge, where the chip then hangs off the corner exactly
+   as a card's does, and the chip is shown again. */
 .node.frame.no-title > .title-row {
-  visibility:hidden; bottom:auto; top:0; left:0; right:0; height:0; padding:0; max-width:none; }
+  visibility:hidden; bottom:auto; top:0; left:0; right:0; height:0; padding:0; border:0; max-width:none; }
 .node.frame.no-title > .title-row > .hidden-count { visibility:visible; }
-/* …and FOLDED, the pill keeps its own outline (the element IS the tab) but shows nothing in it. The
-   title still has to hold the 40px open — an empty inline has no line box, and nodeH ASSERTS FRAME_TAB_H
-   for a folded frame, so without this the stub renders 20px tall while the layout reserves 40. */
+/* …and FOLDED, the pill keeps its own shape but shows nothing in it. The title still has to hold the
+   40px open — an empty inline has no line box, and nodeH ASSERTS FRAME_TAB_H for a folded frame. */
 .node.frame-folded.no-title { min-height:var(--frame-tab-h); }
 .node.frame-folded.no-title > .title-row { visibility:hidden; }
 .node.frame-folded.no-title > .title-row > .hidden-count { visibility:visible; }
-
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (frame / image card) gets all 8: 4 edge bands inset from the corners, plus 4
@@ -1237,8 +1131,6 @@ body.zoom-far .node > .addnote { display:none !important; }
 .node.collapsed > .body > :first-child > li:first-child {
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node.collapsed .title { margin-bottom:0; }
-/* matching empty-swatch in light theme */
-body.light .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#fff 5px,#e7ebf1 5px,#e7ebf1 10px); }
 
 /* big new-card button, bottom-left of the canvas */
 /* ghost card — drag it onto the canvas to create a new card */
@@ -1318,23 +1210,23 @@ body.readonly #canvasColorBtn { display:none; }
 
 /* ---- floating selection bar: a compact pill of icon buttons anchored next to the selected
    card (position set by features/float-bar.ts's rAF follow loop, tracking pan/zoom/drag) ---- */
+/* FigJam's object toolbar: a DARK rounded island with white icons (--bar-*), floating over the light
+   board on a soft shadow — the one piece of chrome that isn't white, so it reads as "acting on what's
+   selected" rather than as part of the board's furniture. */
 #floatBar {
   position:fixed; top:0; left:0; z-index:20;   /* left/top overwritten per-frame in JS */
   display:flex; align-items:center; gap:2px; padding:4px;
-  background:var(--panel); border-radius:var(--r-full);
+  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
   opacity:0; pointer-events:none; transition:opacity .15s ease;
   touch-action:pan-x pan-y;
 }
 #floatBar.open { opacity:1; pointer-events:auto; }
-/* The EDGE bar IS #floatBar's chrome — same pill, same .fb-icon buttons, same --panel surface (see
-   the shared sizing rule below). It anchors to the midpoint of its curve instead of to a card, and it
-   never docks to the bottom on a narrow screen: an edge has no on-screen "self" to be covered by a
-   docked bar. It used to carry its own dark background, border and shadow through --bar-bg/--bar-br/
-   --fg, three variables this stylesheet never defines — so it painted the hard-coded fallbacks in
-   BOTH themes and stayed a dark slab on a light canvas. */
+/* The EDGE bar IS #floatBar's chrome — same island, same .fb-icon buttons (see the shared sizing rule
+   below). It anchors to the midpoint of its curve instead of to a card, and it never docks to the
+   bottom on a narrow screen: an edge has no on-screen "self" to be covered by a docked bar. */
 #edgeBar {
   position:fixed; z-index:60; display:flex; align-items:center; gap:2px; padding:4px;
-  background:var(--panel); border-radius:var(--r-full);
+  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
   opacity:0; pointer-events:none; transition:opacity .12s ease;
   touch-action:pan-x pan-y;
 }
@@ -1378,14 +1270,14 @@ body.canvas-interacting .addnote { display:none !important; }
 #floatBar button, #floatBar label, #edgeBar button {
   flex:none; width:var(--bar-btn); height:var(--bar-btn); padding:0; display:flex;
   align-items:center; justify-content:center;
-  border-radius:var(--r-full); border:0; cursor:pointer;
+  border-radius:6px; border:0; cursor:pointer;
 }
-.fb-icon { background:transparent; color:var(--muted); }
+.fb-icon { background:transparent; color:var(--bar-ink); }
 .fb-icon svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-.fb-icon:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
+.fb-icon:hover { color:var(--bar-ink); background:var(--bar-hover); }
 /* stretches past the bar's own padding (align-self:stretch + negative margin) so it touches the
    bar's top/bottom edges instead of floating as a short centred tick */
-.fb-sep { flex:none; width:1px; align-self:stretch; margin:-4px 2px; background:var(--node-border); }
+.fb-sep { flex:none; width:1px; align-self:stretch; margin:4px 3px; background:var(--bar-sep); }
 /* locked selection: nothing about the card can be changed, so the bar shrinks to just the lock
    button (float-bar.ts's markLock) — one obvious way back out, no dead controls. The ID+class
    prefix is what out-specifies `#floatBar button, #floatBar label` above (markChips only ever
@@ -1403,8 +1295,8 @@ body.canvas-interacting .addnote { display:none !important; }
    or a grid of swatches, so it reads as a menu dropped from its button instead of a second bar
    sitting beside the first. (--r-full clamps to half the SHORTER side, which on a tall box paints a
    lozenge; --r-panel is the roundness step that keeps it on the shared scale.) */
-.fb-pop { position:fixed; top:0; left:0; display:none; z-index:23; padding:6px;
-  background:var(--panel); border-radius:var(--r-panel);
+.fb-pop { position:fixed; top:0; left:0; display:none; z-index:23; padding:8px;
+  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
 /* The colour pickers wrap at FOUR chips — a small block you take in at a glance, the same shape as
@@ -1420,7 +1312,7 @@ body.canvas-interacting .addnote { display:none !important; }
 /* thin stem bridging the short gap between the bar and an open popover, in the bar's own
    background colour so the two read as one connected shape (position/size set in float-bar.ts) */
 .fb-pop-connector { position:fixed; top:0; left:0; display:none; z-index:23; width:2px;
-  background:var(--panel); }
+  background:var(--bar-bg); }
 .fb-pop-connector.open { display:block; }
 
 /* colour picker = rows of individual round bubbles; the selection outline sits AROUND one.
@@ -1438,8 +1330,17 @@ body.canvas-interacting .addnote { display:none !important; }
   border:0; background:var(--sw); }
 .swatch:hover  { box-shadow:0 0 0 2px color-mix(in srgb, var(--text) 45%, transparent); }
 .swatch.active { box-shadow:0 0 0 2px var(--text); }
+/* …on the dark toolbar islands the rings are white */
+.fb-pop .swatch:hover, #floatBar .swatch:hover, #edgeBar .swatch:hover { box-shadow:0 0 0 2px rgba(255,255,255,.45); }
+.fb-pop .swatch.active { box-shadow:0 0 0 2px #fff; }
+/* …and every chip on them carries a faint rim, so the black one doesn't vanish into the island */
+.fb-pop .swatch:not(:hover):not(.active), #floatBar .swatch:not(:hover) { box-shadow:inset 0 0 0 1px rgba(255,255,255,.22); }
+/* the bar's own buttons are rounded squares (FigJam's), but its colour trigger stays a dot */
+#floatBar .fb-swatch, #edgeBar .fb-swatch { border-radius:50%; }
+/* shortcut chips inside the dark menu */
+#ctxMenu .cm-item kbd { background:transparent; border-color:#555; }
 /* inherit (the default): striped chip = "take the parent's colour" */
-.swatch.inherit { background:repeating-linear-gradient(45deg,#1e2733,#1e2733 5px,#2a3543 5px,#2a3543 10px); }
+.swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#fff 5px,#e6e6e6 5px,#e6e6e6 10px); }
 /* custom colour: the chip a native <input type="color"> hides inside (features/properties.ts). It's
    a spectrum wheel until a colour has actually been picked, then it shows that colour like any other
    chip (.picked, which just lets --sw through). The input is stretched over the whole chip at
@@ -1470,13 +1371,13 @@ body.canvas-interacting .addnote { display:none !important; }
    and the generic button padding it would otherwise inherit eats the box from both sides — 32px
    less 2×12px leaves 8px for a 21px icon, which is what squashed the arrow picker's glyphs. */
 .layoutchip { width:var(--bar-btn); height:var(--bar-btn); cursor:pointer; flex:none; padding:0;
-  display:flex; align-items:center; justify-content:center; border-radius:var(--r-full);
-  background:transparent; color:var(--muted); border:0; }
+  display:flex; align-items:center; justify-content:center; border-radius:6px;
+  background:transparent; color:var(--bar-muted); border:0; }
 .layoutchip svg { width:var(--bar-icon); height:var(--bar-icon); flex:none; }
-.layoutchip:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
+.layoutchip:hover { color:var(--bar-ink); background:var(--bar-hover); }
 .layoutchip.active { color:#fff; background:var(--accent); }
 .layoutchip.disabled { opacity:.35; cursor:default; }
-.layoutchip.disabled:hover { color:var(--muted); background:transparent; }
+.layoutchip.disabled:hover { color:var(--bar-muted); background:transparent; }
 
 kbd { background:var(--node); border:1px solid var(--node-border); border-radius:6px;
   padding:0 5px; font-size:11px; }

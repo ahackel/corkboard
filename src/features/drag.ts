@@ -8,9 +8,9 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf } from '../utils/model.js';
-import { detachParentId, isReadingRoot } from '../nav/scope.js';
-import { isFrame, frameAt, ancestorDepth } from '../view/layout.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf } from '../utils/model.js';
+import { detachParentId, isReadingRoot, boxIsViewport } from '../nav/scope.js';
+import { isFrame, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
@@ -435,8 +435,10 @@ function dragPointerUp(): void {
         }
         // Paint first so freshly-created clone cards have real DOM heights, then let each frame that
         // now holds a dropped card grow to show all of it (it clips, so part of it would be lost).
+        // A dropped FRAME also collects whatever it now covers (settleFrames).
         remeasure();
-        if (growFramesToHold(selRoots)) relayout();
+        const settled = settleFrames(selRoots.filter(id => state.nodes.get(id)?.type === 'frame'));
+        if (growFramesToHold([...selRoots, ...settled]) || settled.length) relayout();
         // select the new clone(s) you just dragged out
         if (cloned){ if (clones && clones.length > 1) setSelectionSet(clones.map(c => c.id)); else selectNode(act.id); }
         scheduleSave();
@@ -603,6 +605,38 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
 function clearDropTarget(): void {
   document.querySelectorAll('.node.drop-target, .node.drop-merge')
     .forEach(el => el.classList.remove('drop-target', 'drop-merge'));
+}
+// A frame COLLECTS what it covers — the drop rule run from the frame's side, FigJam-style. After a frame
+// is moved, resized or made, every card whose centre is now in it belongs to it (frameAt: the
+// innermost frame wins, so a card sitting in a smaller frame inside it stays there), and every card of
+// its own whose centre is now OUTSIDE it goes to whatever it's over instead (a shrink lets go of what
+// it no longer covers, rather than hiding it under the clip). A FRAME is collected only when its whole
+// box is inside — by its centre alone, a big frame could be swallowed by a small one laid across it.
+// Locked and hidden things stay where they are. Returns the ids it reparented, for the caller to grow
+// their new frames by (growFramesToHold) — or not, on a resize, where the user is setting the size.
+export function settleFrames(frameIds: Iterable<string>): string[] {
+  const moved: string[] = [];
+  for (const id of frameIds) {
+    const f = state.nodes.get(id);
+    if (!f || !isFrame(f) || isHidden(f) || boxIsViewport(f) || isLockedEffective(f)) continue;
+    const b = containerBox(f);
+    const inside = (m: MindNode): boolean => m.x >= b.x && m.y >= b.y && m.x + nodeW(m) <= b.x + b.w && m.y + nodeH(m) <= b.y + b.h;
+    // let go of its own cards that left it…
+    for (const k of childrenOf(f.id)) {
+      if (isHidden(k) || isLockedEffective(k) || centreInFrame(k, f)) continue;
+      const to = frameAt(k.x + nodeW(k) / 2, k.y + nodeH(k) / 2, new Set(subtreeIds(k.id)));
+      if (reparentOnly(k.id, to?.id ?? detachParentId())) moved.push(k.id);
+    }
+    // …and take in what it now covers.
+    for (const n of state.nodes.values()) {
+      if (n === f || n.parent === f.id || isHidden(n) || isLockedEffective(n)) continue;
+      if (isAncestor(n.id, f.id) || isAncestor(f.id, n.id)) continue;   // its own frames, or inside it already
+      if (n.type === 'frame' ? !inside(n) : !centreInFrame(n, f)) continue;
+      if (frameAt(n.x + nodeW(n) / 2, n.y + nodeH(n) / 2, new Set(subtreeIds(n.id))) !== f) continue;
+      if (reparentOnly(n.id, f.id)) moved.push(n.id);
+    }
+  }
+  return moved;
 }
 // Move one card into a frame, or out to the top level (null). Mutates the parent only — no paint or
 // status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or

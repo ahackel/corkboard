@@ -11,7 +11,7 @@ import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf, parentOf, ancestors } from '../utils/model.js';
-import { applyLayouts, collapseAtDepth, commitRel, orderedKids, moveSubtreeTo, frameInsetY, ancestorDepth } from '../view/layout.js';
+import { applyLayouts, collapseAtDepth, commitRel, orderedKids, moveSubtreeTo, ancestorDepth, frameLabelH } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
@@ -339,8 +339,9 @@ function foldCardsIntoFrames(): number {
   for (const n of state.nodes.values()) paintNode(n);
   for (const f of arrange.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
     const x = f.x + FRAME_BORDER + SPACING;
-    let y = f.y + frameInsetY(f) + SPACING, w = 0;
+    let y = f.y + FRAME_BORDER + SPACING, w = 0;
     for (const k of orderedKids(f, childrenOf(f.id))) {
+      y += frameLabelH(k);   // a frame's label hangs above its box — leave it room
       moveSubtreeTo(k, x, y);
       y += nodeH(k) + SPACING;
       w = Math.max(w, nodeW(k));

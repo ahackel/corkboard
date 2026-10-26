@@ -9,7 +9,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective } from '../utils/model.js';
 import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
-import { subtreeIds, layoutH, nodeH, nodeW, FRAME_BORDER, FRAME_TAB_DROP } from '../main.js';
+import { subtreeIds, layoutH, nodeH, nodeW, FRAME_BORDER } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the drag engine
@@ -36,12 +36,13 @@ export function commitRel(): void {
 }
 
 // Bounding box over a node + its VISIBLE descendants. A FRAME is bounded by its OWN box (mm_w/mm_h):
-// its children live INSIDE it, so we count the frame's box and don't descend into its content.
+// its children live INSIDE it, so we count the frame's box and don't descend into its content — plus
+// the label hanging above it (frameLabelH), so a frame fitted around one leaves its name room.
 export function subtreeBox(node: MindNode){
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const walk = (n: MindNode): void => {
     if (isHidden(n)) return;
-    x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y);
+    x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y - frameLabelH(n));
     x1 = Math.max(x1, n.x + nodeW(n)); y1 = Math.max(y1, n.y + layoutH(n));
     if (isFrame(n)) return;
     for (const c of childrenOf(n.id)) walk(c);
@@ -83,11 +84,9 @@ export function hostFrame(node: MindNode): MindNode | null {
   // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode.
   return h && boxIsViewport(h) ? null : h;
 }
-// …and the same walk WITHOUT that exception: the nearest frame ancestor by TREE, wherever the node's
-// element actually ended up. `hostFrame` answers "whose wrapper is my element inside" (a DOM fact, and
-// the open frame has no wrapper), while this answers "whose fill do I sit on" (a TONE fact, which the
-// open frame still governs, since the canvas wears its colour). Used by main.ts's inFrame.
-export function containerHost(node: MindNode): MindNode | null {
+// …and the same walk WITHOUT that exception: the nearest expanded frame ancestor by TREE, wherever the
+// node's element actually ended up.
+function containerHost(node: MindNode): MindNode | null {
   for (let p = parentOf(node); p; p = parentOf(p))
     if (isFrame(p)) return p;
   return null;
@@ -123,46 +122,33 @@ export function frameAt(x: number, y: number, skip: Set<string>): MindNode | nul
   }
   return best;
 }
-// A frame's INTERIOR rect (absolute world coords, inside its border and below its tab and its
-// description line) — the single source of truth for "where does this frame's content go". Shared by
+// A frame's INTERIOR rect (absolute world coords, inside its border — its label hangs outside, above) — the single source of truth for "where does this frame's content go". Shared by
 // main.ts's frameContentEl (the real DOM clipping wrapper) and the edge painter's clip-path, so the
 // two containment mechanisms stay pixel-identical by construction.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
   // The OPEN frame's interior IS the viewport, with no border and no tab to inset from.
   if (boxIsViewport(f)) return scopeRect();
   return {
-    x: f.x + FRAME_BORDER, y: f.y + frameInsetY(f),
+    x: f.x + FRAME_BORDER, y: f.y + FRAME_BORDER,
     w: Math.max(0, nodeW(f) - FRAME_BORDER * 2),
-    h: Math.max(0, nodeH(f) - frameInsetY(f) - FRAME_BORDER),
+    h: Math.max(0, nodeH(f) - FRAME_BORDER * 2),
   };
 }
-// Does this frame have anything to put ON its tab — its own text? A frame that hasn't been named draws
-// NO tab and reserves no strip for one: its bounds ARE its box, because a tab with nothing written on
-// it is a label that says nothing while costing the box 39px.
+// Does this frame have anything to put on its label — its own text? A frame that hasn't been named
+// shows NO label (FigJam's untitled section): its text was deleted, or never written.
 export function frameLabelled(f: MindNode): boolean { return !!(f.title.trim() || f.body.trim()); }
+// How far an expanded frame's label reaches ABOVE its box (0 for anything else): the pill's measured
+// height plus its 7px gap (styles.css `.node.frame > .title-row`), or a one-line pill's before paint.
+export const FRAME_LABEL_GAP = 7;
+export function frameLabelH(f: MindNode): number {
+  if (!isFrame(f) || !frameLabelled(f)) return 0;
+  const row = f.el?.querySelector(':scope > .title-row') as HTMLElement | null;
+  return (row?.offsetHeight || 28) + FRAME_LABEL_GAP;
+}
 // A frame's DESCRIPTION: its note under its name — the text after the `# ` heading, shown as one muted
-// line under the title on its tab. Only a NAMED frame has one: an untitled frame's tab shows the first
-// line of its text, which is its name in all but form, so splitting that again would just repeat it.
+// line under the title on its label. Only a NAMED frame has one: an untitled frame's label shows the
+// first line of its text, which is its name in all but form, so splitting that again would repeat it.
 export function frameDescription(f: MindNode): string { return f.title.trim() ? f.body.trim() : ''; }
-// The description line's height on the tab (styles.css `.frame-desc`: 16px line box). A described tab
-// is FRAME_TAB_H + this, and the box drops by the same — see frameTabDrop.
-export const FRAME_DESC_H = 16;
-// How far the BOX sits below the frame's bounds top: the tab's height, less its 1px overlap — none at
-// all for an unnamed frame (no tab), and one description line more for a described one. The single
-// spelling of the tab drop; main.ts elTop/reframeForTab and frameInsetY below read it.
-export function frameTabDrop(f: MindNode): number {
-  if (f.type !== 'frame' || !frameLabelled(f)) return 0;
-  return FRAME_TAB_DROP + (frameDescription(f) ? FRAME_DESC_H : 0);
-}
-// How far DOWN from a frame's BOUNDS top its interior starts — the vertical counterpart of the plain
-// FRAME_BORDER inset used on the other three sides, and the single spelling of it: shared by
-// frameInterior and by everything that projects a hosted child into its host's content wrapper
-// (main.ts's place/frameContentEl). A frame's bounds also cover its title tab, which sits above the
-// box (frameTabDrop). Keyed on `type`, not isFrame, so a paint landing mid-collapse can't flip the
-// inset under a hosted child.
-export function frameInsetY(f: MindNode): number {
-  return FRAME_BORDER + frameTabDrop(f);
-}
 // Is `child`'s centre inside `frame`'s OUTER box? The test for "a frame child is still in its frame",
 // the same centre frameAt is asked about on drop.
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {

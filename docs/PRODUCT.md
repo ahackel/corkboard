@@ -31,9 +31,10 @@ What it has been used for, and what it must stay good at:
 
 ## Look and feel
 
-- Bright and playful, in the spirit of Excalidraw / tldraw (minimal chrome, instant) and Apple
-  Freeform / FigJam (friendly, approachable).
-- **Flat**: nothing at rest casts a shadow; only a card being dragged lifts off the board.
+- **FigJam's look**, one theme (no dark mode): a pale grey dotted board, pastel sticky notes, white
+  chrome floating on a soft shadow, a dark toolbar over whatever is selected, Figma blue for selection.
+  Minimal chrome and instant, in the spirit of Excalidraw / tldraw.
+- **Flat cards**: no card casts a shadow at rest; only a card being dragged lifts off the board.
 - A default card is a **coloured sticky note**. Type is a **friendly rounded sans** (the system's
   rounded face, with a bundled fallback so it works offline from the single file).
 
@@ -56,10 +57,12 @@ one searchable list.
 **Two things, one rule.** There are cards and frames, nothing else:
 - A **card** is a note. It never holds other cards — structure inside a thought is written into the
   note (lists, `- [ ]` tasks).
-- A **frame** is a box with a name and a one-line description. Cards sit in it wherever you put them,
-  and frames nest.
-- **The rule:** a card is in the frame you drop it in, and out when you drop it outside. A frame grows
-  to hold what you put in it, so nothing is ever hidden past its edge.
+- A **frame** is a FigJam-style section: a pale box with its name (and an optional one-line
+  description) on a label above it. Delete the text and it's an untitled box; the toolbar's T brings
+  the name back. Cards sit in it wherever you put them, and frames nest.
+- **The rule:** a card is in the frame its centre is over — whether you drop the card there, or move,
+  resize or draw the frame over it. A frame grows to hold what you drop into it, so nothing is hidden
+  past its edge.
 
 **To build, in order:** tidy-up of a selection (only on request) · frame titles that grow readable when
 zoomed out · emoji tags presented as stamps · export a selection or board as PNG · phone inbox.

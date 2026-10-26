@@ -15,10 +15,9 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
-import { frameTabDrop } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, relayout, remeasure, reframeForTab } from '../main.js';
+import { selectNode, relayout, remeasure } from '../main.js';
 import { extractToCard, discardNewCard } from './crud.js';
 import { growFramesToHold } from './float-bar.js';
 import { touch, commitStep } from './history.js';
@@ -44,7 +43,15 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
 }
 
 // ---------- a frame's label, renamed in place (on its tab) ----------
-function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}): void {
+// The float bar's title button (T): open the label with its NAME selected — and on an untitled frame,
+// which shows no label at all, seed one first, so the label comes back with a name ready to type over.
+// Esc on a seeded name leaves the frame untitled, as it was.
+export function editFrameTitle(n: MindNode): void {
+  if (state.readOnly) return;
+  if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
+  startTitleEdit(n, { seed: 'Frame' });
+}
+function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boolean; seed?: string } = {}): void {
   if (!n.el) return;
   if (ui.bodyEdit) endBodyEdit();                                  // close a card editor first
   if (ui.titleEdit) endTitleEdit();                                // …or any other label editor
@@ -57,7 +64,8 @@ function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
   // text for the duration. Otherwise the editor would show `Name` where the file says `# Name`, and
   // committing would write the rendered text back and silently strip the heading away.
-  const raw = cardEditText(n);
+  const own = cardEditText(n);
+  const raw = own.trim() ? own : seed ? '# ' + seed : own;
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
   // The raw text REPLACES the rendered tab, so paintNode's render cache no longer describes what's in
@@ -74,6 +82,8 @@ function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}
   titleEl.classList.add('editing');
   titleEl.focus();
   const r = document.createRange(); r.selectNodeContents(titleEl);     // select-all so typing replaces
+  // …or just the seeded NAME, past its `# `, so typing over it keeps the heading
+  if (raw !== own && titleEl.firstChild) r.setStart(titleEl.firstChild, 2);
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
 }
 // A card element is `draggable` (the ⌥ card-file export, features/clipboard.ts), and a draggable
@@ -99,10 +109,10 @@ export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
 // Commit (or cancel) a frame rename. The text is MARKDOWN, so it splits like any card's — `# Name` is a
-// heading on the tab with the lines below it the description, `Name` is plain text there — and an EMPTY commit is now accepted: a frame may have
-// no name, in which case it draws no tab at all and its bounds stop reserving one (main.ts frameLabelled
-// / elTop). That used to be refused, back when the tab was the only thing you could grab the box by; the
-// rim carries that job now (onFrameRim), so a nameless frame is a plain box and nothing is stranded.
+// heading on the label with the lines below it the description, `Name` is plain text there — and an
+// EMPTY commit is accepted: a frame may have no name, in which case it shows no label at all (main.ts
+// frameLabelled), like an untitled FigJam section. The label hangs outside the box, so neither moves
+// the box. The toolbar's title button (features/float-bar.ts) brings a label back.
 // Nothing restores the element's text here: `ui.titleEdit` is nulled first, which lets the paintAll below
 // re-render the tab from the fields — the raw source goes away with the editor.
 export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
@@ -123,13 +133,8 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     return;
   }
   if (!cancel){
-    // A frame that gains or loses its TEXT gains or loses its tab with it, and its bounds cover that tab
-    // — so hold the box still across the change (reframeForTab), rather than letting it jump 39px the
-    // first time someone names a frame.
-    const wasDrop = frameTabDrop(n);
     const { title, body, gap } = splitHeading(val);
     n.title = title; n.body = body; n.titleGap = gap;
-    reframeForTab(n, wasDrop);
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow

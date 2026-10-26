@@ -15,17 +15,11 @@ export interface PropEls {
 }
 export interface PropertyControls {
   sync(): void;            // reflect the current target(s) into the controls
-  rebuildSwatches(): void; // re-read the palette hexes (theme switch) and rebuild the swatch row
 }
 
 // What the custom chip offers before anything custom is picked — a mid blue, so opening the native
 // sheet starts somewhere neutral rather than on black. Only ever the input's starting value.
 const CUSTOM_FALLBACK = '#3f8cff';
-// every live instance, so a theme switch can rebuild all their swatch rows at once (refreshSwatches)
-const panels: PropertyControls[] = [];
-// Re-read the palette hexes into every instance's swatch row. Called from main.refreshPalette after
-// a light/dark switch (the --pal-* values differ per theme).
-export function refreshSwatches(): void { for (const p of panels) p.rebuildSwatches(); }
 
 // ---------- the swatch row itself: markup + marking ----------
 // Split out of createProperties so the CANVAS colour popover (features/canvas-color.ts) is the same
@@ -165,7 +159,6 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
   }
 
   rebuildSwatches();
-  const panel = { sync, rebuildSwatches };
-  panels.push(panel);
+  const panel = { sync };
   return panel;
 }
