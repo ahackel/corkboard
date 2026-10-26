@@ -92,7 +92,7 @@ no line is ever derived from it. Lines live in `board.json` (`BoardEdge`: two ca
 caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `route` → `polyline`, behind
 `edgeGeometry`, the one place the geometry is computed): along the axis the two cards are further apart
 on, a line runs straight across where they face each other, else leaves the middle of one side, turns
-(rounded, `CORNER_R`) halfway across the gap and enters the middle of the other. Overlapping cards get the
+(rounded, `CORNER_R` 24px, never eating the last `END_STRAIGHT` of an end leg so a cap sits on a straight) halfway across the gap and enters the middle of the other. Overlapping cards get the
 plain centre-to-centre line. An end dropped on a PORT is PINNED to that face (`fromPort`/`toPort` in
 `board.json` — new keys: the `fromSide`/`toSide` an older build wrote on every edge stay ignored, or every
 old line would be pinned to a face nobody chose). A pinned line leaves/enters that face square and is

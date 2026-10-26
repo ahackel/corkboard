@@ -82,7 +82,10 @@ function unit(p: Pt, q: Pt): Pt {
 // the caps and the label need. Two points is a straight segment; more is an elbow, its corners rounded
 // (CORNER_R, shrunk to fit a short leg) the way FigJam's are.
 type Geometry = { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt };
-const CORNER_R = 10;
+const CORNER_R = 24;
+// A corner never eats the END legs down to nothing: the cap needs a straight stretch to sit on, or an
+// arrowhead lands on the bend and reads as a hook.
+const END_STRAIGHT = 16;
 function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   pts = pts.map(p => ({ ...p }));
   const n = pts.length;
@@ -97,7 +100,8 @@ function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 1; i < n - 1; i++) {
     const p = pts[i], uin = unit(pts[i-1], p), uout = unit(p, pts[i+1]);
-    const r = Math.min(CORNER_R, lenOf(i-1) / 2, lenOf(i) / 2);
+    const fit = (j: number): number => (j === 0 || j === n - 2) ? lenOf(j) - END_STRAIGHT : lenOf(j) / 2;
+    const r = Math.max(0, Math.min(CORNER_R, fit(i-1), fit(i)));
     d += ` L ${p.x - uin.x * r} ${p.y - uin.y * r} Q ${p.x} ${p.y} ${p.x + uout.x * r} ${p.y + uout.y * r}`;
   }
   d += ` L ${pts[n-1].x} ${pts[n-1].y}`;
@@ -148,7 +152,7 @@ function route(ra: Rect, rb: Rect): Pt[] {
 // shortest, each bend costing BEND_COST. Small enough to run per paint; nothing is stored but the faces.
 const DIR: Record<EdgeSide, Pt> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
 const SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
-const STUB = 20, BEND_COST = 40;
+const STUB = 44, BEND_COST = 40;   // a detour clears the card by STUB — room for a round corner and the cap
 function facePoint(r: Rect, s: EdgeSide): Pt {
   return s === 'up' ? { x: r.x + r.w/2, y: r.y } : s === 'down' ? { x: r.x + r.w/2, y: r.y + r.h }
        : s === 'left' ? { x: r.x, y: r.y + r.h/2 } : { x: r.x + r.w, y: r.y + r.h/2 };
