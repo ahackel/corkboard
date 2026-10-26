@@ -272,7 +272,7 @@ function walk(n: MindNode, depth: number, visible: Set<string> | null): void {
 const ROW_CONTROLS = '.ol-done, .ol-open, .ol-more, .ol-chip';
 // Which face the row's corner bubble wears — the outliner's counterpart of paintNode's chipFace, and
 // deliberately its own (simpler) predicate: a row lists a TITLE, never a body, so only children make
-// one foldable, and none of the canvas' kind cases (image / tab group) survive
+// one foldable, and none of the canvas' kind cases (an image card) survive
 // into a flat list. Same two faces and the same lock rule, though:
 //   'count' — folded: the "+N" that's tucked underneath. Shown even on a locked row: information.
 //   'fold'  — open and collapsible: the chevron, revealed on hover or while SELECTED (styles.css).

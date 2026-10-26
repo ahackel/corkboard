@@ -109,6 +109,10 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(parseMd('---\nmm_type: annotation\nmm_parent: Card.md\n---\n\nremark').mm).toMatchObject({ type: 'card', parent: 'Card.md' });
   });
 
+  it('opens a retired tab group as a horizontal frame', () => {
+    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm).toMatchObject({ type: 'frame', layout: 'horizontal' });
+  });
+
   it('reads frontmatter from a file with Windows line endings', () => {
     const p = parseMd('---\r\ndate: 2026-01-02\r\ntags: [a]\r\n---\r\n\r\n# Title\r\n\r\nBody\r\n');
     expect(p.title).toBe('Title');

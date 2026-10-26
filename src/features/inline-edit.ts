@@ -16,10 +16,10 @@ import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { outlineActive, startRowTitleEdit } from './outline.js';
-import { actionTarget, isTabsFrame, frameLabelled } from '../view/layout.js';
+import { frameLabelled } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, toggleCollapse, relayout, remeasure, reframeForTab } from '../main.js';
+import { selectNode, relayout, remeasure, reframeForTab } from '../main.js';
 import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
 import { extractToChild, discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
@@ -32,19 +32,10 @@ const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.tit
 
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
-// single rename FUNNEL, so the tab-group redirect, the outline-mode
+// single rename FUNNEL, so the outline-mode
 // hand-off and the lock refusal all still happen in exactly one place.
 export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
-  // A tab group has no title you can see — renaming "this frame" means renaming the OPEN TAB, which is
-  // the name actually on screen. Here rather than at the call sites, so F2, the ⋯ menu and the outline
-  // all follow. (A fresh node is never a group, so the isNew rename path is unaffected.)
-  // FOLDED, the group's pill shows that same tab's title (main.ts foldedTab), so the redirect has to
-  // hold there too — but the tab itself is hidden inside the fold, and an editor on a display:none
-  // element can't be typed into. So unfold first, the way focusNode reveals before it acts; a locked
-  // group refuses, stays folded, and falls through to the lock check below.
-  if (isTabsFrame(n) && n.collapsed) toggleCollapse(n.id);
-  n = actionTarget(n);
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   // In outline mode (which includes every phone-width screen — outline is forced on below
   // that breakpoint) the title is renamed right on its row (features/outline.ts), mirroring the
@@ -72,8 +63,8 @@ function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}
   if (ui.titleEdit) endTitleEdit();                                // …or any other label editor
   touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh frame, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);
-  // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded frame and a
-  // docked tab included, and a container's child cards are DOM-nested inside it — so an unscoped
+  // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded frame
+  // included, and a container's child cards are DOM-nested inside it — so an unscoped
   // `.title` lookup could pick a child card's title instead of this node's own.
   const titleEl = n.el.querySelector(':scope > .title-row > .title') as HTMLElement;
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw

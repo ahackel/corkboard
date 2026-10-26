@@ -20,7 +20,7 @@ import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontm
 import { isAncestor } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
-import { mkNode, deleteSelection, contentParent } from './crud.js';
+import { mkNode, deleteSelection } from './crud.js';
 import { touch, record } from './history.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
@@ -137,10 +137,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
   const rootIds: string[] = [];
   record([], () => {
-    // contentParent: pasting "into" a tab group means into the tab that's OPEN — the group itself shows
-    // no content of its own (same routing as an added child or a dropped card).
-    const at0 = at.parent ? state.nodes.get(at.parent) : undefined;
-    const parentNode = at0 ? contentParent(at0) : undefined;
+    const parentNode = at.parent ? state.nodes.get(at.parent) : undefined;
     if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }   // reveal the drop
     const newIds = new Map<string, string>();   // payload name -> minted id
     for (const c of cards){

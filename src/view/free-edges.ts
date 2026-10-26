@@ -17,7 +17,7 @@ import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type 
 import { junctionOf } from '../data/board.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, resolveWikilink } from '../utils/model.js';
-import { isStack, insideStack, isDockedTab } from './layout.js';
+import { isStack, insideStack } from './layout.js';
 import { isReadingRoot } from '../nav/scope.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
@@ -37,15 +37,12 @@ export const SOCKET_R = 6;          // the four rings on a selected card you dra
 // rings), portPoint (where a line docks) and nearestSide (what a drop picks) all read it, so a ring,
 // its line and the side chosen for it can never disagree. Not every kind carries all four: a shape
 // whose own layout already speaks along one axis keeps only the faces that don't contradict it.
-//   · a DOCKED TAB is a label in a strip, with its siblings pressed against it left and right and its
-//     own box below — the top of the pill is the only face that is free to be pointed at;
 //   · an OUTLINE ROW is a full-width band in a column, stacked directly on the rows above and below,
 //     so up/down would leave a port buried in the neighbouring row: it takes left and right;
 //   · a STACK, being that column, is entered and left along it — top and bottom.
 // Everything else keeps the full set.
 const ALL_SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
 export function portSides(n: MindNode): EdgeSide[] {
-  if (isDockedTab(n)) return ['up'];
   if (insideStack(n)) return ['left', 'right'];
   if (isStack(n)) return ['up', 'down'];
   return ALL_SIDES;
@@ -74,26 +71,20 @@ export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
 // OUTSIDE the border box, so its centre is half its width out:
 //   · `.node.sel` — box-shadow 0 0 0 2px, i.e. the band [0,2] outside → +1, and that's every card,
 //     every frame BOX and a folded frame's pill;
-//   · an OPEN docked tab — its own ::before ring, inset -4px with a 2px border → the band [4,6] → +5;
-//   · a CLOSED docked tab — the same ::before at inset -2px → the band [2,4] → +3.
 // A frame's own title tab has a ring of its own too (inset -2px), but no port sits on it: a frame's
 // ports are on its BOX (portRect below drops the tab from the rect), whose ring is the plain +1.
 const RING_MID = 1;
-function ringMid(n: MindNode): number {
-  if (isDockedTab(n)) return n.collapsed ? 3 : 5;
-  return RING_MID;
-}
 
-// The rectangle the ports sit on: the selection ring's centre line, all the way round (ringMid). Or,
+// The rectangle the ports sit on: the selection ring's centre line, all the way round (RING_MID). Or,
 // put the other way, a node's bounds grown by half a ring — EXCEPT for a frame with a title tab: its
 // bounds include that tab, which is a separate shape hanging above the box (elTop / FRAME_TAB_DROP),
 // so a port on the bounds' top edge would sit up on the tab — or in the empty gap beside it — rather
 // than on the box the edge is pointing at. elTop shifts nothing for everything else, a FOLDED frame
-// and a docked tab included: there the tab IS the body. And the one place the port geometry is spelled — portPoint, socketPoints
+// included: there the tab IS the body. And the one place the port geometry is spelled — portPoint, socketPoints
 // and nearestSide all read it, so a port, its ring and the side a drop picks can't disagree.
 function portRect(n: MindNode): { x: number; y: number; w: number; h: number } {
   const top = elTop(n, n.y);
-  const m = ringMid(n);
+  const m = RING_MID;
   return { x: n.x - m, y: top - m, w: nodeW(n) + 2*m, h: (n.y + nodeH(n) - top) + 2*m };
 }
 

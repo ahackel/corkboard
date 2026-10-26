@@ -173,6 +173,9 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
   if (t === 'image') return { type: 'card', layout: 'free', wasStack: false };
   if (t === 'stack') return { type: 'card', layout: 'inherit', wasStack: true };
   if (t === 'query' || t === 'annotation') return { type: 'card', layout: 'inherit', wasStack: false };
+  // A TAB GROUP (`mm_layout: tabs`) is CUT too: it opens as a horizontal-flow frame, so its former tabs
+  // line up side by side inside it instead of piling onto one spot.
+  if (t === 'frame' && fmValue(entries, 'mm_layout') === 'tabs') return { type: 'frame', layout: 'horizontal', wasStack: false };
   if (t === 'frame' || t === 'card')
     return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout, wasStack: false };
   // legacy: infer both from the combined mm_layout token

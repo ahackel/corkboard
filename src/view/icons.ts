@@ -14,7 +14,7 @@ for (const [path, svg] of Object.entries(modules)) {
 
 // The folder outline the FRAME kind wears. A frame renders as a box with a folder TAB above its
 // top-left corner, so every icon that stands for one is a folder: the kind chip and all three of its
-// layout chips (features/float-bar.ts), the glyph on a folded tab group's pill (main.ts) and every
+// layout chips (features/float-bar.ts), and every
 // crumb of the open-frame path (features/breadcrumbs.ts). Kept here — a module none of those can
 // cycle with — as the ONE spelling of the shape, and as a bare path so each caller can drop its own
 // content blocks inside it. Its interior (below the tab, inside the stroke) is roughly x 5.5…19,

@@ -14,11 +14,10 @@
 // either the notes themselves or something mirrored to disk/localStorage and restored on load. A
 // scope is WHERE YOU ARE STANDING. It never reaches frontmatter, it survives a reload only by
 // re-resolving file paths, and its camera stack is deliberately session-only. Keeping it here is
-// also what makes the `utils/model.ts` → this edge legal: this module imports `core/state.js` and
-// (for the one canonical spelling of "is a tab group") `view/layout.js`, never the reverse.
+// also what makes the `utils/model.ts` → this edge legal: this module imports `core/state.js`, never
+// the reverse.
 // ============================================================
 import { state, type MindNode, type View } from '../core/state.js';
-import { isTabsFrame } from '../view/layout.js';
 import { safeInsets } from '../utils/dom.js';
 
 export interface ScopeBack { view: View; sel: string[]; selId: string | null; }
@@ -91,8 +90,7 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 
 // The ONE kind test for "can this be opened", kept kind-agnostic on purpose: widen it HERE, never
 // at a call site. Raw `type` rather than isFrame, deliberately — a COLLAPSED frame is openable
-// (openFrame unfolds it on the way in) and so is a DOCKED TAB, whose own bounds are only a label in
-// the strip but whose CONTENTS are exactly what opening shows.
+// (openFrame unfolds it on the way in).
 //
 // A CARD is openable too, and means something different on the far side: a frame's interior is the
 // canvas, a card's interior is its NOTE, read at full width (features/reading.ts). Same navigation
@@ -129,13 +127,12 @@ export function scopeRect(): { x: number; y: number; w: number; h: number } {
 export function detachParentId(): string | null { return scope.rootId; }
 
 // The openable ancestors of `t`, outermost first, EXCLUDING t itself — i.e. its folder path.
-// A tabs GROUP is skipped: from the user's side it doesn't exist (its open tab stands for it), the
-// same reason navArrow's ← steps past it. The crumb path IS this, which is why opening a deep frame
+// The crumb path IS this, which is why opening a deep frame
 // from the ⋯ menu still shows `Map › A › B › C` rather than `Map › C`.
 export function openPathTo(t: MindNode): MindNode[] {
   const out: MindNode[] = [];
   for (let p = t.parent ? state.nodes.get(t.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    if (canOpen(p) && !isTabsFrame(p)) out.push(p);
+    if (canOpen(p)) out.push(p);
   return out.reverse();
 }
 
@@ -163,8 +160,8 @@ export function resolveScopeAfterLoad(): void {
 
 // Drop any level whose frame is gone (undone away, removed on disk) or
 // is no longer openable (retyped to a card), truncating the stack at the first casualty. Called
-// from applyLayouts — which runs after every structural change — for exactly the reason
-// normalizeTabs lives there: ~20 callers, one funnel. Truncation ONLY; the camera recovery belongs
+// from applyLayouts — which runs after every structural change — because
+// that is ~20 callers' one funnel. Truncation ONLY; the camera recovery belongs
 // to syncScopeChrome, since it needs the camera. Returns whether anything was dropped.
 export function pruneScope(): boolean {
   const cut = scope.stack.findIndex(l => { const n = state.nodes.get(l.rootId); return !n || !canOpen(n); });

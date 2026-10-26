@@ -41,20 +41,13 @@ export interface Drag {
   // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
   // dropTarget stays null and every other preview stands down.
   cardMerge?: string | null;
-  // The frame whose TAB the dragged frame(s) are poised over: releasing DOCKS them there as tabs
-  // (features/drag.ts tabZoneAt → crud.ts dockFrames). Its own resolution, not a dropMode, because it
-  // isn't a reparent-with-a-landing: dropTarget stays null, so every other preview stands
-  // down — same shape as cardMerge above.
-  dock?: string | null;
-  // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
-  dockAfter?: string | null;
 }
 // A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
 // its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the
 // textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
 // cancels the CREATION rather than just the edit (it used to live on the title editor).
 export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; }
-// A CONTAINER's label being renamed in place — a frame's folder tab, a docked tab, a stack's header.
+// A CONTAINER's label being renamed in place — a frame's folder tab, a stack's header.
 // A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
 // A container can't do that, and the reason is structural rather than stylistic — its `.body` is
 // `display:none` (styles.css: a frame's box holds child cards, not its own note), and an editor inside a
