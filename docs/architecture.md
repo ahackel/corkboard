@@ -714,6 +714,13 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
 - **Every helper is pure text → `{text, start, end}`** (`linkPaste`'s shape) and goes through ONE writer,
   `applyTextEdit`, which replaces only the changed span with `execCommand('insertText')`: assigning
   `ta.value` wipes the textarea's own undo stack, so ⌘Z inside the editor would undo nothing.
+- **In a pipe TABLE, Tab walks the cells and Enter adds rows** (`tableTab`/`tableEnter`, tried before the list
+  keys): Tab selects the next cell's text, stepping over the delimiter row, and adds a row past the last cell;
+  Enter adds a row under the caret's, an empty LAST row ends the table, and Enter at the end of a lone
+  `| a | b |` line starts one. Each also TIDIES that table — cells padded so the pipes line up in the monospace
+  editor (wide characters count two), the delimiter rebuilt keeping its `:` alignment. Only on those keys and
+  only that table, so no note is rewritten behind your back. What counts as a table is the renderer's own
+  `tableAt`/`tableRow`, so the editor never tidies something the card doesn't draw as one.
 - **The renderer nests lists by indentation** (`renderList`): deeper than the open level opens a list inside
   the item above, shallower closes back to the level it matches, a marker change at one level starts a
   sibling list. Tasks stay bullets-only, numbered in body order, because `toggleTask` counts `- [ ]` lines.

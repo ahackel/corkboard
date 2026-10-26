@@ -55,3 +55,21 @@ test('the editor shows the note in a monospace face', async ({ page }) => {
   const family = await editor(c).evaluate(el => getComputedStyle(el).fontFamily);
   expect(family).toMatch(/monospace/);
 });
+
+test('a table is started, walked with Tab and grown with Enter, and the card draws it', async ({ page }) => {
+  await openBoard(page);
+  const ta = await freshEditor(page);
+  await page.keyboard.type('| Name | Age |\nAda');           // Enter on a lone header row starts the table
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('36');
+  await page.keyboard.press('Tab');                          // past the last cell: a new row
+  await page.keyboard.type('Grace');
+  await expect(ta).toHaveValue('| Name | Age |\n| ---- | --- |\n| Ada  | 36  |\n| Grace     |     |');   // tidied on the next Tab or Enter
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Enter');                        // a new row under this one…
+  await page.keyboard.press('Enter');                        // …left empty, ends the table
+  await page.keyboard.type('after');
+  await expect(ta).toHaveValue('| Name  | Age |\n| ----- | --- |\n| Ada   | 36  |\n| Grace |     |\nafter');
+  await clickAway(page);
+  await expect(page.locator('#world .node .body tbody tr')).toHaveCount(2);
+});

@@ -130,6 +130,8 @@ function mdInline(text: string): string {
 //   - Spotting one takes TWO lines, so it can't join the one-line `BLOCK` regex; `tableAt`
 //     is asked separately by the block loop AND by the paragraph gatherer, since a table
 //     interrupts a text run.
+//   - utils/md-edit.ts (the editor's table keys) reads tables through the same `tableAt`/`tableRow`,
+//     so a table the editor tidies is exactly one the card draws.
 //   - Cells go through `mdInline` (code, links, wikilinks, images, emphasis) but NOT
 //     through the task-list branch: `data-ti` numbers checkboxes by body order for
 //     write-back, and GFM has no table tasks either.
@@ -138,7 +140,7 @@ const UNESCAPED_PIPE = /(?:^|[^\\])\|/;
 // Split a row into cells on UNESCAPED pipes (`\|` is a literal pipe in a cell). The
 // optional outer pipes are stripped from the LINE first, not dropped as empty cells —
 // `| a | |` has a genuine empty last cell.
-function tableRow(line: string): string[] {
+export function tableRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith('|')) s = s.slice(1);
   if (UNESCAPED_PIPE.test(s) && s.endsWith('|')) s = s.slice(0, -1);
@@ -153,7 +155,7 @@ function tableRow(line: string): string[] {
   return cells;
 }
 // Column count if a table starts at line i, else 0 (so it's falsy at the call sites).
-function tableAt(lines: string[], i: number): number {
+export function tableAt(lines: string[], i: number): number {
   const head = lines[i], delim = lines[i+1];
   if (head == null || delim == null) return 0;
   if (!UNESCAPED_PIPE.test(head) || !UNESCAPED_PIPE.test(delim)) return 0;

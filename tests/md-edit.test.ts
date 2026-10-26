@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listEnter, indentLines, toggleWrap, type TextEdit } from '../src/utils/md-edit.js';
+import { listEnter, indentLines, toggleWrap, tableTab, tableEnter, type TextEdit } from '../src/utils/md-edit.js';
 import { renderBodyHTML } from '../src/utils/markdown.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
@@ -81,6 +81,65 @@ describe('toggleWrap', () => {
   it('gives a caret an empty pair, and takes an empty pair back', () => {
     expect(wrap('a |', '**')).toBe('a **|**');
     expect(wrap('a **|**', '**')).toBe('a |');
+  });
+});
+
+// Tables are written in pipes, so their cases mark the caret with `^` and a selection with `«…»`.
+function tat(s: string): [string, number, number] {
+  const c = s.indexOf('^');
+  return [s.slice(0, c) + s.slice(c + 1), c, c];
+}
+function tshow(r: TextEdit | null): string | null {
+  if (!r) return null;
+  return r.start === r.end ? r.text.slice(0, r.start) + '^' + r.text.slice(r.start)
+    : r.text.slice(0, r.start) + '«' + r.text.slice(r.start, r.end) + '»' + r.text.slice(r.end);
+}
+const ttab = (s: string, back = false) => tshow(tableTab(...tat(s), back));
+const tenter = (s: string) => tshow(tableEnter(...tat(s)));
+
+describe('tableTab', () => {
+  it('selects the next cell and tidies the table', () => {
+    expect(ttab('| a^ | bb |\n|---|:-:|\n| x | y |'))
+      .toBe('| a   | «bb»  |\n| --- | :-: |\n| x   | y   |');
+  });
+  it('steps over the delimiter row, and adds a row past the last cell', () => {
+    expect(ttab('| a | bb^ |\n|---|:-:|\n| x | y |')).toBe('| a   | bb  |\n| --- | :-: |\n| «x»   | y   |');
+    expect(ttab('| a | bb |\n|---|:-:|\n| x | y ^|')).toBe('| a   | bb  |\n| --- | :-: |\n| x   | y   |\n| ^    |     |');
+  });
+  it('goes back a cell with ⇧Tab, and stays put at the first', () => {
+    expect(ttab('| a | bb |\n|---|:-:|\n| x | y^ |', true)).toBe('| a   | bb  |\n| --- | :-: |\n| «x»   | y   |');
+    expect(ttab('| a | bb |\n|---|:-:|\n| x^ | y |', true)).toBe('| a   | «bb»  |\n| --- | :-: |\n| x   | y   |');
+    expect(ttab('| a^ | bb |\n|---|:-:|', true)).toBe('| «a»   | bb  |\n| --- | :-: |');
+  });
+  it('keeps alignment, escaped pipes, and pads wide characters by their width', () => {
+    expect(ttab('| a | b | c |\n|:--|--:|:-:|\n| 1^ | 2 | 3 |'))
+      .toBe('| a   | b   | c   |\n| :-- | --: | :-: |\n| 1   | «2»   | 3   |');
+    expect(ttab('| a\\|b^ | c |\n|---|---|')).toBe('| a\\|b | «c»   |\n| ---- | --- |');
+    expect(ttab('| 日本^ | c |\n|---|---|')).toBe('| 日本 | «c»   |\n| ---- | --- |');
+  });
+  it('stands aside off a table, so Tab can indent', () => {
+    expect(ttab('a | b^')).toBeNull();
+    expect(ttab('| a | b |\nno delimiter^')).toBeNull();
+    expect(ttab('| a | b |\n|---|---|\n\nafter^')).toBeNull();
+  });
+});
+
+describe('tableEnter', () => {
+  it('adds a row under the caret, in the same column', () => {
+    expect(tenter('| a | b |\n|---|---|\n| x | y^ |'))
+      .toBe('| a   | b   |\n| --- | --- |\n| x   | y   |\n|     | ^    |');
+    expect(tenter('| a^ | b |\n|---|---|\n| x | y |'))
+      .toBe('| a   | b   |\n| --- | --- |\n| ^    |     |\n| x   | y   |');
+  });
+  it('ends the table on an empty last row', () => {
+    expect(tenter('| a | b |\n|---|---|\n| x | y |\n| ^ |  |\nafter'))
+      .toBe('| a   | b   |\n| --- | --- |\n| x   | y   |\n^\nafter');
+  });
+  it('starts a table from a lone header row', () => {
+    expect(tenter('# T\n| Name | Age |^')).toBe('# T\n| Name | Age |\n| ---- | --- |\n| ^     |     |');
+    expect(tenter('| one |^')).toBeNull();
+    expect(tenter('| a | b^ |')).toBeNull();
+    expect(tenter('plain^')).toBeNull();
   });
 });
 

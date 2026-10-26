@@ -15,7 +15,7 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
-import { listEnter, indentLines, toggleWrap, type TextEdit } from '../utils/md-edit.js';
+import { listEnter, indentLines, toggleWrap, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure } from '../main.js';
@@ -289,12 +289,19 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   if (e.key === 'Escape'){ e.preventDefault(); endBodyEdit({ cancel:true }); }
   else if (mod && e.key === 'Enter'){ e.preventDefault(); endBodyEdit(); }
   else if (mod && e.shiftKey && k === 'e'){ e.preventDefault(); extractToCard(); }
-  // A plain Enter in a list item starts the next one (or ends the list on an empty one); anywhere else
-  // it falls through and the textarea inserts a newline (notes are multi-line). ⇧Enter is always a bare
-  // newline — the way to write a second paragraph inside an item.
-  else if (e.key === 'Enter' && !e.shiftKey && !mod && !e.altKey) edit(listEnter(ta.value, ta.selectionStart, ta.selectionEnd));
-  // Tab nests, ⇧Tab un-nests — and never moves focus, which would blur the card shut mid-note.
-  else if (e.key === 'Tab' && !mod && !e.altKey) edit(indentLines(ta.value, ta.selectionStart, ta.selectionEnd, e.shiftKey));
+  // A plain Enter in a table adds a row, in a list item starts the next one (an empty one ends either);
+  // anywhere else it falls through and the textarea inserts a newline (notes are multi-line). ⇧Enter is
+  // always a bare newline — the way to write a second paragraph inside an item.
+  else if (e.key === 'Enter' && !e.shiftKey && !mod && !e.altKey) {
+    const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
+    edit(tableEnter(v, a, b) ?? listEnter(v, a, b));
+  }
+  // Tab walks a table's cells; elsewhere it nests, ⇧Tab un-nests — and never moves focus, which would
+  // blur the card shut mid-note.
+  else if (e.key === 'Tab' && !mod && !e.altKey) {
+    const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
+    edit(tableTab(v, a, b, e.shiftKey) ?? indentLines(v, a, b, e.shiftKey));
+  }
   else if (mod && !e.altKey && !e.shiftKey && k === 'b') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '**'));
   else if (mod && !e.altKey && !e.shiftKey && k === 'i') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '*'));
   else if (mod && !e.altKey && e.shiftKey && k === 'x') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '~~'));
