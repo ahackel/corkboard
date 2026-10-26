@@ -1082,7 +1082,9 @@ function sizeSnapshot(): Map<HTMLElement, Size> {
   }
   return out;
 }
-const SIZE_EASE = 'cubic-bezier(.22,1,.36,1)';
+// An even ease-in-out, not a sharp ease-out: the old (.22,1,.36,1) did 75% of the move in the first fifth
+// of the time, so a fold read as instant however long it nominally ran.
+const SIZE_EASE = 'cubic-bezier(.45,0,.25,1)';
 // How long a fold / Fit / reflow glides — one number for the sizes here, the positions (animateReflow) and
 // `.lt-anim`'s left/top transition in styles.css, which must say the same.
 const LAYOUT_ANIM_MS = 500;

@@ -483,7 +483,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease,
-  left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1); }   /* LAYOUT_ANIM_MS (main.ts) */
+  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts) */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
    so the only thing left to remove here is the space that was separating the title from a body that
    isn't there. The `min-height:0` this rule used to carry is what `.node` itself does now. */
