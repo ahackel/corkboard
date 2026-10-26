@@ -247,7 +247,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // A FRAME's interior gets a new card WHERE YOU POINTED. Going in is ⌥-double-click (above), ↑, the
   // float bar's ⤢ or ⋯ → Open. isFrameBox: a folded frame has no interior on screen, so it falls through.
   if (isFrameBox(n)) { addCardInside(n.id, screenToWorld(cx, cy)); return; }
-  startBodyEdit(n);
+  startBodyEdit(n, { x: cx, y: cy });
 }
 // A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor (a frame).
 // While dragging, preview what that inherited colour is ABOUT TO become, so it doesn't wait for the

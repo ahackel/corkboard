@@ -15,7 +15,8 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
-import { listEnter, indentLines, toggleWrap, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
+import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
+         sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure } from '../main.js';
@@ -192,7 +193,7 @@ function applyTextEdit(ta: HTMLTextAreaElement, r: TextEdit): void {
 // Where the caret lands: on the card's NAME (selected, so typing replaces it — the old rename's
 // select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
 // which is the one nudge that keeps F2 meaningful there.
-type Caret = 'title' | 'end';
+type Caret = 'title' | 'end' | { x: number; y: number };
 function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
   if (isLockedEffective(n)) { setStatus('Locked — can’t edit'); return; }
@@ -210,6 +211,8 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   // didn't want it. F2 on an untitled card puts the caret at the very start instead (caretIn), which is
   // where a `# ` would go if that's what they meant.
   const text = cardEditText(n);
+  // A double-click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
+  const clicked = typeof caret === 'object' ? clickedOffset(bodyEl, text, caret) : null;
   ta.className = 'body-edit'; ta.spellcheck = false; ta.value = text;
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
   // than just reverting the edit the way it does for an existing card.
@@ -223,17 +226,58 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   bodyEl.innerHTML = ''; bodyEl.appendChild(ta);
   bodyEl.classList.add('editing');
   // typing: keep the textarea sized to its content and reflow siblings as the card grows/shrinks
-  ta.addEventListener('input', () => { autosizeBody(ta); onBodyInput(n); });
+  let lineCount = text.split('\n').length;
+  ta.addEventListener('input', (e) => {
+    // A line deleted, cut or pasted into a numbered list renumbers it (md-edit.ts renumber) — only when
+    // the LINE COUNT changed, so fixing a digit by hand isn't fought over keystroke by keystroke.
+    const lines = ta.value.split('\n').length, kind = (e as InputEvent).inputType ?? '';
+    if (lines !== lineCount && (kind.startsWith('delete') || kind.startsWith('insertFrom'))) {
+      const r = renumber({ text: ta.value, start: ta.selectionStart, end: ta.selectionEnd });
+      if (r.text !== ta.value) applyTextEdit(ta, r);
+    }
+    lineCount = ta.value.split('\n').length;
+    autosizeBody(ta); onBodyInput(n);
+  });
   ta.addEventListener('keydown', (e) => onBodyKeydown(e, n));
   ta.addEventListener('blur',    () => { if (ui.bodyEdit && ui.bodyEdit.id === n.id) endBodyEdit(); });
   // a URL over a selection links it; anything else falls through to the image paste / the native insert
-  ta.addEventListener('paste',   (e) => { if (!pasteUrlLink(e, ta)) onBodyPaste(e); });
+  ta.addEventListener('paste',   (e) => { if (!pasteSheet(e, ta) && !pasteUrlLink(e, ta)) onBodyPaste(e); });
   ta.addEventListener('pointerdown', (e) => e.stopPropagation());   // place the caret, don't drag the card
   ta.focus();
   autosizeBody(ta);              // size to content first so the card's real height is known…
   relayout();    // …then reflow siblings around it (not just after a newline)
-  const [from, to] = caretIn(text, caret);
+  const [from, to] = clicked != null ? [clicked, clicked] : caretIn(text, caret === 'title' ? 'title' : 'end');
   ta.setSelectionRange(from, to);
+}
+// Cells copied from a spreadsheet paste as a markdown table (md-edit.ts pasteTable).
+function pasteSheet(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
+  const r = pasteTable(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
+  if (!r) return false;
+  e.preventDefault();
+  applyTextEdit(ta, r);
+  return true;
+}
+// Where in the SOURCE a point on the rendered note is: the text node under the point and the offset
+// into it (the browser's own hit test), mapped through md-edit.ts sourceOffset. Past the title heading,
+// which isn't in `.body`. Null for a miss (an image, a gap), leaving the caret at the end as before.
+function clickedOffset(bodyEl: HTMLElement, text: string, at: { x: number; y: number }): number | null {
+  const d = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
+  let node: Node | null = null, off = 0;
+  const p = typeof d.caretPositionFromPoint === 'function' ? d.caretPositionFromPoint(at.x, at.y) : null;
+  if (p) { node = p.offsetNode; off = p.offset; }
+  else { const r = d.caretRangeFromPoint?.(at.x, at.y); if (r) { node = r.startContainer; off = r.startOffset; } }
+  if (!node || node.nodeType !== Node.TEXT_NODE || !bodyEl.contains(node)) return null;
+  const texts: string[] = [];
+  let hit = -1;
+  const w = document.createTreeWalker(bodyEl, NodeFilter.SHOW_TEXT);
+  for (let t = w.nextNode(); t; t = w.nextNode()) {
+    if (t === node) hit = texts.length;
+    texts.push(t.textContent ?? '');
+    if (hit >= 0) break;
+  }
+  if (hit < 0) return null;
+  const h = headingOf(text);
+  return sourceOffset(text, h ? h.at + h.title.length : 0, texts, hit, off);
 }
 // The heading of the FIRST non-blank line, which is the only one that can be a note's title — the
 // format rule itself lives in utils/frontmatter.ts, so seeding, the caret and the strip below all read
@@ -254,16 +298,17 @@ function headingOf(text: string): { at: number; title: string } | null {
 // editor's select-all did — but only the NAME, not the `# ` that marks it as one, or the first keystroke
 // would demote the card's title to a plain first line. An UNTITLED card has no name to select, so the
 // caret goes to the very start of the note — the one spot where typing `# Something` names it.
-function caretIn(text: string, caret: Caret): [number, number] {
+function caretIn(text: string, caret: 'title' | 'end'): [number, number] {
   if (caret === 'end') return [text.length, text.length];
   const h = headingOf(text);
   if (!h) return [0, 0];
   return [h.at, h.at + h.title.length];
 }
 // "Edit the note" — the same one editor, caret past the name rather than on it. Kept as its own name
-// because that's what its callers mean (double-click the body, `E`, the pen).
-export function startBodyEdit(n: MindNode): void {
-  startCardEdit(n, { caret: 'end' });
+// because that's what its callers mean (double-click the body, `E`, the pen). A double-click passes
+// its point, and the caret lands on the word it hit.
+export function startBodyEdit(n: MindNode, at?: { x: number; y: number }): void {
+  startCardEdit(n, { caret: at ?? 'end' });
 }
 // Drop the editor WITHOUT reading the textarea back, because the caller (crud.ts cutBodyRange) has
 // already written the shortened n.body and endBodyEdit would commit the textarea's pre-cut value
@@ -294,16 +339,23 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   // always a bare newline — the way to write a second paragraph inside an item.
   else if (e.key === 'Enter' && !e.shiftKey && !mod && !e.altKey) {
     const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
-    edit(tableEnter(v, a, b) ?? listEnter(v, a, b));
+    edit(tableEnter(v, a, b) ?? renumbered(listEnter(v, a, b)));
+  }
+  // Backspace just past a list marker takes the marker (a nested item steps out first).
+  else if (e.key === 'Backspace' && !mod && !e.altKey && !e.shiftKey) edit(renumbered(listBackspace(ta.value, ta.selectionStart, ta.selectionEnd)));
+  // ⌥↑/⌥↓ move the line(s) — an item with its nested children — past the neighbour.
+  else if (e.altKey && !mod && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    edit(renumbered(moveLines(ta.value, ta.selectionStart, ta.selectionEnd, e.key === 'ArrowUp')));
   }
   // Tab walks a table's cells; elsewhere it nests, ⇧Tab un-nests — and never moves focus, which would
   // blur the card shut mid-note.
   else if (e.key === 'Tab' && !mod && !e.altKey) {
     const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
-    edit(tableTab(v, a, b, e.shiftKey) ?? indentLines(v, a, b, e.shiftKey));
+    edit(tableTab(v, a, b, e.shiftKey) ?? renumbered(indentLines(v, a, b, e.shiftKey)));
   }
   else if (mod && !e.altKey && !e.shiftKey && k === 'b') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '**'));
   else if (mod && !e.altKey && !e.shiftKey && k === 'i') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '*'));
+  else if (mod && !e.altKey && !e.shiftKey && k === 'l') edit(taskLines(ta.value, ta.selectionStart, ta.selectionEnd));
   else if (mod && !e.altKey && e.shiftKey && k === 'x') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '~~'));
 }
 // Commit (or cancel) the edit. Commit SPLITS the textarea back into the card's title and note

@@ -721,6 +721,18 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   editor (wide characters count two), the delimiter rebuilt keeping its `:` alignment. Only on those keys and
   only that table, so no note is rewritten behind your back. What counts as a table is the renderer's own
   `tableAt`/`tableRow`, so the editor never tidies something the card doesn't draw as one.
+- **More list keys**: Backspace just past a marker takes the MARKER (a nested item steps out first);
+  ⌥↑/⌥↓ move the touched lines past their neighbour, an item carrying its nested children and hopping a
+  whole neighbouring item; ⌘L makes the lines tasks or ticks them (all open → all done → all open; a
+  numbered item turns a bullet, since tasks are bullets-only). A NUMBERED list renumbers itself after any of
+  these, after Enter and Tab, and after a native delete/cut/paste that changed the line count — only the
+  run of non-blank lines around the edit, so a list elsewhere that skips on purpose is left alone. A
+  top-level list keeps its first number; a nested one counts from 1.
+- **Cells pasted from a spreadsheet become a table** (`pasteTable`): two or more tab-separated rows of the
+  same 2+ columns (quoted cells read), first row the header, written tidied on lines of their own.
+- **A double-click on the card lands the caret on the word it hit** (`sourceOffset`): the text nodes of the
+  rendered note are found, in order, in the source (whitespace-flexible), and the clicked node's offset
+  maps into its match. It is read before the textarea replaces the render; a miss leaves the caret at the end.
 - **The renderer nests lists by indentation** (`renderList`): deeper than the open level opens a list inside
   the item above, shallower closes back to the level it matches, a marker change at one level starts a
   sibling list. Tasks stay bullets-only, numbered in body order, because `toggleTask` counts `- [ ]` lines.

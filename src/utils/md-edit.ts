@@ -252,3 +252,206 @@ function tableStart(text: string, start: number, end: number): TextEdit | null {
     cols: head.length, align: head.map(() => ''), indent: line.match(/^[ \t]*/)![0], row: 0, col: 0 };
   return placeTable(text, t, 2, 0);
 }
+
+// ---------- more list keys: Backspace, ⌥↑/⌥↓, ⌘L, and numbers that keep themselves ----------
+// Rewrite lines [first, last) to `next` (the same count), carrying a selection with its text: a
+// position past a line's indent moves by however much that line grew or shrank ahead of it.
+function rewriteLines(text: string, first: number, last: number, next: string[], start: number, end: number): TextEdit {
+  const old = text.slice(first, last).split('\n');
+  const map = (pos: number): number => {
+    let o = first, n = first;
+    for (let i = 0; i < old.length; i++) {
+      if (pos <= o + old[i].length) {
+        const col = pos - o, ind = old[i].match(/^[ \t]*/)![0].length;
+        return n + (col <= ind ? col : Math.max(ind, col + next[i].length - old[i].length));
+      }
+      o += old[i].length + 1; n += next[i].length + 1;
+    }
+    return pos + (n - o);
+  };
+  return { text: splice(text, first, last, next.join('\n')), start: map(start), end: map(end) };
+}
+// The lines a selection touches, as [from, to) — a selection ending at a line's very start leaves it out.
+function linesOf(text: string, start: number, end: number): { first: number; last: number } {
+  return { first: lineAt(text, start).from, last: lineAt(text, end > start && text[end - 1] === '\n' ? end - 1 : end).to };
+}
+const indentOf = (l: string): number => l.match(/^[ \t]*/)![0].replace(/\t/g, '  ').length;
+
+// Backspace right after an item's marker takes the MARKER, not one character of it: a nested item
+// steps out a level first (⇧Tab), a top-level one becomes a plain line keeping its text — the way
+// back out of a list that Enter on an empty item is the way forward out of it.
+export function listBackspace(text: string, start: number, end: number): TextEdit | null {
+  if (start !== end) return null;
+  const { from, to } = lineAt(text, start);
+  const it = itemOf(text.slice(from, to));
+  if (!it || start !== from + it.lead) return null;
+  if (it.indent) return indentLines(text, start, end, true);
+  return { text: splice(text, from, start, ''), start: from, end: from };
+}
+
+// ⌥↑ / ⌥↓: swap the selected lines with the ones above / below. An item travels WITH its nested
+// children, and hops a whole neighbouring item (children included) rather than landing inside it.
+export function moveLines(text: string, start: number, end: number, up: boolean): TextEdit | null {
+  const lines = text.split('\n');
+  const lineNo = (pos: number) => text.slice(0, pos).split('\n').length - 1;
+  const blank = (i: number) => !lines[i].trim();
+  let a = lineNo(start);
+  let b = lineNo(end > start && text[end - 1] === '\n' ? end - 1 : end);
+  const own = lines.slice(a, b + 1).filter(l => l.trim());
+  const base = own.length ? Math.min(...own.map(indentOf)) : 0;
+  while (own.length && b + 1 < lines.length && !blank(b + 1) && indentOf(lines[b + 1]) > base) b++;
+  let lo: number, hi: number;                           // the neighbouring unit, lines [lo, hi]
+  if (up) {
+    if (a === 0) return null;
+    hi = a - 1; lo = hi;
+    let k = hi;
+    while (k >= 0 && !blank(k) && indentOf(lines[k]) > base) k--;
+    if (k >= 0 && k < hi && !blank(k)) lo = k;          // the item above, with the children we're under
+  } else {
+    if (b === lines.length - 1) return null;
+    lo = b + 1; hi = lo;
+    if (!blank(lo)) while (hi + 1 < lines.length && !blank(hi + 1) && indentOf(lines[hi + 1]) > indentOf(lines[lo])) hi++;
+  }
+  const block = lines.slice(a, b + 1), unit = lines.slice(lo, hi + 1);
+  const shift = unit.join('\n').length + 1;
+  const out = up ? [...lines.slice(0, lo), ...block, ...unit, ...lines.slice(b + 1)]
+                 : [...lines.slice(0, a), ...unit, ...block, ...lines.slice(hi + 1)];
+  const d = up ? -shift : shift;
+  return { text: out.join('\n'), start: start + d, end: end + d };
+}
+
+// ⌘L: make the touched lines tasks, or tick them. Lines that are all tasks flip together — all done
+// becomes all open, anything else becomes all done; otherwise every line that isn't a task yet gets a
+// box (a bullet keeps its marker, a plain line gets `- [ ] `, a NUMBERED item turns bullet — the card draws
+// and counts tasks as bullets only, main.ts toggleTask). Headings are left alone: the first one is the
+// card's title. ⌘L on an empty line starts a task there.
+const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
+export function taskLines(text: string, start: number, end: number): TextEdit {
+  const { first, last } = linesOf(text, start, end);
+  const lines = text.slice(first, last).split('\n');
+  const use = lines.map(l => (!!l.trim() || lines.length === 1) && !HEADING.test(l));
+  const items = lines.map(itemOf);
+  const allTasks = use.some(Boolean) && lines.every((_, i) => !use[i] || !!items[i]?.task);
+  const allDone = allTasks && lines.every((_, i) => !use[i] || /x/i.test(items[i]!.task));
+  const next = lines.map((l, i) => {
+    const it = items[i];
+    if (!use[i]) return l;
+    if (allTasks) {
+      const p = it!.indent.length + it!.marker.length + it!.gap.length;
+      return l.slice(0, p) + (allDone ? '[ ]' : '[x]') + l.slice(p + 3);
+    }
+    if (it?.task) return l;
+    if (it && /\d/.test(it.marker)) return it.indent + '- [ ] ' + l.slice(it.lead);
+    if (it) return l.slice(0, it.lead) + '[ ] ' + l.slice(it.lead);
+    const ind = l.match(/^[ \t]*/)![0];
+    return ind + '- [ ] ' + l.slice(ind.length);
+  });
+  if (lines.length === 1 && !lines[0].trim() && use[0]) {               // an empty line: caret after the new box
+    const at = first + next[0].length;
+    return { text: splice(text, first, last, next[0]), start: at, end: at };
+  }
+  return rewriteLines(text, first, last, next, start, end);
+}
+
+// A numbered list keeps counting from its first item, whatever was inserted, moved, nested or deleted
+// in it. Applied to the run of non-blank lines around the edit only, so a list elsewhere in the note
+// that skips on purpose is never touched. A top-level list keeps its own start (`5.` stays 5); a NESTED
+// one counts from 1, which is what nesting an item with Tab should give. A bullet or a plain line at a
+// level ends the count there, as it ends the list in the renderer.
+const ORDERED = /^([ \t]*)(\d+)([.)])(?=[ \t])/;
+export function renumber(r: TextEdit): TextEdit {
+  const lines = r.text.split('\n');
+  let li = r.text.slice(0, r.start).split('\n').length - 1;
+  if (!lines[li].trim() && li > 0) li--;
+  if (!lines[li].trim()) return r;
+  let a = li, b = li;
+  while (a > 0 && lines[a - 1].trim()) a--;
+  while (b + 1 < lines.length && lines[b + 1].trim()) b++;
+  const counters = new Map<number, { n: number; d: string }>();
+  const next = lines.slice(a, b + 1).map(l => {
+    const w = indentOf(l), m = l.match(ORDERED);
+    const outer = [...counters.keys()].some(k => k < w);
+    for (const k of [...counters.keys()]) if (k > w || (k === w && !m)) counters.delete(k);
+    if (!m) return l;
+    const c = counters.get(w);
+    let num: number;
+    if (c && c.d === m[3]) num = c.n++;
+    else { num = outer ? 1 : +m[2]; counters.set(w, { n: num + 1, d: m[3] }); }
+    return m[1] + num + l.slice(m[1].length + m[2].length);
+  });
+  let first = 0;
+  for (let k = 0; k < a; k++) first += lines[k].length + 1;
+  const last = first + lines.slice(a, b + 1).join('\n').length;
+  if (next.join('\n') === lines.slice(a, b + 1).join('\n')) return r;
+  return rewriteLines(r.text, first, last, next, r.start, r.end);
+}
+export const renumbered = (r: TextEdit | null): TextEdit | null => r && renumber(r);
+
+// ---------- pasting a spreadsheet ----------
+// Cells copied from Sheets, Excel or Numbers arrive as tab-separated rows (a cell holding a line break
+// or a tab is quoted, `""` inside being a quote). Two or more rows of the same two-or-more columns
+// become a tidied table, its first row the header; anything else is pasted as the text it is. Not
+// inside a table — there a tab is just a cell's character.
+function parseTsv(s: string): string[][] | null {
+  if (!s.includes('\t')) return null;
+  s = s.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
+  const rows: string[][] = [];
+  let row: string[] = [], cell = '', q = false, fresh = true;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (q) {
+      if (ch === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"' && fresh) { q = true; fresh = false; }
+    else if (ch === '\t') { row.push(cell); cell = ''; fresh = true; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; fresh = true; }
+    else { cell += ch; fresh = false; }
+  }
+  row.push(cell); rows.push(row);
+  const cols = rows[0].length;
+  if (rows.length < 2 || cols < 2 || rows.some(x => x.length !== cols)) return null;
+  return rows.map(x => x.map(c => c.replace(/\s*\n\s*/g, ' ').trim()));
+}
+export function pasteTable(text: string, start: number, end: number, clip: string): TextEdit | null {
+  const rows = parseTsv(clip);
+  if (!rows || tableAround(text, start)) return null;
+  const cols = rows[0].length;
+  const t: TableAt = { from: 0, to: 0, rows: [rows[0], [], ...rows.slice(1)], cols,
+    align: rows[0].map(() => ''), indent: '', row: 0, col: 0 };
+  const table = writeTable(t, 0, 0).text;
+  const before = text.slice(0, start), after = text.slice(end);
+  const pre = before && !before.endsWith('\n') ? '\n' : '';
+  const post = after && !after.startsWith('\n') ? '\n' : '';
+  const at = start + pre.length + table.length;
+  return { text: before + pre + table + post + after, start: at, end: at };
+}
+
+// ---------- double-click lands where you clicked ----------
+// The rendered card is a list of text nodes; each one is (nearly) verbatim somewhere in the source,
+// in order — the markdown around them is markers, URLs and padding. Find each node's text in the
+// source from where the previous one ended (whitespace may differ: a soft line break renders as a
+// space, a table cell loses its padding), and the clicked node's offset maps into its match. `from`
+// skips the title heading. Null when the clicked text can't be found, so the caller keeps its default.
+export function sourceOffset(source: string, from: number, texts: string[], hit: number, off: number): number | null {
+  let cur = from;
+  for (let i = 0; i <= hit; i++) {
+    const t = texts[i], s = t.trim();
+    if (!s) { if (i === hit) return cur; continue; }
+    const re = new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'g');
+    re.lastIndex = cur;
+    const m = re.exec(source);
+    if (!m) { if (i === hit) return null; continue; }
+    if (i === hit) {
+      // walk the rendered text and its match together, a whitespace run against a whitespace run
+      const k = Math.max(0, Math.min(s.length, off - (t.length - t.trimStart().length)));
+      let x = 0, y = 0;
+      while (x < k) {
+        if (/\s/.test(s[x])) { while (x < k && /\s/.test(s[x])) x++; while (y < m[0].length && /\s/.test(m[0][y])) y++; }
+        else { x++; y++; }
+      }
+      return m.index + y;
+    }
+    cur = m.index + m[0].length;
+  }
+  return null;
+}

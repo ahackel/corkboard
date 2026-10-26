@@ -73,3 +73,45 @@ test('a table is started, walked with Tab and grown with Enter, and the card dra
   await clickAway(page);
   await expect(page.locator('#world .node .body tbody tr')).toHaveCount(2);
 });
+
+test('Backspace takes a marker, ⌥↑ moves an item, ⌘L makes and ticks a task, numbers keep counting', async ({ page }) => {
+  await openBoard(page);
+  const ta = await freshEditor(page);
+  await page.keyboard.type('1. a\nb\nc\n');
+  await expect(ta).toHaveValue('1. a\n2. b\n3. c\n4. ');
+  await page.keyboard.press('Backspace');                    // the empty item's marker goes in one key
+  await expect(ta).toHaveValue('1. a\n2. b\n3. c\n');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Alt+ArrowUp');                  // c above b — and renumbered
+  await expect(ta).toHaveValue('1. a\n2. c\n3. b');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ControlOrMeta+l');                // a numbered item turns a bullet task
+  await expect(ta).toHaveValue('1. a\n2. c\n- [ ] b');
+  await page.keyboard.press('ControlOrMeta+l');
+  await expect(ta).toHaveValue('1. a\n2. c\n- [x] b');
+  await page.keyboard.press('Escape');
+});
+
+test('cells pasted from a spreadsheet become a table', async ({ page }) => {
+  await openBoard(page);
+  const ta = await freshEditor(page);
+  await ta.evaluate((el: HTMLTextAreaElement) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'Name\tAge\nAda\t36\n');
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(ta).toHaveValue('| Name | Age |\n| ---- | --- |\n| Ada  | 36  |');
+  await clickAway(page);
+  await expect(page.locator('#world .node .body tbody tr')).toHaveCount(1);
+});
+
+test('double-clicking a word in a card opens the editor with the caret on it', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Title\n\nalpha **beta** gamma');
+  const box = await c.locator('.body strong').boundingBox();
+  await page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  const ta = editor(c);
+  await expect(ta).toBeFocused();
+  const caret = await ta.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart));
+  expect(caret).toMatch(/^ta\*\* gamma$|^a\*\* gamma$/);     // mid-"beta", wherever the half falls
+});
