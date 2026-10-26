@@ -1068,7 +1068,7 @@ function withLayoutAnimation(mutate: () => void): void {
 // n.x/n.y. Just-revealed cards (absent from `before`) fade in from their nearest ancestor.
 // …and the SIZES: a fold shrinks a card to its chip or a frame to its pill, Fit hugs a frame round its
 // cards. The final size is already on screen (paintAll ran); each element that changed is played from
-// its old box to its new one with the Web Animations API, which owns width/height only for the 320ms and
+// its old box to its new one with the Web Animations API, which owns width/height only for LAYOUT_ANIM_MS and
 // then hands them straight back to the inline/CSS sizing — nothing is written, nothing to clean up. The
 // content is clipped meanwhile, so a card's text doesn't spill out of the box as it closes. A frame's
 // content wrapper (its interior clip) follows the box, else its cards would pop in or out at once.
@@ -1083,6 +1083,9 @@ function sizeSnapshot(): Map<HTMLElement, Size> {
   return out;
 }
 const SIZE_EASE = 'cubic-bezier(.22,1,.36,1)';
+// How long a fold / Fit / reflow glides — one number for the sizes here, the positions (animateReflow) and
+// `.lt-anim`'s left/top transition in styles.css, which must say the same.
+const LAYOUT_ANIM_MS = 500;
 function animateSizes(before: Map<HTMLElement, Size>): void {
   if (prefersReducedMotion()) return;
   for (const [el, a] of before) {
@@ -1092,7 +1095,7 @@ function animateSizes(before: Map<HTMLElement, Size>): void {
     el.animate([
       { width: a.w + 'px', height: a.h + 'px', minHeight: '0px', maxWidth: 'none', overflow: 'hidden' },
       { width: b.w + 'px', height: b.h + 'px', minHeight: '0px', maxWidth: 'none', overflow: 'hidden' },
-    ], { duration: 320, easing: SIZE_EASE });
+    ], { duration: LAYOUT_ANIM_MS, easing: SIZE_EASE });
   }
 }
 function animateReflow(before: Map<string, Pt>): void {
@@ -1109,7 +1112,7 @@ function animateReflow(before: Map<string, Pt>): void {
   }
   void document.body.offsetWidth;                    // commit the start positions before transitioning
   // 2) turn on the transition and move every card to its FINAL spot → the browser animates left/top
-  const DUR = 320;
+  const DUR = LAYOUT_ANIM_MS;
   for (const m of visible){ m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);

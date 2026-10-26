@@ -72,7 +72,7 @@ test('a frame folds to its label pill: its cards hide, its lines meet the pill, 
   const again = page.locator('#world .node.frame-folded', { hasText: 'Todo' });
   await again.dblclick();
   await expect(frame(page, 'Todo')).toBeVisible();
-  await page.waitForTimeout(450);                                // the box grows back, animated
+  await page.waitForTimeout(650);                                // the box grows back, animated
   const milk = (await card(page, 'Buy milk').boundingBox())!, box = (await frame(page, 'Todo').boundingBox())!;
   expect(milk.x).toBeGreaterThan(box.x); expect(milk.x + milk.width).toBeLessThan(box.x + box.width);
   expect(errors).toEqual([]);

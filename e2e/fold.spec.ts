@@ -91,10 +91,10 @@ test('folding and Fit animate the size instead of jumping', async ({ page }) => 
   const running = () => c.evaluate(el => el.getAnimations().length);
   await page.locator('#fbFold').click();
   expect(await running()).toBeGreaterThan(0);
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(650);
   expect(await running()).toBe(0);
   await page.locator('#fbFold').click();                       // expand
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(650);
   const s = (await c.locator(':scope > .fh-s').boundingBox())!;  // drag it taller, then Fit
   await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
   await page.mouse.down(); await page.mouse.move(s.x + s.width / 2, s.y + 120, { steps: 5 }); await page.mouse.up();

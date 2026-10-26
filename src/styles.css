@@ -352,9 +352,9 @@ input::placeholder { color:var(--muted); opacity:1; }
      that frame's fill instead (the canvas IS its interior then), through the same effectiveColor its
      box used. On #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child
      of this) so the grid still draws over it. Transitioned so going in and out reads as the canvas
-     taking the frame's colour rather than a hard cut; 320ms is animateReflow's card glide, so the two
+     taking the frame's colour rather than a hard cut; 500ms is animateReflow's card glide, so the two
      land together. Unset → transparent, and the theme's background shows through as before. */
-  background-color: var(--canvas-bg, transparent); transition: background-color 320ms ease; }
+  background-color: var(--canvas-bg, transparent); transition: background-color 500ms ease; }
 /* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
    simply BE there (withoutScopeFade in main.ts). See its comment for why. */
 body.scope-instant #stage { transition: none; }
@@ -483,7 +483,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease,
-  left .3s cubic-bezier(.22,1,.36,1), top .3s cubic-bezier(.22,1,.36,1); }
+  left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1); }   /* LAYOUT_ANIM_MS (main.ts) */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
    so the only thing left to remove here is the space that was separating the title from a body that
    isn't there. The `min-height:0` this rule used to carry is what `.node` itself does now. */
