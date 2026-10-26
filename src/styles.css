@@ -91,7 +91,8 @@
      hair. Named because the centred bars have to drop by exactly it. */
   --crumb-bar-h: 26px;
   --bar-btn: 32px;
-  --bar-icon: 21px;
+  --bar-icon: 18px;   /* FigJam's glyphs are light: 18px in a 32px button */
+  --r-bar: 12px;      /* every toolbar island and popover */
 
   /* ---- the safe area, named once ----
      index.html asks for `viewport-fit=cover`, so the page runs edge to edge: #stage IS the whole
@@ -326,13 +327,14 @@ input::placeholder { color:var(--muted); opacity:1; }
    just its anchor point) stays on-screen even on a short landscape phone with many entries. */
 #ctxMenu { position:fixed; min-width:220px; padding:8px 0; display:none; z-index:40;
   max-height:calc(100vh - 8px); overflow-y:auto; overscroll-behavior:contain;
-  background:var(--bar-bg); border-radius:13px;
+  background:var(--bar-bg); border-radius:var(--r-bar);
   box-shadow:var(--shadow-ui); }   /* FigJam's menus are dark islands, like its toolbar */
 #ctxMenu.open { display:block; }
-/* A row is FigJam's: 24px tall, 16px in from the edges, the shortcut in grey at the far right — and the
-   hover runs edge to edge in the selection blue. No red for Delete: FigJam's menu doesn't shout either. */
-#ctxMenu .cm-item { display:flex; width:100%; align-items:center; justify-content:space-between;
-  gap:32px; height:24px; padding:0 16px; border-radius:0; font-size:13px; color:var(--bar-ink);
+/* A row is FigJam's: 24px tall, its text 16px in from the edges, the shortcut in grey at the far right —
+   and the hover a rounded row INSET 8px from each side, in the selection blue. No red for Delete:
+   FigJam's menu doesn't shout either. */
+#ctxMenu .cm-item { display:flex; width:calc(100% - 16px); margin:0 8px; align-items:center; justify-content:space-between;
+  gap:32px; height:24px; padding:0 8px; border-radius:5px; font-size:13px; color:var(--bar-ink);
   background:transparent; border:none; cursor:default; white-space:nowrap; text-align:left;
   touch-action:manipulation; }
 #ctxMenu .cm-item:hover:not(:disabled) { background:var(--accent); color:#fff; }
@@ -1172,21 +1174,21 @@ body.zoom-far .node > .addnote { display:none !important; }
    colour, grid) and the ⌘K button, in groups split by hairlines. The buttons inside drop their own
    floating-button chrome (shadow, fixed position) and become items in the bar. */
 #dock { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + var(--sa-b)); z-index:20;
-  display:flex; align-items:center; gap:4px; padding:6px;
-  background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
-#dock .floating-btn { position:static; box-shadow:none; background:transparent; }
+  display:flex; align-items:center; gap:4px; height:48px; padding:0 8px;
+  background:var(--panel); border-radius:var(--r-bar); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
+#dock .floating-btn { position:static; box-shadow:none; background:transparent; border-radius:8px; }
 #dock .floating-btn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
-.dock-sep { flex:none; width:1px; align-self:stretch; margin:2px 4px; background:var(--node-border); }
+.dock-sep { flex:none; width:1px; align-self:stretch; margin:0 6px; background:var(--node-border); }
 /* ghost card — drag it onto the canvas to create a new card. Styled like the card it actually creates
    (a sticky in the default yellow), so it previews the real result. */
 #ghostCard {
   position:relative; z-index:20;
-  width:56px; height:36px;
+  width:40px; height:32px;
   display:flex; align-items:center; justify-content:center;
   /* a little sticky note: what it makes is what it looks like (new cards are yellow — main.ts
      effectiveColor). It has no .c-* class to carry --ink, so it names the fill's computed ink directly. */
   background:var(--pal-amber); border:none; border-radius:var(--r-card); box-shadow:var(--lift);
-  color:var(--pal-ink-amber); font-size:20px; font-weight:400;
+  color:var(--pal-ink-amber); font-size:18px; font-weight:400;
   cursor:grab; user-select:none; touch-action:none;
   transition:box-shadow .15s, opacity .15s;
 }
@@ -1205,7 +1207,7 @@ body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
 /* above the dock, pointing down at the sticky you drag */
 #ghostHint { left:50%; transform:translateX(-50%); bottom:calc(70px + var(--sa-b)); }
 #ghostHint .hint-arrow { display:none; }
-#paletteBtn { width:auto; padding:0 10px; font-size:13px; font-weight:600; }
+#paletteBtn { width:auto; padding:0 8px; font-size:12px; font-weight:500; color:var(--muted); letter-spacing:.04em; }
 #canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18); }
 /* Nothing to pick in read-only — setColor refuses there, so the button would be a dead control. */
 body.readonly #canvasColorBtn { display:none; }
@@ -1251,8 +1253,8 @@ body.readonly #canvasColorBtn { display:none; }
    selected" rather than as part of the board's furniture. */
 #floatBar {
   position:fixed; top:0; left:0; z-index:20;   /* left/top overwritten per-frame in JS */
-  display:flex; align-items:center; gap:2px; padding:4px;
-  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
+  display:flex; align-items:center; gap:2px; padding:4px 6px;
+  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-ui);
   opacity:0; pointer-events:none; transition:opacity .15s ease;
   touch-action:pan-x pan-y;
 }
@@ -1261,8 +1263,8 @@ body.readonly #canvasColorBtn { display:none; }
    below). It anchors to the midpoint of its curve instead of to a card, and it never docks to the
    bottom on a narrow screen: an edge has no on-screen "self" to be covered by a docked bar. */
 #edgeBar {
-  position:fixed; z-index:60; display:flex; align-items:center; gap:2px; padding:4px;
-  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
+  position:fixed; z-index:60; display:flex; align-items:center; gap:2px; padding:4px 6px;
+  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-ui);
   opacity:0; pointer-events:none; transition:opacity .12s ease;
   touch-action:pan-x pan-y;
 }
@@ -1311,9 +1313,9 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-icon { background:transparent; color:var(--bar-ink); }
 .fb-icon svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 .fb-icon:hover { color:var(--bar-ink); background:var(--bar-hover); }
-/* stretches past the bar's own padding (align-self:stretch + negative margin) so it touches the
-   bar's top/bottom edges instead of floating as a short centred tick */
-.fb-sep { flex:none; width:1px; align-self:stretch; margin:4px 3px; background:var(--bar-sep); }
+/* stretches past the bar's own padding (align-self:stretch + negative margin) so it runs the bar's
+   full height, as FigJam's dividers do, with the same breathing room either side */
+.fb-sep { flex:none; width:1px; align-self:stretch; margin:-4px 6px; background:var(--bar-sep); }
 /* locked selection: nothing about the card can be changed, so the bar shrinks to just the lock
    button (float-bar.ts's markLock) — one obvious way back out, no dead controls. The ID+class
    prefix is what out-specifies `#floatBar button, #floatBar label` above (markChips only ever
@@ -1323,10 +1325,10 @@ body.canvas-interacting .addnote { display:none !important; }
 /* the colour trigger is the same chip as the ones in its popover, so it's the same 22px they are —
    NOT --bar-btn (which the rule above would give it, and which read as an oversized bubble next to
    the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
-#floatBar .fb-swatch, #edgeBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
-/* FigJam's colour DROPDOWN: the dot and a small chevron on a raised chip, wider than an icon button */
-#floatBar button.fb-dd { width:auto; gap:2px; padding:0 6px 0 0; background:#3a3a3a; color:var(--bar-ink); }
-#floatBar button.fb-dd:hover { background:#474747; }
+#floatBar .fb-swatch, #edgeBar .fb-swatch { width:20px; height:20px; margin:0 6px; }
+/* FigJam's colour DROPDOWN: the dot and a small grey chevron, flat on the bar until hovered */
+#floatBar button.fb-dd { width:auto; gap:0; padding:0 6px 0 0; background:transparent; color:var(--bar-muted); }
+#floatBar button.fb-dd:hover { background:var(--bar-hover); color:var(--bar-ink); }
 #floatBar .fb-dd .fb-swatch { pointer-events:none; }
 .fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
 /* the eye shows the state it would CHANGE: open eye while the contents show, struck-out while hidden */
@@ -1340,7 +1342,7 @@ body.canvas-interacting .addnote { display:none !important; }
    sitting beside the first. (--r-full clamps to half the SHORTER side, which on a tall box paints a
    lozenge; --r-panel is the roundness step that keeps it on the shared scale.) */
 .fb-pop { position:fixed; top:0; left:0; display:none; z-index:23; padding:8px;
-  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
+  background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-ui);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
 /* The colour pickers are FigJam's grid: rows of ELEVEN (main.ts PICKER_ROWS). The explicit width is
@@ -1352,16 +1354,11 @@ body.canvas-interacting .addnote { display:none !important; }
   width:calc(11 * 24px + 10 * 8px); gap:8px; }
 /* FigJam's picker: bigger chips on a roomier island */
 .fb-pop .swatch { width:24px; height:24px; }
-#fbColorPop, #canvasColorPop, #ebColorPop { padding:14px; border-radius:16px; }
+#fbColorPop, #canvasColorPop, #ebColorPop { padding:14px; border-radius:var(--r-bar); }
 .fb-pop .swatches .swatch-break { margin-top:-8px; }
 /* hides instantly while #floatBar itself does (see float-bar.ts's followLoop) — a stale popover
    position mid-pan/drag/zoom would otherwise float away from its (now-moved) trigger button. */
-.fb-pop.hide-interact, .fb-pop-connector.hide-interact { opacity:0; pointer-events:none; transition:none; }
-/* thin stem bridging the short gap between the bar and an open popover, in the bar's own
-   background colour so the two read as one connected shape (position/size set in float-bar.ts) */
-.fb-pop-connector { position:fixed; top:0; left:0; display:none; z-index:23; width:2px;
-  background:var(--bar-bg); }
-.fb-pop-connector.open { display:block; }
+.fb-pop.hide-interact { opacity:0; pointer-events:none; transition:none; }
 
 /* colour picker = rows of individual round bubbles; the selection outline sits AROUND one.
    TWO rows, in one flex container: the fixed palette, then the custom picker + recently-used custom

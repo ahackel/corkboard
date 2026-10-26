@@ -33,7 +33,6 @@ const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
-const popConnector = byId('fbPopConnector');
 const edColors = byId('edColors');
 
 // colour wiring lives in features/properties.ts. Tags are omitted: no room in the bar.
@@ -215,10 +214,8 @@ function syncControls(): void {
 }
 
 // ---------- the colour popover ----------
-// 12px — the same margin every corner/toolbar button keeps from the browser window edge
-// (#toolbar's top:12px, .floating-btn's 12px offsets, …), so the popover sits the same
-// "distance away" from the bar as the bar's own chrome sits from the window.
-const POP_GAP = 12;
+// A free-floating island 8px off the bar, as FigJam's is — no stem joining the two.
+const POP_GAP = 8;
 let activePopover: { pop: HTMLElement; anchor: HTMLElement } | null = null;
 function positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
   const ar = anchor.getBoundingClientRect();
@@ -228,19 +225,11 @@ function positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
   const pw = pop.offsetWidth, ph = pop.offsetHeight;
   let left = ar.left + ar.width / 2 - pw / 2;
   let top = br.top - ph - POP_GAP;
-  const above = top >= 4;
-  if (!above) top = br.bottom + POP_GAP;
-  top = placeInViewport(pop, left, top).top;
-  // the connector stem bridges the gap, centred on the ANCHOR (not the popover, which may have
-  // been clamped sideways near a screen edge) so it always starts right at the trigger button.
-  popConnector.style.left = `${ar.left + ar.width / 2 - 1}px`;
-  popConnector.style.top = `${above ? top + ph : br.bottom}px`;
-  popConnector.style.height = `${POP_GAP}px`;
-  popConnector.classList.add('open');
+  if (top < 4) top = br.bottom + POP_GAP;
+  placeInViewport(pop, left, top);
 }
 function closePopovers(): void {
   colorPop.classList.remove('open');
-  popConnector.classList.remove('open');
   activePopover = null;
 }
 function togglePopover(pop: HTMLElement, anchor: HTMLElement): void {
@@ -436,7 +425,6 @@ function followLoop(): void {
   // hide it right along with the bar it hangs off, same rule, same class.
   if (activePopover){
     activePopover.pop.classList.toggle('hide-interact', interacting || !placed);
-    popConnector.classList.toggle('hide-interact', interacting || !placed);
   }
   // a selected card's own add-emoji/add-note buttons (main.ts's showAddTag/.addnote) float outside
   // its border and don't reposition themselves — they'd lag behind mid-pan/zoom the same way the

@@ -30,7 +30,7 @@ const pop = document.getElementById('canvasColorPop');
 const colors = document.getElementById('canvasColors');
 // 12px — the same margin every floating button keeps from the window edge, so the popover sits the
 // same "distance away" from the button as the button does from the corner.
-const POP_GAP = 12;
+const POP_GAP = 8;
 let built = false;
 
 // The value the button would overwrite: the open frame's own authored colour, or the map's.
