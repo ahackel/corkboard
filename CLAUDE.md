@@ -32,7 +32,7 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
   `idb-store.ts`, `handle-store.ts`, `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
   `flushSave`, `loadFromDir`, zip import/export) `board.ts` (the ONE sidecar), `save-alert.ts` (the only UI here).
-- `view/` — `camera.ts`, `layout.ts` (all placement, container predicates, the outliner),
+- `view/` — `camera.ts`, `layout.ts` (frame geometry, the drop test `frameAt`, `holderOf`),
   `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
@@ -53,15 +53,13 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   filename is a slug TRACKING that text: re-derived each save, renamed on edit-commit, suffixed `Notes 2.md`.
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
-- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card with children outlines them in
-  its own box; free edges live in `board.json`, run STRAIGHT card to card, and mean nothing structural.
+- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the frame that is its parent;
+  free edges live in `board.json`, run STRAIGHT card to card, and mean nothing structural.
 - **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
-  `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`, `mm_locked`, `mm_done`, `mm_checklist`,
-  `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
+  `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
-- **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
-  (folding legacy `image`/`stack`/`annotation`/`query` → `card`). Kinds: card, frame — a card with
-  children IS the outliner.
+- **Two kinds, card and frame (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
+  through `holderOf`; a drop lands in the innermost frame under the card's centre (`frameAt`), else the top level.
 - **`n.w` is always AUTHORED; `n.h` only for a frame and an IMAGE card** — a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
@@ -87,8 +85,9 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - Frames — "A `frame`'s BOUNDS include its title tab" · "A container's content wrapper is
   LIFECYCLE-managed" · "A frame can be OPENED, and
   then the canvas IS its interior" · "An OPENED CARD is its note" (scope, crumbs, canvas colour, `detachParentId`).
-- Outlines — "A `stack` is an OUTLINER" (now: any card with children); files — "A body-less note is MIGRATED on load" · "A note that is
-  blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
+- The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
+  note is drawn on its TAB"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
+  says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"

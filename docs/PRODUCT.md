@@ -47,10 +47,19 @@ What it has been used for, and what it must stay good at:
 
 ## Features
 
-**Core — keep, and make each feel great:** cards with Markdown, free placement, nesting (a card
-with children is an outline; frames group), colour and tags, simple lines between cards, search,
-undo, pasted images, a pasted list becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a card or frame to
-work inside it, and the ⌘K command palette — every action, with its shortcut, in one searchable list.
+**Core — keep, and make each feel great:** cards with Markdown, free placement, frames to group
+cards, colour and tags, simple lines between cards, search, undo, pasted images, a pasted list
+becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
+card or frame to work inside it, and the ⌘K command palette — every action, with its shortcut, in
+one searchable list.
+
+**Two things, one rule.** There are cards and frames, nothing else:
+- A **card** is a note. It never holds other cards — structure inside a thought is written into the
+  note (lists, `- [ ]` tasks).
+- A **frame** is a box with a name and a one-line description. Cards sit in it wherever you put them,
+  and frames nest.
+- **The rule:** a card is in the frame you drop it in, and out when you drop it outside. A frame grows
+  to hold what you put in it, so nothing is ever hidden past its edge.
 
 **To build, in order:** tidy-up of a selection (only on request) · frame titles that grow readable when
 zoomed out · emoji tags presented as stamps · export a selection or board as PNG · phone inbox.
@@ -65,11 +74,14 @@ zoomed out · emoji tags presented as stamps · export a selection or board as P
 - *The help map* — the palette lists every action with its shortcut; that is the reference.
 - *Outline view (and its phone editor)* — built for working on a phone; the phone is an inbox now,
   search finds things, and Obsidian is the reading view.
+- *Cards inside cards (the outliner), checklist mode, and frames that auto-arrange their cards* — two
+  kinds of container with different rules, and a drop could nest a card by accident. Old maps open
+  with those cards turned into frames.
 
 ## Known friction to fix (from daily use)
 
-- **Layout fights me**: card sizes and overlaps need constant fixing. (Lines rerouting when cards
-  move is fixed: lines now run straight from card to card.)
+- **Layout fights me**: card sizes and overlaps need constant fixing. (Fixed so far: lines run straight
+  from card to card; dropping never nests a card by accident; guides line cards up while dragging.)
 - **Boards get messy** over weeks. First try a routine with existing features (a "This week" frame;
   on Friday, write a summary card, move the week's cards into it, collapse it) before building
   anything for it.
