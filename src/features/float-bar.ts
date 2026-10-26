@@ -14,13 +14,12 @@ import { subtreeBox } from '../view/layout.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
 import { settleFrames } from './drag.js';
-import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, addCardInside, createSibling, mkNode } from './crud.js';
+import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
-import { pasteFromClipboard, pickImagesForNode } from './attachments.js';
+import { pasteFromClipboard } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
-import { frameBox } from '../view/camera.js';
 import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
@@ -280,58 +279,55 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && activePo
 // (where the pasted card lands) — the kebab has no cursor position, so it passes the
 // button's own screen position instead.
 export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] {
+  // FigJam's order: the clipboard, Delete, what you can DO with it, where it goes outside the map, and
+  // the lock last. Only actions with no other easy home are here — a new card next to this one is the
+  // port's ⊕, a new card inside a frame is a double-click in it, zooming is F.
   const multi = state.sel.has(n.id) && state.sel.size > 1;
   const targetIds = multi ? [...state.sel] : [n.id];
   const anyFrame = targetIds.some(id => state.nodes.get(id)?.type === 'frame');
+  const isFrame = n.type === 'frame';
   // group actions (Duplicate/Cut/Copy/Export/Share/Auto-size) act on state.sel via selectedIds();
   // when the target isn't already part of the selection, select it first so they act on IT.
   const selectTargetFirst = () => { if (!multi) selectNode(n.id); };
   const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
-  const p = parentOf(n);
-  const parentLocked = !!p && isLockedEffective(p);
-  const anyLocked = targetIds.some(id => isLockedEffective(state.nodes.get(id)!));
+  const someLocked = targetIds.some(id => isLockedEffective(state.nodes.get(id)!));
   const anySubtreeLocked = targetIds.some(id => subtreeHasLocked(id));
+  const ro = state.readOnly;
   const entries: MenuEntry[] = [];
-  if (!state.readOnly){
-    if (!multi){
-      entries.push({ label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked });
-      entries.push({ label:'Edit note', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
-      entries.push({ label:'Insert image…', run: () => pickImagesForNode(n.id), disabled: locked });
-      entries.push('sep');
-      if (n.type === 'frame') {
-        entries.push({ label:'Add a card inside', shortcut:'Tab', run: () => addCardInside(n.id), disabled: locked });
-        entries.push({ label:'Paste inside', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, n.id); }, disabled: locked });
-      } else entries.push({ label:'Add a card after', shortcut:'Enter', run: () => createSibling(n.id), disabled: parentLocked });
-    }
-    entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
-    entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
-    entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: anyLocked });
-    // Lock/unlock is NOT here: it lives on the float bar's own lock toggle (markLock above), which
-    // is the only control left in the bar once a card is locked. The L shortcut still works too.
-    entries.push('sep');
-  }
-  // copy/collapse/fit/export never mutate → allowed in read-only mode too
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
-  if (!multi)
-    entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id),
-      disabled: locked || (!childrenOf(n.id).length && !(n.body && n.body.trim())) });
-  // Opening a frame mutates nothing, so it belongs in this read-only-safe block — and it's the one
-  // way IN while read-only, since a double-click there still folds instead (activateNode).
-  if (!multi && canOpen(n))
-    entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
-  entries.push({ label:'Fit view', shortcut:'F', run: () => frameBox(targetIds.map(id => state.nodes.get(id))) });
-  entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: !n.file });
-  if (anyFrame && !state.readOnly)
-    entries.push({ label: multi ? 'Auto-size frames' : 'Auto-size frame', shortcut:'⇧A',
-      run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: anyLocked });
-  entries.push('sep', { label:'Download selected cards', run: () => { selectTargetFirst(); exportSelection(); } });
-  entries.push({ label:'Share…', run: () => { selectTargetFirst(); void shareSelection(); }, disabled: !canShareFiles });
-  if (!state.readOnly){
-    entries.push('sep', { label: multi ? `Delete ${state.sel.size} cards` : 'Delete', shortcut:'Del',
-      danger: true, run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
+  if (!ro){
+    entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
+    // on a frame, what's pasted lands INSIDE it; on a card, beside it at the pointer
+    entries.push({ label: isFrame && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
+      run: () => { void pasteFromClipboard(sx, sy, isFrame && !multi ? n.id : null); }, disabled: isFrame && locked });
+    entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
+    entries.push('sep');
+    entries.push({ label:'Delete', shortcut:'⌫', run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
     if (anyFrame)
-      entries.push({ label: multi ? 'Ungroup (keep the cards)' : 'Ungroup — delete the frame, keep its cards', shortcut:'⌥Del',
-        danger: true, run: () => { selectTargetFirst(); deleteSelectionKeepChildren(); }, disabled: anyLocked });
+      entries.push({ label:'Delete frame, keep cards', shortcut:'⌥⌫',
+        run: () => { selectTargetFirst(); deleteSelectionKeepChildren(); }, disabled: someLocked });
+  }
+  entries.push('sep');
+  if (!ro && !multi)
+    entries.push(isFrame ? { label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked }
+                         : { label:'Edit', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
+  if (!multi && canOpen(n)) entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
+  if (!multi && isFrame)
+    entries.push({ label: n.collapsed ? 'Show contents' : 'Hide contents', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
+  if (!ro){
+    entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: someLocked });
+    if (anyFrame)
+      entries.push({ label: multi ? 'Fit frames to contents' : 'Fit frame to contents', shortcut:'⇧A',
+        run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
+  }
+  entries.push('sep');
+  entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: multi || !n.file });
+  entries.push({ label:'Download as Markdown', run: () => { selectTargetFirst(); exportSelection(); } });
+  if (canShareFiles) entries.push({ label:'Share…', run: () => { selectTargetFirst(); void shareSelection(); } });
+  if (!ro){
+    entries.push('sep');
+    const lockedNow = anyLocked(targetIds);
+    entries.push({ label: lockedNow ? 'Unlock' : 'Lock', shortcut:'L', run: () => setLockedSelection(targetIds, !lockedNow) });
   }
   return entries;
 }

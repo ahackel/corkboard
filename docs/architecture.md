@@ -831,6 +831,14 @@ had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — i
 past it. While a line end is dragged, the target card shows its ports; the one within `PORT_SNAP` fills. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron.
 
+**The context menu is FigJam's** (`#ctxMenu`, `features/context-menu.ts`; a card's entries are
+`buildCardMenu` in float-bar.ts, shared with the bar's ⋯). Groups, in FigJam's order: the clipboard
+(Copy/Cut/Paste/Duplicate), Delete, what you can do with it (Edit or Rename, Open, Hide contents, Group,
+Fit frame), where it goes outside the map (file path, download, share), and Lock last. Only actions with
+no easier home: a new card beside one is the port ⊕, a card inside a frame is a double-click, zooming is
+F. Rows are 24px, 16px from the edges, the shortcut grey at the right, a full-width blue hover, and no
+red Delete.
+
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
 board's canvas colour and grid, and ⌘K, in groups split by hairlines. Its buttons are ordinary
 `.floating-btn`s that drop their own chrome inside it, and every popover/menu they open is placed from the

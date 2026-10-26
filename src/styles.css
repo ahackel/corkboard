@@ -324,26 +324,25 @@ input::placeholder { color:var(--muted); opacity:1; }
    spilling off-screen with no way to reach the rest. 8px margin on each side matches the 4px
    position clamp in openMenuAt (context-menu.ts) — together they guarantee the WHOLE menu (not
    just its anchor point) stays on-screen even on a short landscape phone with many entries. */
-#ctxMenu { position:fixed; min-width:180px; padding:4px; display:none; z-index:40;
+#ctxMenu { position:fixed; min-width:220px; padding:8px 0; display:none; z-index:40;
   max-height:calc(100vh - 8px); overflow-y:auto; overscroll-behavior:contain;
-  background:var(--bar-bg); border-radius:var(--r-ctl);
+  background:var(--bar-bg); border-radius:13px;
   box-shadow:var(--shadow-ui); }   /* FigJam's menus are dark islands, like its toolbar */
 #ctxMenu.open { display:block; }
+/* A row is FigJam's: 24px tall, 16px in from the edges, the shortcut in grey at the far right — and the
+   hover runs edge to edge in the selection blue. No red for Delete: FigJam's menu doesn't shout either. */
 #ctxMenu .cm-item { display:flex; width:100%; align-items:center; justify-content:space-between;
-  gap:18px; padding:6px 9px; border-radius:6px; font-size:13px; color:var(--bar-ink);
-  background:transparent; border:none; cursor:pointer; white-space:nowrap; text-align:left;
+  gap:32px; height:24px; padding:0 16px; border-radius:0; font-size:13px; color:var(--bar-ink);
+  background:transparent; border:none; cursor:default; white-space:nowrap; text-align:left;
   touch-action:manipulation; }
 #ctxMenu .cm-item:hover:not(:disabled) { background:var(--accent); color:#fff; }
-#ctxMenu .cm-item:hover:not(:disabled) kbd {
-  color:#fff; background:rgba(255,255,255,.16); border-color:rgba(255,255,255,.35); }
-#ctxMenu .cm-item:disabled { color:#808080; cursor:default; }
-/* destructive entries (delete / remove) read red before hover too — unless disabled, which greys
-   out like any other unavailable entry (e.g. a locked card's Delete/Rename/…). */
-#ctxMenu .cm-item.cm-danger:not(:disabled) { color:#ff7262; }
-#ctxMenu .cm-item.cm-danger:hover:not(:disabled) { background:#e0564f; color:#fff; }
-#ctxMenu .cm-item kbd { font-family:inherit; font-size:11px; color:var(--bar-muted); }
-/* negative side margin cancels the menu's own padding + border so the line touches both edges */
-#ctxMenu .cm-sep { height:1px; margin:4px -4px; background:var(--bar-sep); }
+#ctxMenu .cm-item:disabled { color:rgba(255,255,255,.3); }
+#ctxMenu .cm-item kbd { font-family:inherit; font-size:13px; letter-spacing:.06em; color:rgba(255,255,255,.55);
+  background:none; border:none; padding:0; }
+#ctxMenu .cm-item:hover:not(:disabled) kbd { color:#fff; }
+#ctxMenu .cm-item:disabled kbd { color:rgba(255,255,255,.2); }
+/* inset from both edges, with room above and below (FigJam's groups breathe) */
+#ctxMenu .cm-sep { height:1px; margin:8px 8px; background:rgba(255,255,255,.1); }
 
 /* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
 #stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
@@ -1386,8 +1385,6 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-pop .swatch:not(:hover):not(.active), #floatBar .swatch:not(:hover) { box-shadow:inset 0 0 0 1px rgba(255,255,255,.22); }
 /* the bar's own buttons are rounded squares (FigJam's), but its colour trigger stays a dot */
 #floatBar .fb-swatch, #edgeBar .fb-swatch { border-radius:50%; }
-/* shortcut chips inside the dark menu */
-#ctxMenu .cm-item kbd { background:transparent; border-color:#555; }
 /* inherit (the default): striped chip = "take the parent's colour" */
 .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#fff 5px,#e6e6e6 5px,#e6e6e6 10px); }
 /* custom colour: the chip a native <input type="color"> hides inside (features/properties.ts). It's
@@ -1515,7 +1512,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   /* wrap so swatches never escape the sidebar on narrow panels */
   .swatches { flex-wrap:wrap; }
   /* context-menu rows big enough for a finger */
-  #ctxMenu .cm-item { padding:10px 12px; font-size:14px; }
+  #ctxMenu .cm-item { height:40px; font-size:14px; }
   /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
      border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
      touch, so the zone being generous is the only affordance there is. The .addnote pill above grows

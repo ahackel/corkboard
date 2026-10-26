@@ -166,9 +166,8 @@ export function onBodyPaste(e: ClipboardEvent): void {
 // ---------- file-picker fallback (iOS/iPadOS: no OS drag-drop, clipboard image-paste is flaky) ----------
 // A hidden <input type="file"> is the one attach mechanism every mobile browser supports — on iOS it
 // opens the Photos library / Camera / Files share sheet. Routes into the exact same storage/rendering
-// pipeline as paste and drop; menu entries in float-bar.ts / context-menu.ts trigger it.
+// pipeline as paste and drop; the canvas menu's Insert image… (context-menu.ts) triggers it.
 type PickTarget =
-  | { kind: 'node'; id: string }
   | { kind: 'new'; sx: number | null; sy: number | null; parent: string | null };
 let pickTarget: PickTarget | null = null;
 const filePicker = document.createElement('input');
@@ -180,19 +179,8 @@ filePicker.addEventListener('change', () => {
   filePicker.value = '';                              // allow re-picking the same file next time
   const req = pickTarget; pickTarget = null;
   if (!req || !files.length) return;
-  if (req.kind === 'node'){
-    // mirrors the drop-on-editor vs drop-on-card branching in the drop listener below
-    void (ui.bodyEdit && ui.bodyEdit.id === req.id ? insertImagesAtCursor(files) : appendImagesToNode(req.id, files));
-  } else {
-    void createImageCards(files, req.sx, req.sy, req.parent);
-  }
+  void createImageCards(files, req.sx, req.sy, req.parent);
 });
-// Insert into (if its body editor is open) or append to an existing card.
-export function pickImagesForNode(id: string): void {
-  if (!canAttach()) return;
-  pickTarget = { kind: 'node', id };
-  filePicker.click();                                 // must fire synchronously from the user gesture (Safari)
-}
 // Drop a new image card at a canvas point.
 export function pickImagesAt(sx: number | null, sy: number | null, parent: string | null): void {
   if (!canAttach()) return;

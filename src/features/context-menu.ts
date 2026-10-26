@@ -159,16 +159,16 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   }
   if (!state.readOnly){
     const p = screenToWorld(sx, sy);
-    entries.push({ label:'New card here', shortcut:'Space', run: () => createNode(centredAt(p)) });
-    entries.push({ label:'Paste', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, null); } });
+    entries.push({ label:'Paste here', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, null); } });
+    entries.push('sep');
+    entries.push({ label:'New card', shortcut:'N', run: () => createNode(centredAt(p)) });
     entries.push({ label:'Insert image…', run: () => pickImagesAt(sx, sy, null) });
     entries.push('sep');
   }
-  // Selecting mutates nothing, so it sits with Fit view in the read-only-safe group. Here as well as
+  // Selecting mutates nothing, so it sits with zooming in the read-only-safe group. Here as well as
   // on ⌘A because a touch user has no ⌘ — and this menu is the only place they'd find it.
-  entries.push({ label:'Select all cards', shortcut:'⌘A', run: () => selectAll(),
-    disabled: !state.nodes.size });
-  entries.push({ label:'Fit view', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
+  entries.push({ label:'Select all', shortcut:'⌘A', run: () => selectAll(), disabled: !state.nodes.size });
+  entries.push({ label:'Zoom to fit', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
   return entries;
 }
 
