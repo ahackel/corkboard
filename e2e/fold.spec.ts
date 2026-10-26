@@ -1,22 +1,25 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, makeCard, palette, reload, clickAway, card, watchErrors } from './helpers';
+import { openBoard, makeCard, palette, reload, clickAway, card, select, watchErrors } from './helpers';
 
 test('the arrow folds a card to a one-line chip that says how much it hides', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   const g = await makeCard(page, 300, 250, '# Groceries\nmilk\neggs\nbread');
   const one = await makeCard(page, 650, 250, 'One line only');
-  await expect(one).not.toHaveAttribute('data-chip');   // nothing to fold away, so no arrow
-  await g.hover();
-  await g.locator('.hidden-count').click();
+  await expect(page.locator('#world .hidden-count')).toHaveCount(0);   // no fold button on cards any more
+  await select(page, one);
+  await expect(page.locator('#fbFold')).toBeHidden();           // nothing to fold away
+  await select(page, g);
+  await expect(page.locator('#fbFold')).toHaveAttribute('title', 'Collapse (X)');
+  await page.locator('#fbFold').click();
   await expect(g).toHaveClass(/collapsed/);
+  await expect(page.locator('#fbFold')).toHaveAttribute('title', 'Expand (X)');
   await expect(g.locator('.fold-more')).toHaveText('+3');
   await expect(g.locator('.fold-more')).toHaveAttribute('title', '3 more lines');
   expect((await g.boundingBox())!.width).toBeLessThan(200);   // shrink-wrapped to its line
   await g.dblclick();                                           // a double-click unfolds it
   await expect(g).not.toHaveClass(/collapsed/);
-  await g.hover();
-  await g.locator('.hidden-count').click();
+  await page.keyboard.press('x');
   await expect(g).not.toContainText('eggs');
   await reload(page);
   await expect(card(page, 'Groceries')).toHaveClass(/collapsed/);
@@ -26,8 +29,8 @@ test('the arrow folds a card to a one-line chip that says how much it hides', as
 test('resting the mouse on a folded card peeks at the whole note', async ({ page }) => {
   await openBoard(page);
   const g = await makeCard(page, 300, 250, '# Groceries\nmilk\neggs');
-  await g.hover();
-  await g.locator('.hidden-count').click();
+  await select(page, g);
+  await page.keyboard.press('x');
   await clickAway(page);
   const b = (await g.boundingBox())!;
   await page.mouse.move(b.x + b.width / 2, b.y + 10);
@@ -37,7 +40,7 @@ test('resting the mouse on a folded card peeks at the whole note', async ({ page
   await expect(g).toHaveClass(/collapsed/);   // reading changed nothing
 });
 
-test('⌘K collapses and expands every card and frame; ⌥-click folds the cards beside one', async ({ page }) => {
+test('⌘K collapses and expands every card and frame', async ({ page }) => {
   await openBoard(page);
   const a = await makeCard(page, 300, 200, '# A\none\ntwo');
   await makeCard(page, 300, 420, '# B\none\ntwo');
@@ -46,9 +49,6 @@ test('⌘K collapses and expands every card and frame; ⌥-click folds the cards
   await expect(page.locator('#world .node.collapsed')).toHaveCount(3);
   await palette(page, 'Expand all');
   await expect(page.locator('#world .node.collapsed')).toHaveCount(0);
-  await a.hover();
-  await a.locator('.hidden-count').click({ modifiers: ['Alt'] });
-  await expect(page.locator('#world .node.collapsed')).toHaveCount(3);
 });
 
 test.describe('on a touch screen', () => {
@@ -60,7 +60,7 @@ test.describe('on a touch screen', () => {
     await page.mouse.click(700, 60);
     const g = card(page, 'Groceries');
     await g.tap();
-    await g.locator('.hidden-count').tap();
+    await page.locator('#fbFold').tap();
     await expect(g).toHaveClass(/collapsed/);
     await g.locator('.fold-more').tap();
     await expect(page.locator('#peek.open')).toContainText('eggs');
@@ -75,8 +75,8 @@ test('a checklist card wears its progress, and folded its chip says it', async (
   await expect(meter).toHaveAttribute('title', '1 of 3 tasks done (33%)');
   await c.locator('.taskbox').nth(1).click();
   await expect(meter).toHaveText('2/3');
-  await c.hover();
-  await c.locator('.hidden-count').click();
+  await select(page, c);
+  await page.locator('#fbFold').click();
   await expect(c).toHaveClass(/collapsed/);
   await expect(meter).toBeHidden();
   await expect(c.locator('.fold-more')).toHaveText('2/3');

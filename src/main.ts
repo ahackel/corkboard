@@ -74,19 +74,14 @@ const TAG_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 // add-emoji button living at the bottom-RIGHT, see the tag-row comment further down), now that
 // .addnote is a small icon button rather than a wide "Add note…" text pill.
 const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4a2.4 2.4 0 1 1 3.4 3.4L7.8 19 4 20l1-3.8Z"/><path d="M4 21.5h14"/></svg>`;
-// The fold ARROW (.hidden-count — the class outlived the "+N" bubble it once was): a disclosure
-// triangle in the card's left padding, level with its first line, the way an outliner's ▸ sits before
-// its row. ▾ while the note shows, turned to ▸ by CSS when folded — one glyph, so paintNode never
-// rewrites the button (paintAll runs per animation FRAME for the length of a resize drag).
-export const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 8h14l-7 9z"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
   el.dataset.id = n.id;
-  // The fold arrow lives inside .title-row (hence the `> .title-row >` in its selectors in styles.css);
-  // the row is in flow on a card, so the arrow is positioned against the card itself. `.fold-more` is
-  // the "N more lines" a FOLDED card shows under its first line (paintNode).
-  el.innerHTML = `<div class="title-row"><div class="title"></div><button type="button" class="hidden-count">${FOLD_CHIP_SVG}</button></div><div class="body"></div>
+  // `.fold-more` is the badge at the end of a FOLDED card's chip ("+4", "3/5" — paintNode). There is no
+  // fold button on the card: folding is the float bar's (features/float-bar.ts fbFold), X, ←/→ and the
+  // menus, and a double-click on anything folded unfolds it (activateNode).
+  el.innerHTML = `<div class="title-row"><div class="title"></div></div><div class="body"></div>
     <div class="fold-more"></div>
     <div class="task-meter"></div>
     <div class="tag-row"></div>
@@ -99,23 +94,11 @@ function nodeEl(n: MindNode): HTMLElement {
   const addnote = el.querySelector('.addnote')!;
   addnote.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   addnote.addEventListener('click', (e)=>{ e.stopPropagation(); startBodyEdit(n); });
-  // The arrow is a real fold/unfold button: stop the pointerdown so bindNodeDrag never starts a
-  // drag/select. On a card that's part of a MULTI-selection it folds the whole selection (like X); with
-  // ⌥ it folds every card BESIDE this one (the same frame, or the top level) to the state this one goes
-  // to — the outliner's ⌥-click on a disclosure triangle.
-  // "N more lines" under a folded card shows the whole note (features/peek.ts) — the tap for touch,
+  // The badge on a folded card shows the whole note (features/peek.ts) — the tap for touch,
   // which has no hover to peek with.
   const foldMore = el.querySelector(':scope > .fold-more')!;
   foldMore.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   foldMore.addEventListener('click', (e)=>{ e.stopPropagation(); peekCard(el); });
-  const foldChip = el.querySelector(':scope > .title-row > .hidden-count')!;
-  foldChip.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
-  foldChip.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    if ((e as MouseEvent).altKey) setCollapsedSelection(childrenOf(n.parent).filter(c => !isHidden(c)).map(c => c.id), !n.collapsed);
-    else if (state.sel.size > 1 && state.sel.has(n.id)) toggleCollapseSelection(state.sel);
-    else toggleCollapse(n.id);
-  });
   const bodyEl = el.querySelector('.body')!;
   // body links: open externally, or jump to a wikilink's node. Don't let the click bubble to
   // the card (which would select / toggle the panel); pointerdown is stopped in bindNodeDrag.
@@ -191,7 +174,7 @@ function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
 }
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
-const NODE_CONTROLS = '.hidden-count, .fold-more, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
+const NODE_CONTROLS = '.fold-more, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
 // What a gesture at these viewport coords actually hits. Deliberately NOT the event's own `target`:
 // bindNodeDrag takes a POINTER CAPTURE on the node's element, and a capture retargets the click (and
 // so the dblclick) that follows to the capturing element — so by the time a double-click arrives its
@@ -216,7 +199,7 @@ export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
   return cx <= r.left + inB || cx >= r.right - inB || cy <= r.top + inB || cy >= r.bottom - inB;
 }
 // ---------- double-click / double-tap = OPEN this node ----------
-// Folding lives on the corner chip (the .hidden-count button above), which leaves the gesture free for
+// Folding lives on the float bar and X, which leaves the gesture free for
 // what a double-click means nearly everywhere else: open the thing for editing. What it opens is
 // decided by WHAT WAS HIT:
 //   · the title (a card's title row, a frame's tab), or a frame's rim  → rename in place
@@ -508,12 +491,6 @@ export function paintNode(n: MindNode): void {
       (noTagRow ? '' : [...n.tags].reverse().map(t => tagPillHTML(t)).join(''));
     bindCardTagPills(tagRowEl, n);
   }
-  // The fold arrow — `data-chip` is the SINGLE thing that decides whether and how it shows (see
-  // chipFace + styles.css): 'count' = folded (▸), 'fold' = foldable and open (▾).
-  const chip = el.querySelector(':scope > .title-row > .hidden-count') as HTMLElement;
-  const face = chipFace(n, collapsed || isFrameFold(n));
-  if (el.dataset.chip !== face) { if (face) el.dataset.chip = face; else delete el.dataset.chip; }
-  if (face) chip.title = (face === 'count' ? 'Expand' : 'Collapse') + ' (X) · ⌥-click: every card beside it';
   // …and at the end of a folded card's chip, how much it's hiding: a checklist's progress ("3/5"), or
   // else how many more lines ("+4"). Tapping it peeks (features/peek.ts).
   const more = el.querySelector(':scope > .fold-more') as HTMLElement;
@@ -534,15 +511,15 @@ export function paintNode(n: MindNode): void {
     meter.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
     meter.classList.toggle('all-done', tp.total > 0 && tp.done === tp.total);
     meter.title = tp.total ? `${tp.done} of ${tp.total} task${tp.total === 1 ? '' : 's'} done (${Math.round(tp.done / tp.total * 100)}%)` : '';
-  }  // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
-  // what's left under the padding and the rest is cut under a fade (`.clipped`, only while something IS
-  // cut). Not while folded, opened as a page, or edited — the editor shows the whole note, then it clips again.
+  }
+  // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
+  // what's left under the padding and the rest is simply cut. Not while folded, opened as a page, or
+  // edited — the editor shows the whole note, then it clips again.
   const clipH = clipHeight(n, !!editingBody);
   if (clipH != null){
     const cap = Math.max(0, clipH - bodyEl.offsetTop - parseFloat(getComputedStyle(el).paddingBottom));
     if (bodyEl.style.maxHeight !== cap + 'px') bodyEl.style.maxHeight = cap + 'px';
-    el.classList.toggle('clipped', bodyEl.scrollHeight > bodyEl.clientHeight + 1);
-  } else if (bodyEl.style.maxHeight){ bodyEl.style.maxHeight = ''; el.classList.remove('clipped'); }
+  } else if (bodyEl.style.maxHeight) bodyEl.style.maxHeight = '';
 }
 function clipHeight(n: MindNode, editing: boolean): number | null {
   return n.clip && n.h != null && !n.collapsed && !editing && !isBoxNode(n) && !isImageFold(n) && !isReadingRoot(n) ? n.h : null;
@@ -579,22 +556,6 @@ function hiddenLineCount(n: MindNode): number {
   const lines = cardMarkdown(n).split('\n');
   const i = firstTextLine(lines);
   return i < 0 ? 0 : lines.slice(i + 1).filter(l => l.trim()).length;
-}
-// How the fold arrow shows — the ONE predicate behind it (styles.css keys off nothing but the data-chip
-// this returns). '' = no arrow.
-//   'count' — folded: ▸, always visible (it's the one sign there's more).
-//   'fold'  — foldable and open: ▾, faint until the card is hovered or selected.
-function chipFace(n: MindNode, collapsed: boolean): '' | 'count' | 'fold' {
-  // Folding the card you are standing INSIDE would leave you looking at nothing, so it offers no arrow.
-  if (isReadingRoot(n)) return '';
-  if (collapsed) return 'count';
-  if (!canFold(n)) return '';
-  // An IMAGE card is invited: it folds to a 40px icon of its own picture (isImageFold), which is a
-  // thumbnail rather than an empty shell.
-  // toggleCollapse refuses a locked node, so it must not offer a button that does nothing. Its
-  // folded arrow above is unaffected: that's information, not a control.
-  if (isLockedEffective(n)) return '';
-  return 'fold';
 }
 export const NODE_W = 200;
 // world-px grid dragged positions AND frame/image-card sizes snap to — tracks the visible grid's
@@ -1134,6 +1095,7 @@ export function toggleCollapse(id: string): void {
   // animate the reflow; withLayoutAnimation paints, measures heights, and lays out the children
   record([id], () => withLayoutAnimation(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
   dropHiddenFromSelection();
+  syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();
   setStatus(n.collapsed ? `Collapsed “${nodeLabel(n)}”` : `Expanded “${nodeLabel(n)}”`);
 }
@@ -1158,6 +1120,7 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   record(cards.map(n => n.id),
     () => withLayoutAnimation(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
+  syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();
   const what = cards.length > 1 ? `${cards.length} notes` : `“${nodeLabel(cards[0]!)}”`;
   setStatus(`${collapsed ? 'Collapsed' : 'Expanded'} ${what}`);

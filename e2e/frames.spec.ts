@@ -53,10 +53,10 @@ test('a frame folds to its label pill: its cards hide, its lines meet the pill, 
   const old = page.locator('#world .node.frame-folded', { hasText: 'Old' });
   await expect(old).toBeVisible();
   expect(Math.round((await old.boundingBox())!.height)).toBe(40);
-  // fold Todo with the arrow on its label
+  // fold Todo from the float bar
   const todo = frame(page, 'Todo');
-  await todo.hover();
-  await todo.locator(':scope > .title-row > .hidden-count').click();
+  await todo.locator(':scope > .title-row').click();
+  await page.locator('#fbFold').click();
   const pill = page.locator('#world .node.frame-folded', { hasText: 'Todo' });
   await expect(pill).toBeVisible();
   await expect(pill.locator('.frame-count')).toHaveText('1');

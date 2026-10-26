@@ -69,8 +69,6 @@ export function installPeek(): void {
     if (e.pointerType !== 'mouse') return;
     const el = (e.target as Element).closest<HTMLElement>('.node.collapsed[data-id]');
     if (!el || el.dataset.id === showing) return;
-    // not over its own arrow: that's a click about to happen, not a read
-    if ((e.target as Element).closest('.hidden-count')) return;
     hidePeek();
     timer = window.setTimeout(() => { timer = null; show(el); }, PEEK_DELAY);
   });

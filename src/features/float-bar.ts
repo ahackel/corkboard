@@ -21,7 +21,7 @@ import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, toggleCollapse, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, remeasure } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, remeasure } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -32,6 +32,7 @@ const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbTidy = byId<HTMLButtonElement>('fbTidy');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbFit = byId<HTMLButtonElement>('fbFit');
+const fbFold = byId<HTMLButtonElement>('fbFold');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
@@ -167,6 +168,15 @@ export function groupSelectionIntoFrame(): void {
 function markOpen(): void {
   fbOpen.style.display = canOpenSelection() ? '' : 'none';
   fbFit.style.display = selectedIds().some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }) ? '' : 'none';
+  // Collapse / expand: THE fold button (cards carry none of their own). It shows the state it would make:
+  // expand once everything foldable in the selection is folded, collapse otherwise — what X does.
+  const foldable = selectedIds().map(id => state.nodes.get(id)).filter((k): k is MindNode =>
+    !!k && canFold(k) && !isLockedEffective(k) && !isScopeRoot(k));
+  fbFold.style.display = foldable.length ? '' : 'none';
+  const expand = foldable.length > 0 && foldable.every(k => k.collapsed);
+  fbFold.classList.toggle('expand', expand);
+  fbFold.title = expand ? 'Expand (X)' : 'Collapse (X)';
+  fbFold.setAttribute('aria-label', expand ? 'Expand' : 'Collapse');
   fbTidy.style.display = canTidy() ? '' : 'none';
   const n = anchorNode();
   const oneFrame = state.sel.size === 1 && n?.type === 'frame';
@@ -353,6 +363,7 @@ export function canOpenSelection(): boolean {
   return !!n && canOpen(n) && !isScopeRoot(n);
 }
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
+fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
 fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;

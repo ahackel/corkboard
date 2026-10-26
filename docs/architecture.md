@@ -425,8 +425,8 @@ dragged size and nothing else — never a value a layout pass computed. What the
 - **…unless it was dragged SHORTER than its text: then it CLIPS** (`n.clip`, `board.json` `clip`). The
   resize goes down to `CLIP_MIN_H` (about a line); ending below the text's natural height (`natural()` in
   `startNodeResize`, measured with the clip lifted) sets the flag, ending at or above it clears it. Clipped,
-  the same `n.h` is exact: paintNode caps `.body`'s `max-height` to what's left under the padding and,
-  only while something IS cut, `.clipped` fades the bottom. No scrolling — it's a sticky note, not a
+  the same `n.h` is exact: paintNode caps `.body`'s `max-height` to what's left under the padding and the
+  rest is simply cut (a fade was tried and read as a smudge on a short card). No scrolling — it's a sticky note, not a
   viewport. Folded, opened as a page or open in the editor it doesn't clip (the editor shows the whole
   note). **Fit** (`autoSizeSelection`: the float bar's ↔, `⇧A`, "Fit to contents") drops a card's `h` and
   `clip` — and fits a frame to its cards, as before; `canFit` says which selections offer it.
@@ -642,16 +642,14 @@ That's what the apps that do it well do (Heptabase folds a card to its title; Ob
 folds a group to its header), and what FigJam's "hide contents" doesn't: a hidden section keeps its size.
 `canFold` (main.ts) is the one rule: every frame, a card with something below its first line, or an image
 card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`toggleCollapseSelection`/
-`setCollapsedSelection`: the fold ARROW, `X`, the ⋯ menu, `←`/`→` (directional, not toggles), a
+`setCollapsedSelection`: the float bar's fold button (`fbFold`), `X`, the ⋯ menu, `←`/`→` (directional, not toggles), a
 double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘K's **Collapse all** / **Expand
 all** (`foldScope`: the selected frames and everything in them, else every frame and card in the place
-you're looking at — hidden ones included, so Expand all brings everything back). ⌥-click on an arrow folds
-every node BESIDE that one (same frame or top level) to the state it goes to. Folding drops anything it
-hid from the selection (`dropHiddenFromSelection`).
+you're looking at — hidden ones included, so Expand all brings everything back). Folding drops anything
+it hid from the selection (`dropHiddenFromSelection`).
 
 - **A folded FRAME** is its label pill at the box's top-left corner: its name, a round count of the
-  notes inside (`.frame-count`, `descendantCount`), the arrow at the END of the label (so the label's left
-  edge, where a frame is grabbed, stays all label). `nodeH` = `FRAME_TAB_H` (40px: 20px line + 9px padding
+  notes inside (`.frame-count`, `descendantCount`). `nodeH` = `FRAME_TAB_H` (40px: 20px line + 9px padding
   + 1px border, top and bottom — pinned in CSS, since `nodeH` asserts it rather than measuring); `nodeW`
   measures the pill. Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
   when the pill is dragged (`moveSubtreeTo`'s `insideFrame`). It takes no drops (`isFrame` is false while
@@ -660,13 +658,11 @@ hid from the selection (`dropHiddenFromSelection`).
 - **A line to a card inside a folded frame ends on the pill** (`edgeEnd` in view/free-edges.ts:
   `firstVisible`, its pinned port dropped); a line between two cards of the same folded frame is hidden.
 
-- **The arrow** is `.hidden-count` (the name outlived the old "+N" bubble): a ▾ in the card's left padding,
-  level with the first line (`.titled` gives it a heading's height), turned to ▸ when folded. Faint until the
-  card is hovered or selected; a FOLDED card shows it plainly. On an image card it's a small white button at
-  the top-right. `chipFace` is the single thing that decides whether it shows (`data-chip`: `'count'` folded,
-  `'fold'` open, absent = none) — locked and opened cards get none while open. It lives inside `.title-row`,
-  and its `pointerdown` stops propagation so `bindNodeDrag` never turns the click into a drag
-  (`NODE_CONTROLS` in drag.ts exempts it from the touch double-tap too).
+- **The fold button lives on the float bar, not on the card** (`fbFold`, float-bar.ts `markOpen`). A ▾ in
+  each card's padding was tried and was too small to hit and invisible until hovered. The bar's button
+  shows when the selection holds anything foldable (`canFold`, unlocked, not the open node) and draws what
+  a click would DO — chevrons closing, or opening once everything is folded — the same toggle as `X`
+  (`toggleCollapseSelection`). `toggleCollapse`/`applyCollapsed` call `syncFloatBar` so a key keeps it right.
 - **A folded card is a CHIP**: one row — its first line (`collapsedMarkdown`, greyed when the card is
   untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: a
   checklist's "3/5", else "+N" (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N

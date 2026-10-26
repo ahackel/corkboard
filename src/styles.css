@@ -680,9 +680,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    instead (border-radius:inherit + overflow:hidden, below), so nothing relies on the node clipping. */
 .node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
-/* The row is EMPTY on an image card (untitled by definition) but must NOT be display:none: it carries
-   the fold arrow (.hidden-count lives inside .title-row). Zero height instead, so the picture still
-   starts at the card's top edge; the arrow is positioned against the NODE either way. */
+/* The row is EMPTY on an image card (untitled by definition): zero height, so the picture starts at the
+   card's top edge. */
 .node.image-card > .title-row { height:0; }
 .node.image-card > .title-row > .title { display:none; }
 /* FOLDED, an image card is an icon of itself: a 40px square of the picture (main.ts IMAGE_FOLD, which
@@ -1065,51 +1064,15 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node:has(.body.editing)  .addnote,
 .node:has(.title.editing) .tag-add-btn,
 .node:has(.body.editing)  .tag-add-btn { display:none !important; }
-/* The FOLD ARROW: a disclosure triangle in the card's left padding (--pad-x wide), level with the first
-   line — a heading's line when the card is titled (.titled), else a body line — the way an outliner's ▸
-   sits before its row. ▾ while the note shows, turned to ▸ when folded. Faint until hovered, so a board
-   of foldable cards isn't a column of arrows; a FOLDED card keeps it plainly visible, since it's the
-   one sign there's more. */
-.node .hidden-count { position:absolute; z-index:3; left:0; top:calc(var(--pad-y) + var(--text-drop));
-  width:var(--pad-x); height:var(--body-lh); padding:0; display:none; align-items:center; justify-content:center;
-  -webkit-appearance:none; appearance:none; border:none; background:none; color:inherit;
-  opacity:0; cursor:pointer; transition:opacity .12s; }
-.node.titled > .title-row > .hidden-count { height:var(--h1-lh); }
-.node .hidden-count svg { width:9px; height:9px; display:block; transition:transform .15s ease; }
-.node.collapsed > .title-row > .hidden-count svg,
-.node.frame-folded > .title-row > .hidden-count svg { transform:rotate(-90deg); }
-/* On a FRAME the arrow sits IN its label, at the END — on the pill above the box, and on the folded pill
-   that replaces it — so folding a frame never moves the button, and the label's left edge, where a frame
-   is grabbed to drag it, stays all label. */
-.node.frame > .title-row > .hidden-count,
-.node.frame-folded > .title-row > .hidden-count { position:static; order:1; flex:none; width:16px; height:20px; margin:0 -4px 0 4px; }
-.node.frame > .title-row > .hidden-count { height:24px; }
-/* WHICH state shows is decided in ONE place — paintNode's chipFace, via data-chip ('' = no arrow). */
-.node[data-chip] > .title-row > .hidden-count { display:flex; }
-.node[data-chip="count"] > .title-row > .hidden-count { opacity:.55; }
-.node[data-chip]:hover > .title-row > .hidden-count, .node[data-chip].sel > .title-row > .hidden-count { opacity:.55; }
-.node[data-chip] > .title-row > .hidden-count:hover { opacity:1; }
-/* An IMAGE card has no padding to put it in: there it's a small white button on the picture's top-RIGHT
-   corner (the magnifier has the left), shown on hover or while selected — on a folded 40px icon too. */
-.node.image-card > .title-row > .hidden-count { left:auto; right:4px; top:4px; width:18px; height:18px;
-  border-radius:50%; background:#fff; color:#1e1e1e; box-shadow:0 1px 3px rgba(0,0,0,.25); }
-.node.image-card[data-chip] > .title-row > .hidden-count { opacity:0; }
-.node.image-card[data-chip]:hover > .title-row > .hidden-count,
-.node.image-card[data-chip].sel > .title-row > .hidden-count { opacity:1; }
-.node.image-card.collapsed > .title-row > .hidden-count { top:-6px; right:-6px; }
-/* Mid-drag and while the card is being edited the arrow is noise. */
-body.grabbing .node > .title-row > .hidden-count,
-.node:has(.body.editing) > .title-row > .hidden-count { display:none; }
 /* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
 /* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
-   not any one card. Every badge that hangs off a card is a few pixels wide there: the fold chip's "+7"
-   and chevron, the lock padlock, the emoji tag pills and their "+" button, the "add note" pen. All of
+   not any one card. Every badge that hangs off a card is a few pixels wide there: the task meter,
+   the lock padlock, the emoji tag pills and their "+" button, the "add note" pen. All of
    them go, which also keeps their layout + paint out of the frame budget at exactly the zoom level that
    has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview.
-   `!important` because these controls are revealed by `:hover`/`.sel`/`[data-chip]` selectors that
-   out-specify any plain class (see the chipFace note above): a per-state fight this rule can't win on
-   specificity, and the switch is a global mode rather than a per-kind exception. */
-body.zoom-far .node > .title-row > .hidden-count,
+   `!important` because these controls are revealed by `:hover`/`.sel` selectors that out-specify any
+   plain class: a per-state fight this rule can't win on specificity, and the switch is a global mode
+   rather than a per-kind exception. */
 body.zoom-far .node > .lock-badge,
 body.zoom-far .node > .tag-row,
 body.zoom-far .node > .task-meter,
@@ -1147,10 +1110,6 @@ body.zoom-far .node > .addnote { display:none !important; }
   max-height:60vh; overflow:auto; box-shadow:var(--shadow-ui); cursor:default; user-select:text; -webkit-user-select:text;
   touch-action:auto; }
 #peek.node.open { display:block; }
-/* a CLIPPED card (n.clip, paintNode): dragged shorter than its note, the cut text fades out at the bottom
-   rather than ending mid-line — the sign that there's more. Double-click shows it all in the editor. */
-.node.clipped > .body { -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
-  mask-image:linear-gradient(to bottom, #000 calc(100% - 22px), transparent); }
 /* A FOLDED card is a CHIP: one line in a row with its count, shrink-wrapped to its text (up to the width
    it has open — paintNode's inline max-width) with tighter padding, so a board of folded cards packs. */
 .node.collapsed:not(.image-card) { --pad-y:7px; display:flex; align-items:center; gap:8px; width:max-content; }
@@ -1331,7 +1290,10 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-chev { margin-left:3px; opacity:.6; }
 .fb-dd:hover .fb-chev { opacity:1; }
 .fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
-/* the eye shows the state it would CHANGE: open eye while the contents show, struck-out while hidden */
+/* the fold button shows what a click would DO: chevrons closing while anything is open, opening once
+   everything is folded (float-bar.ts markOpen) */
+#fbFold .ic-unfold, #fbFold.expand .ic-fold { display:none; }
+#fbFold.expand .ic-unfold { display:block; }
 
 /* small popover anchored under/over its trigger button (colour / layout / arrow pickers) —
    borderless, same "floating island" style as #floatBar, no shadow either. It sizes to its
