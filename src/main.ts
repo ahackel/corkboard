@@ -22,18 +22,18 @@ import { setupTheme, toggleTheme } from './view/theme.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand } from './view/camera.js';
-import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW } from './view/layout.js';
+import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, isFrame, frameLabelled } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
-import { createNode, createDetachedNode, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
+import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch } from './features/search.js';
 import { refreshSwatches } from './features/properties.js';
-import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
+import { syncFloatBar, autoSizeSelection, growFramesToHold, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
@@ -95,7 +95,7 @@ function nodeEl(n: MindNode): HTMLElement {
   // against the card, as it always did), but a FRAME's row is its absolutely-positioned title TAB —
   // so the chip lands on the tab's own corner rather than 43px lower on the box. Being out of flow, it never disturbs the
   // row's flex layout. Hence the `> .title-row >` in every .hidden-count selector in styles.css.
-  el.innerHTML = `<div class="title-row"><input type="checkbox" class="donebox" title="Mark done"><div class="title"></div><span class="progress"></span><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
+  el.innerHTML = `<div class="title-row"><div class="title"></div><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
     <div class="tag-row"></div>
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>
     <button type="button" class="addnote" title="Add note" aria-label="Add note">${NOTE_ADD_SVG}</button>`;
@@ -141,15 +141,10 @@ function nodeEl(n: MindNode): HTMLElement {
     e.stopPropagation();
     toggleTask(n, +(cb.dataset.ti ?? 0));
   });
-  // done checkbox (title-only cards): toggle the card-level done mark, independent of drag/select
-  const doneEl = el.querySelector('.donebox') as HTMLInputElement;
-  doneEl.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); if (isLockedEffective(n)) e.preventDefault(); });
-  doneEl.addEventListener('click', (e)=>{ e.stopPropagation(); });
-  doneEl.addEventListener('change', (e)=>{ e.stopPropagation(); toggleDone(n); });
   // For a CARD the `.title` is a rendered label and nothing else — its name is the leading `# ` line of
   // its one text field, so there's no title editor to bind (which is what took the `.invalid` styling
-  // with it). These listeners are for a CONTAINER's label, the one thing still renamed on itself
-  // (ui-state.ts TitleEdit): a frame's folder tab, a stack's header.
+  // with it). These listeners are for a FRAME's label, the one thing still renamed on itself
+  // (ui-state.ts TitleEdit).
   const titleEl = el.querySelector('.title') as HTMLElement;
   titleEl.addEventListener('input',   ()  => onTitleInput(n));
   titleEl.addEventListener('keydown', (e) => onTitleKeydown(e as KeyboardEvent, n));
@@ -162,9 +157,8 @@ function nodeEl(n: MindNode): HTMLElement {
     // double-click on itself. Hence the stopPropagation ahead of the two bails rather than after
     // them: double-clicking a word inside an open editor (the ordinary way to fix one word of a name)
     // reached the host and opened the HOST's editor, which closed this one and sent the rest of the
-    // typing into the parent's note. Same for a double-click on a nested card's own controls. A
-    // container's children are NOT nested (they live in its sibling .frame-content
-    // wrapper), so this is about plain cards.
+    // typing into the parent's note. A frame's children are NOT nested (they live in its sibling
+    // .frame-content wrapper), so this is about the card's own controls.
     e.stopPropagation();
     // while editing this node, a double-click selects a word — don't take it over
     if (inPlaceEditOn(n.id)) return;
@@ -182,6 +176,11 @@ function newCardAtPointer(): void {
   if (ui.lastMouse) createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
   else createNode();
 }
+// …and an empty FRAME there, named on the spot — the palette's "New frame".
+function newFrameAtPointer(): void {
+  const m = ui.lastMouse ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  newFrameAt(screenToWorld(m.x, m.y));
+}
 // Open one of a card's images full-screen. The RESOLVED src comes off the rendered <img> (hydrateImages
 // has already put it there), and `n` + the image's own path give the viewer its run: every image in the
 // cards that share this card's parent, paged with ‹ / › (features/image-viewer.ts). Shared by the
@@ -193,7 +192,7 @@ function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
 }
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
-const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
+const NODE_CONTROLS = '.hidden-count, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
 // What a gesture at these viewport coords actually hits. Deliberately NOT the event's own `target`:
 // bindNodeDrag takes a POINTER CAPTURE on the node's element, and a capture retargets the click (and
 // so the dblclick) that follows to the capturing element — so by the time a double-click arrives its
@@ -218,25 +217,19 @@ export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
   return cx <= r.left + inB || cx >= r.right - inB || cy <= r.top + inB || cy >= r.bottom - inB;
 }
 // ---------- double-click / double-tap = OPEN this node ----------
-// Folding moved to the corner chip (see the .hidden-count button above), which freed the gesture for
+// Folding lives on the corner chip (the .hidden-count button above), which leaves the gesture free for
 // what a double-click means nearly everywhere else: open the thing for editing. What it opens is
-// decided by WHAT WAS HIT, so one gesture covers every kind:
-//   · the title (a card's title row, a frame's folder tab)  → rename in place
-//   · a STACK's own header text                             → …which for a stack is that same rename
-//   · anywhere else on a card                               → edit its note
-//   · a FRAME's interior                                    → OPEN it (nav/scope.ts)
-//   · any other container's interior (a stack, below its rows) → put a new card THERE
-// A container has no body of its own to edit, so its interior falls to one of the last two cases: a
-// frame is a folder you can stand in, so the gesture goes in; a stack is an outliner with nowhere to
-// stand, so it keeps the "double-click empty space to make a card" reading the canvas has
-// (features/gestures.ts), one level in.
+// decided by WHAT WAS HIT:
+//   · the title (a card's title row, a frame's tab), or a frame's rim  → rename in place
+//   · anywhere else on a card                                          → edit its note
+//   · a FRAME's interior                                               → a new card THERE
 // A FOLDED node is nothing but its title (its body is display:none), so every hit on it renames —
 // otherwise a double-click would open an editor inside a hidden .body.
 // Shared by nodeEl's dblclick and the touch double-tap in features/drag.ts.
 export function activateNode(n: MindNode, cx: number, cy: number, { open = false }: { open?: boolean } = {}): void {
   // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch: go IN. The one navigating gesture on a node,
   // and it is held apart from all the editing ones by the modifier rather than by which PART of the
-  // card was hit — so it means the same thing on a card, a frame and a stack, which no plain
+  // card was hit — so it means the same thing on a card and a frame, which no plain
   // double-click ever could. Ahead of the read-only bail on purpose, the same exemption openFrame
   // itself takes: looking inside something isn't changing it. openFrame reports its own refusal for
   // the kinds with no interior.
@@ -250,59 +243,32 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
   // startInlineEdit is the single rename funnel: it refuses a locked node.
   if (onTitle || n.collapsed) { startInlineEdit(n); return; }
-  // A frame's interior OPENS it (nav/scope.ts) — the folder metaphor's own gesture, and the only one
-  // that reads as "go in". Putting a card inside it kept Tab, the ⋯ menu and the canvas right-click.
-  // A STACK is a container that can't be opened (it's an outliner, not a box you stand in), so a hit
-  // that missed its header falls through to the branch below and appends a row.
-  // A frame's own RIM edits its text — its border, and the resize hit-zones lying over it, which is all
-  // the chrome a frame has that isn't its interior (that OPENS it) or its tab (which an unnamed frame no
-  // longer draws). Works the same whether or not the frame is named, so there's one way to write on a
-  // frame rather than one for each state; the tab keeps its own double-click through the onTitle branch.
+  // A frame's own RIM edits its text — the chrome a frame has that isn't its interior or its tab
+  // (which an unnamed frame doesn't draw), so there's one way to write on a frame whether it's named.
   if (isFrameBox(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
-  // A FRAME's interior gets a new card WHERE YOU POINTED — it no longer opens the frame. No double-click
-  // navigates any more: going in is ⌥-double-click (above), ↑, the float bar's ⤢ or ⋯ → Open. What that
-  // buys is one rule instead of a per-kind table — every plain double-click makes or edits content — and
-  // it costs the frame nothing, because a 2D box is precisely the container where "here" means something
-  // (a stack's outline appends, so its interior keeps editing the stack instead; see below).
-  // isFrameBox, not `type === 'frame'`: it means an EXPANDED frame, and the point of this branch is
-  // that a 2D box has a WHERE. A folded frame is a bare pill with its interior off screen, so there is
-  // no "here" to drop into — it falls through to the editor below, as any other folded node does.
-  if (isFrameBox(n)) { addChild(n.id, screenToWorld(cx, cy)); return; }
-  // A STACK is the other container, and the gesture means the same thing anywhere on it: EDIT IT. Its
-  // header is its own text (there is no title row to hit), and the rest of the box is its rows, each of
-  // which owns the gesture over itself — so what's left is the stack, and a stack has no place to put a
-  // card "here" anyway (the outline appends; the point means nothing). Adding a row is `Tab`, the ⋯ menu
-  // and the canvas right-click, as it is for a frame.
-  if (isStack(n)) { startInlineEdit(n); return; }
+  // A FRAME's interior gets a new card WHERE YOU POINTED. Going in is ⌥-double-click (above), ↑, the
+  // float bar's ⤢ or ⋯ → Open. isFrameBox: a folded frame has no interior on screen, so it falls through.
+  if (isFrameBox(n)) { addCardInside(n.id, screenToWorld(cx, cy)); return; }
   startBodyEdit(n);
 }
-// A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor. While
-// dragging, preview what that inherited colour is ABOUT TO become, so it doesn't wait for the
-// drop to update:
-//  - Alt-dragging, or pulled past the rip threshold, to detach: treat the dragged node as a root
-//    (stop the ancestor walk there) — mirrors the actual detach condition in dragPointerUp.
-//  - Poised over a valid reparent target: continue the walk from the NEW parent instead of the
-//    real (about-to-change) one — a sibling-mode drop adopts the target's own parent.
-// Either way this only redirects the walk once it reaches the actively dragged node, so the whole
-// dragged subtree's inheriting descendants preview correctly too (their own walk passes through it).
-// An inheriting card with no coloured ancestor (a root left on the default "inherit") falls back
-// to grey, so it gets the same neutral card bg as an explicit grey rather than going transparent.
-// Explicit 'none' still short-circuits below (it's truthy), so "no colour" stays transparent.
+// A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor (a frame).
+// While dragging, preview what that inherited colour is ABOUT TO become, so it doesn't wait for the
+// drop: the walk continues from the frame the dragged card will land in (drag.dropTarget, null = the
+// top level) instead of its real, about-to-change parent. Only from the actively dragged node on, so
+// a dragged frame's contents preview with it (their own walk passes through it).
 export function effectiveColor(n: MindNode): string {
+  // A FRAME wears only its own colour: one nested in a blue frame would otherwise turn blue too and
+  // vanish into it. Uncoloured, it's the neutral surface below — a box you can see inside any other.
+  if (n.type === 'frame') return n.color || (document.body.classList.contains('light') ? 'white' : 'black');
   const drag = ui.drag;
   let previewId: string | null = null;
   let previewParent: MindNode | null | undefined;
-  if (drag && !drag.shift && (drag.alt || drag.rip)) { previewId = drag.active.id; previewParent = null; }
-  // …and never substitute the dragged card for its OWN parent: the walk below would then never leave
-  // it and would spin forever. A drop target that IS the dragged card is a no-op drop anyway (drag.ts
-  // rules it out), so there's nothing to preview.
-  else if (drag && drag.dropTarget && drag.dropTarget !== drag.active.id) {
+  // …never substituting the dragged card for its OWN parent: the walk below would never leave it.
+  if (drag && drag.moved && !drag.shift) {
     previewId = drag.active.id;
-    const tgt = state.nodes.get(drag.dropTarget);
-    previewParent = drag.dropMode === 'sibling' ? (tgt ? parentOf(tgt) : null) : tgt;
-    if (previewParent?.id === previewId) previewParent = null;
+    previewParent = drag.dropTarget && drag.dropTarget !== previewId ? state.nodes.get(drag.dropTarget) : null;
   }
-  // `guard`, like effectiveLayout's: a chain is only as trustworthy as the data behind it, and this
+  // `guard`: a chain is only as trustworthy as the data behind it, and this
   // runs on every paint of every card — a cycle must degrade to a fallback colour, not hang the tab.
   let guard = 0;
   for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c))
@@ -314,33 +280,13 @@ export function effectiveColor(n: MindNode): string {
   if (n.type === 'card') return 'amber';
   return document.body.classList.contains('light') ? 'white' : 'black';
 }
-// A card shows a done checkbox only if its PARENT has `checklist` on — Trello-style: the
-// setting lives on the parent ("treat my children as a checklist"), not on the item itself, and
-// doesn't cascade past that one level (a checklist item can run its own checklist for its kids).
-// Exported because the OUTLINE asks the same question of the same nodes.
-export function showsDoneCheckbox(n: MindNode): boolean {
-  const p = parentOf(n);
-  return !!(p && p.checklist);
-}
-// The "n/m" a checklist owner shows over its own children: how many are done, out of how many CAN
-// be — counted through showsDoneCheckbox, so the readout is drawn from exactly the set of boxes that
-// exist and cannot drift from them if that predicate ever gains a term. null = no readout at all.
-// The ONE spelling: the canvas card and the outline row both show this (features/outline.ts).
-// `kids` is passed in wherever the caller already has it — paintNode and the outline row both do, and
-// childrenOf is a full spread of the node map, so re-deriving it here put a second O(nodes) scan on
-// the paint path for every checklist card on screen.
-export function checklistProgress(n: MindNode, kids: MindNode[] = childrenOf(n.id)): { done: number; total: number } | null {
-  if (!n.checklist) return null;
-  const items = kids.filter(showsDoneCheckbox);
-  return items.length ? { done: items.filter(k => k.done).length, total: items.length } : null;
-}
 export function paintNode(n: MindNode): void {
   const el = nodeEl(n);
   // Drop the content wrapper the moment it isn't holding anything — `hostsContent` is exactly the set
   // of cases the sizing chain below creates one for, so the two can't drift. ONE drop, and it sits
   // ahead of the isHidden return so it covers a hidden node too. A fold used to strand it — an empty overflow:hidden
   // div left at the box's old size, sitting over the canvas below the tab; same for a frame converted
-  // to a card, or a stack demoted to a row inside another stack. Its (hidden) children ride along
+  // to a card. Its (hidden) children ride along
   // detached and are re-placed by place() the moment it holds again.
   // The OPEN frame (nav/scope.ts) rides this same drop, which is how it stops hosting: it's isHidden
   // by the scope term, so hostsContent goes false and the wrapper goes with it — and hostFrame then
@@ -354,14 +300,13 @@ export function paintNode(n: MindNode): void {
   const hasBody = editingBody || !!(n.body && n.body.trim());  // keep the body slot while editing
   const collapsedKids = n.collapsed && hasKids;            // hidden children → +N chip
   const collapsed = n.collapsed && (hasKids || hasBody);   // folded to just its title
-  const showDone = showsDoneCheckbox(n);                   // checklist item of a checklist parent
   // selected card gets an inline "+" at the end of its tag row (features/tags.ts's openEmojiPicker) —
   // frames have no natural place for a tag row at all (see the tag-row comment below). Only the
   // selection ANCHOR (state.selId — the same card the floating toolbar anchors to, float-bar.ts's
   // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !state.readOnly && !isLockedEffective(n);
+  const showAddTag = n.id === state.selId && !isFrameBox(n) && !state.readOnly && !isLockedEffective(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   // A frame's title paints on no fill of its own (styles.css: neither the tab nor the folded pill has
@@ -376,9 +321,7 @@ export function paintNode(n: MindNode): void {
   el.className = 'node ' + colorClass(col)
     + (isReadingRoot(n) ? ' reading-root' : '')   // opened as a page: one screen-fixed strip (styles.css)
     + (isFrameBox(n) ? ' frame' : '')
-    + (isStack(n) ? ' stack' : '')
-    + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
-    + (inFrame(n) ? ' frame-child' : '')   // …and a card inside a frame's box, by the same step
+    + (inFrame(n) ? ' frame-child' : '')   // a card inside a frame's box — rendered a step off its fill
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
@@ -391,22 +334,10 @@ export function paintNode(n: MindNode): void {
     // editor calls paintAll() itself right after opening.
     + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
-    + (isFrameBox(n) || isStack(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
-    + (showDone ? ' show-done' : '')
-    + (showDone && n.done ? ' done' : '')
+    + (isFrameBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
     + (state.searchMatch && !state.searchMatch.has(n.id) ? ' search-dim' : '')
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
-  (el.querySelector('.donebox') as HTMLInputElement).checked = n.done;
-  // this card's own checklist (over ITS children) → an "n/m done" progress readout by the title
-  const prog = checklistProgress(n, kids);
-  const progress = prog ? `${prog.done}/${prog.total}` : '';
-  el.querySelector('.progress')!.textContent = progress;
-  // …which on a node with no LABEL has to float over the text rather than sit beside it: it's a flex item
-  // in the title row, so on a card or a stack (whose name is its rendered text, not a label) it was the
-  // one thing left holding that row open — a badge alone on a line, blank to its left, the text below it.
-  // styles.css lifts it out of flow and pays for the overlap with a right inset on the first line.
-  el.classList.toggle('has-progress', !!progress);
   // Which frame (if any) hosts this card's element — settled outside gestures (see settledHost).
   settledHost(n);
   // During drag: keep left/top frozen at the pre-drag origin and move via transform (compositor-
@@ -439,32 +370,23 @@ export function paintNode(n: MindNode): void {
     // frame's overflow:hidden wrapper (place()). isFrameBox covers frames (image cards are leaves).
     const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
-    if (p && !isContainerBox(p) && !isContainerBox(n)) {
+    if (p && !isFrameBox(p) && !isFrameBox(n)) {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
       el.style.top  = (elTop(n, np.y) - elTop(p, pp.y)) + 'px';
       if (el.parentElement !== pEl) pEl.appendChild(el);
     } else {
-      // root → #world; direct frame/stack child → container content wrapper. A CONTAINER's own box
-      // takes this branch too, even when its parent is an ordinary card: its content wrapper is
-      // placed by the very same place()/settledHost call (frameContentEl), and the two only stack
-      // correctly — wrapper (and the rows inside it) above the box's own fill — while they're
-      // SIBLINGS in one DOM parent. Nesting the box inside a parent card instead put the two in
-      // different stacking contexts, so the box's fill won the tie and swallowed its own rows'
-      // pointer events (pressing a stack row grabbed the whole stack).
+      // root → #world; direct frame child → its content wrapper. A FRAME's own box always takes
+      // this branch: its content wrapper is placed by the very same place()/settledHost call
+      // (frameContentEl), and the two only stack correctly — wrapper above the box's own fill —
+      // while they're SIBLINGS in one DOM parent.
       placeSelf(n, np.x, elTop(n, np.y));
     }
   }
   // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card
-  // is its own 2D box (8 handles). Everything else authors only a WIDTH (2 side handles):
-  // a stack's height is auto-fitted by layout, and a card's comes from its content, so
-  // their inline height is always cleared and left to CSS. The one node that ISN'T resizable is an
-  // outline row inside a stack — its width is derived from the stack's, so it gets the width but no
-  // handles (see nodeW / stackRowW).
-  // Resolved once up front, not inside the `else if`: nodeW() would run the same ancestor walk a
-  // second time to answer the same question. The earlier branches can't be rows, so they skip it.
-  const rowW = isBoxNode(n) || isFrameFold(n) || isStack(n) ? null : stackRowW(n);
+  // is its own 2D box (8 handles). A card authors only a WIDTH (2 side handles): its height comes from
+  // its content, so its inline height is always cleared and left to CSS.
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     // the element is the BOX, and a frame's bounds height also covers its tab — elTop(n, 0) IS that
@@ -472,12 +394,7 @@ export function paintNode(n: MindNode): void {
     el.style.height = (nodeH(n) - elTop(n, 0)) + 'px';
     // border matches this card's EDGE tint (same colour edges use), falling back to --edge
     el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
-    // A box that is a stack ROW authors neither its width (the stack's to give) nor, for an image, its
-    // height (the picture's ratio) — so it offers only what's left. For a frame/query row that's the
-    // SOUTH edge alone: dragging the top would move a y the outline owns and re-place on the next
-    // pass, which reads as the box snapping back.
-    if (stackBoxRow(n) != null) { if (isImageBox(n)) clearResizeHandles(el); else ensureResizeHandles(n, S_DIRS); }
-    else ensureResizeHandles(n, FRAME_DIRS);
+    ensureResizeHandles(n, FRAME_DIRS);
     if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
   } else if (isFrameFold(n)) {
     // folded: the element is the bare title tab, shrink-wrapped by CSS (.frame-folded) — no inline
@@ -492,18 +409,6 @@ export function paintNode(n: MindNode): void {
     // The authored w/h stay on the node untouched meanwhile, for the chip's own unfold.
     el.style.width = ''; el.style.height = '';
     ensureResizeHandles(n, FRAME_DIRS);
-  } else if (isStack(n)) {
-    el.style.width = nodeW(n) + 'px';    // authored (n.w, default STACK_W) — resizable on this axis only
-    el.style.height = nodeH(n) + 'px';   // auto-fitted to children (set by layoutSubtree)
-    el.style.setProperty('--frame-stroke', colorFill(effectiveColor(n)) ?? 'var(--edge)');
-    frameContentEl(n);                   // clipping content wrapper
-    ensureResizeHandles(n, EW_DIRS);
-  } else if (rowW != null) {
-    // an OUTLINE ROW
-    el.style.width = rowW + 'px';        // stretched to the row width its depth allows (stackRowW)
-    if (el.style.height) el.style.height = '';
-    el.style.removeProperty('--frame-stroke');
-    clearResizeHandles(el);              // a row's width is derived, so it isn't resizable
   } else {
     // A plain card: an authored width if it has one (else back to the CSS-fixed card width), never an
     // inline height.
@@ -513,13 +418,13 @@ export function paintNode(n: MindNode): void {
     el.style.removeProperty('--frame-stroke');
     ensureResizeHandles(n, EW_DIRS);
   }
-  // Same rule the outline-row arm states, and it has to sit AFTER the whole chain because a stack, a
-  // frame and a plain card each hand out their own handles: a DERIVED size isn't resizable. The card
+  // After the whole chain, because a frame and a plain card each hand out their own handles: a DERIVED
+  // size isn't resizable. The card
   // being read takes the window's width and the window's height, so there is nothing to drag — and
   // this is also the authority drag.ts's own refusal defers to, instead of CSS hiding the handles
   // while the gesture was refused somewhere else.
   if (isReadingRoot(n)) clearResizeHandles(el);
-  // Don't clobber a CONTAINER's label while it's being renamed on itself (ui.titleEdit — the user is
+  // Don't clobber a FRAME's label while it's being renamed on itself (ui.titleEdit — the user is
   // typing into this very element). A card needs no such guard: its name is the leading `# ` line of its
   // one text field, and while that's open the whole row is hidden (`.card-editing`).
   if (!(ui.titleEdit && ui.titleEdit.id === n.id)) {
@@ -528,11 +433,8 @@ export function paintNode(n: MindNode): void {
     // A CARD HAS NO LABEL OF ITS OWN, titled or not: it is its text, rendered as markdown, and a leading
     // `# ` line is therefore an H1 in that text exactly as `- item` is a bullet — one renderer, one set of
     // rules, nothing hoisted out of the note into a field of its own. So the slot stays empty (`no-title`
-    // below collapses the row away, keeping only the fold chip and the done checkbox that live in it) and
-    // cardMarkdown feeds the whole note to the body below.
-    // A STACK is a card too, now: its header is its own text, rendered by the same markdown, so `# Name`
-    // is a heading there and `Name` is a paragraph — the label it used to draw unconditionally is what
-    // made a stack's name look like a heading whether or not anybody wrote one.
+    // below collapses the row away, keeping only the fold chip that lives in it) and cardMarkdown feeds
+    // the whole note to the body below.
     // A FRAME's tab renders that same markdown, flattened to ONE inline line (styles.css) — so it obeys
     // the same rule while staying a tab. It keeps a `.title` element rather than a body only because its
     // geometry is fixed: FRAME_TAB_H is 40px of padding plus one 20px line box, and its own `.body` is
@@ -621,8 +523,6 @@ export function paintNode(n: MindNode): void {
 // putting it back means renderBodyHTML makes it an H1 the same way it makes `- item` a bullet. There is no
 // title element on a card any more, so this is the only place its name is drawn, and a card can't end up
 // showing its name in one typeface in the row and another in the note.
-// A STACK renders the same way — its header IS its text, above its rows — which is what makes "write
-// `# Name` if you want a heading" one rule instead of a card rule plus a container exception.
 // (An image card needs no arm of its own — it is untitled by definition, so joinHeading hands back the
 // picture markdown unchanged.)
 function cardMarkdown(n: MindNode): string {
@@ -652,7 +552,7 @@ function collapsedMarkdown(n: MindNode): string {
 //   'count' — folded: "+N" hidden descendants, or a bare "+" when only a body is tucked away.
 //   'fold'  — expanded and collapsible: the chevron, which styles.css reveals on hover or while
 //             SELECTED. Every kind that can actually fold gets it, so the gesture is discoverable
-//             on frames and stacks too, not just plain cards.
+//             on frames too, not just plain cards.
 function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: boolean): '' | 'count' | 'fold' {
   // Folding the card you are standing INSIDE would leave you looking at nothing, so it offers no chip
   // at all. Here rather than in CSS: chipFace is the single authority for "no chip", and a display:none
@@ -660,10 +560,8 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   if (isReadingRoot(n)) return '';
   if (collapsed) return 'count';
   // A FRAME's own body is never rendered (styles.css — its name is a folder tab), so only CHILDREN make
-  // one collapsible. Every other kind, a STACK now included, can also fold its text down to one line:
-  // a stack's header IS its rendered body these days, so there is something there to fold. Deliberately
-  // a test on the KIND and not isContainer/isFrame/isStack: those also carry state (a collapsed frame, a
-  // stack demoted to a row inside another stack) that has no bearing on whether the body is drawn.
+  // one collapsible. A card folds its text down to one line. Deliberately a test on the KIND and not
+  // isFrame: that also carries state (a collapsed frame) with no bearing on whether the body is drawn.
   const foldable = rendersAsFrame(n) ? hasKids : (hasKids || hasBody);
   if (!foldable) return '';
   // An IMAGE card is invited: it folds to a 40px icon of its own picture (isImageFold), which is a
@@ -701,14 +599,6 @@ export const FRAME_TAB_DROP = FRAME_TAB_H - 1;   // 39
 // interior fixed when the tab height changes (declared after FRAME_TAB_DROP so the sum is in scope).
 export const FRAME_W = 360, FRAME_H = 260 + FRAME_TAB_DROP;
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
-// Stack geometry (a framed, auto-sized outliner node kind — see isStack in view/layout.ts). Its
-// width is AUTHORED (n.w, defaulting to STACK_W — it takes the EW handle set like a card); its
-// height auto-fits its children and is never authored (computed in layoutSubtree).
-export const STACK_W = NODE_W;   // a stack STARTS the same width as a normal card (not wider)
-export const STACK_HEADER = 36;  // title strip reserved above the stacked children
-export const STACK_PAD = 6;      // inset from the border to the content — half a normal card's
-                                 // padding, so full-width child cards still fit in the narrow box
-export const STACK_GAP = 8;      // vertical gap between stacked children
 // Whether a node currently renders as a frame BOX. A collapsed frame folds to its bare title tab
 // (isFrameFold below), so it has no box at all. Shared by the geometry helpers below.
 function isFrameBox(n: MindNode): boolean { return isFrame(n); }
@@ -716,20 +606,18 @@ function isFrameBox(n: MindNode): boolean { return isFrame(n); }
 // top (n.y), i.e. exactly where an expanded frame's tab sits, so folding never moves the title. Its
 // element shrink-wraps the title, so its width is measured (nodeW) rather than assumed.
 function isFrameFold(n: MindNode): boolean {
-  return n.type === 'frame' && !!n.collapsed && !insideStack(n);
+  return n.type === 'frame' && !!n.collapsed;
 }
-// …so: does this node draw a frame AT ALL — a box with a tab, or the bare tab? The question three
-// render sites ask, and the one a demoted frame answers NO to: inside a stack it is an outline row,
-// which renders like any other row (its markdown in its body, no tab, no box — see isFrame).
+// …so: does this node draw a frame AT ALL — a box with a tab, or the bare tab?
 function rendersAsFrame(n: MindNode): boolean { return isFrameBox(n) || isFrameFold(n); }
 // Whether `n` currently holds its children in a content wrapper of its own (frameContentEl) — the two
-// cases paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from them:
-// an expanded frame BOX and an expanded stack (isStack already excludes collapsed and demoted-to-a-row).
+// case paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from it: an
+// expanded frame BOX.
 // Being HIDDEN (an ancestor folded) counts as holding nothing, which is what lets paintNode maintain
 // "a wrapper exists iff hostsContent(n)" with ONE drop, ahead of its isHidden early return.
 function hostsContent(n: MindNode): boolean {
   if (isHidden(n)) return false;
-  return isFrameBox(n) || isStack(n);
+  return isFrameBox(n);
 }
 // The width a frame's own title TAB renders at — MEASURED, since a title is as wide as its text (up
 // to the CSS max-width, which ellipsises it). When the frame is folded its element IS that tab;
@@ -763,97 +651,50 @@ function isImageBox(n: MindNode): boolean { return imageLook(n) && !n.collapsed;
 export const IMAGE_FOLD = 40;
 function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed; }
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
-// below. A stack is a box too (it gets a size + a .frame-content wrapper) but authors only a width,
-// so it takes the EW handles in paintNode and is covered by isContainerBox instead.
+// below.
 function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n); }
-// Any node that renders as a child-containing BOX with a size + clipping wrapper: a resizable frame
-// OR an auto-sized stack. Used for the size/wrapper plumbing in paintNode.
-function isContainerBox(n: MindNode): boolean { return isFrameBox(n) || isStack(n); }
-// Does this card live inside a stack's outliner? True when its nearest CONTAINER ancestor is a
-// stack (a frame in between governs instead) — covers the stack's direct children AND deeper rows.
-// Used for the .stack-child tint. For "is this actually an outline ROW" (which drives the row width)
-// use stackRowW instead — see the sizing branch above.
-// containerHost, not hostFrame: this is the TONE question (whose fill am I sitting on), which an
-// OPEN frame still governs even though it hosts no elements — see containerHost in view/layout.ts.
-function inStack(n: MindNode): boolean {
-  const h = containerHost(n);
-  return !!h && isStack(h);
-}
-// …and the mirror for a FRAME's box: a card sitting in one is tinted a touch brighter (.frame-child),
-// exactly as a stack's rows are, and for the same reason — a card INHERITS its colour from its
-// ancestors (effectiveColor), so one dropped into a coloured frame resolves to the frame's own fill
-// and vanishes into it. Nearest container only, so a card in a stack in a frame stays a stack row.
-// Plain cards only: every other kind is a shape with its own fill rules — a nested stack already
-// steps DOWN inside a frame, a nested frame's fill is tied to the --frame-stroke its border and title
-// tab share, and an image card is deliberately image-only.
-// containerHost again, and here it MATTERS rather than merely reading better: an OPEN frame hosts no
-// elements, so hostFrame would drop the tint from exactly the cards that need it most — the ones on a
-// canvas now painted the frame’s own fill (syncCanvasBackground), which they’d otherwise vanish into.
-// isFrameFold sits beside isContainer because isContainer routes through isFrame, and isFrame means an
-// EXPANDED frame (it tests !collapsed). So a FOLDED frame fell through to the plain-card branch and took the .frame-child tint. That's not a
-// near miss: .node.frame-child's (0,3,0) background out-specifies .node.frame-folded's own
-// `background:none`, so the folded pills meant to read as bare outlines wore a washed-out fill.
-// Together the two tests mean "a frame in any state".
+// A card sitting in a frame is tinted a touch off the frame's fill (.frame-child): a card INHERITS its
+// colour from its ancestors (effectiveColor), so one dropped into a coloured frame resolves to the
+// frame's own fill and would vanish into it. Plain cards only — a nested frame's fill is tied to the
+// --frame-stroke its border and tab share, and an image card is deliberately image-only.
+// containerHost, not hostFrame: an OPEN frame hosts no elements, but the canvas wears its fill
+// (syncCanvasBackground), so its cards need the tint most of all. And `type`, not isFrame, for the
+// node itself: a FOLDED frame is a bare outlined pill and must not take the tint's background.
 function inFrame(n: MindNode): boolean {
-  if (isContainer(n) || isFrameFold(n) || isImageBox(n)) return false;
+  if (n.type === 'frame' || isImageBox(n)) return false;
   const h = containerHost(n);
   return !!h && isFrame(h);
 }
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
 // A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
-// mm_w — and every kind can carry one: a frame/image card sizes its whole box with it, while a
-// card/stack authors only this axis (their height comes from content/outline instead).
-// The two widths that are NOT authored come first, so they win: an outline ROW inside a stack is
-// stretched to the width its indent depth allows (stackRowW, derived — a row can't be resized, and a
-// card keeps whatever width it authored OUTSIDE the stack for when it's dragged back out), and a
-// folded frame's tab shrink-wraps its title.
-// A BOX that is a stack ROW is given its width by the STACK, like every other row: the outline owns
-// the width (stackRowW — the stack's own, less its border/padding and one indent per depth), whatever
-// the kind sitting in it. The box kinds are the ones that would otherwise insist on their own, being
-// the ones that author a size — a 600px photo or an 800px frame dropped into a 240px stack used to
-// hang out of it. What each does with the HEIGHT is still its own business: an image card derives it
-// from the picture's ratio (nodeH below), a frame keeps the one it authors. The
-// authored w/h are untouched meanwhile, exactly as a plain card's authored width is: drag it back out
-// and it comes out at the size it went in with.
-function stackBoxRow(n: MindNode): number | null { return isBoxNode(n) ? stackRowW(n) : null; }
-// The ratio the box carries — authored, and aspect-locked to the picture by every resize — falling
-// back to the loaded image for a card that has no height of its own yet.
-function boxAspect(n: MindNode): number { return (n.w && n.h) ? n.w / n.h : imageAspect(n); }
+// mm_w — and every kind can carry one: a frame/image card sizes its whole box with it, while a card
+// authors only this axis (its height comes from its content). A folded frame's tab shrink-wraps its
+// title instead.
 export function nodeW(n: MindNode): number {
-  // Opened as a page: a DERIVED reading width, ahead of every other arm. This is the line that makes
-  // the box, its outline rows (stackRowW → stackInnerW → nodeW) and the layout pass agree about how
-  // wide "open" is — without writing a pixel of it to n.w, so the card comes back out as authored.
+  // Opened as a page: a DERIVED reading width, ahead of every other arm — without writing a pixel of
+  // it to n.w, so the card comes back out as authored.
   if (isReadingRoot(n)) return readingWidth();
-  const rowBox = stackBoxRow(n);
-  if (rowBox != null) return rowBox;
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
   if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the tab shrink-wraps its title
-  const row = stackRowW(n); if (row != null) return row;             // outline row — derived, not authored
-  if (isStack(n)) return n.w ?? STACK_W;
   return n.w ?? NODE_W;
 }
-// live height (falls back pre-render). An expanded frame/image card's height is its box (n.h), a
-// stack's height is its auto-fitted box (n.h, set by layout) — not its card.
+// live height (falls back pre-render). An expanded frame/image card's height is its box (n.h).
 export function nodeH(n: MindNode): number {
-  // …and only an IMAGE row derives its height from that width: the picture's ratio is the whole shape
-  // of the card. A frame/query row keeps its authored height — its box holds content, not a picture.
-  if (isImageBox(n)) { const rowBox = stackBoxRow(n); if (rowBox != null) return Math.max(1, Math.round(rowBox / boxAspect(n))); }
   if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
   if (isImageFold(n)) return IMAGE_FOLD;
   if (isFrameFold(n)) return FRAME_TAB_H;   // just the tab — one fixed line, never measured
-  if (isStack(n)) return n.h ?? (STACK_HEADER + STACK_PAD);
   return (n.el && n.el.offsetHeight) || 64;
 }
 // Height used for LAYOUT geometry. Identical to nodeH for every kind whose height is DECLARED
-// (box / folded frame / stack), so it defers to it rather than restating the ladder — a new kind
+// (box / folded frame / folded image), so it defers to it rather than restating the ladder — a new kind
 // added to nodeH must not have to be remembered here too. The two differ only for a MEASURED card:
 // nodeH treats a zero-height element as unrendered and falls back to 64, while layout wants the real
 // 0 (the selection affordances — + and the "add note" bubble — are absolutely positioned and
 // overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
-  if (isBoxNode(n) || isFrameFold(n) || isStack(n) || isImageFold(n)) return nodeH(n);
+  if (isBoxNode(n) || isFrameFold(n) || isImageFold(n)) return nodeH(n);
   const el = n.el; if (!el) return 64;
   return el.offsetHeight;
 }
@@ -961,9 +802,8 @@ function placeSelf(n: MindNode, absX: number, absY: number): void {
 // Keep a container's own box BEFORE its content wrapper among their shared siblings. The two paint in
 // the same step (both z-index:auto — see .node.frame in styles.css), so document order alone decides
 // which is on top: the wrapper must FOLLOW the box, or the box's opaque fill paints straight over
-// everything inside it that also sits at z-index:auto — a nested stack, a nested frame. (Plain cards
-// are z-index:2 and survive either way, which is exactly what "the stack vanished but its rows didn't"
-// looked like.)
+// everything inside it that also sits at z-index:auto — a nested frame. (Plain cards are z-index:2
+// and survive either way.)
 // Any re-append of the box moves it to the END of its container, inverting the pair whenever the
 // wrapper got there first — which is routine, since Map iteration order isn't parent-before-child, so
 // a child's paint reaches frameContentEl before the container's own paintNode. The case that actually
@@ -994,10 +834,6 @@ function frameContentEl(f: MindNode): HTMLElement {
     placeSelf(f, f.x, elTop(f, f.y));
     w = document.createElement('div'); w.className = 'frame-content'; f.frameContentEl = w;
   }
-  // A stack auto-sizes to its outline, so nothing ever needs clipping — and clipping would cut off
-  // its rows' corner affordances (the +N count / lock badges that overhang the card edge). Mark its
-  // wrapper so CSS lets those overhang (overflow:visible); a resizable frame keeps overflow:hidden.
-  w.classList.toggle('stack-content', isStack(f));
   const box = frameInterior(f);
   // Position from paintPos, not box.x/box.y: mid-drag the wrapper's left/top must stay frozen at the
   // frame's origin, since applyDragTransform mirrors the box's own transform onto it. Its SIZE comes
@@ -1018,8 +854,7 @@ export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
 // (startNodeResize below), so there is no smaller expanded size to clamp at.
 // A width-only kind can only ever get WIDER than the width it has by default — the whole point is
 // trading height for width on a card whose text wraps badly, so its natural size is the floor. That
-// floor is NODE_W for a plain card, a stack (STACK_W is NODE_W) and a frame alike, so they share the
-// one fall-through rather than three aliases that had to be kept equal by hand.
+// floor is NODE_W for a plain card and a frame alike, so they share the one fall-through.
 function minWOf(n: MindNode): number {
   if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
   return NODE_W;
@@ -1028,12 +863,9 @@ function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) 
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
-// …and the bottom edge alone, for a box whose width and position are the stack outline's (see paintNode).
-const S_DIRS = ['s'] as const;
 type FrameDir = typeof FRAME_DIRS[number];
-// …and the width-only set: a card / stack authors a WIDTH but never a height (its
-// height stays whatever its content measures, or — for a stack — whatever its outline needs), so it
-// gets the two side bands and no corners.
+// …and the width-only set: a card authors a WIDTH but never a height (its height stays whatever its
+// content measures), so it gets the two side bands and no corners.
 const EW_DIRS = ['e', 'w'] as const;
 // Ensure the node has exactly the (invisible) resize hit-zones its kind wants — one per edge/corner,
 // added once and reused. No visible grip: the resize cursors on the border are the affordance.
@@ -1075,19 +907,13 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   if (state.readOnly || isLockedEffective(n)) return;
   e.stopPropagation(); e.preventDefault();
   // Does this kind author its own HEIGHT, or only a width? A card measures its height from
-  // its content and a stack derives its own from its outline, so for those the resize writes w only.
+  // its content, so for a card the resize writes w only.
   // A FOLDED image card counts as a box here even though isBoxNode says no: its 40px icon is the small
   // end of its own size range, and scaling it back up is how you unfold it (see `fold` in resize()).
   const img = isImageBox(n) || isImageFold(n);
   const sizeH = isBoxNode(n) || img;
-  // …and does it author its own WIDTH? A box that is a stack ROW doesn't: the outline gives it that
-  // (stackBoxRow), so writing `right - left` back would quietly replace its authored width with the
-  // row's — the S-handle drag, which changes no horizontal edge at all, would still have flattened an
-  // 800px frame to 400 the moment you made it taller. Its x is the outline's for the same reason.
-  const sizeW = stackBoxRow(n) == null;
   const minW = minWOf(n), minH = minHOf(n);
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
-  const flow = !!frameFlow(n);   // frame-h/frame-v: reflow its children live as the box resizes, not just on release
   // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
   const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
@@ -1146,7 +972,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       if (fold !== n.collapsed) n.collapsed = fold;
       if (fold) { n.dirty = true; return; }
     }
-    if (sizeW) { n.x = left; n.w = right - left; }
+    n.x = left; n.w = right - left;
     // a width-only kind never gets a y/h written — see sizeH
     if (sizeH) { n.y = top; n.h = bottom - top; }
     n.dirty = true;
@@ -1156,15 +982,9 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     resize(snap);
     paintNode(n);
     paintFreeEdges();
-    // A flow frame (frame-h/frame-v) arranges its children by wrapping them into the box's own
-    // width/height — reflow them live as that box changes size, not just once on release, so the
-    // wrap point visibly updates while dragging. Coalesced to once per animation frame (applyLayouts
-    // walks every root's subtree, so it's not free) rather than once per raw pointermove.
-    // A width-only kind needs the same live pass for a different reason: its HEIGHT is measured, and
-    // re-wrapping the text at the new width changes it — so its parent's line/fan arrangement (and a
-    // stack's own auto-fitted box) has to settle around the new shape as the drag goes, or everything
-    // below it jumps on release. paintNode(n) above already ran, so the measurement is current.
-    if ((flow || !sizeH) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
+    // A width-only kind re-wraps its text at the new width, which changes its measured HEIGHT — let
+    // everything that reads it (edges, the selection bar) settle as the drag goes, once per frame.
+    if (!sizeH && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
       subtreeRAF = null;
       relayout();
     });
@@ -1173,8 +993,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // wrapper-relative position compensates and stays put in absolute space as the box resizes
     // around it (an east/south-only resize doesn't move the origin, so this is skipped entirely).
     // subtreeIds walks the whole node map, so coalesce it to once per animation frame rather than
-    // once per raw pointermove (which can fire far faster than the screen repaints). Skipped for a
-    // flow frame — the applyLayouts()+paintAll() above already repaints the whole subtree.
+    // once per raw pointermove (which can fire far faster than the screen repaints).
     else if ((north || west) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
       subtreeRAF = null;
       for (const id of subtreeIds(n.id)) { const k = state.nodes.get(id); if (k) paintNode(k); }
@@ -1188,8 +1007,8 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
     // a redundant mm_w on every card the user so much as nudges.
     if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
-    // paint BEFORE laying out: a width-only node's height (and a stack's title-row header, which is
-    // measured) only matches the snapped width once the DOM has it — see prepRow in view/layout.ts.
+    // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
+    // the DOM has it.
     paintNode(n);
     // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
     // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
@@ -1205,14 +1024,13 @@ export function paintAll(): void {
   syncScopeChrome();   // crumbs + reading class + the recovery when the frame you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
-// in the app ends in one of them — some 35 call sites, which is why they used to be written out by
-// hand — and which one is correct turns on a single question: did the change alter a MEASURED size?
-//   relayout()  — lay out, then paint. The default: positions moved, no card's own height did.
-//   remeasure() — paint FIRST, then lay out, then paint again. For anything that changes a card's
-//                 measured height (its text, its width, or a card so new it has no element yet): the
-//                 layout pass reads offsetHeight, so the DOM has to be current BEFORE it runs, and
-//                 the second paint applies the positions it worked out. The same paint-before-measure
-//                 rule prepRow / sizeEmptyStack follow inside the layout pass itself.
+// in the app ends in one of them, and which one is correct turns on a single question: did the change
+// alter a MEASURED size?
+//   relayout()  — the open-frame bookkeeping (applyLayouts), then paint. The default.
+//   remeasure() — paint FIRST, then the same. For anything that changes a card's measured height (its
+//                 text, its width, or a card so new it has no element yet), so whatever runs between
+//                 the two paints reads a current DOM. Nothing flows cards any more, so the two differ
+//                 only in that first paint — kept apart so callers still say which they mean.
 export function relayout(): void { applyLayouts(); paintAll(); }
 export function remeasure(): void { paintAll(); applyLayouts(); paintAll(); }
 
@@ -1277,12 +1095,6 @@ function withLayoutAnimation(mutate: () => void): void {
   mutate();
   paintAll();          // reveal/hide DOM and measure real heights
   applyLayouts();      // compute FINAL positions into n.x/n.y (DOM not updated yet)
-  // Paint again: a container that AUTO-SIZES only learns its new box in the pass above, and the
-  // first paint wrote the pre-toggle one. animateReflow moves elements' left/top but never their
-  // size, so a stack stayed at its collapsed height while its revealed rows spilled out of the box
-  // until some later, unrelated repaint happened to fix it. Harmless for the animation: the parking
-  // step below immediately rewrites every position before the browser gets a chance to paint.
-  paintAll();
   animateReflow(before);
 }
 // CSS-animate every visible card from its snapshotted `before` spot to its current (final)
@@ -1359,7 +1171,7 @@ export function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean)
 // The four keys are about DEPTH, in the two senses this map has: which folder you're standing in,
 // and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
 // that, deliberately — opening a frame is now the primary way to navigate a big map, and clicking
-// (or the outline, which is a real tree widget) covers moving between siblings.
+// covers moving between siblings.
 // They were never geometric and still aren't — a child now lives INSIDE its parent, so there is no
 // direction from one to the other for an arrow key to mean.
 // ←/→ are DIRECTIONAL, unlike the chip / X / the ⋯ menu, which all toggle: pressing → twice can't
@@ -1381,16 +1193,6 @@ function navArrow(key: string): void {
   if (!n) return;          // ←/→ have nothing to fold
   // → unfolds, ← folds — every selected card that isn't already there.
   setCollapsedSelection(selectedIds(), key === 'ArrowLeft');
-}
-// Flip a checklist item's done mark (mm_done) and persist. Independent of any body task list.
-// Also repaints the parent so its "n/m" checklist progress readout stays in sync.
-// Exported: the outline row list shows the same donebox/progress readout (features/outline.ts).
-export function toggleDone(n: MindNode): void {
-  if (state.readOnly || isLockedEffective(n)) return;
-  record([n.id], () => { n.done = !n.done; n.dirty = true; });
-  paintNode(n);
-  const p = parentOf(n); if (p) paintNode(p);
-  scheduleSave();
 }
 // Lock/unlock every selected card (the float bar's lock toggle / L). Locking freezes that card in place — no move,
 // (un)collapse, rename/body/color/type/layout edit, add-child, or delete — and cascades so its
@@ -1510,8 +1312,8 @@ export function focusScope(): void { frameBox([...state.nodes.values()]); }
 
 // The viewport rect the open frame lays its contents out in — read back through containerBox /
 // frameInterior. A SNAPSHOT, taken here and refreshed only on a window resize:
-//  · not LIVE, or every pan frame would re-wrap a flow frame's children, shiftSubtree them and — via
-//    commitRel — dirty every one of their files. A pan would autosave the folder.
+//  · not LIVE: the drop test reads it on every move, and a rect that moved with every pan would
+//    make where a card lands depend on how you got there.
 //  · sized at k = 1 (the app's canonical 1 world px = 1 screen px), not at the current zoom: the
 //    camera is about to change, since opening fits the contents, so reading the live k is circular.
 //    frameBox clamps k ≤ 1.0 anyway, so the fitted result lands near 1 and the contents do fill it.
@@ -1519,9 +1321,8 @@ export function focusScope(): void { frameBox([...state.nodes.values()]); }
 //    AND open, i.e. it tracks the SELECTION — folding it in would reflow the frame on every click.
 //    It belongs to the camera moves (frameBox/revealInView) and stays there. Same for the crumb bar,
 //    which is floating chrome over the canvas like #toolbar.
-//  · anchored at the frame's own content origin, so opening a FREE frame moves nothing at all (and
-//    so dirties nothing), and a flow frame's children move the shortest distance — which is what
-//    makes the glide read as contents spreading out rather than teleporting.
+//  · anchored at the frame's own content origin, so opening a frame moves nothing at all (and so
+//    dirties nothing).
 function scopeRectFor(t: MindNode): { x: number; y: number; w: number; h: number } {
   const home = containerBox(t);   // read before the level is pushed, so it's the frame's real bounds
   const s = stageSize();
@@ -1558,31 +1359,18 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
 
 // A FREE frame you were INSIDE had the whole viewport to arrange things in, so a card can easily end
 // up outside the box it goes back to being on the way out — where its wrapper's overflow:hidden would
-// clip it clean away. So grow the box to hold what's in it as you leave: the same fit ⇧A performs
-// (fitFrameToContent), and only when something really does stick out, so a visit that moved nothing
-// still writes nothing.
-// FREE only, and that's load-bearing rather than an optimisation. A flow frame RE-WRAPS into its own
-// box as soon as the viewport override goes — but that happens in the applyLayouts that follows this,
-// so measuring here would see the children still spread across the viewport and widen the box to fit
-// a row that was about to fold itself back up. The box would creep wider on every visit. A locked
-// frame is out for the ordinary reason: it refuses to be resized at all.
+// clip it clean away. So grow the box to hold what's in it as you leave (growFramesToHold), and only
+// when something really does stick out, so a visit that moved nothing still writes nothing.
+// A locked frame is out: it refuses to be resized at all.
 function growToFitContents(f: MindNode): void {
-  if (state.readOnly || f.type !== 'frame' || isLockedEffective(f)) return;
-  if (frameFlow(f)) return;
-  const box = containerBox(f);
-  const out = childrenOf(f.id).filter(k => !isHidden(k)).some(k => {
-    const b = subtreeBox(k);
-    return isFinite(b.x0) && (b.x0 < box.x || b.y0 < box.y || b.x1 > box.x + box.w || b.y1 > box.y + box.h);
-  });
-  if (!out) return;
-  fitFrameToContent(f);
-  f.dirty = true; f.dirtyLayout = true;
+  if (state.readOnly || f.type !== 'frame') return;
+  growFramesToHold(childrenOf(f.id).map(k => k.id));
 }
 
 interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiting?: boolean; camera?: boolean; }
 function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   // A scope change re-parents elements (a child moves between #world and a wrapper), which would
-  // drop a captured pointer or blur an open editor — the same precaution setOutline takes.
+  // drop a captured pointer or blur an open editor.
   endInPlaceEdit();
   cancelViewAnim();
   const before = scope.rootId;
@@ -1701,7 +1489,7 @@ export function popScopeFor(t: MindNode): void {
 // Keep the crumb bar in step, and recover from the open frame having been deleted / undone away /
 // removed on disk. pruneScope (view/layout.ts's applyLayouts) already truncated the stack; the
 // camera half has to live here, and without it you'd be staring at the parent scope through the
-// departed child's camera. Driven from paintAll, the same argument renderOutline makes.
+// departed child's camera. Driven from paintAll, so every mutation path gets it.
 // While a frame is OPEN the canvas IS its interior, so the canvas takes the frame's own fill — the
 // very colour its box was wearing a moment before, through the same resolver its box used
 // (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no frame and the
@@ -1754,14 +1542,11 @@ export function canvasFill(): string | null {
 // paints no background behind its title any more (styles.css: the tab is a bare label, the folded pill
 // an outline), so var(--ink) is the wrong answer twice over: it's computed against the frame's OWN
 // fill, which isn't there, and the surface that IS there belongs to something else entirely.
-// The nearest CONTAINER that actually paints a fill, else the canvas — an open frame's colour, the
+// The nearest FRAME that actually paints a fill, else the canvas — an open frame's colour, the
 // map's, or the theme's own background. A walk rather than one step because only an AUTHORED colour
 // paints at all (the same test canvasFill makes: effectiveColor falls back to the theme's neutral card
 // fill for a frame nobody coloured, but .c-none renders transparent, so what's behind an uncoloured
 // container is whatever is behind IT).
-// A stack's own fill is a shade darker than what's read here (styles.css steps it 86% toward black);
-// left un-stepped deliberately, since darkening only moves a fill further from the light ink and so
-// can never change which of the two inks wins.
 export function behindFill(n: MindNode): string {
   for (let h = containerHost(n); h; h = containerHost(h)) {
     const fill = hasAuthoredColor(h) ? colorFill(effectiveColor(h)) : null;
@@ -1808,17 +1593,16 @@ function syncScopeChrome(): void {
   const open = scopeRootNode();
   setStatus(open ? `That frame is gone — back to “${nodeLabel(open)}”` : 'That frame is gone — back to the whole map');
 }
-// Keep the rect honest across a window resize. Nothing to re-lay-out — an open frame's contents are
-// FREE (frameFlow), so no layout reads the rect to place anything; what still reads it is where a
-// DROP lands (dropLanding clamps into containerBox), which a stale rect would confine to the old
-// window. Debounced, and a no-op when the size didn't really change.
+// Keep the rect honest across a window resize. Nothing to re-lay-out — an open frame's contents sit
+// where they were put; what still reads the rect is the drop test (frameAt / containerBox), which a
+// stale rect would confine to the old window. Debounced, and a no-op when the size didn't really change.
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
 let readingResizeRaf: number | null = null;
 window.addEventListener('resize', () => {
   if (!scopeActive()) return;
   // An open CARD's width IS the window's (readingWidth), and so is its centring — so a resize has to
-  // re-run the layout, not just re-snapshot the rect: the box, its outline rows and the camera clamp
-  // all read the new width. Not debounced, because a strip lagging 200ms behind the window edge while
+  // re-run the layout, not just re-snapshot the rect: the box and the camera clamp both read the new
+  // width. Not debounced, because a strip lagging 200ms behind the window edge while
   // you drag it is the one thing you're looking at — but coalesced into one frame, since a live drag
   // emits resize at input rate and each pass measures every card.
   if (readingActive()) {
@@ -1882,7 +1666,7 @@ deriveInk();
 //   colorVars  — …which are those variables: the same --card/--ink/--scrim triple a .c-* class
 //                provides, just computed per node instead of once per palette key. Everything
 //                downstream keys off the variables alone, so a custom colour behaves exactly like a
-//                palette one — including a coloured stack's step-down and the :not(.c-none) tests.
+//                palette one — including the :not(.c-none) tests.
 // One inline declaration per coloured node is affordable where a generated stylesheet isn't: the set
 // of custom colours in a map is open-ended, and a node's own style attribute is already written on
 // every paint.
@@ -1923,7 +1707,7 @@ export function selectAll(): void {
   setSelectionSet([...state.nodes.values()].filter(n => !isHidden(n)).map(n => n.id));
   setStatus(state.sel.size ? `Selected ${state.sel.size} card${state.sel.size > 1 ? 's' : ''}` : 'Nothing to select');
 }
-// the ids currently being edited (one or many) — colour/layout/checklist/bg apply to all of them
+// the ids currently being edited (one or many) — colour and lock apply to all of them
 export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
 // reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
 // Selecting a CARD ends any edge selection — the two never coexist (core/state.ts selEdges). Enforced
@@ -2003,8 +1787,7 @@ export function selectNode(id: string | null): void {
   }
   applySelection();
 }
-// Colour / checklist / group-background / layout all apply live via the floating bar
-// (features/float-bar.ts). The TITLE and BODY are edited on the canvas (F2 / double-click → inline edit).
+// Colour and lock apply live via the floating bar (features/float-bar.ts). The TITLE and BODY are edited on the canvas (F2 / double-click → inline edit).
 
 
 // ---------- image attachments live in features/attachments.ts ----------
@@ -2015,11 +1798,11 @@ export function selectNode(id: string | null): void {
 
 // keyboard:
 //  · N / ⌘N        → new node at the pointer   (Space: hand-pan; on an image card, open the picture)
-//  · Enter          → add a sibling of the selected node
-//  · Tab            → add a child of the selected node
+//  · Enter          → a new card below the selected one, in the same place
+//  · Tab            → a new card inside the selected frame
 //  · F2             → rename the selected node in place (also: double-click its title)
 //  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
-//  · ← → ↑ ↓        → walk the tree: →/← go deeper/shallower (folding on the way), ↑/↓ walk siblings
+//  · ← → ↑ ↓        → ↑/↓ open/leave a frame, →/← unfold/fold
 //  · E              → edit the selected node's note/body in place (also: double-click the body)
 //  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
 // A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
@@ -2093,7 +1876,8 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); const n = state.nodes.get(state.selId); if (n) startBodyEdit(n); return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
-  if (key === 'Tab' && state.selId){ e.preventDefault(); addChild(state.selId); return; }
+  // Tab puts a new card INSIDE the selected frame — the one thing that has an inside.
+  if (key === 'Tab' && state.selId){ e.preventDefault(); if (state.nodes.get(state.selId)?.type === 'frame') addCardInside(state.selId); return; }
   if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
   // ⌘L connects the selected cards (MindNode's shortcut for the same thing). Bare `l` is lock.
   if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
@@ -2120,8 +1904,8 @@ window.addEventListener('keyup', (e) => {
 });
 
 // Ghost-card drag: grab the corner card to spawn a new note that rides the cursor through the same
-// move/reparent machinery as dragging an existing card — so the landing-ghost preview, child/sibling
-// drop zones and managed-layout snapping all behave identically. Releasing back on the ghost cancels.
+// move/drop machinery as dragging an existing card — so the guides and the drop-into-a-frame rule
+// behave identically. Releasing back on the ghost cancels.
 {
   const ghost = byId('ghostCard');
   let newNode: MindNode | null = null;
@@ -2196,7 +1980,8 @@ function paletteCommands(): Command[] {
     { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2) },
     { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
     { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
-    { label: 'Add a card inside', shortcut: 'Tab', keywords: 'child', when: () => editable() && !!oneSel(), run: () => addChild(state.selId!) },
+    { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
+    { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
     { label: 'Open', shortcut: '↑', keywords: 'enter frame read', when: () => { const n = oneSel(); return !!n && canOpen(n) && !isScopeRoot(n); }, run: () => openFrame(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },

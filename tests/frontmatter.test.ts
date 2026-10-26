@@ -42,7 +42,7 @@ describe('parseMd / serializeMd round-trip', () => {
     'foreign frontmatter':
       '---\ndate: 2026-01-02\naliases:\n  - one\n  - two\ncategory: work  # a comment\ntags: []\nstatus: open\n---\n\n# Kept\n\nBody.\n',
     'app-owned flags':
-      '---\ndate: 2026-01-02\ntags: []\nmm_checklist: true\nmm_type: frame\nmm_layout: horizontal\n---\n\n# Box\n',
+      '---\ndate: 2026-01-02\ntags: []\nmm_locked: true\nmm_type: frame\n---\n\n# Box\n',
     'body with a markdown table and code':
       '---\ndate: 2026-01-02\ntags: []\n---\n\n# T\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```\n---\nnot frontmatter\n---\n```\n',
   };
@@ -96,7 +96,13 @@ describe('parseMd / serializeMd round-trip', () => {
   it('folds legacy kinds', () => {
     expect(parseMd('---\nmm_type: image\n---\nx').mm.type).toBe('card');
     expect(parseMd('---\nmm_layout: stack\n---\nx').mm).toMatchObject({ type: 'card', wasStack: true });
-    expect(parseMd('---\nmm_layout: frame-v\n---\nx').mm).toMatchObject({ type: 'frame', layout: 'vertical' });
+    expect(parseMd('---\nmm_layout: frame-v\n---\nx').mm.type).toBe('frame');
+  });
+
+  it('drops the cut arrangement and checklist keys on the next write', () => {
+    const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_checklist: true\nmm_done: true\nmm_type: frame\nmm_layout: horizontal\n---\n\n# Box\n');
+    expect(n.type).toBe('frame');
+    expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\nmm_type: frame\n---\n\n# Box\n');
   });
 
   it('opens a retired query card as a plain card, keeping its title and body', () => {
@@ -109,8 +115,8 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(parseMd('---\nmm_type: annotation\nmm_parent: Card.md\n---\n\nremark').mm).toMatchObject({ type: 'card', parent: 'Card.md' });
   });
 
-  it('opens a retired tab group as a horizontal frame', () => {
-    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm).toMatchObject({ type: 'frame', layout: 'horizontal' });
+  it('opens a retired tab group as a plain frame', () => {
+    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm.type).toBe('frame');
   });
 
   it('reads frontmatter from a file with Windows line endings', () => {

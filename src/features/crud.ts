@@ -2,18 +2,19 @@
 // Every node is one .md file; ids are ephemeral (minted in mkNode). All create/duplicate paths go
 // through mkNode so the node schema stays in one place. Each mutation schedules a save. Re-parenting
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
-import { state, setStatus, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { splitHeading } from '../utils/frontmatter.js';
-import { applyLayouts, insertedKidOrder, hostFrame } from '../view/layout.js';
+import { applyLayouts, frameInterior, holderOf } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, relayout, remeasure } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING } from '../utils/guides.js';
+import { growFramesToHold } from './float-bar.js';
 import { scheduleSaveBoard } from '../data/board.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
@@ -24,9 +25,9 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
   touch(id);   // not in state.nodes yet → before-image is null (undo of a create = remove it)
   return {
     id, file:null,
-    x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false, done:false, checklist:false,
+    x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false,
     title:'', color:'', keepStatus:'', tags:[], body:'',
-    type:'card', layout:'inherit',
+    type:'card',
     dirty:true, dirtyLayout:true,
     ...fields,
   };
@@ -46,7 +47,7 @@ export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p
 // Make a new UNCONNECTED node (parent:null) at the viewport centre (or a given spot).
 interface CreateOpts {
   x?: number; y?: number; parent?: string | null; title?: string; color?: string;
-  tags?: string[]; body?: string; type?: NodeType; layout?: NodeLayout; isNew?: boolean;
+  tags?: string[]; body?: string; type?: NodeType; isNew?: boolean;
   w?: number; h?: number;
   edit?: boolean;   // false = don't open the inline rename (e.g. paste — the content is final)
 }
@@ -62,7 +63,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   // level (detachParentId, nav/scope.ts) — a genuine root would land outside the scope and simply
   // vanish. That's what makes this ONE line cover every create path: the canvas double-click, Space,
   // both "New card here" menus, a paste, a dropped image.
-  const parentId = opts.parent ?? detachParentId();
+  const parentId = opts.parent !== undefined && opts.parent !== null ? holderOf(opts.parent) : detachParentId();
   if (parentId) {
     const p = state.nodes.get(parentId);
     if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return; }
@@ -78,12 +79,14 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     title: opts.title ?? '',
     color: opts.color ?? '',
     tags: opts.tags ? [...opts.tags] : [], body: opts.body ?? '',
-    type: opts.type ?? 'card', layout: opts.layout ?? 'inherit',
+    type: opts.type ?? 'card',
     w: opts.w, h: opts.h,
   });
   const id = n.id;
   state.nodes.set(id, n);
-  relayout(); selectNode(id);
+  relayout();
+  if (growFramesToHold([id])) relayout();   // a card made past its frame's edge is shown, not clipped
+  selectNode(id);
   popIn(n);
   if (opts.edit !== false) startInlineEdit(n, { isNew: opts.isNew ?? true });
   else commitStep();   // no rename session follows, so the create step ends here
@@ -97,7 +100,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
 const LIST_GAP = SPACING;   // the house spacing, the same one the smart guides pull to
 export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
   if (state.readOnly || !texts.length) return [];
-  const parentId = parent ?? detachParentId();
+  const parentId = parent ? holderOf(parent) : detachParentId();
   const p = parentId ? state.nodes.get(parentId) : undefined;
   if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return []; }
   const made: MindNode[] = [];
@@ -112,6 +115,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
     remeasure();
     let y = at.y;
     for (const n of made) { n.y = y; y += nodeH(n) + LIST_GAP; }
+    growFramesToHold(made.map(n => n.id));
     relayout();
     setSelectionSet(made.map(n => n.id));
     made.forEach(popIn);
@@ -143,8 +147,8 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     parent: s.parent,
     title: s.title,
     color: s.color,
-    tags: [...s.tags], body: s.body, done: s.done, checklist: s.checklist,
-    type: s.type, layout: s.layout,
+    tags: [...s.tags], body: s.body,
+    type: s.type,
     w: s.w, h: s.h,   // a frame/image card's own box size
     // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
     // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
@@ -171,9 +175,7 @@ export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): Mi
   const srcs = ids.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
   if (!srcs.length) return;
   const copies = srcs.map(copyNode);
-  // paint first so the new cards get real DOM heights — applyLayouts measures offsetHeight,
-  // and a chain/fan of fresh copies would otherwise stack on the 64px fallback (only the first
-  // lands right). Then lay out with correct heights and commit.
+  // paint first so the new cards get real DOM heights, then settle and commit.
   remeasure();
   const msg = copies.length === 1 ? `Duplicated → “${nodeLabel(copies[0])}”` : `Duplicated ${copies.length} cards`;
   if (copies.length === 1 && edit){
@@ -195,74 +197,56 @@ export function leaveClone(s: MindNode, pos: Pt): MindNode {
   return copy;
 }
 
-// ---------- add child / sibling ----------
-// `at` (world coords) seeds the new child's position instead of the staggered offset below — the
-// double-click-inside-a-container gesture (main.ts activateNode) knows where the user pointed. A
-// managed layout (line/fan/flow/stack) re-places it either way, so it only sticks in a free parent.
-export function addChild(parentId: string, at?: Pt): void {
+// ---------- a new card inside a frame / after a card / a new frame ----------
+// A new card INSIDE a frame — Tab, the ⋯ menu, a double-click in its interior (main.ts activateNode,
+// which passes where the user pointed as `at`). Without a point it goes under whatever the frame
+// already holds, at the interior's left edge, so Tab-Tab-Tab fills a frame top to bottom.
+export function addCardInside(frameId: string, at?: Pt): void {
   if (state.readOnly) return;
-  const parent = state.nodes.get(parentId); if (!parent) return;
-  if (isLockedEffective(parent)) { setStatus('Locked — can’t add a child'); return; }
-  touch(parentId);   // the reveal below (and a line/fan kidOrder change) belong to the create step
-  if (parent.collapsed){ parent.collapsed = false; } // reveal so the new child is visible
-  const sibs = childrenOf(parentId);
-  const n = mkNode({
-    x: at ? at.x : parent.x + 40 + sibs.length * 30,
-    y: at ? at.y : parent.y + 150 + sibs.length * 10,
-    parent: parentId,
-  });
-  const id = n.id;
-  state.nodes.set(id, n);
-  applyLayouts();        // a line/fan parent immediately slots the new child into place
-  paintAll();
-  selectNode(id);
-  popIn(n);
-  startInlineEdit(n, { isNew: true });   // drop straight into renaming the fresh card; Esc cancels creation
-  scheduleSave();
+  const f = state.nodes.get(frameId); if (!f || f.type !== 'frame') return;
+  if (isLockedEffective(f)) { setStatus('Locked — can’t add a card'); return; }
+  touch(frameId);   // the reveal below belongs to the create step
+  if (f.collapsed) f.collapsed = false;
+  let pos: Pt;
+  if (at) pos = centredAt(at);
+  else {
+    const box = frameInterior(f);
+    const kids = childrenOf(frameId);
+    const bottom = kids.reduce((y, k) => Math.max(y, k.y + nodeH(k)), -Infinity);
+    pos = snapPt({ x: box.x + LIST_GAP, y: kids.length ? bottom + LIST_GAP : box.y + LIST_GAP });
+  }
+  createNode({ ...pos, parent: frameId });
 }
-// Add a SIBLING of `refId` — a new node sharing its parent, on the SAME side as the reference
-// card and slotted into the child order DIRECTLY AFTER it (not appended at the end). A root-level
-// node has no parent, so its "sibling" is a fresh unconnected node placed just below it.
+// A new, empty FRAME centred on a world point, its name editor open — the palette's "New frame".
+export function newFrameAt(p: Pt): void {
+  if (state.readOnly) return;
+  const at = snapPt({ x: p.x - FRAME_W / 2, y: p.y - FRAME_H / 2 });
+  createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H });
+}
+// The next card after `refId`, in the same place it lives (the top level, or the same frame): just
+// below it, or below whatever already sits under it — Enter, Enter, Enter down a column of cards
+// appends to it rather than stacking on the card underneath.
 export function createSibling(refId: string){
   if (state.readOnly) return;
   const ref = state.nodes.get(refId); if (!ref) return;
-  if (ref.parent == null) {
-    // The next card in its column: just below, or below whatever already sits there — Enter, Enter,
-    // Enter down a column of cards appends to it rather than stacking on the card underneath.
-    const w = ref.w ?? NODE_W;
-    let y = ref.y + nodeH(ref) + LIST_GAP;
-    for (let moved = true; moved;) {
-      moved = false;
-      for (const o of childrenOf(null)) {
-        const oh = nodeH(o);
-        if (o === ref || o.x >= ref.x + w || o.x + (o.w ?? NODE_W) <= ref.x || o.y >= y + NEW_CARD_H || o.y + oh <= y) continue;
-        y = o.y + oh + LIST_GAP; moved = true;
-      }
+  const parent = ref.parent ? state.nodes.get(ref.parent) : undefined;
+  if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t add a card here'); return; }
+  const w = nodeW(ref);
+  let y = ref.y + nodeH(ref) + LIST_GAP;
+  for (let moved = true; moved;) {
+    moved = false;
+    for (const o of childrenOf(ref.parent)) {
+      const oh = nodeH(o);
+      if (o === ref || o.x >= ref.x + w || o.x + nodeW(o) <= ref.x || o.y >= y + NEW_CARD_H || o.y + oh <= y) continue;
+      y = o.y + oh + LIST_GAP; moved = true;
     }
-    return createNode({ x: ref.x, y });
   }
-  const parent = state.nodes.get(ref.parent); if (!parent) return;
-  if (isLockedEffective(parent)) { setStatus('Locked — can’t add a sibling'); return; }
-  touch(parent.id);   // the kidOrder change (and a possible reveal) belong to the create step
-  if (parent.collapsed) parent.collapsed = false;
-  const n = mkNode({
-    // seed just below the reference; a managed layout re-places it, a free layout keeps it here
-    x: ref.x, y: ref.y + nodeH(ref) + 24,
-    parent: ref.parent,
-  });
-  state.nodes.set(n.id, n);
-  parent.kidOrder = insertedKidOrder(parent, n.id, ref.id);   // directly after the reference
-  relayout();
-  selectNode(n.id);
-  popIn(n);
-  startInlineEdit(n, { isNew: true });   // drop straight into renaming the fresh card; Esc cancels creation
-  scheduleSave();
+  createNode({ x: ref.x, y, parent: ref.parent });
 }
 
 // ---------- breaking a note apart: extract selected body text into a card of its own ----------
-// Two gestures share this: ⌘⇧E (→ a child) and dragging the selection out of the editor
-// (features/text-drag.ts → a sibling, a card in whatever container it was dropped in, or straight
-// into another card's note). All of them CUT the text out of the source, so the three helpers below
+// Two gestures share this: ⌘⇧E (→ a card beside it) and dragging the selection out of the editor
+// (features/text-drag.ts → a card where it was dropped, or straight into another card's note). All of them CUT the text out of the source, so the three helpers below
 // are the shared halves — deriving the new card's title/body, and the cut itself.
 
 // A lump of extracted text IS a card's text, so it splits exactly the way the note it came from does —
@@ -296,27 +280,21 @@ function appendToBody(t: MindNode, md: string): void {
   t.dirty = true;
   if (ui.bodyEdit && ui.bodyEdit.id === t.id) ui.bodyEdit.ta.value = t.body;
 }
-// Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the
-// note and drop it into a fresh child card.
-export function extractToChild(): void {
+// Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
+// drop it into a fresh card right beside it, in the same place the source lives.
+export function extractToCard(): void {
   if (state.readOnly || !ui.bodyEdit) return;
   const n = state.nodes.get(ui.bodyEdit.id); if (!n) return;
   const ta = ui.bodyEdit.ta;
   const s = ta.selectionStart, e = ta.selectionEnd;
   if (s === e){ setStatus('Select some body text to extract'); return; }
   const { title, body } = splitHeading(cutCardText(n, s, e, ta.value));
-  // make the child below the parent and jump to it
-  const sibs = childrenOf(n.id);
-  if (n.collapsed) n.collapsed = false;
-  const child = mkNode({
-    x: n.x + 40 + sibs.length*30, y: n.y + 180 + sibs.length*10,
-    parent: n.id, title, body,
-  });
-  const id = child.id;
-  state.nodes.set(id, child);
-  relayout(); selectNode(id); scheduleSave();
+  const at = snapPt({ x: n.x + nodeW(n) + LIST_GAP, y: n.y });
+  const card = mkNode({ ...at, parent: n.parent, title, body });
+  state.nodes.set(card.id, card);
+  remeasure(); selectNode(card.id); popIn(card); scheduleSave();
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
-  setStatus(`Extracted “${nodeLabel(child)}” as a child`);
+  setStatus(`Extracted “${nodeLabel(card)}”`);
 }
 const nodeOrNull = (id: string | null | undefined): MindNode | null =>
   (id ? state.nodes.get(id) ?? null : null);
@@ -356,21 +334,9 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
     setStatus(`Moved text into “${nodeLabel(t)}”`);
     return;
   }
-  // WHERE THE NEW CARD BELONGS, in one rule read both ways: the box you dropped in governs.
-  //  · dropped IN a container → its child, wherever in it you let go;
-  //  · dropped on the open canvas, from a card that LIVES in a container (a stack's row, a card in a
-  //    frame) → out to the top level, i.e. the open frame while there is one (detachParentId). This is
-  //    the half "sibling of the source" got wrong: it parented the card back INSIDE the box, so
-  //    dragging text out of a stack row put a new ROW in the outline instead of a card where you
-  //    dropped it, and out of a frame's card put one at a drop point the box's overflow:hidden clips
-  //    away to nothing. Dropping on the canvas is how a note comes OUT;
-  //  · dropped on the open canvas from a card already ON it → a sibling of that card, slotted directly
-  //    after it the way createSibling does, so the new card joins the branch it was cut from.
-  // hostFrame is the "am I inside a box" test, and it's the right one because it stops at the scope
-  // root: inside an OPEN frame there's no box to come out of — that frame IS the canvas — so its cards
-  // keep the sibling reading.
-  const parent = dest.container
-    ?? (hostFrame(n) ? nodeOrNull(detachParentId()) : parentOf(n));
+  // WHERE THE NEW CARD BELONGS: the frame it was dropped in (text-drag.ts resolves it with the same
+  // frameAt every drop uses), else the top level — the open frame while there is one.
+  const parent = dest.container ?? nodeOrNull(detachParentId());
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
   const { title, body } = splitHeading(text);
@@ -383,17 +349,13 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
     parent: parent?.id ?? null, title, body,
   });
   state.nodes.set(card.id, card);
-  // Only a real sibling splices the order; a card dropped into a container is slotted by its
-  // position (orderedKids treats an unlisted child as fresh), which is where the drop point is.
-  if (parent && parent.id === n.parent) parent.kidOrder = insertedKidOrder(parent, card.id, n.id);
-  relayout(); selectNode(card.id); scheduleSave(); commitStep();
+  remeasure(); selectNode(card.id); scheduleSave(); commitStep();
   setStatus(`Extracted “${nodeLabel(card)}”`);
 }
 
 // ---------- merging cards into one ----------
 // What can FUSE with another note, on EITHER side of the gesture: a plain card — the kind whose whole
-// content is a body (with a title above it). Every other
-// kind is a box or a leaf whose own shape is the point (a frame, a stack, an image),
+// content is a body (with a title above it). A frame is a box whose own shape is the point,
 // so folding it into a body would throw away exactly what it is. One predicate rather than a
 // source/target pair, because the answer really is the same question both ways round.
 export const canMerge = (n: MindNode): boolean =>
@@ -401,8 +363,7 @@ export const canMerge = (n: MindNode): boolean =>
 // ⌥-drop card(s) onto another card (features/drag.ts): fold each dragged note into the target's
 // body — `## Title` then its text, in the order they were selected — and let the now-redundant cards
 // go. The target is the card that SURVIVES, so it keeps its own id, file, colour, size and flags;
-// only tags are unioned in, since a tag is a label on content that just moved. Their CHILDREN come
-// up onto the target rather than going with them: merging notes must never take a branch with it.
+// only tags are unioned in, since a tag is a label on content that just moved.
 // Runs INSIDE the live drag undo step — it touches + mutates only, and the caller (dragPointerUp)
 // commits. Returns how many cards were folded in.
 export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): number {
@@ -429,15 +390,6 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
   for (const c of cards) for (const t of c.tags) tags.add(t);
   target.tags = [...tags];
   target.dirty = true;
-  // The swallowed cards' children land on the target.
-  const kidHome = targetId;
-  // No kidOrder splice for the adopted children: orderedKids already slots a reparented-but-unlisted
-  // child by position (same as deleteSelectionKeepChildren).
-  for (const c of cards){
-    const kids = childrenOf(c.id);
-    touch(...kids.map(k => k.id));
-    for (const k of kids){ k.parent = kidHome; k.dirty = true; }
-  }
   deleteNodes(cards.map(c => c.id));
   return cards.length;
 }
@@ -511,14 +463,13 @@ function canPromoteDelete(id: string): boolean {
   if (parent && isLockedEffective(parent)) return false;
   return childrenOf(id).every(k => !isLockedEffective(k));
 }
-// Delete every selected card WITHOUT touching its subtree: each one's direct children move up to
-// become children of ITS OWN parent, right where it sat — the node disappears, its branch survives
-// one level shallower. Cascades correctly when a selected node's parent is ALSO selected: children
+// UNGROUP: delete every selected frame WITHOUT touching what it holds — its cards move up to ITS OWN
+// parent, right where they sit. (A card has no children, so on a card this is a plain delete.) Cascades correctly when a selected node's parent is ALSO selected: children
 // are read live (childrenOf), so a child already promoted by an earlier pass in this loop is what a
 // later pass (deleting that now-former parent) sees and promotes again — any chain length just
 // works, in any processing order. New parents get no explicit kidOrder splice; orderedKids
 // (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
-// position, so nothing needs doing here. Shared by ⌥Delete/⌥Backspace and its context-menu twin.
+// position, so nothing needs doing here. Shared by ⌥Delete/⌥Backspace and the ⋯ menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
   if (state.readOnly) return;
   const ids = selectedIds().filter(canPromoteDelete);
@@ -538,7 +489,7 @@ export function deleteSelectionKeepChildren(): void {
   relayout();
   setSelectionSet(promoted);
   scheduleSave();
-  setStatus(`Deleted ${ids.length} card${ids.length===1?'':'s'}, kept children`);
+  setStatus(`Ungrouped ${ids.length} frame${ids.length===1?'':'s'}`);
 }
 const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the

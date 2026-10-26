@@ -1,10 +1,7 @@
-// ---------- shared card-property controls (colour / tags / checklist) ----------
-// ONE implementation, used by both the canvas floating bar (#floatBar) and the branch-view bottom sheet
-// (#branchProps). Given the control elements plus a "which cards am I editing" provider, it wires
-// the swatch row, the tags input and the checklist toggle to the same undo / paint / save contract the
-// sidebar always used. Title & body are edited elsewhere (inline editors / branch cards), so this
-// deliberately owns only the sidebar-style properties. Layout chips stay in main.ts — they're
-// canvas geometry with no meaning in the outline, so the branch sheet doesn't get them.
+// ---------- the colour control ----------
+// The swatch row the floating bar's colour popover shows (#floatBar). Given the row element plus a
+// "which cards am I editing" provider, it wires the swatches and the custom-colour chip to the undo /
+// paint / save contract. Also exports the swatch-row helpers the canvas-colour picker shares.
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
@@ -12,13 +9,9 @@ import { scheduleSave } from '../data/persistence.js';
 import { paintAll, SWATCH_BG, PALETTE } from '../main.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
-import { setTagOnNodes, tagPillHTML } from './tags.js';
-import { openEmojiPicker } from './emoji-picker.js';
 
 export interface PropEls {
   colors: HTMLElement;
-  tagRow?: HTMLElement;   // omitted where there's no tags UI at all (this factory has no canvas caller — the canvas card renders its own tag row directly, see main.ts)
-  checklist: HTMLInputElement;
 }
 export interface PropertyControls {
   sync(): void;            // reflect the current target(s) into the controls
@@ -166,49 +159,9 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
     markSwatchRow(els.colors, colors.size === 1 ? ([...colors][0] || '') : '');
   }
 
-  // ---- checklist toggle (set on every target; mixed → indeterminate) ----
-  function setChecklist(on: boolean): void {
-    const ids = getIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
-    record(ids, () => {
-      for (const id of ids){ const n = state.nodes.get(id); if (n){ n.checklist = on; n.dirty = true; } }
-    });
-    markChecklist();
-    paintAll(); scheduleSave();
-  }
-  function markChecklist(): void {
-    const vals = new Set(getIds().map(id => !!state.nodes.get(id)?.checklist));
-    els.checklist.indeterminate = vals.size > 1;
-    els.checklist.checked = vals.size === 1 && [...vals][0];
-  }
-  els.checklist.addEventListener('change', () => setChecklist(els.checklist.checked));
-
-  // ---- tags: emoji pills + a trailing "+" that opens the shared MRU picker (features/emoji-picker.ts).
-  // Tags are per-card, so they only apply to a single target. Optional: this factory is only used
-  // by the outline properties sheet — the canvas card renders its own tag row directly (main.ts),
-  // matching how the card's own pill click removes a tag instead of going through a shared control.
-  function renderTagRow(): void {
-    if (!els.tagRow) return;
-    const ids = getIds();
-    const n = ids.length === 1 ? state.nodes.get(ids[0]) : undefined;
-    const tags = n ? n.tags : [];
-    els.tagRow.innerHTML = tags.map(t => tagPillHTML(t, ' data-removable')).join('') +
-      `<button type="button" class="tag-add-btn" title="Add tag" aria-label="Add tag">+</button>`;
-    els.tagRow.querySelectorAll<HTMLElement>('.tag-pill').forEach(pill => {
-      pill.addEventListener('click', () => {
-        if (!n || isLockedEffective(n)) return;
-        setTagOnNodes([n.id], pill.dataset.tag!, false);
-        renderTagRow();
-      });
-    });
-    const addBtn = els.tagRow.querySelector<HTMLButtonElement>('.tag-add-btn')!;
-    addBtn.addEventListener('click', () => { if (n && !isLockedEffective(n)) openEmojiPicker(addBtn, [n.id], renderTagRow); });
-  }
-
   function sync(): void {
     renderRecents();   // the offered set depends on the open MAP, so re-derive it whenever we're shown
     markSwatch();
-    markChecklist();
-    renderTagRow();
   }
 
   rebuildSwatches();

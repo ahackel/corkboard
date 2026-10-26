@@ -10,15 +10,16 @@ import { safeName, slugStem, desiredFileFor, retargetLinks } from '../utils/file
 import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
-import { childrenOf, parentOf } from '../utils/model.js';
-import { applyLayouts, collapseAtDepth, commitRel } from '../view/layout.js';
+import { childrenOf, parentOf, ancestors } from '../utils/model.js';
+import { applyLayouts, collapseAtDepth, commitRel, orderedKids, moveSubtreeTo, frameInsetY, ancestorDepth } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
-import { paintAll, selectNode, NODE_W } from '../main.js';
+import { paintAll, paintNode, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
-import { resolveScopeAfterLoad } from '../nav/scope.js';
+import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
+import { SPACING } from '../utils/guides.js';
 import { refreshGrid } from '../view/grid.js';
 import { isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
@@ -191,8 +192,8 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   const wasStack = new Set<string>();   // notes that carried the legacy stack kind (flattenLegacyBranches)
   // mm_w is now written for every kind (an authored width), but it USED to be written ungated for a
   // while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
-  // width from a time when `n.w` also held derived values (a stack outline row's stretched width, for
-  // one). Those are all NARROWER than a normal card, and a card/stack can only ever be widened past
+  // width from a time when `n.w` also held derived values (an outline row's stretched width, for
+  // one). Those are all NARROWER than a normal card, and a card can only ever be widened past
   // its default, so anything under the default is junk from that era: drop it. One kind of note
   // legitimately goes narrower and is exempt: an IMAGE card — a small picture is a small card, and one
   // that used to carry `mm_type: image` now loads as an ordinary card (foldTypeLayout), so without
@@ -236,9 +237,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       parent: null,
       collapsed: g ? !!g.collapsed : !!mm.collapsed,
       locked: !!mm.locked,
-      done: !!mm.done,
-      checklist: !!mm.checklist,
-      type: mm.type, layout: mm.layout,
+      type: mm.type,
       // authoredW's junk-width filter is for the FRONTMATTER value only — a width in board.json was
       // written by this build and means exactly what it says.
       w: g?.w ?? authoredW(mm.w, mm.type, imageOnly),
@@ -277,6 +276,8 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // A map written before containment: its card-to-card links meant "beside", not "inside". Convert
   // them now that every node has final absolute coordinates to be re-anchored from.
   const flattened = boardIsLegacy() ? flattenLegacyBranches(wasStack) : 0;
+  // …and cards no longer hold cards: any card that still has children becomes a frame holding them.
+  const folded = foldCardsIntoFrames();
   // advance the runtime id counter past everything we just loaded so new nodes don't collide
   state.idSeq = seq + 1;
   // Auto-collapse a big map ONLY the very first time this folder is opened. After that we
@@ -290,8 +291,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).
   resolveScopeAfterLoad();
-  // Resolve layouts in three steps: paint once so every card has a real measured height, run
-  // the line/fan layout against those true heights, then paint the resolved positions.
+  // Paint once so every card has a real measured height, settle, and paint again.
   paintAll();
   applyLayouts();
   paintAll();
@@ -305,12 +305,57 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     catch { setStatus('⚠ Could not write board.json — leaving this map as it was.'); return; }
     setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to edges — nothing moved.`);
   }
+  if (folded) setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into frame${folded === 1 ? '' : 's'}`);
   // Persist the resolved layout so the saved mm_x/mm_y match what's on screen. Only write when
   // the load actually moved something, so a stable reopen touches no files.
   if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout))
     scheduleSave();
   updateMapTitle();
 }
+// ---------- cards that hold cards become frames (runs on every load; a no-op once done) ----------
+// A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
+// ticks. That model is gone (docs/PRODUCT.md: cards are flat, frames are the only container), so a
+// card that still has children on disk opens as a FRAME holding them: its title is the frame's tab,
+// its note the frame's description, its children cards inside it. Nothing is lost or re-parented —
+// only `mm_type` changes, on the card itself.
+// Where its children SIT has to be decided, though: their saved positions were the outliner's rows,
+// laid out by the app, and a frame shows its children where they are. So each converted frame — and
+// any frame that was itself drawn as a row inside one — lays its cards out ONCE, in a column in their
+// old order (kidOrder), with the house spacing, and sizes itself around them. Deepest first, so an
+// inner frame has its final size before its parent stacks it. That needs MEASURED heights, so every
+// affected node is unfolded and painted for the duration (scope set aside too: on a reload its ids
+// are still the previous load's, and it would hide everything), then folded back exactly as it was.
+// Pure function of what's on disk, so a failed save simply migrates again next time.
+function foldCardsIntoFrames(): number {
+  const cards = [...state.nodes.values()].filter(n => n.type === 'card' && childrenOf(n.id).length);
+  if (!cards.length) return 0;
+  const was = new Set(cards.map(n => n.id));
+  const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
+    && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
+  for (const n of cards) { n.type = 'frame'; n.dirty = true; n.dirtyLayout = true; }
+  const unfolded = new Set<MindNode>();
+  for (const f of arrange) for (const a of [f, ...ancestors(f)]) if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
+  const keepScope = scope.rootId; scope.rootId = null;
+  for (const n of state.nodes.values()) paintNode(n);
+  for (const f of arrange.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
+    const x = f.x + FRAME_BORDER + SPACING;
+    let y = f.y + frameInsetY(f) + SPACING, w = 0;
+    for (const k of orderedKids(f, childrenOf(f.id))) {
+      moveSubtreeTo(k, x, y);
+      y += nodeH(k) + SPACING;
+      w = Math.max(w, nodeW(k));
+    }
+    const end = snapPt({ x: x + w + SPACING + FRAME_BORDER, y: y + FRAME_BORDER });
+    f.w = Math.max(MIN_FRAME_W, end.x - f.x);
+    f.h = end.y - f.y;
+    f.dirtyLayout = true;
+    paintNode(f);
+  }
+  scope.rootId = keepScope;
+  for (const a of unfolded) a.collapsed = true;
+  return cards.length;
+}
+
 // ---------- the containment migration (runs once per map) ----------
 // A map written before containment (board.json missing, or its `model` below BOARD_MODEL) holds
 // card-to-card `mm_parent` links that meant "this card sits BESIDE that one, joined by a branch
@@ -418,6 +463,7 @@ export async function saveAll(): Promise<void> {
   // Kept in step with n.file below, so a name this loop has already handed out is seen as taken by
   // the nodes after it — the live `state.nodes` scan this replaced got that for free.
   const inUse = filesInUse();
+  let pathsMoved = false;   // board.json is keyed by path, so a new or renamed note needs it rewritten
   for (const n of state.nodes.values()) {
     // While the title is being typed (in-card rename OR the editor sheet), keep the current
     // filename (rename happens when the edit session commits).
@@ -428,7 +474,7 @@ export async function saveAll(): Promise<void> {
       renames.set(n.file, target);
       for (const c of childrenOf(n.id)) needWrite.add(c.id);
     }
-    if (n.file !== target) needWrite.add(n.id);    // brand-new node, or a rename
+    if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }   // brand-new node, or a rename
     if (n.file) inUse.delete(n.file.toLowerCase());
     n.file = target;                               // adopt the final name
     inUse.set(target.toLowerCase(), n.id);
@@ -455,7 +501,11 @@ export async function saveAll(): Promise<void> {
     pendingRemovals.delete(old);
   }
 
-  for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write below carries these
+  // …and the board follows. Its own debounce fires alongside this save, so it may already have been
+  // written with this note still nameless (a card created a moment ago) or under its old path — and
+  // then nothing would ever write that card's position. A reload would drop it at the origin.
+  if (pathsMoved) scheduleSaveBoard();
+  for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write carries these
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   paintAll();
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());

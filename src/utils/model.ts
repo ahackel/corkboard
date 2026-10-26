@@ -36,7 +36,7 @@ export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
 // THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both.
 //
 //  1. FOLD (persisted, mm_collapsed): `collapsed` on a node hides its CHILDREN but keeps the node
-//     itself visible (outliner model), so a node is hidden iff one of its ANCESTORS is collapsed.
+//     itself visible, so a node is hidden iff one of its ANCESTORS is collapsed.
 //  2. SCOPE (ephemeral, nav/scope.ts): while a frame is OPEN, only what's inside it is on the
 //     canvas. Reaching the open frame on the way up means we're inside it; running out of
 //     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS

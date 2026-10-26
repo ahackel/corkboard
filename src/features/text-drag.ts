@@ -18,7 +18,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { isContainer } from '../view/layout.js';
+import { isFrame } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { centredAt, dropCardText, cardText, canMerge,
          type TextSource } from './crud.js';
@@ -41,10 +41,10 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
   const nodeEl = el?.closest?.('#world [data-id]') as HTMLElement | null;
   const n = nodeEl ? state.nodes.get(nodeEl.dataset.id ?? '') ?? null : null;
   if (n?.id === sourceId) return null;                   // its own card (editor or not): a native move
-  if (!n) return { container: null };                    // open canvas → a sibling of the source
+  if (!n) return { container: null };                    // open canvas → the top level
   if (isLockedEffective(n)) return null;                 // locked: no drop, no hint
   if (canMerge(n)) return { into: n };                    // a card swallows the text
-  if (isContainer(n)) return { container: n };   // a frame/stack takes a card of its own
+  if (isFrame(n)) return { container: n };               // a frame takes a card of its own
   // Anything else under the cursor (an image card or a folded frame) has no
   // note to take the text and no interior to hold a card, so it counts as canvas — the new card
   // simply lands over it.
@@ -52,7 +52,7 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
 }
 
 // The drop hint: the same dashed outline the ⌥ card merge uses when the text lands IN a card, and
-// the frame-drop outline when it lands inside a container.
+// the frame-drop outline when it lands inside a frame.
 let hintEl: Element | null = null;
 let hintCls = '';
 function setHint(el: Element | null, cls = ''): void {

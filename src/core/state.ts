@@ -7,21 +7,12 @@
 import { byId } from '../utils/dom.js';
 import { soleImage } from '../utils/markdown.js';
 
-// A node's KIND, orthogonal to how it arranges its children (`layout` below):
-//   · card       — an ordinary titled/bodied node. A card WITH CHILDREN is a container: it outlines
-//                  them inside its own box (view/layout.ts isStack). There is no `stack` kind — having
-//                  children is the whole condition. See docs/spec-edges-and-containment.md.
-//   · frame      — a resizable container box (mm_w/mm_h) that adopts cards dropped inside.
-// Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
+// A node's KIND — the whole of it (docs/PRODUCT.md, "cards are flat, frames are the only container"):
+//   · card  — a note. It never has children: structure inside a thought is written into the note.
+//   · frame — a resizable box (mm_w/mm_h) with a title and a description; the cards dropped inside it
+//             are its children, and they sit wherever they were put. Frames nest.
+// Persisted as `mm_type` (omitted for the `card` default).
 export type NodeType = 'card' | 'frame';
-// How a node ARRANGES its children. The valid set depends on the node's `type`:
-//   · card  → none: a card with children OUTLINES them inside its own box, so there is nothing to
-//             choose. `inherit`/`free`/`line`/`fan` survive in the type only to read old notes;
-//             `line`/`fan` placed children BESIDE the parent and are unreachable now.
-//   · frame → free (children placed freely inside), horizontal (auto-flow rows: left→right, wrap
-//             down), vertical (auto-flow columns: top→bottom, wrap right).
-// Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
-export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
 // sizing from title/body content — a frame. An IMAGE card authors a height too, but
 // it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
@@ -59,17 +50,11 @@ export interface MindNode {
   _parentPath?: string;            // transient: the mm_parent path, resolved to `parent` post-load
   collapsed: boolean;
   locked: boolean;                 // this card can be selected but not moved, (un)collapsed, or
-                                    // edited (rename/body/color/type/layout/delete/add child); the
+                                    // edited (rename/body/color/delete); the
                                     // lock cascades to every descendant, which additionally can't
                                     // even be selected — see utils/model.ts hasLockedAncestor.
                                     // Persisted as mm_locked.
-  done: boolean;                   // this card is checked off (only meaningful when its parent
-                                    // has `checklist` on — that's what shows the checkbox)
-  checklist: boolean;              // Trello-style: treat my DIRECT children as a checklist — each
-                                    // gets a done checkbox and I show their `n/m` progress. Doesn't
-                                    // cascade further down; a child can run its own checklist too.
   type: NodeType;                  // card | frame (persisted as mm_type)
-  layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
   // Resizable box size (world px). `w` is authored by every kind; `h` only by a frame (the box
   // whose interior adopts cards dropped in) and an IMAGE card — a card holding nothing but one `![alt](src)`,
   // which is its picture and so owns both axes (isImageCard above). Persisted as mm_w/mm_h.
@@ -102,8 +87,8 @@ export interface MindNode {
 
 // An IMAGE card is a card that IS its picture: untitled, and its whole note is one `![alt](src)`.
 // DERIVED from the note, not a kind of its own — there is no `mm_type: image` any more (the legacy
-// value folds to `card`, utils/frontmatter.ts foldTypeLayout). So it's an ordinary card in every
-// other respect: it takes children, renames, merges, docks as a tab. What it gets for being one is
+// value folds to `card`, utils/frontmatter.ts foldType). So it's an ordinary card in every
+// other respect: it renames, merges, sits in frames. What it gets for being one is
 // the render (no padding, the picture flush to its corners), an authored HEIGHT as well as a width,
 // and an aspect-locked resize — see isImageBox in main.ts, which adds "…and isn't folded or open in
 // an editor", the two states where a card shows something other than its picture.

@@ -58,9 +58,8 @@ export function readingRootNode(): MindNode | null {
   return n && isReadingRoot(n) ? n : null;
 }
 export function readingActive(): boolean { return readingRootNode() !== null; }
-// The strip's width, and the ONE place it is decided. Read by `nodeW` (so the box, the outline rows
-// inside it and the layout pass all agree — `stackRowW` derives from `nodeW(stack)`) and by the camera
-// clamp that keeps it centred. A DERIVED width: `n.w` on disk is never touched, so a card opened,
+// The strip's width, and the ONE place it is decided. Read by `nodeW` and by the camera clamp that
+// keeps it centred. A DERIVED width: `n.w` on disk is never touched, so a card opened,
 // read and left comes back out at exactly the width it was authored at.
 // "Is this the open node whose BOX became the viewport" — the question every branch in the layout
 // pass was really asking when it tested isScopeRoot. True for a frame, whose interior IS the window,

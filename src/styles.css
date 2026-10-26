@@ -52,7 +52,7 @@
   --pal-black: #2b2e35;
 
   /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 8px;   /* board cards + the ghost/template card, and every box kind (frame/stack/image) */
+  --r-card: 8px;   /* board cards + the ghost/template card, and every box kind (frame/image) */
   /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 4px is
      FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
      against the corners it's supposed to sit inside. */
@@ -473,11 +473,9 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   background: var(--card, var(--node)); border:none;
   /* text colour = the ink this card's own fill demands (see the .c-* block up top). The literal
      fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
-  /* Padding as a PAIR OF VARIABLES, not literals, because the untitled card's absolutely positioned
-     checkbox has to start where the content starts and a stack's row halves these (.node.stack-child).
-     Same reasoning as --donebox-w/--title-gap below: one declaration, read by everything that has to
-     agree with it. Kinds that own their whole interior (.frame, .stack, image cards) still set
-     `padding` outright — they have no checkbox to line up. */
+  /* Padding as a PAIR OF VARIABLES, not literals: the reading view widens them (.reading-root), and
+     everything that lines up with the content reads the same two. Kinds that own their whole interior
+     (.frame, image cards) set `padding` outright. */
   border-radius:var(--r-card); padding:var(--pad-y) var(--pad-x); cursor:default; color:var(--ink, #ffffff);
   user-select:none; -webkit-touch-callout:none; touch-action:none;
   /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
@@ -497,16 +495,8 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    DOM nesting) has its OWN .tag-row further down the tree and must stay unaffected by its
    ancestor's no-tags state. */
 .node.no-tags > .tag-row { display:none; }
-/* checklist item: a done checkbox next to the title, shown when this card's PARENT has its own
-   `checklist` turned on (Trello-style — see showsDoneCheckbox in main.ts). A body's own task
-   list carries separate per-line state instead — see .taskbox below. */
-/* The checkbox's footprint in the title row, as one pair of numbers: the row's own gap and the
-   box's width (see .node .donebox further down, which reads its width from here too). The body
-   below the row repeats their sum so it lines up under the TITLE rather than under the box — px
-   and not em deliberately, since .body is 12px against the row's 16px, so one em sum would
-   resolve to two different indents. */
 /* --h1-size is THE heading size, and every label in the app is one heading: a card's leading `# ` line,
-   a frame's folder tab, a stack's header. One variable so they cannot drift — they were
+   a frame's folder tab. One variable so they cannot drift — they were
    three separate declarations that happened to agree, which is not the same thing as being the same, and
    the one time they stopped agreeing it took four rounds to find.
    It matches the BODY size: on a dense board a heading marks its line by WEIGHT (600 against the body's
@@ -515,69 +505,10 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    the CARD's font-size, not the body's. --h1-lh is --h1-size × the 1.2 pinned on `.node .body h1`;
    --body-lh is 14px × the 1.4 pinned on `.node .body`. The collapsed clamp takes the TALLER of the two
    with max() rather than naming one, since which is taller flips with --h1-size — at 16px the heading's
-   was, at 12px the paragraph's is. The checkbox centres on --body-lh. */
-.node { --pad-y:12px; --pad-x:14px; --h1-size:14px; --h1-lh:16.8px; --body-lh:19.6px;
-  --donebox-w:14px; --title-gap:8px; }
+   was, at 12px the paragraph's is. */
+.node { --pad-y:12px; --pad-x:14px; --h1-size:14px; --h1-lh:16.8px; --body-lh:19.6px; --title-gap:8px; }
 .node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
-/* Direct child, same reason as .donebox below: a DOM-nested child card has its own .body, and its
-   indent belongs to ITS OWN checklist state, not to an ancestor's. */
-.node.show-done > .body { margin-left:calc(var(--donebox-w) + var(--title-gap)); }
-/* margin-top + `left` put the box equally far from the card's top and left edges (its padding is
-   10px vs 12px) and kill the UA default margin. The horizontal nudge is `left`, NOT a margin, so
-   the box's flow width stays exactly --donebox-w and the body's indent above can be that plus the
-   gap and nothing else; px, not em, because a checkbox's em is the UA's control font-size (13.3px),
-   not the card's — the em spelling this replaces was silently ~0.7px short of its own intent. */
-/* Direct-child combinators only: the donebox belongs to THIS card's own title row (main.ts
-   builds .title-row > .donebox directly under .node). A descendant combinator would leak the
-   show-done state onto DOM-nested descendant cards (a child card nested inside this one has its
-   own .donebox further down the tree), showing a checkbox on a grandchild whose own direct parent
-   has no checklist — see showsDoneCheckbox in main.ts, which is already parent-only. */
-.node > .title-row > .donebox { display:none; margin:3px 0 0; left:1px; }
-.node.show-done > .title-row > .donebox { display:block; }
-/* An UNTITLED card's checkbox leaves the row's FLOW. In the row it was the only visible item left once
-   the label went, so it held the row open at its own height and the body started underneath it — a
-   checkbox alone on one line, blank to its right, text below. Absolutely positioned it takes the row's
-   height back to nothing and the FIRST LINE OF THE BODY comes up beside it, which is where a checkbox
-   belongs. Nothing has to be lined up by hand: `.show-done > .body` already indents past the box, so the
-   gap between them stays the row's own --title-gap. `left` is the flow version's 12px + 1px unchanged, so
-   the box doesn't move sideways. Both offsets resolve against `.node`'s padding box — a plain card's
-   .title-row is unpositioned, so it is not the containing block here (a frame's tab is, but a frame has
-   no checkbox).
-   Both are CENTRED on the body's first line, and both are derived rather than typed: an absolutely
-   positioned child resolves against the PADDING box, so the card's own padding has to be added back —
-   and a stack's ROW halves it (.node.stack-child sets --pad-y/--pad-x to 5/6), which is exactly the bug
-   these numbers were hardcoded as 10/12 for. `--body-lh` is the first line's box (12px × 1.4); half the
-   leftover around a 14px box centres it. The horizontal +1px is the flow version's own nudge, kept so
-   the box doesn't move sideways between the two states.
-   The other half of the arithmetic is the `.node .body > :first-child` margin below — load-bearing, not
-   tidying: with a `<p>`'s own .3em still in place the first line began 3.6px lower than this assumes and
-   the box sat visibly high above the text. That margin is now --text-drop rather than 0, and this offset
-   deliberately does NOT add it back: dropping the text by an optical hair while the box stays put is the
-   whole point of that variable — see its own comment for why the two aren't symmetrical. */
-.node.no-title.show-done > .title-row > .donebox { position:absolute; margin:0;
-  top:calc(var(--pad-y) + (var(--body-lh) - var(--donebox-w)) / 2);
-  left:calc(var(--pad-x) + 1px); }
-/* Struck-through = THIS card is checked off. It strikes the note's FIRST BLOCK — its heading, or its
-   first paragraph when it hasn't got one — because that is the line a card's name now lives on; the rule
-   used to target `.title`, which no longer carries a card's text at all. Only the first block, not the
-   whole note: a struck-out paragraph of detail is unreadable, and "done" is a mark on the thing, not a
-   deletion of what it says. `.title` keeps it for the kinds that still HAVE a label (a frame's tab, a
-   stack's header). Direct-child combinators for the same reason as .donebox above: a child card is
-   DOM-nested inside its parent's element, so a descendant combinator struck out every title below a done
-   card — the whole subtree read as done, and in a stack's outline that looks like the card's own content
-   being crossed out. Checking a parent off says nothing about its children. */
-.node.done > .title-row > .title,
-.node.done > .body > :first-child { text-decoration:line-through; opacity:.65; }
-/* checklist owner: this card's own "n/m" progress over its direct children */
-.node .progress { flex:none; margin-left:auto; padding-left:.5em; font-size:11px; font-weight:600; opacity:.7; }
-/* On a node with no LABEL — a card, a stack — the "n/m" badge leaves the row's flow, for exactly the
-   reason the checkbox does: it was the last flex item in there once the label went, so it held the row
-   open at its own height and the text started below it. The insets put it back where `margin-left:auto`
-   had it (the content's top-right corner), minus the line it was occupying; the matching padding on the
-   first line is what stops a long one running underneath it. */
-.node.no-title > .title-row > .progress { position:absolute; top:var(--pad-y); right:var(--pad-x); padding:0; }
-.node.no-title.has-progress > .body > :first-child { padding-right:34px; }
 /* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
    .hidden-count's upper-right collapse bubble (same footprint, opposite corner so the two never
    collide on a card that's both locked and collapsed). That badge is the ONLY cue — no dashed
@@ -613,44 +544,20 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is
    what lets its own title tab (below) lift above the edges/cards that would otherwise cover it.
    Its own box size is set inline (main.ts paintNode); border tinted to the card's own colour, like
-   its edges. .stack (a framed card layout) shares the same box behaviour. */
-.node.frame, .node.stack { z-index:auto; min-height:0; border-radius:var(--r-card);
+   its edges. */
+.node.frame { z-index:auto; min-height:0; border-radius:var(--r-card);
   border:4px solid var(--frame-stroke, var(--edge)); }
-/* (Both are on --r-card like every other box kind; their rows/contents step down to --r-inner.) */
+/* (On --r-card like every other box kind; its contents step down to --r-inner.) */
 /* no padding: a frame shows nothing but its (absolutely positioned) title tab — the padding only
    ever positioned the title back when it sat INSIDE the box. Children are placed by main.ts place()
    relative to the interior (frameInterior), which counts the border only. */
 .node.frame { padding:0; }
-/* a stack is only as wide as a normal card, so it (and its children below) use HALF the normal
-   card padding — that's what lets full-width child cards fit inside the narrow box.
-   6px on EVERY side, not 5px vertically: this padding is the same inset the layout pass spends as
-   STACK_PAD (main.ts) when it places the rows and closes the box under the last one, so anything but
-   STACK_PAD here shows up as a title sitting 1px nearer the top edge than the bottom gap below it —
-   most visible on an empty stack, where the title IS the content. Keep the two in step. */
-/* the VARIABLES, not `padding` — a stack renders a body now, so the checkbox offset derived from these
-   applies to it too (see `.node`, and the .stack-child rule further down for the same reason) */
-.node.stack { --pad-y:6px; --pad-x:6px; }
-.node.frame .title, .node.frame-folded .title, .node.stack .title { font-weight:600; }
-/* an uncoloured (c-none) frame/stack stays transparent like before — only a coloured one fills.
+.node.frame .title, .node.frame-folded .title { font-weight:600; }
+/* an uncoloured (c-none) frame stays transparent like before — only a coloured one fills.
    Its title needs no rule of its own either way: an untabbed frame's tab has no fill at all (see
    below), so its title sits on whatever the tab hangs over, and .c-none's --ink is var(--text) —
    legible on the canvas in both themes. */
-.node.frame.c-none, .node.stack.c-none { background:transparent; }
-/* …and a coloured STACK sits one tone DOWN from that fill, so its box is always its own shape. A
-   stack inherits its colour from its ancestors (effectiveColor), so a stack inside a coloured frame
-   resolved to the frame's own --card — same fill, same border tint — and vanished into it completely:
-   all you saw was its rows. This is the mirror image of .stack-child's brightening below, which is
-   what keeps all three levels apart: frame fill > stack fill (darker) > row fill (brighter).
-   :not(.c-none) because --card is `transparent` there, and mixing THAT toward black yields a faint
-   grey wash instead of the transparency the rule above asks for.
-   The BORDER takes the very same step: it's --frame-stroke (the pure palette tint, set inline by
-   main.ts paintNode), so left alone it stood out as a bright rim around the darkened fill on every
-   stack. Matching the two makes the box step down as ONE shape instead of growing an outline.
-   Deliberately kept ABOVE .node.stack.drop-target further down: that rule's white dash has the same
-   specificity, so it only wins the border while it's the later of the two. */
-.node.stack:not(.c-none) {
-  background:   color-mix(in srgb, var(--card, var(--node)) 94%, #000);
-  border-color: color-mix(in srgb, var(--frame-stroke, var(--edge)) 94%, #000); }
+.node.frame.c-none { background:transparent; }
 /* ---------- a frame's title: a folder TAB above the box's top-left corner ---------- */
 /* Above the box, not inside it, for two reasons: the box's whole interior belongs to the cards it
    holds (a child dropped at the top-left used to cover the title), and the box paints BELOW the edges
@@ -754,25 +661,12 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   background:none; color:var(--tab-ink, var(--ink)); }
 .node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
 /* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
-.node.frame-folded > .body, .node.frame-folded .progress { display:none; }
-/* a card inside a stack's outliner (main.ts .stack-child) is rendered one step off its container's
-   fill, so it still reads as a distinct row even when it shares the stack's own colour; and uses
-   HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.
-   Its corners take --r-inner (one step inside the box's border) — a row on the full card radius
-   bulged against the stack's corners instead of sitting inside them.
-   The step is toward the fill's own --scrim — the backdrop an editor paints behind its ink, i.e. the
-   direction AWAY from the text colour — so a row is a lighter strip on a pale sticky (dark ink) and a
-   darker one on a dark fill (white ink), and its text keeps its contrast either way. */
-.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 55%, var(--scrim, #fff));
-  /* the VARIABLES, not `padding` — the checkbox offset above is derived from them (see `.node`) */
-  --pad-y:5px; --pad-x:6px; border-radius:var(--r-inner); }
-/* …and a card inside a FRAME's box takes the SAME step, for the same reason (main.ts .frame-child):
-   a card inherits its colour from its ancestors (effectiveColor), so one dropped into a coloured
-   frame resolved to the frame's own --card and vanished into it. Only the fill steps — a frame's
-   children are ordinary cards, so unlike a stack's rows they keep normal padding and the full card
-   radius. Which kinds get the class is decided in inFrame (a nested container/box has its own tone),
-   which is what keeps this selector a plain one.
-   :not(.c-none) like the frame/stack rules above: --card is `transparent` there, and mixing THAT
+.node.frame-folded > .body { display:none; }
+/* A card inside a FRAME's box steps its fill a little toward its ink (main.ts .frame-child): a card
+   inherits its colour from its ancestors (effectiveColor), so one dropped into a coloured frame
+   resolved to the frame's own --card and vanished into it. Which kinds get the class is decided in
+   inFrame (a nested frame has its own tone), which is what keeps this selector a plain one.
+   :not(.c-none) like the frame rule above: --card is `transparent` there, and mixing THAT
    toward the ink is a faint wash, not the "no fill, show what's behind" that colour asks for. */
 .node.frame-child:not(.c-none) { background: color-mix(in srgb, var(--card, var(--node)) 93%, var(--ink, #fff)); }
 /* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
@@ -785,26 +679,13 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    the frame's own element underneath instead of this invisible wrapper. */
 /* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
 .frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
-/* a stack's wrapper auto-fits its outline, so it never needs to clip — and mustn't, or it would cut
-   off its rows' overhanging corner affordances (+N count / lock badges). See frameContentEl. */
-.frame-content.stack-content { overflow:visible; }
 .frame-content > .node { pointer-events:auto; }
-/* a frame never shows body content, the "n/m" progress, or the +N chip; and NEVER the "add note"
-   pill (the !important beats the .solo.no-body show rule that would otherwise reveal it). */
-.node.frame > .body, .node.frame .progress { display:none; }
+/* a frame never shows the "add note" pill (the !important beats the .solo.no-body show rule that
+   would otherwise reveal it). */
 .node.frame .addnote { display:none !important; }
-/* a stack is a container too: it shows only its title header (its children are framed below it), so
-   hide its own body / +N chip / add-note pill — but KEEP its "n/m" progress, since a stack is a
-   natural checklist container (its direct children carry the done-boxes). */
-/* A stack's body IS its header — the text above its rows, rendered as markdown like any card's, so a
-   heading needs a `# ` there exactly as it does anywhere else. It used to be `display:none` with the name
-   drawn in `.title` instead, which is what made a stack's name a heading whether one was written or not.
-   view/layout.ts stackHeaderH measures this box, so however many lines it renders, the rows start below it. */
-.node.stack .addnote { display:none !important; }
-/* drag-into-container preview: restyle the box's OWN border to a white dash — like the other drag
-   ghosts (reparent ghost / insert bar) — so it reads as "the children land in here". No extra
-   ring, no width change, no fill; no landing-ghost card or reparent edge (see drag.ts / edges.ts). */
-.node.frame.drop-target, .node.stack.drop-target { border-style:dashed; border-color:#fff; }
+/* drop-into-a-frame preview: restyle the box's OWN border to a white dash, so it reads as "the card
+   lands in here". No extra ring, no width change, no fill (see drag.ts updateDropTarget). */
+.node.frame.drop-target { border-style:dashed; border-color:#fff; }
 /* A frame with nothing written on it shows NO TITLE — see paintNode, which sets `no-title` for exactly
    that case, and elTop/frameInsetY, which then stop reserving the 39px strip its tab would have sat in.
    The box IS the frame there; its text is written by double-clicking the rim (onFrameRim).
@@ -826,7 +707,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (frame / image card) gets all 8: 4 edge bands inset from the corners, plus 4
    corner squares at the very corners, which is what those insets leave un-contested. A width-only
-   kind (card / stack) gets just fh-e/fh-w, restyled further down.
+   kind (a card) gets just fh-e/fh-w, restyled further down.
    `>` throughout, and no per-kind prefix: handles only exist on a node that was given them, and
    child cards are DOM-nested inside their parent, so a descendant selector would style (and a
    descendant QUERY would find — see ensureResizeHandles) a nested card's handles as if they were
@@ -845,7 +726,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .node > .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
 .node > .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
 .node > .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
-/* WIDTH-ONLY kinds — a card, a stack. Two differences from a box's side bands:
+/* The WIDTH-ONLY kind — a card. Two differences from a box's side bands:
    · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
      constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
    · a taller band (4px inset, not 12px): there are no corner squares here to leave room for, and on
@@ -879,9 +760,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    corner either way, being positioned against the NODE (an unpositioned row is not its containing
    block; see the .hidden-count note below). */
 .node.image-card > .title-row { height:0; }
-.node.image-card > .title-row > .title,
-.node.image-card > .title-row > .donebox,
-.node.image-card .progress { display:none; }
+.node.image-card > .title-row > .title { display:none; }
 /* FOLDED, an image card is an icon of itself: a 40px square of the picture (main.ts IMAGE_FOLD, which
    nodeW/nodeH declare and paintNode leaves un-inlined), rather than the empty shell a card with no
    title folds to. So the body stays visible here — `.node.collapsed .body { display:none }` is (0,3,0)
@@ -968,7 +847,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
 /* The lift is a SHADOW only, never a scale: a card in hand keeps its exact size, so the smart guides
    (features/guides.ts) line up with the edges you actually see. */
-.node.dragging:not(.frame):not(.stack):not(.stack-child) {
+.node.dragging:not(.frame) {
   box-shadow:0 2px 4px rgba(0,0,0,.12), 0 14px 32px rgba(0,0,0,.22); }
 @media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
@@ -976,17 +855,11 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
    dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
    the rest of the canvas, because #dragLayer (below) is itself a z-index:9 stacking context. */
-.node.frame.dragging, .node.stack.dragging { z-index:auto; }
+.node.frame.dragging { z-index:auto; }
 /* the group-opacity layer: while dragging, main.ts moves the dragged cards in here. Opacity on the layer composites
    the whole set once — you see the canvas below, but the items never show through one another. */
 #dragLayer { position:absolute; top:0; left:0; z-index:9; opacity:.9; pointer-events:none; }
 #dragLayer > .node, #dragLayer > .frame-content { pointer-events:auto; }
-/* while poised over a valid parent the dragged card becomes just a dotted outline,
-   so the parent underneath stays visible. Border colour is set inline to match the
-   dragged card's branch colour (see features/drag.ts showLandingGhost). */
-.node.reparent-ghost { background:transparent !important; box-shadow:none !important;
-  border:2px dashed var(--node-sel); }
-.node.reparent-ghost > * { visibility:hidden; }
 /* The DRAG IMAGE for a body-text drag (features/text-drag.ts buildGhost): a card, so it's plain that
    a card is what the drop makes — not the browser's default snapshot of the dragged letters. It's in
    the document only for the tick the browser needs to snapshot it, which is why it's parked off to the
@@ -997,19 +870,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.drag-ghost { position:fixed; left:-9999px; top:0; pointer-events:none;
   white-space:pre-line; box-shadow:0 10px 28px rgba(0,0,0,.4); }
 .node.drag-ghost .body { max-height:96px; overflow:hidden; }
-/* .drop-merge: alt-dragging an image over a plain card — the dashed outline is the whole
-   affordance (no reorder/reparent ghost is possible while merging an image in). Same look. */
+/* .drop-merge: ⌥-dragging a card over a plain card — the dashed outline is the whole affordance. */
 /* (outline, not border, so no layout shift) */
 .node.drop-merge { outline:2px dashed var(--node-sel); outline-offset:3px; border-radius:var(--r-card); }
-/* landing-spot preview: where the dragged card will actually land once dropped onto a
-   valid reparent target — above the resting cards AND the lines drawn over them (the ghost band, 8),
-   below the cards actually in hand (9) */
-.node.landing-ghost { pointer-events:none; transition:none; z-index:8; }
-/* in-parent reorder indicator: a bar in the gap between the two siblings the dragged card
-   would slot between (horizontal for a vertical stack, vertical for a horizontal spread).
-   White and dashed to match the reparent ghost's border; the dash gradient runs along the
-   bar's long axis, set inline per orientation — see features/drag.ts showInsertLine */
-.insert-line { position:absolute; pointer-events:none; z-index:8; }
 /* Smart guides while dragging (features/guides.ts): one-screen-pixel rules in a bright pink that reads
    on every card colour and both canvases. Above the cards, under nothing interactive. */
 #guides { position:absolute; left:0; top:0; pointer-events:none; z-index:9; }
@@ -1027,8 +890,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* inline title rename (double-click / F2 / on-create): edit the card's title in place.
    --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
    as the card editor, which takes the same variable. */
-/* Only a CONTAINER's label is ever `.editing` now — a frame's folder tab, a stack's
-   header (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
+/* Only a FRAME's label is ever `.editing` now — its tab (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
    is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
    `none` for the one element that IS text being edited. */
 .node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-inner);
@@ -1069,24 +931,18 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 }
 /* No `opacity` here. It used to sit at .9, which de-emphasised the note against its title — but `--ink`
    is already the MINIMUM contrast this fill can carry (utils/ink.ts measures it against a 2.5 floor, and
-   a card inside a stack or a frame then steps its fill 93% toward that same ink), so trimming another
-   10% off came straight out of the thinnest margin in the app. It showed worst exactly where the
-   screenshot showed it: ordinary un-bold text in a stack's row. */
+   a card inside a frame then steps its fill 93% toward that same ink), so trimming another 10% off
+   came straight out of the thinnest margin in the app. */
 .node .body  { font-size:14px; color:inherit; line-height:1.4;
   overflow-wrap:anywhere; overflow:hidden; }
 /* The note's first and last blocks give up their outer margins. Every block in here carries one (a `<p>`
    is .3em/.75em — see below), and at the EDGES of the body those margins are not spacing BETWEEN
    anything: they're a gap under the title and a gap above the card's bottom edge. Both were invisible
    while a card had a 64px floor to hide them in; now that a card shrink-wraps its text, they are the
-   card's own padding twice over. The first-child rule is also what makes the untitled card's checkbox
-   land right — see .no-title.show-done above, whose offset centres the box on a first line it can now
-   count on starting at the content top. */
-/* --text-drop is an OPTICAL nudge, not spacing: the checkbox is a 14px square whose weight sits evenly
-   inside it, while a line of text carries its weight above the middle of its 16.8px line box (the
-   descender space under the baseline is mostly empty). Centring the two on each other geometrically
-   therefore leaves the text reading a shade high, and this pays that back. Applied to EVERY card, not
-   only the ones with a checkbox, so a checklist row and a plain row side by side in a stack keep their
-   first lines level. One value, easy to retune — the only thing in this file that is a matter of eye
+   card's own padding twice over. */
+/* --text-drop is an OPTICAL nudge, not spacing: a line of text carries its weight above the middle of
+   its line box (the descender space under the baseline is mostly empty), so text set flush against the
+   padding reads a shade high, and this pays that back. One value, easy to retune — the only thing in this file that is a matter of eye
    rather than arithmetic. */
 .node { --text-drop:2px; }
 .node .body > :first-child { margin-top:var(--text-drop); }
@@ -1099,10 +955,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.card-editing > .title-row { display:none; }
 /* An UNTITLED card shows no name at all — it IS its text (main.ts paintNode writes `no-title`), and it
    must reserve NO space for the name it hasn't got: visually such a card is its body and nothing else.
-   The row itself stays, because the fold chip hangs off it and the done checkbox sits in it, but with the
-   label gone every remaining child is either zero-height or absolutely positioned, so the row collapses
-   to nothing — as long as it contributes no box of its own, hence the explicit zeroing. (A checklist
-   card's checkbox does give the row height back, which is right: there IS something on that line then.) */
+   The row itself stays, because the fold chip hangs off it, but with the label gone every remaining child
+   is absolutely positioned, so the row collapses to nothing — as long as it contributes no box of its
+   own, hence the explicit zeroing. */
 .node.no-title > .title-row > .title { display:none; }
 .node.no-title > .title-row { margin:0; min-height:0; }
 /* in-place card editor (double-click, F2, E, the pen): the whole note as raw markdown in a textarea */
@@ -1152,21 +1007,18 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    five-bullet card twice as tall. On the item, so every list kind gets it: bullets, ordered, tasks. */
 .node .body li { margin:.5em 0; }
 .node .body li.task { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:.4em; }
-.node .body li.task .taskbox,
 /* Empty, a checkbox is an OUTLINE in the card's own ink at half strength — visible on every fill, pale
    or dark, because the ink is by construction the colour with contrast against it. Ticked, it fills
    with 50% black, i.e. ticking DARKENS the card instead of stamping var(--accent) on it, and the white
    tick is drawn on that darker state. */
-.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:4px; background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--ink, #fff) 55%, transparent); cursor:pointer; flex:none; position:relative; }
+.node .body li.task .taskbox { -webkit-appearance:none; appearance:none; width:14px; height:14px; border:none; outline:none; border-radius:4px; background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--ink, #fff) 55%, transparent); cursor:pointer; flex:none; position:relative; }
 /* Sits 1px below the line box's top, which centres the 14px box on the first line's CAP BAND — the
    band the eye reads as "the text". flex-start (not center) is what keeps it on line ONE when the
-   item wraps. px, not em, for exactly the reason .donebox spells out above: a checkbox's em is the
+   item wraps. px, not em: a checkbox's em is the
    UA's control font (13.333px Arial), NOT the card's body. (19.6px line − 14px box) / 2 ≈ 3px. */
 .node .body li.task .taskbox { margin:3px 0 0; }
-.node .body li.task .taskbox:checked,
-.node .donebox:checked { background:color-mix(in srgb, #000 50%, transparent); }
-.node .body li.task .taskbox:checked::after,
-.node .donebox:checked::after { content:""; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
+.node .body li.task .taskbox:checked { background:color-mix(in srgb, #000 50%, transparent); }
+.node .body li.task .taskbox:checked::after { content:""; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
 .node .body strong { font-weight:700; }
 .node .body em { font-style:italic; }
 .node .body del { opacity:.7; }
@@ -1305,10 +1157,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
    containing block exactly when it's positioned, i.e. when it's a FRAME's title tab, so a frame's chip
    rides its tab instead of sitting 43px lower on the box, and a folded frame (whose label
    IS the element) needs no special case at all.
-   Where the row is in FLOW (card, stack) the offsets resolve against the node's own
-   padding box instead — which for a bordered box means adding its border back, hence the stack's
-   -12px (its title then sits at the same 8px from its outer corner as a card's). */
-.node.stack > .title-row > .hidden-count { right:-12px; top:-12px; }
+   Where the row is in FLOW (a card) the offsets resolve against the node's own padding box instead. */
 /* A tab-shaped label — a frame's title TAB, a folded frame's pill — is only FRAME_TAB_H
    (40px) tall on a --r-card corner, and centring the chip on that corner (the -8px above, i.e. half the
    chip) reads as having slid DOWN into the rounded corner instead of straddling it: at the chip's own x
@@ -1320,7 +1169,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 /* WHICH face shows is decided in ONE place — paintNode's chipFace, via data-chip — and never by a
    per-kind rule here: a `:hover`/`.sel` selector out-specifies any plain class, so a kind that
    wanted to hide the bubble could never win that fight. Hence no .hidden-count in the frame /
-   stack / image-card rules further up.
+   image-card rules further up.
    The folded "+N" always shows. The chevron shows on hover, or while the card is SELECTED — every
    selected collapsible card carries one, including each card of a multi-selection (clicking it then
    folds them all, like X). Selected counts because touch has no hover: tap the card, tap the chip.
@@ -1526,10 +1375,6 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-icon { background:transparent; color:var(--muted); }
 .fb-icon svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 .fb-icon:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, transparent); }
-/* the checklist toggle: a real (visually hidden) checkbox drives the icon's state */
-.fb-toggle input { position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
-.fb-toggle:has(input:checked) { color:#fff; background:var(--accent); }
-.fb-toggle:has(input:indeterminate) { color:var(--accent); }
 /* stretches past the bar's own padding (align-self:stretch + negative margin) so it touches the
    bar's top/bottom edges instead of floating as a short centred tick */
 .fb-sep { flex:none; width:1px; align-self:stretch; margin:-4px 2px; background:var(--node-border); }
@@ -1743,9 +1588,8 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 
 /* ---- reading view: an OPENED card is its note, at reading width ----
    The element here is THE CARD — the same one paintNode paints on the canvas, so its fill, its
-   derived ink, its markdown, its links and its own editor all arrive for free, and its children are
-   ordinary child cards you can drag and edit. Only its LOOK is CSS: the width is DERIVED in
-   `nodeW` (nav/scope.ts readingWidth) so the layout pass and the outline rows inside agree with it,
+   derived ink, its markdown, its links and its own editor all arrive for free. Only its LOOK is CSS:
+   the width is DERIVED in `nodeW` (nav/scope.ts readingWidth),
    and the camera is pinned by clampReadingView (view/camera.ts) so the card sits centred at 1:1 —
    with no vertical movement at all while it fits on screen, and bounded vertical panning (which IS
    the scroll) once it doesn't. Its HEIGHT is its content's, exactly as on the board: a note two lines
@@ -1759,14 +1603,9 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    in the same pass, so a two-selector rule would miss the first paint of an open and apply on the
    second. The class is only ever on the open card, so the body class adds nothing here. */
 .node.reading-root { --h1-size:24px; --h1-lh:28.8px; }   /* reading size, via `.node .body h1`'s own variable */
-/* Reading MARGINS, and the two restrictions on them are both load-bearing. The VARIABLES, never
-   `padding` outright (styles.css says so where a stack row halves them): `--pad-x/--pad-y` are what
-   the checkbox offset and the `.body` indent are derived from. And `:not(.stack)` — a stack's own
-   --pad-x IS the layout pass's STACK_PAD, mirrored in stackInnerW/stackRowW and in where the outline
-   places each row, so widening it here would move the interior the rows were measured against and
-   they would overflow the box and be clipped by its wrapper. A stack keeps its 6px; the room its
-   rows need is the row's business, not the box's. */
-.node.reading-root:not(.stack) { --pad-y:14px; --pad-x:22px; }
+/* Reading MARGINS — the VARIABLES, never `padding` outright: `--pad-x/--pad-y` are what everything that
+   lines up with the content reads. */
+.node.reading-root { --pad-y:14px; --pad-x:22px; }
 .node.reading-root > .body { font-size:15px; line-height:1.65; }
 .node.reading-root > .body p { margin:.4em 0 1em; }
 .node.reading-root > .body h2 { font-size:19px; margin:1.6em 0 .4em; }

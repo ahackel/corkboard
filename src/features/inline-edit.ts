@@ -19,7 +19,8 @@ import { frameLabelled } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure, reframeForTab } from '../main.js';
-import { extractToChild, discardNewCard } from './crud.js';
+import { extractToCard, discardNewCard } from './crud.js';
+import { growFramesToHold } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 
 // The text the editor holds: the note with its title back on the front as a heading — exactly the
@@ -37,13 +38,12 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   // A FRAME's label can't live in the card editor — it's a folder TAB of fixed height, and the frame's own
   // `.body` is display:none, so a textarea in there couldn't be focused (see ui-state.ts TitleEdit). Its
-  // tab is renamed on itself instead. A STACK is NOT in this bucket any more: its header is its rendered
-  // text, so it edits like any card and `# Name` is how you ask for a heading there.
+  // tab is renamed on itself instead.
   if (n.type === 'frame') { startTitleEdit(n, { isNew }); return; }
   startCardEdit(n, { caret: 'title', isNew });
 }
 
-// ---------- a container's label, renamed in place (one line, on the tab/header itself) ----------
+// ---------- a frame's label, renamed in place (on its tab) ----------
 function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}): void {
   if (!n.el) return;
   if (ui.bodyEdit) endBodyEdit();                                  // close a card editor first
@@ -51,7 +51,7 @@ function startTitleEdit(n: MindNode, { isNew = false }: { isNew?: boolean } = {}
   touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh frame, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);
   // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded frame
-  // included, and a container's child cards are DOM-nested inside it — so an unscoped
+  // included, and a frame's child cards may be DOM-nested inside it — so an unscoped
   // `.title` lookup could pick a child card's title instead of this node's own.
   const titleEl = n.el.querySelector(':scope > .title-row > .title') as HTMLElement;
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
@@ -168,7 +168,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   if (!n.el) return;
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) return;          // already editing this card
   if (ui.bodyEdit) endBodyEdit();                              // close any other open editor
-  if (ui.titleEdit) endTitleEdit();                            // …including a container's label
+  if (ui.titleEdit) endTitleEdit();                            // …including a frame's label
   touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh card, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) selectNode(n.id);
   const bodyEl = n.el.querySelector('.body') as HTMLElement;
@@ -253,7 +253,7 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   e.stopPropagation();                                  // keep canvas/card shortcuts out while typing
   if (e.key === 'Escape'){ e.preventDefault(); endBodyEdit({ cancel:true }); }
   else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); endBodyEdit(); }
-  else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')){ e.preventDefault(); extractToChild(); }
+  else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')){ e.preventDefault(); extractToCard(); }
   // plain Enter falls through → the textarea inserts a newline (notes are multi-line)
 }
 // Commit (or cancel) the edit. Commit SPLITS the textarea back into the card's title and note
@@ -288,6 +288,8 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change
+  // A note that grew past its frame's edge would be clipped out of sight — grow the frame instead.
+  if (changed && growFramesToHold([n.id])) relayout();
   if (changed) scheduleSave();
   commitStep();                                         // no-op sessions (cancel/unchanged) are discarded
 }

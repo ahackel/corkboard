@@ -18,22 +18,12 @@ export interface Drag {
   sx: number; sy: number; cx: number; cy: number;
   start: Map<string, Pt>; targets: Map<string, Pt>; origins: Map<string, Pt>;
   // Top-level roots of the drag (a single-node drag's [n.id], or a multi-selection's members
-  // whose own parent isn't ALSO selected — descendants ride along with their selected ancestor
-  // rather than getting re-parented independently). Reparented as a group on drop.
+  // whose own parent isn't ALSO selected — descendants ride along with their selected ancestor).
   selRoots: string[];
-  // dropMode 'reorder' = no card hovered but the drag is sliding along its OWN parent's
-  // line/fan sibling band — dropTarget is the parent itself, the drop just re-slots the order.
-  moved: boolean; dropTarget: string | null; dropMode: 'child' | 'sibling' | 'reorder';
-  // Side the drop resolved to (edge zone -> that edge; centre zone -> the sibling target's own
-  // side), set explicitly on every reparented root on commit — see features/drag.ts.
-  // Insertion anchor for sibling/reorder drops: slot in right after this sibling in the parent's
-  // order (`null` = at the front, `undefined` = default — after the hovered card / appended).
-  dropAfter: string | null | undefined;
-  // World-space gap segment of the insertion-line preview, when one is showing (managed governor
-  // with children on the resolved side). The line REPLACES the landing ghost and the dashed
-  // would-be-edge preview — they never show together (see features/drag.ts, view/edges.ts).
-  dropLine: Seg | null;
-  alt: boolean; shift: boolean; cloned: boolean; rip: boolean;
+  // The parent the active card would have if released now — the frame its centre is in, or null for
+  // the top level (view/layout.ts frameAt). Read by effectiveColor to preview an inherited colour.
+  moved: boolean; dropTarget: string | null;
+  alt: boolean; shift: boolean; cloned: boolean;
   meta: boolean; touch: boolean;
   clones?: MindNode[] | null;
   // Alt-dragging CARD(s) over another card: the target card's id to fold their notes
@@ -47,9 +37,9 @@ export interface Drag {
 // textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
 // cancels the CREATION rather than just the edit (it used to live on the title editor).
 export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; }
-// A CONTAINER's label being renamed in place — a frame's folder tab, a stack's header.
+// A FRAME's label being renamed in place, on its tab.
 // A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
-// A container can't do that, and the reason is structural rather than stylistic — its `.body` is
+// A frame can't do that, and the reason is structural rather than stylistic — its `.body` is
 // `display:none` (styles.css: a frame's box holds child cards, not its own note), and an editor inside a
 // hidden element can't be focused or typed into. So its label is edited ON itself, one line, in a
 // contenteditable. Same contract as BodyEdit otherwise: while set, persistence freezes this node's
