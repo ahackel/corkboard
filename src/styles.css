@@ -516,6 +516,16 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   display:none; align-items:center; justify-content:center; }
 .node .lock-badge svg { width:100%; height:100%; }
 .node.locked .lock-badge { display:inline-flex; }
+/* a checklist's progress (paintNode): "3/5" on a pill straddling the card's top edge at the right, like the
+   tag row straddles its bottom — outside the text, so it never moves a line. Filled to --done in the
+   card's own ink (a tint of it, so the count stays readable over both halves); all done, a ✓ leads. */
+.node > .task-meter { position:absolute; right:10px; top:-9px; z-index:3; display:none;
+  height:18px; padding:0 6px; box-sizing:border-box; border-radius:var(--r-full);
+  font-size:11px; font-weight:700; line-height:18px; font-variant-numeric:tabular-nums; white-space:nowrap;
+  color:inherit; --pill:color-mix(in srgb, var(--card, var(--node)) 72%, white 28%);
+  background:linear-gradient(to right, color-mix(in srgb, currentColor 24%, var(--pill)) var(--done, 0%), var(--pill) 0); }
+.node > .task-meter:not(:empty) { display:block; }
+.node > .task-meter.all-done::before { content:'✓ '; }
 /* ---------- frame: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
 /* The element is the box and nothing else: n.x/n.y/w/h are the box (main.ts), and the label hangs
    outside it, above the top-left corner, the way a FigJam section's name does. So naming, renaming or
@@ -1069,6 +1079,7 @@ body.grabbing .node > .title-row > .hidden-count,
 body.zoom-far .node > .title-row > .hidden-count,
 body.zoom-far .node > .lock-badge,
 body.zoom-far .node > .tag-row,
+body.zoom-far .node > .task-meter,
 body.zoom-far .node > .addnote { display:none !important; }
 /* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
    covers both branches-with-children and leaf cards whose body is folded away. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderBodyHTML } from '../src/utils/markdown.js';
+import { renderBodyHTML, taskProgress } from '../src/utils/markdown.js';
 
 describe('renderBodyHTML', () => {
   it('draws a rule for ---, ***, ___ — even straight under a line of text', () => {
@@ -21,5 +21,15 @@ describe('renderBodyHTML', () => {
   it('highlights ==text==, and leaves a lone == alone', () => {
     expect(renderBodyHTML('a ==hot== b')).toBe('<p>a <mark>hot</mark> b</p>');
     expect(renderBodyHTML('a == b')).toBe('<p>a == b</p>');
+  });
+});
+
+describe('taskProgress', () => {
+  it('counts the bullet tasks a card draws as checkboxes, and how many are ticked', () => {
+    expect(taskProgress('- [x] a\n- [ ] b\n  * [X] c\n+ [ ] d')).toEqual({ done: 2, total: 4 });
+  });
+  it('leaves out numbered items, empty boxes, plain bullets and fenced code', () => {
+    expect(taskProgress('1. [x] no\n- [ ]\n- plain\n```\n- [x] sample\n```\n- [ ] yes')).toEqual({ done: 0, total: 1 });
+    expect(taskProgress('')).toEqual({ done: 0, total: 0 });
   });
 });

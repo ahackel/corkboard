@@ -648,6 +648,9 @@ folds every card BESIDE that one (same frame or top level) to the state it goes 
 - **A folded card** renders only its first line (`collapsedMarkdown`), greyed when the card is untitled
   (so it reads as the start of a note, not a name), and under it `.fold-more`: "N more lines"
   (`hiddenLineCount`, non-blank lines after the first).
+- **A checklist wears its progress**: `.task-meter`, a "3/5" pill straddling the card's top edge at the
+  right (paintNode, from `taskProgress` in utils/markdown.ts — the bullet tasks the renderer draws, fenced
+  code skipped), filled to the share done, a ✓ when all are. Open or folded, so a folded list still says it.
 - **Peek** (`features/peek.ts`): resting the mouse on a folded card for `PEEK_DELAY` floats its whole note
   beside it, in its colour. Nothing changes — no fold state, layout or save. Mouse only; any press, key or
   wheel puts it away. The panel is a `.node > .body` outside `#world`, so card text styles apply and nothing

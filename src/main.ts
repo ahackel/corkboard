@@ -13,7 +13,7 @@
 
 import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
-import { renderBodyHTML } from './utils/markdown.js';
+import { renderBodyHTML, taskProgress } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor, paleFill } from './utils/ink.js';
 import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
@@ -88,6 +88,7 @@ function nodeEl(n: MindNode): HTMLElement {
   // the "N more lines" a FOLDED card shows under its first line (paintNode).
   el.innerHTML = `<div class="title-row"><div class="title"></div><button type="button" class="hidden-count">${FOLD_CHIP_SVG}</button></div><div class="body"></div>
     <div class="fold-more"></div>
+    <div class="task-meter"></div>
     <div class="tag-row"></div>
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>
     <button type="button" class="addnote" title="Add note" aria-label="Add note">${NOTE_ADD_SVG}</button>`;
@@ -502,6 +503,17 @@ export function paintNode(n: MindNode): void {
   const hidden = collapsed && !imageLook(n) ? hiddenLineCount(n) : 0;
   const moreText = hidden ? `${hidden} more line${hidden === 1 ? '' : 's'}` : '';
   if (more.textContent !== moreText) more.textContent = moreText;
+  // A checklist's progress, "3/5", on the card's top edge — open or folded, so a folded list still says
+  // how far it's got. The pill fills left to right with the share done (--done); all ticked, it says so.
+  const meter = el.querySelector(':scope > .task-meter') as HTMLElement;
+  const tp = n.type === 'frame' ? { done: 0, total: 0 } : taskProgress(n.body);
+  const meterText = tp.total ? `${tp.done}/${tp.total}` : '';
+  if (meter.textContent !== meterText){
+    meter.textContent = meterText;
+    meter.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
+    meter.classList.toggle('all-done', tp.total > 0 && tp.done === tp.total);
+    meter.title = tp.total ? `${tp.done} of ${tp.total} task${tp.total === 1 ? '' : 's'} done (${Math.round(tp.done / tp.total * 100)}%)` : '';
+  }
 }
 // The markdown a node RENDERS — its whole note, title included.
 //

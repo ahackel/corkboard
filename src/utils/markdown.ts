@@ -55,6 +55,21 @@ export function soleImage(body: string | null | undefined): SoleImage | null {
   return m ? { alt: m[1].trim(), src: m[2] } : null;
 }
 
+// ---------- how far a checklist has got ----------
+// The tasks in a note and how many are ticked — the "3/5" a card wears (paintNode). The same lines
+// renderList draws as checkboxes: a BULLET followed by `[ ]`/`[x]` and text; a numbered `1. [ ]` isn't one.
+// Fenced code is skipped, so a markdown sample in a code block isn't counted as the note's own list.
+export function taskProgress(md: string | null | undefined): { done: number; total: number } {
+  let done = 0, total = 0, fence = '';
+  for (const line of (md ?? '').split('\n')){
+    const f = line.match(/^(```|~~~)/);
+    if (f){ fence = fence ? (line.startsWith(fence) ? '' : fence) : f[1]; continue; }
+    const m = !fence && line.match(/^\s*[-*+]\s+\[([ xX])\]\s+\S/);
+    if (m){ total++; if (m[1] !== ' ') done++; }
+  }
+  return { done, total };
+}
+
 // ---------- writing a link, rather than rendering one ----------
 // Pasting a URL over selected text LINKS that text, the way every note app does it — the one thing
 // markdown's `[label](url)` costs that a rich editor's ⌘K doesn't. The rule lives here beside mdLinks
