@@ -10,7 +10,8 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 **Check every feature against [docs/PRODUCT.md](docs/PRODUCT.md)** (the north star, incl. the CUT list).
 `index.html` (style + HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
 `vite-plugin-singlefile` bundles it all back into ONE self-contained `dist/index.html`. No runtime
-dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — run it after touching it.
+dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — run it after touching it;
+`npm run e2e` (Playwright, `e2e/`) drives the canvas in Chromium — run it after touching interactions.
 
 ## Running / developing
 

@@ -71,6 +71,10 @@ The on-device store needs a secure context, so use the dev server rather than op
 file directly. `npm run build` produces the deployable single-file `dist/`; `npm run
 typecheck` runs `tsc --noEmit`.
 
+Tests: `npm test` checks the file format (vitest). `npm run e2e` drives the app in a real
+browser (Playwright, `e2e/`); the first time, install its browser with
+`npx playwright install chromium`.
+
 ## Versioning
 
 The displayed version is set by the deploy workflow: `0.1.<GitHub run number>`, so it
