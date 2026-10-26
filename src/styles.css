@@ -456,7 +456,7 @@ svg#toggles g.fe-socket:hover .fe-port-plus { display:inline; }
    goes" cue — there are no ports to aim at, the whole card is the target. */
 svg#toggles rect.fe-target { fill:none; stroke:var(--accent, #6ea8fe); stroke-width:2; stroke-dasharray:6 4;
   pointer-events:none; }
-svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:2;
+svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:3;
   pointer-events:auto; cursor:grab; }
 
 /* A card SHRINKS TO FIT its text — it is its content and nothing more, so a one-line note is a one-line

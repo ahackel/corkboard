@@ -25,7 +25,7 @@ import { esc } from '../utils/markdown.js';
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.
 export const HIT_W = 18;
-export const HANDLE_R = 7;          // endpoint grab handles, shown while one edge is selected
+export const HANDLE_R = 8;          // endpoint grab handles (FigJam's white disc, thick blue rim), one edge selected
 // The four PORTS on a selected card you drag a new line from — FigJam's: a small blue dot in a white
 // rim, floating SOCKET_OUT outside each side, that becomes a ⊕ under the pointer (styles.css).
 const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
@@ -313,7 +313,9 @@ export function paintFreeEdges(): void {
     hits += `<path class="fe-hit" data-edge="${e.id}" d="${g.d}" stroke-width="${HIT_W}"/>`;
     // The selection ring, in the same language a card's is: the same line drawn thicker and SOLID
     // underneath, so a selected edge reads as outlined rather than merely recoloured.
-    if (sel) svg += `<path class="fe-selring" d="${g.d}"/>`;
+    // With ONE edge selected its two end handles say so (FigJam); a multi-selection has no handles, so
+    // there each line wears the ring instead.
+    if (sel && state.selEdges.size > 1) svg += `<path class="fe-selring" d="${g.d}"/>`;
     svg += `<path class="fe" style="stroke:${ink}"${dash} d="${g.d}"/>`;
     svg += endCap(e.toCap, g.b, g.tipTan, ink) + endCap(e.fromCap, g.a, g.tailTan, ink);
     // The label sits ON the line at its midpoint, on a plate so the line doesn't strike it through.
@@ -327,8 +329,13 @@ export function paintFreeEdges(): void {
     // Handles to move either end onto another card — only when ONE edge is selected, since on a
     // multi-selection they'd be identical dots with no way to tell which line each belongs to.
     if (sel && state.selEdges.size === 1) {
-      tools += `<circle class="fe-handle" data-handle="from" data-edge="${e.id}" cx="${g.a.x}" cy="${g.a.y}" r="${HANDLE_R}"/>`;
-      tools += `<circle class="fe-handle" data-handle="to" data-edge="${e.id}" cx="${g.b.x}" cy="${g.b.y}" r="${HANDLE_R}"/>`;
+      // ON the card's rim where the line attaches — the drawn ends stop END_GAP short of it, so step
+      // each back along its own tangent by the trim it was given.
+      const ta = trim(e.fromCap), tb = trim(e.toCap);
+      const ha = { x: g.a.x + g.tailTan.x * ta, y: g.a.y + g.tailTan.y * ta };
+      const hb = { x: g.b.x + g.tipTan.x * tb, y: g.b.y + g.tipTan.y * tb };
+      tools += `<circle class="fe-handle" data-handle="from" data-edge="${e.id}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
+      tools += `<circle class="fe-handle" data-handle="to" data-edge="${e.id}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
     }
   }
   // The four rings on the selected card. On SELECTION, never on hover: a ring that only appears once

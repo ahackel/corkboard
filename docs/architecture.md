@@ -822,7 +822,9 @@ being EDITED the card itself is the field: the textarea is bare (no box, no scri
 changes size as editing starts: the textarea is one row (`rows = 1`) and the card holds the height it
 had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — it only grows if you type
 past it. While a line end is dragged, the target card shows its ports; the one within `PORT_SNAP` fills. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
-are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron.
+are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron. A lone selected line shows FigJam's end
+handles — white discs with a 3px blue rim, ON the card rims where it attaches (the drawn ends stepped back
+by their trim) — and no outline; a multi-selection, which has no handles, outlines each line instead.
 
 **The context menu is FigJam's** (`#ctxMenu`, `features/context-menu.ts`; a card's entries are
 `buildCardMenu` in float-bar.ts, shared with the bar's ⋯). Groups, in FigJam's order: the clipboard
