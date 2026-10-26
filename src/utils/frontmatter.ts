@@ -196,6 +196,10 @@ function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayou
 }
 
 export function parseMd(text: string): ParsedNote {
+  // A note written on Windows (CRLF) or with a BOM must still have its frontmatter FOUND: missed, the
+  // whole block would read as body text and the next save would stack a second block above it. The
+  // note is written back with plain \n — the only change a save makes to text the app doesn't own.
+  text = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const m = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   const entries = m ? parseFM(m[1]) : [];
   // The TITLE is the body's leading heading (splitHeading above); no heading = an untitled card.

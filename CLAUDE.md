@@ -9,7 +9,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 **Corkboard** — a local-first visual editor for a folder of Markdown notes. `index.html` (the style +
 HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
 `vite-plugin-singlefile` bundles it all back into ONE self-contained `dist/index.html`. No runtime
-dependencies, no tests, no lint.
+dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — run it after touching it.
 
 ## Running / developing
 
@@ -29,11 +29,11 @@ dependencies, no tests, no lint.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch). Mutate in place, never reassign, so every module shares one interaction state.
 - `utils/` — pure helpers: `markdown.ts`, `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
-  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
+  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
-  `flushSave`, `loadFromDir`, zip import/export) and `board.ts` (the ONE sidecar). Render no UI.
+  `flushSave`, `loadFromDir`, zip import/export) `board.ts` (the ONE sidecar), `save-alert.ts` (the only UI here).
 - `view/` — `camera.ts`, `layout.ts` (all placement, container predicates, the outliner),
   `edges.ts`, `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
@@ -68,7 +68,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   Derived from the text (`isImageCard`), never a kind. Card/annotation measure their height.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
   open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
-- **Every mutation calls `scheduleSave()`**; `state.readOnly` and `store.isOpen === false` (demo mode)
+- **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
   make writes no-ops. Collapsing and opening a frame stay allowed in read-only — they mutate nothing.
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the

@@ -713,7 +713,20 @@ only the `store` object — don't scatter backend calls elsewhere.
 **External-change reload:** `store.watch` fires `reloadFromDisk` on window focus / tab-visible (FSA can't
 truly watch files; OPFS's `watch` is a no-op, and the focus listener is shared via `installWatch`). It
 re-reads from disk but guards against clobbering in-progress typing/renaming and against re-reading the app's
-own recent writes (`state.lastSelfWrite`).
+own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`settleSave`) and refuses to
+reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
+it used to read over an edit made just before switching away (it cancelled the queued save instead).
+
+**A save is never LOST, and never SILENT.** Three rules in `data/persistence.ts` + `data/save-alert.ts`:
+- The 400ms debounce is flushed on `visibilitychange → hidden` and `pagehide`, and `beforeunload` asks the
+  browser to hold the page while `hasUnsavedChanges()` — an edit made just before closing still lands.
+- A failed write shows `#saveAlert` (the toolbar's `#status` is hidden, so nothing written there is seen) and
+  retries on its own (2s, 5s, 15s, then every 30s) until a write lands; "Retry now" forces it.
+- `saveAll` records progress AS it lands, so a throw half-way leaves exactly the rest pending: every note
+  phase 1 decided to write is marked `dirty` (its `n.file` has already moved, so a retry can't re-derive the
+  rename), `state.toDelete` shifts per removal, and a renamed note's old path waits in `pendingRemovals`.
+`tests/` (`npm test`) pins the format these writes produce: the `parseMd`/`serializeMd` round-trip, foreign
+frontmatter kept verbatim, CRLF/BOM notes, and the pure naming rules in `utils/filenames.ts`.
 
 **Help map:** `F1` (and `#helpBtn`) opens `?help` in a new tab (`openHelpTab`). On boot with `?help`,
 `openHelp()` switches to a read-only `helpStore` serving the bundle-embedded `help/*.md` notes — a real map

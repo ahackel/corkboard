@@ -18,6 +18,8 @@ export default defineConfig({
   publicDir: 'public',
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   plugins: [viteSingleFile()],
+  // `npm test` (tests/): the modules under test import core/state.ts, which looks up the DOM shell.
+  test: { environment: 'happy-dom' },
   build: {
     target: 'es2020',
     // viteSingleFile inlines everything; no separate asset dir needed.

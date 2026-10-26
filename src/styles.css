@@ -153,6 +153,16 @@ html, body { margin:0; height:100%; overflow:hidden;
 /* re-enable selection inside form controls and editable elements */
 input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text; outline:none; }
 
+/* a failed save (data/save-alert.ts) — loud on purpose, and above every other chrome */
+#saveAlert { position:fixed; bottom:calc(16px + var(--sa-b)); left:50%; transform:translateX(-50%);
+  z-index:60; max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r));
+  display:flex; align-items:center; gap:12px; padding:8px 8px 8px 16px; border-radius:12px;
+  background:#c62828; color:#fff; font-size:14px; box-shadow:0 4px 16px rgba(0,0,0,.3); }
+#saveAlert[hidden] { display:none; }
+#saveAlertRetry { flex:none; border:0; border-radius:8px; padding:6px 12px; font:inherit; font-weight:600;
+  background:rgba(255,255,255,.2); color:inherit; cursor:pointer; }
+#saveAlertRetry:hover { background:rgba(255,255,255,.3); }
+
 /* floating "island" toolbar — no border, rounded, soft shadow (Excalidraw-style) */
 #toolbar {
   position: fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;

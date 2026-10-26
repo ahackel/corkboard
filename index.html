@@ -22,6 +22,12 @@
 <meta name="apple-mobile-web-app-title" content="Corkboard">
 </head>
 <body>
+  <!-- a failed save, shown until a write lands (data/save-alert.ts): #status is hidden, so this is
+       the ONE place a lost write can surface -->
+  <div id="saveAlert" role="alert" hidden>
+    <span id="saveAlertMsg"></span>
+    <button id="saveAlertRetry">Retry now</button>
+  </div>
   <!-- home / storage: floating bar in the top-left; the folder name sits beside the button -->
   <div id="homeBar">
     <button id="homeBtn" class="floating-btn" title="Home — recent folders / open another" aria-label="Home — recent folders">

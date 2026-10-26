@@ -5,7 +5,8 @@
 // `store` is the active backend (reassigned by useStore); main holds the open() flows.
 // ============================================================
 import { state, world, setStatus, isBoxType, isAnnotation, type MindNode } from '../core/state.js';
-import { parseMd, serializeMd, firstLineLabel, fileStem } from '../utils/frontmatter.js';
+import { parseMd, serializeMd, fileStem } from '../utils/frontmatter.js';
+import { safeName, slugStem, desiredFileFor, retargetLinks } from '../utils/filenames.js';
 import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
@@ -23,6 +24,7 @@ import { refreshGrid } from '../view/grid.js';
 import { ui, isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
 import { byId } from '../utils/dom.js';
+import { saveFailed, saveSucceeded } from './save-alert.js';
 import { BOARD_FILE, SKETCH_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge } from './board.js';
 
 // Everything that is about the BOARD rather than about a note — the free edges, the ink layer, the
@@ -165,7 +167,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // …including the container wrappers, which carry no data-id: a frame's clipping wrapper and a tab
   // group's strip hang off the NODE object (frameContentEl / tabStripEl), so once state.nodes is
   // cleared nothing can reach the old ones to remove them and they'd pile up in #world on every load.
-  state.nodes.clear(); state.toDelete = [];
+  state.nodes.clear(); state.toDelete = []; pendingRemovals.clear();
   world.querySelectorAll('[data-id], .frame-content, .tab-strip').forEach(e=>e.remove());
   resetImageCache();   // blob URLs from the previous map (or store) are stale now
   await loadBoard();   // edges + ink layer + view prefs for this map (board.json), if any
@@ -381,36 +383,6 @@ export function updateMapTitle(): void {
   byId('folderName').textContent = store.name;
   updateDocumentTitle();
 }
-// title -> safe filename component (no path separators or illegal chars)
-function safeName(title: string): string {
-  return (title || 'Untitled').trim().replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g,' ').slice(0,120);
-}
-// The filename a node SHOULD have, given its title, keeping its current directory.
-//
-// The filename is a SLUG, not the node's identity any more — the title lives in the note itself (the
-// body's leading heading, utils/frontmatter.ts splitHeading), so this is free to suffix a colliding
-// name without that suffix ever being read back as part of the title. Which is what lets two cards
-// share a title: `Notes.md` and `Notes 2.md`, both titled "Notes".
-//
-// The slug TRACKS the text: it is re-derived on every save, so a card's filename always reads as the
-// name the card shows — its heading, else its first line. It used to be minted once and left to go
-// stale, which meant an ordinary card (untitled, its text edited into shape after it was created) kept
-// whatever name it had at its very first autosave — `Untitled 12.md` for life. Tracking costs a rename
-// per edit that changes the first line, and the two things that record a path follow it: the children's
-// mm_parent (saveAll phase 1) and the inbound [[wikilinks]] (phase 1b). It is not a rename PER
-// KEYSTROKE, though: while any editor holds the note's text the name is frozen (ui-state.ts
-// frozenFileNodeId), so the rename lands once, when the edit session commits.
-// The bare slug a node's own text gives it, with no directory and no `.md` — the ONE spelling of that
-// rule, shared with exportZip, which has to name never-saved nodes the same way.
-// An IMAGE card (a card holding nothing but one `![alt](src)`) is named after the PICTURE: its alt
-// text, else the image file's own stem. firstLineLabel would hand back the raw `![](attachments/…)`
-// markup, which slugifies into something no one can read in a folder listing — and the note has no
-// other text to be named from, so this is the one kind of body worth reading structurally.
-function slugStem(n: MindNode): string {
-  const img = soleImage(n.body);
-  if (!n.title.trim() && img) return safeName(img.alt || fileStem(img.src) || 'image');
-  return safeName(n.title.trim() || firstLineLabel(n.body));
-}
 // The lowercased filename -> node index the collision test reads. Built ONCE per save rather than
 // re-derived per candidate name: saveAll asks for every node's desired name, so a per-call
 // `[...state.nodes.values()].some(…)` made settling filenames O(n²) with two string allocations per
@@ -420,46 +392,13 @@ function filesInUse(): Map<string, string> {
   for (const o of state.nodes.values()) if (o.file) m.set(o.file.toLowerCase(), o.id);
   return m;
 }
-function desiredFileFor(n: MindNode, inUse: Map<string, string>): string {
-  const dir = n.file ? n.file.slice(0, n.file.lastIndexOf('/')+1) : '';
-  const stem = slugStem(n);
-  // Nothing in the note to be named off — `Untitled` is safeName's fallback for an empty string, so
-  // this is a card with no heading, no text and no picture. Keep the name it already has: there is
-  // nothing to track, and renaming it would only renumber it as its neighbours come and go. A card the
-  // user just CLEARED therefore keeps the slug it was named under, which utils/model.ts namelessLabel
-  // leans on — the stem is the name they deleted, so nothing shows it to them again.
-  if (stem === 'Untitled' && n.file) return n.file;
-  let rel = dir + stem + '.md';
-  // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since
-  // that's how the filesystem collides on macOS/Windows: "Notes" and "notes" are one file there, so
-  // an exact-match test would hand both nodes "their own" name and let the second write eat the first.
-  const taken = (p: string): boolean => {
-    const owner = inUse.get(p.toLowerCase());
-    return owner !== undefined && owner !== n.id;
-  };
-  let i = 2;
-  while (taken(rel)) rel = dir + stem + ' ' + (i++) + '.md';
-  return rel;
-}
-// Re-point the PATH-form [[wikilinks]] that name a file phase 1 just renamed, so a link written
-// before the rename still resolves after it (utils/model.ts resolveWikilink matches a target against
-// the node's path, `.md` optional). Only the path form moves: a `[[Title]]` names the title, which
-// re-slugging a file never touches — and the keys here are whole paths, so a bare title can only
-// collide with one by BEING that path, which resolveWikilink already reads path-first anyway.
-// The alias half is carried through verbatim: `[[Untitled 7|see this]]` keeps the words the reader sees.
-// Returns the ids whose body changed, for phase 2 to write.
+// Re-point inbound [[wikilinks]] across every note (utils/filenames.ts retargetLinks), returning the
+// ids whose body changed, for phase 2 to write.
 function retargetWikilinks(renames: Map<string, string>): string[] {
   if (!renames.size) return [];
-  const dropMd = (path: string): string => path.replace(/\.md$/i, '');
-  const to = new Map<string, string>();   // old path, no `.md`, lowercased -> new path, no `.md`
-  for (const [from, into] of renames) to.set(dropMd(from).toLowerCase(), dropMd(into));
   const touched: string[] = [];
   for (const n of state.nodes.values()) {
-    // Same shape as the renderer's wikilink arm (utils/markdown.ts mdInline).
-    const body = n.body.replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, (m, target: string, alias?: string) => {
-      const into = to.get(dropMd(target.trim()).toLowerCase());
-      return into ? `[[${into}${alias ?? ''}]]` : m;
-    });
+    const body = retargetLinks(n.body, renames);
     if (body === n.body) continue;
     n.body = body; n.dirty = true; touched.push(n.id);
   }
@@ -469,8 +408,10 @@ export async function saveAll(): Promise<void> {
   if (state.readOnly) return;        // read-only mode never writes to disk
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
-  for (const f of state.toDelete) await store.remove(f);
-  state.toDelete = [];
+  // Each step below records its progress AS it lands, so a save that throws half-way (quota, a revoked
+  // folder permission) leaves exactly the unfinished part pending, and the retry (data/save-alert.ts)
+  // picks it up — rather than a renamed note's old file, or a child's stale mm_parent, surviving it.
+  while (state.toDelete.length) { await store.remove(state.toDelete[0]); state.toDelete.shift(); }
 
   // CONTENT changes rewrite the note; GEOMETRY changes don't — position, size, collapse and child
   // order live in board.json now, so `dirtyLayout` alone is not a reason to touch a .md. Moving a
@@ -481,7 +422,6 @@ export async function saveAll(): Promise<void> {
   // Phase 1 — settle every note's final filename IN MEMORY first. A child records its parent
   // by path (mm_parent), so a renamed parent forces its children to be rewritten, and all
   // parent paths must be final before we serialize anyone.
-  const removals: string[] = [];
   const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
   // Kept in step with n.file below, so a name this loop has already handed out is seen as taken by
   // the nodes after it — the live `state.nodes` scan this replaced got that for free.
@@ -492,7 +432,7 @@ export async function saveAll(): Promise<void> {
     const frozen = frozenFileNodeId() === n.id ? n.file : null;
     const target = frozen ?? desiredFileFor(n, inUse);
     if (n.file && n.file !== target) {
-      removals.push(n.file);                       // old file to delete once the rename is written
+      pendingRemovals.add(n.file);                 // old file to delete once the rename is written
       renames.set(n.file, target);
       for (const c of childrenOf(n.id)) needWrite.add(c.id);
     }
@@ -505,6 +445,9 @@ export async function saveAll(): Promise<void> {
   // Phase 1b — a rename drags its INBOUND links along, for the same reason it rewrites its children's
   // mm_parent: a path recorded elsewhere in the vault must not outlive the path it records.
   for (const id of retargetWikilinks(renames)) needWrite.add(id);
+  // Everything phase 1 decided must be written is now DIRTY, not just in this call's set: n.file has
+  // already moved to its new name, so a retry would see no rename and forget the children it implied.
+  for (const id of needWrite) state.nodes.get(id)!.dirty = true;
 
   // Phase 2 — write everything that changed, now that all paths are final.
   let written = 0;
@@ -515,14 +458,20 @@ export async function saveAll(): Promise<void> {
     written++;
   }
   // Phase 3 — drop files left behind by renames (unless some node now legitimately holds the path).
-  for (const old of removals)
+  for (const old of [...pendingRemovals]) {
     if (![...state.nodes.values()].some(n => n.file === old)) await store.remove(old);
+    pendingRemovals.delete(old);
+  }
 
   for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write below carries these
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   paintAll();
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
 }
+
+// Old paths of renamed notes, still on disk until phase 3 removes them. Module-level so a failed save
+// carries them to its retry; cleared by loadFromDir, since they belong to the map that was open.
+const pendingRemovals = new Set<string>();
 
 // ---------- autosave (debounced) ----------
 let saveTimer: number | undefined, saveAgain = false;
@@ -535,7 +484,7 @@ export function scheduleSave(): void {
   scheduleSaveBoard();
   setStatus('Saving…');
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(flushSave, 400);
+  saveTimer = window.setTimeout(flushSave, 400);
 }
 export function flushSave(): Promise<void> {
   if (!store.isOpen) return Promise.resolve();
@@ -544,9 +493,9 @@ export function flushSave(): Promise<void> {
   savePromise = (async () => {
     try {
       await saveAll();
+      saveSucceeded('notes');
     } catch (err) {
-      console.error('Save failed:', err);
-      setStatus('⚠ Save failed: ' + ((err as Error).message || (err as Error).name));
+      saveFailed('notes', err, () => { void flushSave(); });
     }
     savePromise = null;
     if (saveAgain) { saveAgain = false; await flushSave(); }
@@ -558,8 +507,33 @@ export function flushSave(): Promise<void> {
 // autosave firing after the switch would write the old map's files into the new one.
 export async function settleSave(): Promise<void> {
   if (boardSavePending()) await flushBoard();
-  if (saveTimer != null || savePromise) await flushSave();
+  if (saveTimer != null || savePromise || notesUnsaved()) await flushSave();
 }
+// Is there anything in memory the disk doesn't have yet — queued, in flight, or left over by a write
+// that failed? Read-only and demo mode never write, so they never have anything unsaved.
+function notesUnsaved(): boolean {
+  if (state.readOnly || !store.isOpen) return false;
+  if (state.toDelete.length || pendingRemovals.size) return true;
+  for (const n of state.nodes.values()) if (n.dirty || !n.file) return true;
+  return false;
+}
+export function hasUnsavedChanges(): boolean {
+  if (state.readOnly || !store.isOpen) return false;
+  return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();
+}
+
+// ---------- never lose the last edit to a closing tab ----------
+// The autosave waits 400ms for a burst to settle, so an edit made just before the tab is hidden,
+// closed or reloaded would otherwise die with it. Hiding is the dependable signal (it fires before
+// unload, and is the LAST one iOS gives a backgrounded page); beforeunload also asks the browser to
+// hold the page while anything is still unwritten.
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') void settleSave(); });
+window.addEventListener('pagehide', () => { void settleSave(); });
+window.addEventListener('beforeunload', e => {
+  if (!hasUnsavedChanges()) return;
+  void settleSave();
+  e.preventDefault();
+});
 
 // ---------- reload on focus ----------
 let reloading = false;
@@ -569,8 +543,6 @@ export async function reloadFromDisk(): Promise<void> {
   if (reloading) return;
   // if we just wrote, the focus event is almost certainly our own round-trip — skip
   if (Date.now() - (state.lastSelfWrite || 0) < 600) return;
-  clearTimeout(saveTimer);
-  if (savePromise) return;            // a write is mid-flight; don't read torn state
   const selBefore = state.selId;
   // Don't yank the rug out while the user is actively typing in the panel or renaming a card.
   // ui.sheetEdit counts even when no field is focused — on iOS the keyboard can be dismissed
@@ -579,6 +551,12 @@ export async function reloadFromDisk(): Promise<void> {
   if (ui.sketchDraw) return;          // mid-stroke: don't reload the ink layer under the pen
   reloading = true;
   try {
+    // loadFromDir REPLACES every note with what's on disk, so whatever is still queued must reach the
+    // disk first — this used to cancel the pending save instead, and an edit made just before
+    // switching away was read over. If a write fails, memory holds the only copy: keep it, don't reload.
+    await settleSave();
+    if (hasUnsavedChanges()) return;
+    if (editSessionActive() || isTypingInField() || ui.sketchDraw) return;   // began during the write
     await loadFromDir({ keepView:true });
     if (selBefore && state.nodes.has(selBefore)) selectNode(selBefore);
     else selectNode(null);

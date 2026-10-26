@@ -10,11 +10,12 @@
 // arrangement of it. `mm_parent` is the deliberate exception (see docs/architecture.md) — keeping
 // membership in the note is what lets a folder stand on its own if this file is lost.
 // ============================================================
-import { state, setStatus, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type Stroke, type BoardEdge, type EdgeCap, type EdgeSide, type Junction } from '../core/state.js';
+import { state, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type Stroke, type BoardEdge, type EdgeCap, type EdgeSide, type Junction } from '../core/state.js';
 import { store } from './persistence.js';
 import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';
 import { facingSides } from '../view/free-edges.js';
+import { saveFailed, saveSucceeded } from './save-alert.js';
 
 export const BOARD_FILE = 'board.json';
 // The MODEL the board was last written by, which is how the flatten migration knows a map predates
@@ -345,17 +346,22 @@ let boardTimer: number | undefined;
 export function scheduleSaveBoard(): void {
   if (state.readOnly || !store.isOpen) return;   // read-only / demo mode: never write
   clearTimeout(boardTimer);
-  boardTimer = setTimeout(flushBoard, 400);
+  boardTimer = window.setTimeout(flushBoard, 400);
 }
-export function boardSavePending(): boolean { return boardTimer != null; }
+// A write that FAILED is still pending: the board in memory is the only copy of it, and a reload
+// (data/persistence.ts reloadFromDisk) must not read the older one over it.
+let boardFailed = false;
+export function boardSavePending(): boolean { return boardTimer != null || boardFailed; }
 export async function flushBoard(): Promise<void> {
   clearTimeout(boardTimer); boardTimer = undefined;
   if (state.readOnly || !store.isOpen) return;
   try {
     await store.write(BOARD_FILE, boardJSON());
     state.lastSelfWrite = Date.now();            // so the focus-reload ignores our own write
+    boardFailed = false;
+    saveSucceeded('board');
   } catch (err) {
-    console.error('Board save failed:', err);
-    setStatus('⚠ Board save failed: ' + ((err as Error).message || (err as Error).name));
+    boardFailed = true;
+    saveFailed('board', err, () => { void flushBoard(); });
   }
 }

@@ -56,7 +56,7 @@ export function bodyImageAt(cardEl: HTMLElement, x: number, y: number): HTMLImag
 let imgRelayoutTimer: number | undefined;
 function scheduleImgRelayout(): void {
   clearTimeout(imgRelayoutTimer);
-  imgRelayoutTimer = setTimeout(() => { relayout(); }, 60);
+  imgRelayoutTimer = window.setTimeout(() => { relayout(); }, 60);
 }
 export function hydrateImages(el: ParentNode): void {
   el.querySelectorAll<HTMLImageElement>('img.md-img[data-img-src]').forEach(img => {
