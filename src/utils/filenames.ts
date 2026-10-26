@@ -7,9 +7,13 @@ import type { MindNode } from '../core/state.js';
 import { firstLineLabel, fileStem } from './frontmatter.js';
 import { soleImage } from './markdown.js';
 
-// title -> safe filename component (no path separators or illegal chars)
+// title -> safe filename component: no path separators or illegal chars — and no leading or trailing
+// dot or space, and no `..`. A leading dot makes a HIDDEN file (Finder, Obsidian and `ls` all skip it),
+// and a first line that is a sentence ended its filename in `move..md`.
 export function safeName(title: string): string {
-  return (title || 'Untitled').trim().replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g,' ').slice(0,120);
+  const s = title.trim().replace(/[\/\\:*?"<>|]/g, '-').replace(/\s+/g,' ').replace(/\.{2,}/g, '.')
+    .slice(0,120).replace(/^[.\s]+|[.\s]+$/g, '');
+  return s || 'Untitled';
 }
 // The filename a node SHOULD have, given its title, keeping its current directory.
 //

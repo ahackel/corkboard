@@ -19,6 +19,14 @@ describe('slugStem', () => {
     expect(safeName('  many   spaces ')).toBe('many spaces');
     expect(safeName('x'.repeat(300))).toHaveLength(120);
   });
+  it('never ends in a dot or contains `..`, so a sentence makes a valid filename', () => {
+    expect(safeName('Spend it to move.')).toBe('Spend it to move');
+    expect(safeName('Wait...')).toBe('Wait');
+    expect(safeName('a..b')).toBe('a.b');
+    expect(safeName('.hidden')).toBe('hidden');
+    expect(safeName('...')).toBe('Untitled');
+    expect(safeName('v1.2 notes')).toBe('v1.2 notes');
+  });
 });
 
 describe('desiredFileFor', () => {
