@@ -6,8 +6,9 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 
 ## What this is
 
-**Corkboard** — a local-first visual editor for a folder of Markdown notes. `index.html` (the style +
-HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
+**Corkboard** — a playful sticky-note wall for sorting thoughts by hand, over a folder of Markdown notes.
+**Check every feature against [docs/PRODUCT.md](docs/PRODUCT.md)** (the north star, incl. the CUT list).
+`index.html` (style + HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
 `vite-plugin-singlefile` bundles it all back into ONE self-contained `dist/index.html`. No runtime
 dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — run it after touching it.
 
@@ -16,9 +17,8 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 - `npm install` once, then `npm run dev` (localhost:5173). OPFS needs https/localhost — not `file://`.
 - `npm run build` → `dist/index.html` + `dist/help/`; `npm run preview` serves it. Push to `main`
   deploys to GitHub Pages (`.github/workflows/deploy.yml`).
-- `npm run typecheck` (`tsc --noEmit`) after touching types. Fully strict, no `@ts-nocheck` — keep it
+- `npm run typecheck` after touching types; verify in a browser by exercising the canvas. Fully strict, no `@ts-nocheck` — keep it
   that way. Keep `.js` in import specifiers (bundler resolution maps them to `.ts`).
-- Verify changes by running the app in a browser and exercising the canvas.
 - Help content is `public/help/*.md`, embedded at build time (`import.meta.glob '?raw'` in `boot.ts`)
   rather than fetched, so it works from `file://` too.
 - Runs in any modern browser incl. iPad (OPFS default); "Open folder" needs FSA (Chrome/Edge only).
