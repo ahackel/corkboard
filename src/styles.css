@@ -206,7 +206,7 @@ button:disabled { opacity:.45; cursor:default; }
    squashing when a shrinking neighbour (folder name / search box) fights for space */
 #toolbar button svg { width:var(--bar-icon); height:var(--bar-icon); display:block; flex:none; }
 #status { display:none; }   /* transient log messages are not shown in the toolbar */
-/* floating toolbar-less buttons pinned to the canvas corners (home / help) */
+/* floating toolbar-less buttons pinned to the canvas corners */
 .floating-btn {
   position:fixed; z-index:20;
   width:var(--bar-btn); height:var(--bar-btn); display:inline-flex; align-items:center; justify-content:center;
@@ -1404,7 +1404,7 @@ body.light #ghostCard { background:var(--pal-white); color:var(--pal-ink-white);
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
 body.readonly #ghostCard { opacity:.35; pointer-events:none; }
 
-/* first-run hints next to the + ghost card and the help button — only while empty */
+/* first-run hint next to the + ghost card — only while empty */
 .emptyhint {
   position:fixed; z-index:21; display:flex; align-items:center; gap:6px;
   color:var(--muted); font-size:14px; font-weight:500;
@@ -1415,26 +1415,16 @@ body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
 @media (prefers-reduced-motion: reduce) { .emptyhint { transition:none; } }
 #ghostHint { left:calc(120px + var(--sa-l)); bottom:calc(23px + var(--sa-b)); }   /* right of the ghost card */
 #ghostHint span { position:relative; top:-5px; }        /* nudge only the label up, arrow stays */
-/* help toggle — bottom-right corner */
-#helpBtn { right:calc(12px + var(--sa-r)); bottom:calc(12px + var(--sa-b)); overflow:visible; }
-/* grid toggle — its own floating button, sitting immediately to the left of help */
-#gridBtn { right:calc(12px + var(--sa-r) + var(--bar-btn) + 8px); bottom:calc(12px + var(--sa-b)); }
+/* grid toggle — bottom-right corner */
+#gridBtn { right:calc(12px + var(--sa-r)); bottom:calc(12px + var(--sa-b)); }
 /* grid size picker — one slot further left again, showing the current cell size as a number. The one
    .floating-btn whose content is TEXT, so it drops the shared flex centring for the numeric-badge
    rule next to .hidden-count (which centres digits rather than their line box). */
-#canvasColorBtn { right:calc(12px + var(--sa-r) + 2 * (var(--bar-btn) + 8px)); bottom:calc(12px + var(--sa-b)); }
+#canvasColorBtn { right:calc(12px + var(--sa-r) + var(--bar-btn) + 8px); bottom:calc(12px + var(--sa-b)); }
 #canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; }
 /* Nothing to pick in read-only — setColor refuses there, so the button would be a dead control. */
 body.readonly #canvasColorBtn { display:none; }
-/* help hint lives INSIDE the help button, so it tracks it with no JS — sits ABOVE the
-   bottom-right button and points down at it */
-#helpHint {
-  position:absolute; bottom:100%; right:6px; margin-bottom:7px;
-  flex-direction:column; align-items:flex-end; gap:2px; white-space:nowrap;
-}
 .hint-arrow { flex:none; opacity:.85; }
-/* override #toolbar button svg (15×15) so the in-button help arrow keeps its real size */
-#helpHint .hint-arrow { width:24px; height:46px; }
 
 /* emoji tag picker popover (features/emoji-picker.ts): a Slack-reaction-style grid of recent +
    curated + vault-wide emoji, opened off whichever ".tag-add-btn" triggered it — the selected
@@ -1751,7 +1741,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
     padding-bottom:calc(4px + var(--sa-b));
     transform:translateY(calc(100% + 10px));   /* parked BELOW the screen when closed */
   }
-  /* above the corner ghost-card/help buttons (z 20) — they'd float over the bar otherwise */
+  /* above the corner ghost-card/canvas buttons (z 20) — they'd float over the bar otherwise */
   #floatBar.open { transform:translateY(0); z-index:25; }
   /* the map name sits beside the home button in the top-left — it would overlap other UI on a
      narrow bar, so hide it here (the home sidebar still shows which map is open). */
@@ -1784,12 +1774,12 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    list (a position:absolute descendant of #outline that's ALSO the scroll container scrolls right
    along with it — this is what bit #ocBack when it first lived inside here). */
 .ol-scroll { position:absolute; inset:0; overflow:hidden auto; -webkit-overflow-scrolling:touch; }
-/* Sketch + help are canvas tools, so hide them in outline mode. The outliner is a drawer over a
+/* Canvas tools are hidden in outline mode. The outliner is a drawer over a
    still-visible canvas, so a card can stay selected there — the floating edit bar stays hidden
    too since it would float over the drawer. #outlineBtn joins them here: once open, #olCloseBtn
    (the drawer's top-LEFT, sharing #ocBack's spot) is the way to close it. #canvasMenuBtn is the
    deliberate exception (see its own z-index rule) — it must stay reachable from the outliner too. */
-body.outline #helpBtn, body.outline #gridBtn,
+body.outline #gridBtn,
 body.outline #canvasColorBtn, body.outline #outlineBtn,
 body.outline #floatBar { display:none !important; }
 
@@ -2013,8 +2003,7 @@ body.readonly .ol-open { display:none; }
 .ol-row[data-chip="count"] > .ol-chip,
 .ol-row[data-chip="fold"]:hover > .ol-chip,
 .ol-row[data-chip="fold"].sel > .ol-chip { display:inline-flex; }
-/* READ-ONLY shows the chevron unconditionally — collapsing is the one thing the mode allows (browsing
-   the help map is nothing else), and tapping a row there opens the note sheet over the list rather
+/* READ-ONLY shows the chevron unconditionally — collapsing is the one thing the mode allows, and tapping a row there opens the note sheet over the list rather
    than just selecting it, so "select, then press the bubble" isn't a route you can take. Nothing
    competes for the space either: no drag, no rename, no ⋮/chevron buttons in this mode. */
 body.readonly .ol-row[data-chip="fold"] > .ol-chip { display:inline-flex; }

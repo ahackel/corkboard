@@ -227,7 +227,7 @@
   <button id="canvasMenuBtn" class="floating-btn" title="Canvas menu — new card, insert image…" aria-label="Canvas menu">
     <span class="ic" data-icon="kebab"></span></button>
 
-  <!-- background grid: floating bottom-right, immediately left of help. ONE button for both axes —
+  <!-- background grid: floating bottom-right. ONE button for both axes —
        its face shows the live style and a click opens a menu holding the styles AND the spacings
        (view/grid.ts). Two circles for one idea is what this replaced. -->
   <button id="gridBtn" class="floating-btn" title="Background grid" aria-label="Background grid"></button>
@@ -241,15 +241,6 @@
   <div id="canvasColorPop" class="fb-pop">
     <div id="canvasColors" class="swatches"></div>
   </div>
-
-  <!-- help toggle: floating bottom-right, outside the toolbar -->
-  <button id="helpBtn" class="floating-btn" title="Open help (F1)" aria-label="Open help">
-    <span class="ic" data-icon="help"></span>
-    <span id="helpHint" class="emptyhint" aria-hidden="true">
-      <span>Click for help</span>
-      <svg class="hint-arrow" viewBox="0 0 24 46" width="24" height="46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M8 2 Q 20 22 12 42"/><path d="M12 42l-6-6M12 42l7-4"/></svg>
-    </span></button>
 
   <!-- ghost card in the corner — drag it onto the canvas to create a new card -->
   <div id="ghostCard" title="Drag to create a new card">+</div>

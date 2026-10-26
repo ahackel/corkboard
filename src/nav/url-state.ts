@@ -52,7 +52,7 @@ export function updateDocumentTitle(): void {
 function buildHash(): string {
   if (!store.isOpen) return '';
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
-  // Help has no registry entry, so retain a name segment for its own in-tab navigation.
+  // A store with no registry entry keeps a name segment for its own in-tab navigation.
   const parts = currentMap ? [currentMap.kind, encodeURIComponent(currentMap.id)] : [slugify(store.name)];
   if (node?.file) parts.push(encodeFilePath(node.file));
   const params = new URLSearchParams();

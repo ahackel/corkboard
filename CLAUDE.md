@@ -15,12 +15,10 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 ## Running / developing
 
 - `npm install` once, then `npm run dev` (localhost:5173). OPFS needs https/localhost — not `file://`.
-- `npm run build` → `dist/index.html` + `dist/help/`; `npm run preview` serves it. Push to `main`
+- `npm run build` → `dist/index.html`; `npm run preview` serves it. Push to `main`
   deploys to GitHub Pages (`.github/workflows/deploy.yml`).
 - `npm run typecheck` after touching types; verify in a browser by exercising the canvas. Fully strict, no `@ts-nocheck` — keep it
   that way. Keep `.js` in import specifiers (bundler resolution maps them to `.ts`).
-- Help content is `public/help/*.md`, embedded at build time (`import.meta.glob '?raw'` in `boot.ts`)
-  rather than fetched, so it works from `file://` too.
 - Runs in any modern browser incl. iPad (OPFS default); "Open folder" needs FSA (Chrome/Edge only).
 
 ## Module layout (`src/`)
@@ -39,7 +37,7 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
   text-drag, attachments, clipboard, search, outline, float-bar, properties, breadcrumbs, history, …
-- `boot.ts` — local-first boot onto the last map, the home/storage screen, the help store.
+- `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry: the render core (`paintNode`/`paintAll`/`effectiveColor`), selection, read-only
   mode, global keyboard/toolbar wiring. Its `main`↔feature cycles are deliberate and runtime-only.
 
@@ -95,6 +93,6 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
-  fallback, FSA) · "Boot order" · "Help map" · "External-change reload".
+  fallback, FSA) · "Boot order" · "External-change reload".
 - Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its
   fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`".

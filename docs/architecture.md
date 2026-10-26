@@ -588,13 +588,6 @@ it used to read over an edit made just before switching away (it cancelled the q
 `tests/` (`npm test`) pins the format these writes produce: the `parseMd`/`serializeMd` round-trip, foreign
 frontmatter kept verbatim, CRLF/BOM notes, and the pure naming rules in `utils/filenames.ts`.
 
-**Help map:** `F1` (and `#helpBtn`) opens `?help` in a new tab (`openHelpTab`). On boot with `?help`,
-`openHelp()` switches to a read-only `helpStore` serving the bundle-embedded `help/*.md` notes — a real map
-isolated in its own tab, so the user's vault is never touched. Titles carry a leading emoji; the map goes
-general→specific from a root welcome card, each branch collapsed so users expand to go deeper. Edit the `.md`
-files directly; use backtick code spans rather than raw HTML (`renderBodyHTML` escapes `<…>`), and don't wrap
-inline `code` in `**bold**`/`*italic*` — the code span is extracted first, so the emphasis won't pair.
-
 ## Interaction
 
 **Touch input:** pan/zoom on the canvas is a unified Pointer-Events gesture layer on `#stage` (one finger

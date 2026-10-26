@@ -33,10 +33,10 @@ import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom
 
 // Active backend. Local-first: default to on-device; "Open folder" swaps in fsaStore.
 // `ref` identifies WHICH map is now open (registry entry + what boot() reopens); omit it
-// for stores that aren't registry-backed (help).
+// for stores that aren't registry-backed.
 export let store: Store = opfsStore;
 // Which map is on the canvas RIGHT NOW — in-memory runtime state, unlike the persisted
-// last-map key (which another tab may rewrite). null for non-registry stores (help).
+// last-map key (which another tab may rewrite). null for non-registry stores.
 export let currentMap: { kind: MapKind; id: string } | null = null;
 export function useStore(s: Store, ref?: { kind: MapKind; id: string }): void {
   store = s; store.watch(reloadFromDisk);

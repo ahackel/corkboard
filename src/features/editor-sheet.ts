@@ -22,7 +22,7 @@ const shBody = byId<HTMLTextAreaElement>('shBody');
 const shDone = byId<HTMLButtonElement>('shDone');
 const shCancel = byId<HTMLButtonElement>('shCancel');
 
-// read-only sessions (help map / locked mode) never set ui.sheetEdit — nothing can be written,
+// read-only sessions (locked mode) never set ui.sheetEdit — nothing can be written,
 // so the persistence guards don't apply; the sheet just displays the note.
 let roView: string | null = null;   // node id being VIEWED read-only, else null
 

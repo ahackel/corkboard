@@ -42,7 +42,7 @@ import { commitStep, record, touch, undo, redo, updateUndoButtons } from './feat
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
-import { showStart, openHelpTab, boot } from './boot.js';
+import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
 import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
@@ -245,7 +245,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // itself takes: looking inside something isn't changing it. openFrame reports its own refusal for
   // the kinds with no interior.
   if (open) { openFrame(n); return; }
-  // Read-only (the help map, or a map the user has locked down): there is nothing to edit, so the
+  // Read-only (a map the user has locked down): there is nothing to edit, so the
   // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
   // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
   if (state.readOnly) { toggleCollapse(n.id); return; }
@@ -1217,8 +1217,7 @@ export function paintAll(): void {
 export function relayout(): void { applyLayouts(); paintAll(); }
 export function remeasure(): void { paintAll(); applyLayouts(); paintAll(); }
 
-// First-run hints ("Drag to create a card" / "Click for help") show only on an empty canvas.
-// The help hint tracks the (centred, variable-x) help button; the ghost hint is CSS-anchored.
+// The first-run hint ("Drag to create a card") shows only on an empty canvas.
 // "Empty" means empty OF WHAT'S ON SCREEN, so an open frame with nothing in it gets the hints too —
 // opening an empty folder to start filling it is the whole point of being able to open one.
 export function updateEmptyHints(): void {
@@ -2037,8 +2036,6 @@ window.addEventListener('keydown', (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const mod = e.metaKey || e.ctrlKey;
   const del = key === 'Delete' || key === 'Backspace';
-  // F1 opens the bundled help map (read-only) in a new tab — works even while typing.
-  if (key === 'F1'){ e.preventDefault(); openHelpTab(); return; }
 
   // Intercept browser zoom shortcuts (Cmd/Ctrl +/-/0) so they drive the canvas, not the viewport.
   // Must be checked before the `typing` guard so they work even while a text field is focused.
@@ -2184,7 +2181,6 @@ window.addEventListener('keyup', (e) => {
 }
 byId('fitBtn').onclick = focusOrFit;
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
-byId('helpBtn').onclick = openHelpTab;  // same as F1 — opens the help map in a new tab
 
 // (rename/duplicate/export/delete on-screen actions now live in the floating bar's kebab menu —
 // features/float-bar.ts)

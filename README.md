@@ -4,8 +4,8 @@ A single-file, zero-build visual editor for a **local folder of Markdown notes**
 Every `.md` file becomes a card on an infinite canvas; edits are saved straight back to
 disk as plain Markdown.
 
-**[▶ Open the app](https://andreashackel.de/corkboard/)** — usage is documented in the
-built-in help map (press **F1**).
+**[▶ Open the app](https://andreashackel.de/corkboard/)** — what it is for, and what it is not,
+is in [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## How it works
 
@@ -42,15 +42,12 @@ layout on desktop.
 
 ## Features
 
-- Cards rendered from a hand-rolled Markdown subset — headings, links, emphasis, task lists
-- Direction-aware two-sided radial layout with auto-fan
-- Per-branch colours with inheritance
-- Collapse / focus / find, read-only mode
-- Inline rename, reparent, duplicate, extract-to-child
-- Freehand sketch layer (world-space ink that pans/zooms with the map)
+- Cards rendered from a hand-rolled Markdown subset — headings, links, emphasis, task lists, tables
+- Free placement, nesting (a card with children is an outline), frames to group cards
+- Colours and emoji tags; straight lines between cards with arrows, dots and labels
+- Collapse / focus / find, an outline view, read-only mode
 - Undo / redo, image paste & drop
-- Autosave back to the source files
-- Built-in help map (**F1**)
+- Autosave back to the source files, with a visible warning if a save fails
 
 ## Architecture
 

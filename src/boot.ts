@@ -13,10 +13,10 @@ import { store, currentMap, useStore, loadFromDir, exportZip, settleSave, switch
 import {
   fsaStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
   readMaps, getLastMap, ensureMapRegistry, createDeviceMap, deleteDeviceMap, renameDeviceMap,
-  type Store, type MapRef, type MapKind,
+  type MapRef, type MapKind,
 } from './store/index.js';
 import { esc } from './utils/markdown.js';
-import { applyReadOnly, subtreeIds } from './main.js';
+import { subtreeIds } from './main.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';
@@ -207,40 +207,6 @@ startScreen.addEventListener('click', e => { if (e.target === startScreen) hideS
 setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
 byId('appVersion').textContent = `v${__APP_VERSION__}`;
 
-// ---------- help map (help/*.md, opened with F1) ----------
-// Read-only store serving the help notes; lives in its own tab (?help), so the user's own map
-// and vault are never touched. The notes are embedded in the bundle at build time (via glob)
-// rather than fetched: `fetch()` is blocked under the file:// protocol, so a fetch-based help
-// store silently failed when the single-file build was opened directly from disk.
-const helpModules = import.meta.glob('../public/help/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
-// Key off the bare filename ('Storage.md'), matching the old fetch paths / manifest entries.
-const helpNotes: Record<string, string> = Object.fromEntries(
-  Object.entries(helpModules).map(([path, text]) => [path.split('/').pop()!, text]),
-);
-const helpStore: Store = {
-  get isOpen(){ return true; },
-  get name(){ return 'Help'; },
-  get seenKey(){ return 'help'; },
-  async pick(){ return 'ok'; },
-  async openRecent(){ return 'ok'; },
-  async list(){
-    return Object.entries(helpNotes).map(([path, text]) => ({ path, text }));
-  },
-  async write(){}, async remove(){},
-  async readBlob(){ return null; },   // help notes reference no local images
-  watch(){},
-};
-export function openHelpTab(): void {
-  const url = location.pathname + '?help';
-  if (!window.open(url, '_blank')) location.href = url;   // fall back if a new tab is blocked
-}
-async function openHelp(): Promise<void> {
-  state.readOnly = true; applyReadOnly();                 // help is view-only; nothing is saved
-  useStore(helpStore);                                    // no ref → doesn't change the last-map bookkeeping
-  try { await loadFromDir(); }
-  catch { setStatus('Help content (help/) not found next to index.html.'); }
-}
-
 // ---------- boot: local-first — open straight into the last map, no gate ----------
 // Open the last-used on-device map; else the most recent one; else create a fresh "My map".
 async function commitDevice(): Promise<void> {
@@ -270,7 +236,6 @@ function orientForPhone(): void {
 export async function boot(): Promise<void> {
   applyView();
   hideStart();
-  if (new URLSearchParams(location.search).has('help')){ await openHelp(); orientForPhone(); await applyUrlFromHash(); return; }
   // one-time legacy migration / rebuild — the store probe is skipped once the registry exists
   if (!readMaps().length) await ensureMapRegistry(await resolveOnDeviceStore());
   // resume a local folder only if we can do it silently (permission still granted); else on-device
