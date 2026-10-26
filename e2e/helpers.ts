@@ -24,13 +24,14 @@ export async function clickAway(page: Page): Promise<void> {
   await page.waitForTimeout(120);
 }
 
-// N with the pointer at (x, y) makes a card there and opens it for typing; Enter in the editor is a
-// newline, so `text` may hold several lines.
+// N with the pointer at (x, y) makes a card there and opens it for typing. `text` is INSERTED rather
+// than typed, so it lands verbatim: a typed Enter after a list item would continue the list
+// (utils/md-edit.ts listEnter) and double every marker. It may hold several lines.
 export async function makeCard(page: Page, x: number, y: number, text: string): Promise<Locator> {
   await page.mouse.move(x, y);
   await page.keyboard.press('n');
   await page.waitForTimeout(120);
-  await page.keyboard.type(text);
+  await page.keyboard.insertText(text);
   await clickAway(page);
   const first = text.split('\n')[0].replace(/^#\s*/, '');
   await expect(card(page, first)).toBeVisible();

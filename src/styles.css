@@ -862,10 +862,13 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.no-title > .title-row > .title { display:none; }
 .node.no-title > .title-row { margin:0; min-height:0; }
 /* in-place card editor (double-click, F2, E, the pen): the whole note as raw markdown in a textarea —
-   bare, so the text stays exactly where it was; the CARD shows it's being edited (.node.sel:has above) */
+   bare, so the text stays exactly where it was; the CARD shows it's being edited (.node.sel:has above).
+   MONOSPACE, the face `code` renders in below: what's in here is the note's SOURCE, not its rendering,
+   and a fixed pitch lines up list markers, nesting indents and table pipes. 11.5px keeps a line about as
+   wide as the card's 12px rounded text, so opening the editor barely rewraps a note. */
 .node .body.editing { overflow:visible; opacity:1; }
 .node .body-edit { display:block; width:100%; box-sizing:border-box; margin:0;
-  font:inherit; font-size:12px; line-height:1.4; color:inherit;
+  font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:11.5px; line-height:1.46; color:inherit;
   background:transparent; border:none; border-radius:0; padding:0;
   outline:none; resize:none; overflow:hidden;
   white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -907,7 +910,14 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    boundary above the line boundary; a whole blank line would match the markdown source but makes a
    five-bullet card twice as tall. On the item, so every list kind gets it: bullets, ordered, tasks. */
 .node .body li { margin:.5em 0; }
-.node .body li.task { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:.4em; }
+.node .body li.task { list-style:none; margin-left:-1.4em; display:flex; flex-wrap:wrap; align-items:flex-start; gap:0 .4em; }
+/* The task's text takes the row beside its box (basis 0, so a long line wraps INSIDE it rather than
+   dropping under the box), and a list nested in a task takes a row of its own below — flex-wrap above.
+   That nested list is indented from the task's TEXT, as a bullet's children are from its text. */
+.node .body li.task > .task-text { flex:1 1 0; min-width:0; }
+.node .body li.task > :is(ul, ol) { flex-basis:100%; padding-left:calc(14px + 1.9em); }
+/* A nested list's spacing is its items' own; the block margin above is for a list among paragraphs. */
+.node .body li > :is(ul, ol) { margin:0; }
 /* Empty, a checkbox is an OUTLINE in the card's own ink at half strength — visible on every fill, pale
    or dark, because the ink is by construction the colour with contrast against it. Ticked, it fills
    with 50% black, i.e. ticking DARKENS the card instead of stamping var(--accent) on it, and the white

@@ -27,7 +27,7 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 - `core/state.ts` — the mutable `state` (the MAP: nodes, view, selection, flags) + types + DOM handles.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch). Mutate in place, never reassign, so every module shares one interaction state.
-- `utils/` — pure helpers: `markdown.ts`, `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
+- `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list Enter, Tab, ⌘B/I), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `paste-list.ts`, `guides.ts` (smart-guide geometry), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
@@ -90,7 +90,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse folds a CARD to its first line" (arrow, peek, fold all) · "A plain double-click
-  MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
+  MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB

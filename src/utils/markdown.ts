@@ -183,6 +183,43 @@ function renderTable(lines: string[], start: number, cols: number): { html: stri
   return { html: `<table><thead>${row(tableRow(lines[start]), 'th')}</thead><tbody>${body}</tbody></table>`, next: i };
 }
 
+// ---- lists, nested by indentation -------------------------------------------------
+// A run of item lines is ONE list block whatever its markers, nested by each line's indent: deeper
+// than the open level opens a list INSIDE the item above (where CommonMark and Obsidian put it), less
+// closes back out to the level it matches. Indent is compared, never counted in fixed steps, so `  -`
+// and `    -` both nest under `-`, and a `1. ` item's three-space children do too. A change of marker
+// kind at the same level starts a sibling list (`<ul>` → `<ol>`). Only bullets make TASKS — `data-ti`
+// numbers checkboxes in body order for write-back (main.ts toggleTask), which counts `- [ ]` lines only.
+// A task's text is wrapped in a span because the row is a flex box (styles.css li.task): bare, the text
+// would wrap under the checkbox, and a nested list would sit BESIDE it instead of below.
+const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+/;
+function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: number } {
+  let html = '';
+  const open: { indent: number; tag: 'ul' | 'ol' }[] = [];
+  const li = (body: string, tag: 'ul' | 'ol'): string => {
+    const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(.*)$/);
+    if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
+                 + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}><span class="task-text">${mdInline(tm[2])}</span>`;
+    return `<li>${mdInline(body)}`;
+  };
+  for (const line of lines){
+    const m = line.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/)!;
+    const indent = m[1].replace(/\t/g, '  ').length;
+    const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+    while (open.length > 1 && indent < open[open.length - 1].indent) html += `</li></${open.pop()!.tag}>`;
+    const top = open[open.length - 1];
+    if (!top || indent > top.indent){                         // a new level, inside the open item
+      html += `<${tag}>`; open.push({ indent, tag });
+    } else {
+      html += '</li>';
+      if (tag !== top.tag){ html += `</${top.tag}><${tag}>`; top.tag = tag; }
+    }
+    html += li(m[3], tag);
+  }
+  while (open.length) html += `</li></${open.pop()!.tag}>`;
+  return { html, taskIdx };
+}
+
 // Block-level pass: headings, lists, blockquotes, fenced code, rules, tables, paragraphs.
 export function renderBodyHTML(md: string | null | undefined): string {
   const src = (md || '').replace(/\r\n?/g, '\n').trim();
@@ -210,20 +247,11 @@ export function renderBodyHTML(md: string | null | undefined): string {
       while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
       html += `<blockquote>${q.map(mdInline).join('<br>')}</blockquote>`; continue;
     }
-    if (/^\s*[-*+]\s+/.test(line)){                            // unordered list (incl. [ ]/[x] tasks)
+    if (LIST_ITEM.test(line)){                                 // list: bullets, numbers, [ ]/[x] tasks, nested
       const items: string[] = [];
-      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*[-*+]\s+/, ''));
-      html += '<ul>' + items.map(it => {
-        const tm = it.match(/^\[([ xX])\]\s+(.*)$/);
-        if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
-                     + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}>${mdInline(tm[2])}</li>`;
-        return `<li>${mdInline(it)}</li>`;
-      }).join('') + '</ul>'; continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)){                            // ordered list
-      const items: string[] = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*\d+\.\s+/, ''));
-      html += `<ol>${items.map(it => `<li>${mdInline(it)}</li>`).join('')}</ol>`; continue;
+      while (i < lines.length && LIST_ITEM.test(lines[i])) items.push(lines[i++]);
+      const r = renderList(items, taskIdx);
+      html += r.html; taskIdx = r.taskIdx; continue;
     }
     // Text run: gather until the next block, then split it into PARAGRAPHS on blank lines — one <p>
     // per group of non-blank lines, and A RUN OF BLANK LINES IS ONE BREAK however many lines it is.

@@ -703,6 +703,21 @@ that can't produce a broken note. It stands aside (native paste) for an empty se
 one, a paste that isn't a bare URL, and an image's `![alt](src)`. The handler writes nothing but the
 textarea and then dispatches `input`, so the editor's own live path runs exactly as it does for typing.
 
+**The card editor WRITES a little markdown for you, and nothing more** (`utils/md-edit.ts`, bound in
+`onBodyKeydown`). Enter in a list item starts the next one (the next number, a fresh `[ ] `), and Enter on an
+empty item ends the list; ⇧Enter is always a bare newline. Tab nests the touched lines one level and ⇧Tab
+lifts them — a level being the item above's MARKER WIDTH (`- ` 2, `1. ` 3), so the indent is the one
+CommonMark and Obsidian read as nesting — and Tab never moves focus, which used to blur the card shut.
+⌘B / ⌘I / ⌘⇧X wrap or unwrap `**` / `*` / `~~`, reading a run of stars whole so italic and bold compose. No
+⌘K for links: the palette owns it, and pasting a URL over a selection already links. The textarea itself
+stays plain text (monospace, since it shows SOURCE); styling the text while editing was weighed and parked.
+- **Every helper is pure text → `{text, start, end}`** (`linkPaste`'s shape) and goes through ONE writer,
+  `applyTextEdit`, which replaces only the changed span with `execCommand('insertText')`: assigning
+  `ta.value` wipes the textarea's own undo stack, so ⌘Z inside the editor would undo nothing.
+- **The renderer nests lists by indentation** (`renderList`): deeper than the open level opens a list inside
+  the item above, shallower closes back to the level it matches, a marker change at one level starts a
+  sibling list. Tasks stay bullets-only, numbered in body order, because `toggleTask` counts `- [ ]` lines.
+
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;
 adding one is a decision, not a gap. Neither writes a new frontmatter key — a merge is a body edit plus a

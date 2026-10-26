@@ -15,6 +15,7 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
+import { listEnter, indentLines, toggleWrap, type TextEdit } from '../utils/md-edit.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure } from '../main.js';
@@ -149,8 +150,8 @@ export function endInPlaceEdit(): void { endBodyEdit(); endTitleEdit(); }
 // ---------- the card's ONE editor ----------
 // Shows the RAW markdown of the whole note — title heading included — in a textarea inside `.body`,
 // with the rendered `.title-row` hidden for the duration (styles.css `.node.card-editing`), since the
-// title is in the textarea and showing it twice would read as two fields. Enter inserts a newline,
-// Esc cancels, blur commits.
+// title is in the textarea and showing it twice would read as two fields. Enter inserts a newline
+// (continuing a list item — utils/md-edit.ts has the writing helpers), Esc cancels, blur commits.
 export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
 // Paste a URL over selected text and the text becomes a LINK — or, if it already is one, keeps its
 // label and takes the new URL (utils/markdown.ts linkPaste owns that rule). Bound by every editor
@@ -163,10 +164,30 @@ export function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolea
   const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
   if (!r) return false;
   e.preventDefault();
-  ta.value = r.text;
-  ta.setSelectionRange(r.start, r.end);
-  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  applyTextEdit(ta, r);
   return true;
+}
+// The ONE way the editor's own helpers (link paste, list Enter, Tab, ⌘B…) write into the textarea:
+// replace only the span that CHANGED, through the browser's own insert, so it lands on the textarea's
+// native undo stack — assigning `ta.value` wipes that stack, and ⌘Z in the editor would then undo
+// nothing. `execCommand` is deprecated but still the only call that does this in Chrome and Safari;
+// where it's refused, `setRangeText` writes the same span (without undo) and we raise the `input`
+// the browser would have, so the editor's live path (autosize, reflow) runs either way.
+function applyTextEdit(ta: HTMLTextAreaElement, r: TextEdit): void {
+  const a = ta.value, b = r.text;
+  let p = 0; while (p < a.length && p < b.length && a[p] === b[p]) p++;
+  let q = 0; while (q < a.length - p && q < b.length - p && a[a.length - 1 - q] === b[b.length - 1 - q]) q++;
+  const ins = b.slice(p, b.length - q);
+  if (a !== b){
+    ta.setSelectionRange(p, a.length - q);
+    const done = ins ? document.execCommand('insertText', false, ins) : document.execCommand('delete');
+    if (!done || ta.value !== b){
+      ta.value = a;                                     // undo a half-applied command before the fallback
+      ta.setRangeText(ins, p, a.length - q);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+  ta.setSelectionRange(r.start, r.end);
 }
 // Where the caret lands: on the card's NAME (selected, so typing replaces it — the old rename's
 // select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
@@ -262,10 +283,21 @@ function onBodyInput(n: MindNode): void {
 function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) return;
   e.stopPropagation();                                  // keep canvas/card shortcuts out while typing
+  if (e.isComposing) return;                            // an IME owns Enter/Tab while it composes
+  const ta = ui.bodyEdit.ta, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+  const edit = (r: TextEdit | null): void => { if (r){ e.preventDefault(); applyTextEdit(ta, r); } };
   if (e.key === 'Escape'){ e.preventDefault(); endBodyEdit({ cancel:true }); }
-  else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter'){ e.preventDefault(); endBodyEdit(); }
-  else if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')){ e.preventDefault(); extractToCard(); }
-  // plain Enter falls through → the textarea inserts a newline (notes are multi-line)
+  else if (mod && e.key === 'Enter'){ e.preventDefault(); endBodyEdit(); }
+  else if (mod && e.shiftKey && k === 'e'){ e.preventDefault(); extractToCard(); }
+  // A plain Enter in a list item starts the next one (or ends the list on an empty one); anywhere else
+  // it falls through and the textarea inserts a newline (notes are multi-line). ⇧Enter is always a bare
+  // newline — the way to write a second paragraph inside an item.
+  else if (e.key === 'Enter' && !e.shiftKey && !mod && !e.altKey) edit(listEnter(ta.value, ta.selectionStart, ta.selectionEnd));
+  // Tab nests, ⇧Tab un-nests — and never moves focus, which would blur the card shut mid-note.
+  else if (e.key === 'Tab' && !mod && !e.altKey) edit(indentLines(ta.value, ta.selectionStart, ta.selectionEnd, e.shiftKey));
+  else if (mod && !e.altKey && !e.shiftKey && k === 'b') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '**'));
+  else if (mod && !e.altKey && !e.shiftKey && k === 'i') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '*'));
+  else if (mod && !e.altKey && e.shiftKey && k === 'x') edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '~~'));
 }
 // Commit (or cancel) the edit. Commit SPLITS the textarea back into the card's title and note
 // (splitHeading — the leading `# ` line is the name, everything else the body, and no heading means
