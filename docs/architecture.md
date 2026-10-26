@@ -844,7 +844,9 @@ inset 8px, and no red Delete.
 **Toolbar metrics.** Every dark island (float bar, edge bar, popovers, menu) and the dock share
 `--r-bar` (12px). Icons are 18px (`--bar-icon`) in 32px buttons; dividers (`.fb-sep`, `.dock-sep`) run
 the bar's full height with 6px either side; the colour dropdown is flat until hovered. A popover floats
-`POP_GAP` (8px) off its bar with no stem joining them.
+`POP_GAP` (8px) off its bar with no stem joining them. Every button that opens a menu or popover is a DROPDOWN (`.fb-dd`): its
+face then a grey chevron (`chevron()` in view/icons.ts for faces rebuilt in JS) — the colour dots, ⋯,
+the edge bar's line style (a Solid/Dashed popover, `ebDashPop`) and ends, the dock's canvas colour and grid.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
 board's canvas colour and grid, and ⌘K, in groups split by hairlines. Its buttons are ordinary

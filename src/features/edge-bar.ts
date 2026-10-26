@@ -1,5 +1,5 @@
 // ============================================================
-// The selected EDGE's floating bar: colour · solid/dashed · arrows · label · delete.
+// The selected EDGE's floating bar: colour ▾ · line style ▾ · ends ▾ · delete (label = double-click).
 //
 // Its own bar rather than a mode of features/float-bar.ts. That one is keyed on `state.sel` and
 // anchored to a CARD from end to end (anchorNode, labelRect, the locked-selection collapse), and an
@@ -19,9 +19,11 @@ import { byId } from '../utils/dom.js';
 import { isInteracting } from './float-bar.js';
 import { PICKER_ROWS, SWATCH_BG, colorFill } from '../main.js';
 import { safeInsets } from '../utils/dom.js';
+import { chevron } from '../view/icons.js';
 
 const bar = byId('edgeBar');
 const colorBtn = byId<HTMLButtonElement>('ebColor');
+const colorDot = byId('ebColorDot');
 const dashBtn = byId<HTMLButtonElement>('ebDash');
 const arrowsBtn = byId<HTMLButtonElement>('ebArrows');
 
@@ -30,6 +32,8 @@ const colorPop = byId('ebColorPop');
 const colorRow = byId('ebColors');
 const arrowPop = byId('ebArrowPop');
 const arrowChips = byId('ebArrowChips');
+const dashPop = byId('ebDashPop');
+const dashChips = byId('ebDashChips');
 
 const GAP = 10;
 
@@ -86,12 +90,14 @@ function wire(): void {
   // each edge's own — three lines where two are dashed become three dashed lines, not two solid and
   // one dashed. The lead edge (the last one clicked, whose state the button shows) decides which
   // value that is, so the button does what it looks like it will do.
-  dashBtn.onclick = () => {
-    const es = selectedEdges(); if (!es.length) return;
-    const want = !(leadEdge()?.dashed ?? false);
+  dashBtn.onclick = (ev) => { ev.stopPropagation(); dashPop.classList.contains('open') ? closeDashPop() : openDashPop(); };
+  dashChips.onclick = (ev) => {
+    const chip = (ev.target as Element).closest<HTMLElement>('[data-dash]');
+    const es = selectedEdges(); if (!chip || !es.length) return;
+    const want = chip.dataset.dash === '1';
     touchEdges();
     for (const e of es) e.dashed = want;
-    commit(); commitStep();
+    closeDashPop(); commit(); commitStep();
   };
   arrowsBtn.onclick = (ev) => { ev.stopPropagation(); arrowPop.classList.contains('open') ? closeArrowPop() : openArrowPop(); };
   arrowChips.onclick = (ev) => {
@@ -120,6 +126,7 @@ function wire(): void {
     const t = ev.target as Node;
     if (colorPop.classList.contains('open') && !colorPop.contains(t) && !colorBtn.contains(t)) closeColorPop();
     if (arrowPop.classList.contains('open') && !arrowPop.contains(t) && !arrowsBtn.contains(t)) closeArrowPop();
+    if (dashPop.classList.contains('open') && !dashPop.contains(t) && !dashBtn.contains(t)) closeDashPop();
   }, true);
 }
 function commit(repaintBar = true): void {
@@ -151,6 +158,15 @@ function openArrowPop(): void {
   placePop(arrowPop, arrowsBtn);
 }
 function closeArrowPop(): void { arrowPop.classList.remove('open'); }
+// Line style: a menu of the two, each drawn as it looks — the same dropdown every picker in the bar is.
+function openDashPop(): void {
+  const dashed = leadEdge()?.dashed ?? false;
+  dashChips.innerHTML = [{ v: false, icon: ICON_SOLID, label: 'Solid' }, { v: true, icon: ICON_DASHED, label: 'Dashed' }]
+    .map(c => `<button class="layoutchip${c.v === dashed ? ' active' : ''}" data-dash="${c.v ? 1 : 0}" title="${c.label}">${c.icon}</button>`).join('');
+  dashPop.classList.add('open');
+  placePop(dashPop, dashBtn);
+}
+function closeDashPop(): void { dashPop.classList.remove('open'); }
 function placePop(pop: HTMLElement, anchor: HTMLElement): void {
   const r = anchor.getBoundingClientRect();
   pop.style.left = Math.max(8, r.left + r.width / 2 - pop.offsetWidth / 2) + 'px';
@@ -160,11 +176,11 @@ function placeColorPop(): void { placePop(colorPop, colorBtn); }
 
 function syncControls(): void {
   const e = leadEdge(); if (!e) return;
-  colorBtn.style.setProperty('--sw', colorFill(e.color) ?? 'var(--edge)');
-  dashBtn.innerHTML = e.dashed ? ICON_DASHED : ICON_SOLID;
-  dashBtn.title = e.dashed ? 'Dashed — click for solid' : 'Solid — click for dashed';
-  arrowsBtn.innerHTML = endsIcon(e.fromCap, e.toCap);
-  arrowsBtn.title = `Ends: ${CAP_NAME[e.fromCap]} → ${CAP_NAME[e.toCap]} — click to change`;
+  colorDot.style.setProperty('--sw', colorFill(e.color) ?? 'var(--edge)');
+  dashBtn.innerHTML = (e.dashed ? ICON_DASHED : ICON_SOLID) + chevron();
+  dashBtn.title = e.dashed ? 'Line style: dashed' : 'Line style: solid';
+  arrowsBtn.innerHTML = endsIcon(e.fromCap, e.toCap) + chevron();
+  arrowsBtn.title = `Ends: ${CAP_NAME[e.fromCap]} → ${CAP_NAME[e.toCap]}`;
 }
 
 // The curve's midpoint in SCREEN space — where the bar hangs. Returns null when the edge has gone
@@ -188,6 +204,7 @@ function place(): boolean {
   bar.style.top = Math.min(top, window.innerHeight - bh - 8) + 'px';
   if (colorPop.classList.contains('open')) placeColorPop();
   if (arrowPop.classList.contains('open')) placePop(arrowPop, arrowsBtn);
+  if (dashPop.classList.contains('open')) placePop(dashPop, dashBtn);
   return true;
 }
 
@@ -200,11 +217,12 @@ function followLoop(): void {
   bar.classList.toggle('hide-interact', busy);
   colorPop.classList.toggle('hide-interact', busy);
   arrowPop.classList.toggle('hide-interact', busy);
+  dashPop.classList.toggle('hide-interact', busy);
   raf = requestAnimationFrame(followLoop);
 }
 function hide(): void {
   bar.classList.remove('open');
-  closeColorPop(); closeArrowPop();
+  closeColorPop(); closeArrowPop(); closeDashPop();
   if (raf != null) { cancelAnimationFrame(raf); raf = null; }
 }
 

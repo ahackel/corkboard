@@ -112,21 +112,24 @@
     <button id="fbOpen" class="fb-icon" title="Open (↑)" aria-label="Open">
       <span class="ic" data-icon="expand"></span></button>
     <button id="fbLock" class="fb-icon" title="Lock (L)" aria-label="Lock"></button>
-    <button id="fbMore" class="fb-icon" title="More actions" aria-label="More actions">
-      <span class="ic" data-icon="kebab"></span></button>
+    <button id="fbMore" class="fb-icon fb-dd" title="More actions" aria-label="More actions">
+      <span class="ic" data-icon="kebab"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
   </div>
   <!-- the selected EDGE's bar (features/edge-bar.ts). Its own bar rather than a mode of #floatBar:
        that one is anchored to a CARD and keyed on state.sel throughout, and an edge shares none of
        its controls. Starts closed so it doesn't flash in before the first sync. -->
   <div id="edgeBar">
-    <button id="ebColor" class="fb-swatch swatch" title="Colour" aria-label="Edge colour"></button>
-    <button id="ebDash" class="fb-icon" title="Solid / dashed" aria-label="Line style"></button>
-    <button id="ebArrows" class="fb-icon" title="Ends — click to choose" aria-label="Line ends"></button>
+    <!-- every button that opens a picker is a dropdown (.fb-dd): its face, then a chevron -->
+    <button id="ebColor" class="fb-dd" title="Colour" aria-label="Edge colour">
+      <span id="ebColorDot" class="fb-swatch swatch"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
+    <button id="ebDash" class="fb-icon fb-dd" title="Line style" aria-label="Line style"></button>
+    <button id="ebArrows" class="fb-icon fb-dd" title="Line ends" aria-label="Line ends"></button>
     <span class="fb-sep"></span>
     <button id="ebDelete" class="fb-icon" title="Delete edge (Del)" aria-label="Delete edge"></button>
   </div>
   <div id="ebColorPop" class="fb-pop"><div id="ebColors" class="swatches"></div></div>
   <div id="ebArrowPop" class="fb-pop"><div id="ebArrowChips" class="capcols"></div></div>
+  <div id="ebDashPop" class="fb-pop"><div id="ebDashChips" class="layoutchips"></div></div>
   <!-- the label editor, opened by DOUBLE-CLICKING an edge; positioned over the line's midpoint -->
   <input id="ebLabelEdit" type="text" spellcheck="false" placeholder="Label…" aria-label="Edge label">
 
@@ -161,11 +164,11 @@
     <!-- canvas colour: edits the colour of the canvas you're standing on — the MAP at the top level,
          the OPEN FRAME once you're inside one (features/canvas-color.ts). Its face is a .swatch, so it
          shows the colour it would overwrite. The popover holds properties.ts's own swatch rows. -->
-    <button id="canvasColorBtn" class="floating-btn" title="Canvas colour" aria-label="Canvas colour">
-      <span class="swatch inherit"></span></button>
+    <button id="canvasColorBtn" class="floating-btn fb-dd" title="Canvas colour" aria-label="Canvas colour">
+      <span class="swatch inherit"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
     <!-- background grid: ONE button for both axes — its face shows the live style and a click opens a
          menu holding the styles AND the spacings (view/grid.ts). -->
-    <button id="gridBtn" class="floating-btn" title="Background grid" aria-label="Background grid"></button>
+    <button id="gridBtn" class="floating-btn fb-dd" title="Background grid" aria-label="Background grid"></button>
     <span class="dock-sep"></span>
     <!-- the command palette's own button: the way in for touch, and the hint that ⌘K exists -->
     <button id="paletteBtn" class="floating-btn" title="All commands (⌘K)" aria-label="All commands">⌘K</button>

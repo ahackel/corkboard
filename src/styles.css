@@ -1325,11 +1325,17 @@ body.canvas-interacting .addnote { display:none !important; }
 /* the colour trigger is the same chip as the ones in its popover, so it's the same 22px they are —
    NOT --bar-btn (which the rule above would give it, and which read as an oversized bubble next to
    the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
-#floatBar .fb-swatch, #edgeBar .fb-swatch { width:20px; height:20px; margin:0 6px; }
-/* FigJam's colour DROPDOWN: the dot and a small grey chevron, flat on the bar until hovered */
-#floatBar button.fb-dd { width:auto; gap:0; padding:0 6px 0 0; background:transparent; color:var(--bar-muted); }
-#floatBar button.fb-dd:hover { background:var(--bar-hover); color:var(--bar-ink); }
-#floatBar .fb-dd .fb-swatch { pointer-events:none; }
+#floatBar .fb-swatch, #edgeBar .fb-swatch { width:20px; height:20px; margin:0 4px 0 6px; }
+/* A DROPDOWN: every toolbar button that opens a menu or a popover — the colour dot, the line style, the
+   ends, ⋯, the dock's canvas colour and grid — is its face followed by a small grey chevron, flat on
+   the bar until hovered (FigJam's). One rule for both dark bars and the light dock. */
+#floatBar button.fb-dd, #edgeBar button.fb-dd { width:auto; gap:0; padding:0 6px 0 4px; background:transparent; color:var(--bar-ink); }
+#floatBar button.fb-dd:hover, #edgeBar button.fb-dd:hover { background:var(--bar-hover); }
+#dock .floating-btn.fb-dd { width:auto; gap:0; padding:0 6px 0 7px; }
+.fb-dd > svg, .fb-dd > .ic:not(.fb-chev) svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
+#floatBar .fb-dd .fb-swatch, #edgeBar .fb-dd .fb-swatch { pointer-events:none; }
+.fb-chev { margin-left:3px; opacity:.6; }
+.fb-dd:hover .fb-chev { opacity:1; }
 .fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
 /* the eye shows the state it would CHANGE: open eye while the contents show, struck-out while hidden */
 #fbHide .ic-off, #fbHide.off .ic-on { display:none; }

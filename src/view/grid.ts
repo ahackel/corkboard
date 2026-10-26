@@ -32,6 +32,7 @@
 // the gradients are rebuilt only when the level actually changes.
 // Persisted per-map in settings.json (data/persistence.ts) — not localStorage, since it's a
 // property of the map/vault, and should travel with it.
+import { chevron } from './icons.js';
 import gridOffIcon from '../assets/icons/grid-off.svg?raw';
 import gridDotIcon from '../assets/icons/grid-dot.svg?raw';
 import gridMeshIcon from '../assets/icons/grid-mesh.svg?raw';
@@ -149,7 +150,7 @@ export function paintGrid(): void {
 // after each pick.
 export function refreshGrid(): void {
   if (gridBtn) {
-    gridBtn.innerHTML = GRID_ICONS[state.gridStyle];
+    gridBtn.innerHTML = GRID_ICONS[state.gridStyle] + chevron();
     gridBtn.title = `Background grid: ${STYLE_LABELS[state.gridStyle]}, ${sizeLabel(state.gridSize)}`;
   }
   painted = '';   // force a rebuild — the style may have changed, not just the step

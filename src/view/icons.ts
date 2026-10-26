@@ -25,6 +25,10 @@ export const FOLDER_PATH = '<path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h3.4l2 2.5h8.6A1.
 // "a folder glyph, no content blocks" don't each re-spell the wrapper.
 export const FOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FOLDER_PATH}</svg>`;
 
+// The dropdown chevron EVERY toolbar button that opens a menu or popover carries after its face (styles
+// .fb-dd), for the buttons whose face is rebuilt in JS and so can't take a data-icon placeholder.
+export function chevron(): string { return `<span class="ic fb-chev">${ICONS.chevron ?? ''}</span>`; }
+
 export function mountIcons(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>('[data-icon]').forEach(el => {
     const name = el.dataset.icon;
