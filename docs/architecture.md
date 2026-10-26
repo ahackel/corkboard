@@ -818,7 +818,9 @@ its sides — a blue dot in a white rim that becomes a ⊕ under the pointer (fr
 to draw a line; CLICK it (a press under `MIN_DRAG_PX`) and `spawnConnected` (edge-tools.ts) makes a card
 `CONNECT_GAP` away on that side — the source's colour and size, in the source's home, joined by a line,
 open for typing — stepping past cards already there so repeated clicks fan out. It is one undo step with
-the card, so an abandoned empty card takes its line with it (`discardNewCard` → `deleteNodes`). The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
+the card, so an abandoned empty card takes its line with it (`discardNewCard` → `deleteNodes`). While a card is
+being EDITED the card itself is the field: the textarea is bare (no box, no scrim), the ring turns a dimmed
+3px blue round the card's border and the corner handles stand down (`.node.sel.card-editing`). The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
