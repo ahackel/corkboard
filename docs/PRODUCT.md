@@ -49,11 +49,10 @@ What it has been used for, and what it must stay good at:
 
 **Core — keep, and make each feel great:** cards with Markdown, free placement, nesting (a card
 with children is an outline; frames group), colour and tags, simple lines between cards, search,
-undo, pasted images, a pasted list becoming one card per item, collapse, opening a card or frame to
+undo, pasted images, a pasted list becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a card or frame to
 work inside it, and the ⌘K command palette — every action, with its shortcut, in one searchable list.
 
-**To build, in order:** smart alignment guides
-while dragging · tidy-up of a selection (only on request) · frame titles that grow readable when
+**To build, in order:** tidy-up of a selection (only on request) · frame titles that grow readable when
 zoomed out · emoji tags presented as stamps · export a selection or board as PNG · phone inbox.
 
 **Cut — and why:**

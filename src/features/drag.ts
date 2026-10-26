@@ -23,6 +23,7 @@ import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
+import { guidePull, hideGuides } from './guides.js';
 
 // The #outline drawer overlays the canvas from the right on wide screens; cache it too so
 // auto-pan can treat it as a right obstruction (see autoPanStep).
@@ -169,7 +170,18 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   const inBox = !!(fp && isContainer(fp));
   const ax = inBox ? fp!.x : 0, ay = inBox ? fp!.y : 0;
   const g = gridSnap();
-  return { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
+  const grid = { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
+  // Smart guides (features/guides.ts) win over the grid on an axis where something lines up with the
+  // RAW pointer position — read before the grid rounds it, or a 20px step would jump right past a
+  // 6px pull. Off while the drop is a reparent or a merge: the card is going INTO something then.
+  if (drag.alt || drag.dropTarget || drag.cardMerge) { hideGuides(); return grid; }
+  const roots: { n: MindNode; s: Pt }[] = [];
+  for (const [id, st] of drag.targets) {
+    const m = state.nodes.get(id);
+    if (m && !(m.parent && drag.targets.has(m.parent))) roots.push({ n: m, s: st });
+  }
+  const pull = guidePull(act, roots, new Set(drag.targets.keys()), dx, dy);
+  return { x: pull.x != null ? dx + pull.x : grid.x, y: pull.y != null ? dy + pull.y : grid.y };
 }
 
 // Move every dragged card to start + (dx,dy) in world space, mirroring it with a compositor-only
@@ -478,6 +490,7 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
 // live ui.drag. Shared by the per-card handler and the ghost-card flow.
 function dragPointerUp(): void {
     stopAutoPan();
+    hideGuides();
     if (ui.dragRAF){ cancelAnimationFrame(ui.dragRAF); ui.dragRAF = null; }
     const drag = ui.drag;
     if (drag) {
@@ -659,6 +672,7 @@ export function abortDrag(): void {
   if (!drag) return;
   clearDropTarget();
   hideLandingGhost();
+  hideGuides();
   for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
     const m = state.nodes.get(id);
     if (m?.el){ m.el.style.transform = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }

@@ -637,6 +637,16 @@ drag was the one gesture that slipped through: it swaps the drag to a CLONE (`ap
 `drag.targets`), so a delta snapped for the original card found nothing and fell back to the raw pointer
 delta — `snappedDelta` keys off `drag.active` for that reason.
 
+**Smart guides PULL a drag by a few pixels, and win over the grid when they do.** `snapBox`
+(`utils/guides.ts`, pinned by `tests/guides.test.ts`) takes the union box of the drag's roots at the
+RAW pointer position and, per axis, pulls it within 6 screen px to the nearest edge-on-edge or
+centre-on-centre alignment, the gap of the pair it continues, or the middle between two neighbours.
+Neighbours are the drag's siblings in the same space, on screen. `features/guides.ts` draws one
+pink rule per aligned position (the centre rule only when no edge lines up) and a ticked bar per equal
+gap. An axis the guides claim skips the grid: guides read the RAW position because a 20px grid step
+would otherwise jump past a 6px pull, and measured card heights put bottoms off the grid anyway. Off
+for a reparent, a merge, Alt, and managed layouts; hidden on every drop and abort.
+
 An eased pull toward the grid — a magnet, the value sliding toward the nearest line in proportion to how
 close it was — was built and then removed, and the reason is worth keeping. Any pull is a GAP between the
 pointer and the thing being dragged; closing that gap means the object travels faster than the pointer for

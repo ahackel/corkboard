@@ -1018,6 +1018,10 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    White and dashed to match the reparent ghost's border; the dash gradient runs along the
    bar's long axis, set inline per orientation — see features/drag.ts showInsertLine */
 .insert-line { position:absolute; pointer-events:none; z-index:8; }
+/* Smart guides while dragging (features/guides.ts): one-screen-pixel rules in a bright pink that reads
+   on every card colour and both canvases. Above the cards, under nothing interactive. */
+#guides { position:absolute; left:0; top:0; pointer-events:none; z-index:9; }
+#guides .guide { position:absolute; background:#ff3b8b; }
 /* break long words / URLs and clip anything that still overflows the card horizontally */
 /* A card's title IS the leading `# ` line of its note, so it must LOOK like one: this metric is shared
    verbatim with `.node .body h1` below (the same heading, rendered by renderBodyHTML when it appears
