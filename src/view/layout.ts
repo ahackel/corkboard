@@ -272,7 +272,7 @@ export function activeTab(g: MindNode): MindNode | null {
 // What can be dropped on a frame's tab to become a tab of it. A frame already is one; a plain CARD is
 // turned into a frame on the way in (crud.ts dockFrames), since that's what a tab is. The other kinds
 // keep out: an annotation is a note pinned on top of something else and holds nothing, a stack's whole
-// nature is its outliner box, and an image/query card is a leaf whose box IS its content.
+// nature is its outliner box, and an image card is a leaf whose box IS its content.
 export function canBeTab(n: MindNode): boolean { return n.type === 'frame' || n.type === 'card'; }
 // The node a user-facing action on `n` should actually hit. A tab group doesn't exist from the outside:
 // what you see, colour, rename or delete is the OPEN TAB, so those land there. The box-shaped actions

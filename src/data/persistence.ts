@@ -244,7 +244,6 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       // written by this build and means exactly what it says.
       w: g?.w ?? authoredW(mm.w, mm.type, imageOnly),
       h: g?.h ?? mm.h ?? undefined,
-      query: mm.query || undefined,
       ...rest, dirty:unmigrated, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
     };
     if (mm.wasStack) wasStack.add(node.id);

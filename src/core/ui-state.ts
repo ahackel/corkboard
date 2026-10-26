@@ -64,10 +64,6 @@ export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLT
 // No `orig`: unlike a card's editor there is nothing to compare against on commit — an empty label
 // falls back to what the node had, and the element's own text is the only value read.
 export interface TitleEdit { id: string; el: HTMLElement; isNew?: boolean; }
-// A query card's search-field editing session (main.ts nodeEl/onQueryInput/endQueryEdit) — mirrors
-// InlineEdit/BodyEdit's touch-once-on-focus, commit-on-blur shape so the whole typing session is one
-// undo step instead of one per keystroke.
-export interface QueryEdit { id: string; orig: string; }
 // A full-screen editor-sheet session (features/editor-sheet.ts) — the phone/outline replacement
 // for the in-card editors. Same contract: while set, persistence defers the file rename and the
 // focus-reload (the sheet holds uncommitted text even when the field itself is blurred on iOS).
@@ -126,7 +122,6 @@ export const ui = {
   // At most one of the two is ever set — each opener closes the other.
   bodyEdit: null as BodyEdit | null,
   titleEdit: null as TitleEdit | null,
-  queryEdit: null as QueryEdit | null,
   // ---- full-screen editor sheet (features/editor-sheet.ts) ----
   sheetEdit: null as SheetEdit | null,
   // ---- panel title/body editing (outline mode; wired in main.ts) ----

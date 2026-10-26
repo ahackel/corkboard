@@ -7,7 +7,7 @@ export function nodeFrom(text: string, file: string | null = 'Note.md', id = 'n'
   const n: MindNode = {
     id, file, x: 0, y: 0, rx: 0, ry: 0, parent: null,
     collapsed: p.mm.collapsed, locked: p.mm.locked, done: p.mm.done, checklist: p.mm.checklist,
-    type: p.mm.type, layout: p.mm.layout, query: p.mm.query,
+    type: p.mm.type, layout: p.mm.layout,
     title: p.title, color: p.color, keepStatus: p.keepStatus, tags: p.tags, body: p.body,
     titleGap: p.titleGap, fmEntries: p.fmEntries, dirty: false, dirtyLayout: false,
   };

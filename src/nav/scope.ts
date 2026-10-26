@@ -53,7 +53,7 @@ export function isReadingRoot(n: MindNode): boolean {
 // …and the same question asked of the SCOPE rather than of a node: the card being read, or null.
 // Every "is a card open" test in the app goes through one of these two — the camera clamp, the
 // annotation shift, the canvas-colour owner, the body class, openFrame's own two consequences — so
-// widening what reads as a page (a query card, say) stays the one edit isReadingRoot promises.
+// widening what reads as a page (an image card, say) stays the one edit isReadingRoot promises.
 export function readingRootNode(): MindNode | null {
   const n = scopeRootNode();
   return n && isReadingRoot(n) ? n : null;
@@ -98,8 +98,7 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 // canvas, a card's interior is its NOTE, read at full width (features/reading.ts). Same navigation
 // either way — one level on the stack, one crumb, ↓ to leave — which is the whole reason reading a
 // long note is a place you GO rather than a second panel you look at.
-// An ANNOTATION has no interior (it is a margin note pinned on its parent) and a QUERY card's
-// contents are derived rather than written, so neither opens.
+// An ANNOTATION has no interior (it is a margin note pinned on its parent), so it doesn't open.
 export function canOpen(n: MindNode | null | undefined): boolean {
   return n?.type === 'frame' || n?.type === 'card';
 }
@@ -163,7 +162,7 @@ export function resolveScopeAfterLoad(): void {
   scope.rootId = next[next.length - 1]?.rootId ?? null;
 }
 
-// Drop any level whose frame is gone (deleted from a query card, undone away, removed on disk) or
+// Drop any level whose frame is gone (undone away, removed on disk) or
 // is no longer openable (retyped to a card), truncating the stack at the first casualty. Called
 // from applyLayouts — which runs after every structural change — for exactly the reason
 // normalizeTabs lives there: ~20 callers, one funnel. Truncation ONLY; the camera recovery belongs

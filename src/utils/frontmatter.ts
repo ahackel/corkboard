@@ -106,7 +106,6 @@ export interface ParsedNote {
     y: number | null;
     w: number | null;
     h: number | null;
-    query: string;
     collapsed: boolean;
     locked: boolean;
     done: boolean;
@@ -155,7 +154,7 @@ function fmRemove(entries: FmEntry[], key: string): void {
 }
 
 // Resolve a note's kind + child-arrangement from frontmatter, folding legacy tokens.
-// CURRENT format: `mm_type` (card|frame|annotation|query, default card) + `mm_layout`.
+// CURRENT format: `mm_type` (card|frame|annotation, default card) + `mm_layout`.
 // LEGACY (no mm_type): a single `mm_layout` token conflated both — split it here so old vaults
 // keep working: none/''→card·inherit, free/line/fan→card·*, two-sided/grid→card·fan,
 // frame(+mm_arrange flow-h/flow-v)→frame·free|horizontal|vertical, frame-h/-v→frame·*.
@@ -165,11 +164,14 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // first save; nothing else in the app has to know the kind ever existed.
 // `stack` folds away the same way, and for the same reason: a card with children IS an outline now
 // (view/layout.ts isStack), so the kind said nothing the child list didn't already say.
+// `query` (a live search-results box) is CUT (docs/PRODUCT.md): such a note opens as a plain card with
+// its title and body; its `mm_query` search text is dropped the next time the note is written.
 function foldTypeLayout(entries: FmEntry[]): { type: NodeType; layout: NodeLayout; wasStack: boolean } {
   const t = fmValue(entries, 'mm_type');
   if (t === 'image') return { type: 'card', layout: 'free', wasStack: false };
   if (t === 'stack') return { type: 'card', layout: 'inherit', wasStack: true };
-  if (t === 'frame' || t === 'card' || t === 'annotation' || t === 'query')
+  if (t === 'query') return { type: 'card', layout: 'inherit', wasStack: false };
+  if (t === 'frame' || t === 'card' || t === 'annotation')
     return { type: t, layout: (fmValue(entries, 'mm_layout') || (t === 'frame' ? 'free' : 'inherit')) as NodeLayout, wasStack: false };
   // legacy: infer both from the combined mm_layout token
   const v = fmValue(entries, 'mm_layout');
@@ -227,7 +229,6 @@ export function parseMd(text: string): ParsedNote {
       y: num(fmValue(entries, 'mm_y')),
       w: num(fmValue(entries, 'mm_w')),
       h: num(fmValue(entries, 'mm_h')),
-      query: fmValue(entries, 'mm_query'),
       collapsed: fmValue(entries, 'mm_collapsed') === 'true',
       locked: fmValue(entries, 'mm_locked') === 'true',
       done: fmValue(entries, 'mm_done') === 'true',
@@ -273,11 +274,10 @@ export function serializeMd(n: MindNode): string {
   if (!n.title.trim() && !n.body.trim()) entries.push({ key:'mm_blank', lines:['mm_blank: true'] });
   if (n.type !== 'card') entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
   // Only card/frame carry a layout; omit it when it's the type's default (card→inherit, frame→free).
-  // annotation/query are leaves with no layout, so they never write mm_layout.
+  // an annotation is a leaf with no layout, so it never writes mm_layout.
   const layoutDefault = n.type === 'frame' ? 'free' : 'inherit';
   if ((n.type === 'card' || n.type === 'frame') && n.layout !== layoutDefault)
     entries.push({ key:'mm_layout', lines:[`mm_layout: ${n.layout}`] });
-  if (n.type === 'query' && n.query) entries.push({ key:'mm_query', lines:[`mm_query: ${n.query}`] });
   const fm = entries.flatMap(e => e.lines).join('\n');
   // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse
   // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing, down to

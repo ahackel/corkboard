@@ -16,8 +16,8 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { renderBodyHTML, esc } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, disambiguatedLabel, duplicateLabels, descendantCount, hasLockedAncestor, isLockedEffective, subtreeHasLocked, parentOf, ancestors, resolveWikilink } from './utils/model.js';
-import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation, isQueryCard } from './core/state.js';
+import { childrenOf, isHidden, nodeLabel, descendantCount, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
+import { state, world, dragLayer, stage, setStatus, isImageCard, isAnnotation } from './core/state.js';
 import { setupTheme } from './view/theme.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, FOLDER_SVG } from './view/icons.js';
@@ -27,7 +27,7 @@ import { paintEdges } from './view/edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
-import { openMenu } from './features/context-menu.js';   // also registers the custom right-click menu on the canvas
+import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createAnnotationHere, createSibling, addChild, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
@@ -69,11 +69,8 @@ setupCanvasColor();
 // row (features/outline.ts), the float bar's lock toggle (features/float-bar.ts) and the read-only
 // toolbar button (applyReadOnly, further down) — all four share this one glyph.
 export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
-// magnifier glyph shown in front of a query card's title; tapping it reveals the query-input in
-// the title's place (see the query-icon click handler + endQueryEdit below).
-const QUERY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="6"/><path d="M20 20l-5-5"/></svg>`;
 // line-smiley glyph for the card's own "add emoji tag" button (bottom-left, next to .addnote) —
-// same hand-drawn-icon style (stroke=currentColor) as LOCK_BADGE_SVG/QUERY_ICON_SVG above.
+// same hand-drawn-icon style (stroke=currentColor) as LOCK_BADGE_SVG above.
 const TAG_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="10" x2="9.01" y2="10"/><line x1="15" y1="10" x2="15.01" y2="10"/><path d="M8 14.5a4.5 4.5 0 0 0 8 0"/></svg>`;
 // writing-pen glyph for the "add a note" button — bottom-left corner (mirrors the tag row's own
 // add-emoji button living at the bottom-RIGHT, see the tag-row comment further down), now that
@@ -109,11 +106,8 @@ function nodeEl(n: MindNode): HTMLElement {
   // so the chip lands on the tab's own corner rather than 43px lower on the box, and a docked tab
   // (whose label IS the element) gets it in the same spot. Being out of flow, it never disturbs the
   // row's flex layout. Hence the `> .title-row >` in every .hidden-count selector in styles.css.
-  el.innerHTML = `<div class="title-row"><input type="checkbox" class="donebox" title="Mark done"><span class="query-icon" title="Search">${QUERY_ICON_SVG}</span><span class="folder-icon">${FOLDER_SVG}</span><div class="title"></div><input type="text" class="query-input" placeholder="Search…" autocomplete="off"><span class="progress"></span><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
+  el.innerHTML = `<div class="title-row"><input type="checkbox" class="donebox" title="Mark done"><span class="folder-icon">${FOLDER_SVG}</span><div class="title"></div><span class="progress"></span><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
     <div class="tag-row"></div>
-    <div class="query-box">
-      <div class="query-results"></div>
-    </div>
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>
     <button type="button" class="addnote" title="Add note" aria-label="Add note">${NOTE_ADD_SVG}</button>`;
   world.appendChild(el);
@@ -159,51 +153,6 @@ function nodeEl(n: MindNode): HTMLElement {
     const cb = (e.target as HTMLElement).closest('input.taskbox') as HTMLInputElement | null; if (!cb) return;
     e.stopPropagation();
     toggleTask(n, +(cb.dataset.ti ?? 0));
-  });
-  // query card: a magnifier icon in front of the title toggles the query-input in the title's
-  // place (see queryMatches/renderQueryResults below); confirming (Enter/blur) or Escape hides it
-  // again and shows the title. pointerdown/click are stopped so typing/clicking never starts a
-  // card drag or selects-through.
-  const titleRow = el.querySelector('.title-row') as HTMLElement;
-  const queryIcon = el.querySelector('.query-icon')!;
-  queryIcon.addEventListener('pointerdown', (e) => e.stopPropagation());
-  queryIcon.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (titleRow.classList.contains('query-editing')) { queryInput.blur(); }
-    else startQueryEdit(n);
-  });
-  const queryInput = el.querySelector('.query-input') as HTMLInputElement;
-  queryInput.addEventListener('pointerdown', (e) => e.stopPropagation());
-  queryInput.addEventListener('click', (e) => e.stopPropagation());
-  queryInput.addEventListener('focus', () => {
-    if (!ui.queryEdit || ui.queryEdit.id !== n.id) { touch(n.id); ui.queryEdit = { id: n.id, orig: n.query ?? '' }; }
-    titleRow.classList.add('query-editing');
-  });
-  queryInput.addEventListener('input', () => onQueryInput(n, queryInput.value));
-  queryInput.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape' || e.key === 'Enter') queryInput.blur(); });
-  queryInput.addEventListener('blur', () => endQueryEdit(n));
-  // result cards: a plain click selects + centers the matched node on the canvas (these are compact
-  // rows you read and act on, not canvas cards you drag); the "⋮" opens a small actions menu; the
-  // done checkbox (checklist items only) toggles independent of either.
-  const queryResultsEl = el.querySelector('.query-results')!;
-  queryResultsEl.addEventListener('pointerdown', (e) => e.stopPropagation());
-  queryResultsEl.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    const item = target.closest('.query-item') as HTMLElement | null; if (!item) return;
-    e.stopPropagation();
-    const m = state.nodes.get(item.dataset.id!); if (!m) return;
-    const more = target.closest('.qi-more') as HTMLElement | null;
-    if (more) { const r = more.getBoundingClientRect(); openQueryItemMenu(m, r.left, r.bottom + 4); return; }
-    if (target.closest('.qi-done')) return;   // handled by the change listener below
-    // A query card searches the WHOLE map, deliberately, so a hit can be outside the frame you're
-    // standing in — come out far enough to show it before selecting (popScopeFor).
-    popScopeFor(m); selectNode(m.id); focusNode(m, true);
-  });
-  queryResultsEl.addEventListener('change', (e) => {
-    const cb = (e.target as HTMLElement).closest('.qi-done') as HTMLInputElement | null; if (!cb) return;
-    e.stopPropagation();
-    const item = cb.closest('.query-item') as HTMLElement;
-    const m = state.nodes.get(item.dataset.id!); if (m) toggleDone(m);
   });
   // done checkbox (title-only cards): toggle the card-level done mark, independent of drag/select
   const doneEl = el.querySelector('.donebox') as HTMLInputElement;
@@ -258,7 +207,7 @@ function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
 }
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
-const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge, .query-icon, .query-input, .query-box, .tag-row, .img-zoom, a.lk, .fh';
+const NODE_CONTROLS = '.hidden-count, .donebox, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
 // What a gesture at these viewport coords actually hits. Deliberately NOT the event's own `target`:
 // bindNodeDrag takes a POINTER CAPTURE on the node's element, and a capture retargets the click (and
 // so the dblclick) that follows to the capturing element — so by the time a double-click arrives its
@@ -314,7 +263,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // a hit inside a DOM-nested child card can't be read as a hit on its host's title.
   const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
   // startInlineEdit is the single rename funnel: it redirects a tab group to its open tab, an
-  // annotation to its body and a query card to its query, and refuses a locked node.
+  // annotation to its body, and refuses a locked node.
   if (onTitle || n.collapsed) { startInlineEdit(n); return; }
   // A frame's interior OPENS it (nav/scope.ts) — the folder metaphor's own gesture, and the only one
   // that reads as "go in". Putting a card inside it kept Tab, the ⋯ menu and the canvas right-click.
@@ -341,7 +290,6 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // card "here" anyway (the outline appends; the point means nothing). Adding a row is `Tab`, the ⋯ menu
   // and the canvas right-click, as it is for a frame.
   if (isStack(n)) { startInlineEdit(n); return; }
-  if (isQueryCard(n)) return;   // no note to edit — its title slot IS the query field
   startBodyEdit(n);
 }
 // A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor. While
@@ -427,119 +375,6 @@ export function checklistProgress(n: MindNode, kids: MindNode[] = childrenOf(n.i
   const items = kids.filter(showsDoneCheckbox);
   return items.length ? { done: items.filter(k => k.done).length, total: items.length } : null;
 }
-// true if ANY ancestor (at any depth, not just the direct parent) has a title containing `needle`
-// (already lowercased) — backs the "p:<parent>" query token below.
-function hasAncestorTitleContaining(n: MindNode, needle: string): boolean {
-  for (const p of ancestors(n)) if (p.title.toLowerCase().includes(needle)) return true;
-  return false;
-}
-// ---------- query card: search field + scrollable results list ----------
-// Opens the query field for editing: swaps the title's live query-text display for the
-// `.query-input` in place. Called by the card's own magnifier-icon click, and — since a
-// query card has no renamable title of its own — by startInlineEdit's redirect
-// (features/inline-edit.ts) whenever a rename would otherwise have been triggered (slow
-// click on the title, F2, context-menu "Rename").
-export function startQueryEdit(n: MindNode): void {
-  if (!n.el) return;
-  const titleRow = n.el.querySelector('.title-row') as HTMLElement;
-  const queryInput = n.el.querySelector('.query-input') as HTMLInputElement;
-  if (!ui.queryEdit || ui.queryEdit.id !== n.id) { touch(n.id); ui.queryEdit = { id: n.id, orig: n.query ?? '' }; }
-  titleRow.classList.add('query-editing');
-  queryInput.focus(); queryInput.select();
-}
-// Matches every OTHER node's title OR body against the query card's own search text — the same
-// substring rule the toolbar find box uses (features/search.ts runSearch), but uncapped (the
-// results list scrolls) and scoped to this one card's #query-results element, not the whole canvas.
-// A "p:<parent>" token (whitespace-delimited, repeatable) filters to nodes with an ancestor whose
-// title contains <parent>; a "t:<tag>" token (also repeatable) filters to nodes with an EXACT
-// (case-insensitive) tag match. Both are ANDed with each other, with any remaining plain search
-// text, and with any other tokens of their own kind — all case-insensitive.
-function queryMatches(n: MindNode): MindNode[] {
-  const raw = (n.query ?? '').trim();
-  if (!raw) return [];
-  const parentTerms: string[] = [];
-  const tagTerms: string[] = [];
-  const textTerms: string[] = [];
-  for (const tok of raw.split(/\s+/)) {
-    const pm = /^p:(.+)$/i.exec(tok);
-    const tm = /^t:(.+)$/i.exec(tok);
-    if (pm) parentTerms.push(pm[1].toLowerCase());
-    else if (tm) tagTerms.push(tm[1].toLowerCase());
-    else textTerms.push(tok.toLowerCase());
-  }
-  const text = textTerms.join(' ');
-  const hits = [...state.nodes.values()].filter(m => m.id !== n.id && !isAnnotation(m) && !isQueryCard(m) &&
-    parentTerms.every(pt => hasAncestorTitleContaining(m, pt)) &&
-    tagTerms.every(tt => m.tags.some(t => t.toLowerCase() === tt)) &&
-    (!text || m.title.toLowerCase().includes(text) || (m.body && m.body.toLowerCase().includes(text))));
-  return hits.sort((a, b) => {
-    const at = a.title.toLowerCase().includes(text), bt = b.title.toLowerCase().includes(text);
-    return at !== bt ? (at ? -1 : 1) : a.title.localeCompare(b.title);
-  });
-}
-function renderQueryResults(n: MindNode): void {
-  const el = n.el?.querySelector('.query-results') as HTMLElement | null; if (!el) return;
-  const hits = queryMatches(n);
-  // Rebuilding on every repaint (paintAll runs on every selection change, incl. clicking a result)
-  // would replace the .query-item elements mid-click — a real mouse's SECOND click of a double-click
-  // then lands on a freshly-minted element, and the browser never recognises it as the same target,
-  // so dblclick silently stops firing. Key the cache on the ids actually shown (not the raw query
-  // text) so a result set that hasn't changed keeps its DOM identity across an unrelated repaint.
-  const hasQuery = !!(n.query ?? '').trim();
-  // Keyed on more than just the id set: a matched note's colour/lock/done/title can change without
-  // the SET of matches changing (e.g. recolouring a hit from elsewhere on the canvas) — fold those
-  // into the key too so the result cards refresh live, not just when the match set itself changes.
-  const key = !hasQuery ? '' : hits.length
-    ? hits.map(m => `${m.id}:${effectiveColor(m)}:${m.locked ? 1 : 0}:${m.done ? 1 : 0}:${nodeLabel(m)}`).join(',')
-    : 'none';
-  if (el.dataset.queryKey === key) return;
-  el.dataset.queryKey = key;
-  if (!hasQuery){ el.innerHTML = ''; return; }
-  if (!hits.length){ el.innerHTML = '<div class="query-empty">No matches</div>'; return; }
-  const dup = duplicateLabels();   // one pass for the whole list, not one per row
-  el.innerHTML = hits.map(m => queryItemHTML(m, dup)).join('');
-}
-// One matched note, rendered as a small card (colour, lock badge, checklist done box, title) —
-// the outline's `.ol-row` in miniature, minus drag-to-reorder (these are search hits, not
-// siblings). The "⋮" opens a menu with the same actions the outline row's own ⋯ menu offers.
-function queryItemHTML(m: MindNode, dup: Set<string>): string {
-  const done = showsDoneCheckbox(m);
-  const col = effectiveColor(m);
-  const label = nodeLabel(m);
-  return `<div class="query-item ${colorClass(col)}${done && m.done ? ' done' : ''}" style="${colorVars(col)}" data-id="${m.id}">
-    ${m.locked ? `<span class="qi-lock" title="Locked">${LOCK_BADGE_SVG}</span>` : ''}
-    ${done ? `<input type="checkbox" class="qi-done" ${m.done ? 'checked' : ''} title="Mark done">` : ''}
-    <span class="qi-title">${esc(disambiguatedLabel(m, dup))}</span>
-    <button type="button" class="qi-more" title="Card actions" aria-label="Actions for “${esc(label)}”">⋮</button>
-  </div>`;
-}
-function openQueryItemMenu(m: MindNode, x: number, y: number): void {
-  const locked = isLockedEffective(m);
-  openMenu([
-    { label: 'Rename', run: () => startInlineEdit(m), disabled: locked },
-    { label: 'Duplicate', run: () => { selectNode(m.id); duplicateSelection({ edit: false }); } },
-    { label: locked ? 'Unlock' : 'Lock', run: () => setLockedSelection([m.id], !locked) },
-    { label: 'Delete', run: () => deleteNode(m.id), danger: true, disabled: subtreeHasLocked(m.id) },
-  ], x, y);
-}
-// Debounced per-card: recomputing the results list on every keystroke is cheap here (no dropdown/
-// highlight side effects like the toolbar search), but still worth coalescing on a fast typist.
-const queryDebounce = new Map<string, number>();
-function onQueryInput(n: MindNode, value: string): void {
-  n.query = value; n.dirty = true;
-  const pending = queryDebounce.get(n.id); if (pending != null) clearTimeout(pending);
-  queryDebounce.set(n.id, window.setTimeout(() => { queryDebounce.delete(n.id); renderQueryResults(n); }, 150));
-}
-function endQueryEdit(n: MindNode): void {
-  if (!ui.queryEdit || ui.queryEdit.id !== n.id) return;
-  ui.queryEdit = null;
-  n.el?.querySelector('.title-row')?.classList.remove('query-editing');
-  const pending = queryDebounce.get(n.id); if (pending != null) { clearTimeout(pending); queryDebounce.delete(n.id); renderQueryResults(n); }
-  paintNode(n);   // the revealed .title slot shows the query text (see paintNode) — refresh it now,
-                   // not on whatever repaint happens to come next, since typing itself never touches it
-  scheduleSave();
-  commitStep();
-}
 export function paintNode(n: MindNode): void {
   const el = nodeEl(n);
   // Drop the content wrapper the moment it isn't holding anything — `hostsContent` is exactly the set
@@ -568,7 +403,7 @@ export function paintNode(n: MindNode): void {
   // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isQueryBox(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
+  const showAddTag = n.id === state.selId && !isFrameBox(n) && !isStack(n) && !isAnnotation(n) && !isDockedTab(n) && !state.readOnly && !isLockedEffective(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   // A frame's title paints on no fill of its own (styles.css: neither the tab nor the folded pill has
@@ -587,7 +422,6 @@ export function paintNode(n: MindNode): void {
     + (inStack(n) ? ' stack-child' : '')   // a card inside a stack's outliner — rendered slightly brighter
     + (inFrame(n) ? ' frame-child' : '')   // …and a card inside a frame's box, by the same step
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
-    + (isQueryBox(n) ? ' query-card' : '')
     + (isAnnotation(n) ? ' annotation' : '')
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
@@ -611,7 +445,7 @@ export function paintNode(n: MindNode): void {
     // editor calls paintAll() itself right after opening.
     + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
-    + (isFrameBox(n) || isStack(n) || isAnnotation(n) || isQueryBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
+    + (isFrameBox(n) || isStack(n) || isAnnotation(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
     + (showDone ? ' show-done' : '')
     + (showDone && n.done ? ' done' : '')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
@@ -683,8 +517,8 @@ export function paintNode(n: MindNode): void {
       placeSelf(n, np.x, elTop(n, np.y));
     }
   }
-  // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card /
-  // query card is its own 2D box (8 handles). Everything else authors only a WIDTH (2 side handles):
+  // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card
+  // is its own 2D box (8 handles). Everything else authors only a WIDTH (2 side handles):
   // a stack's height is auto-fitted by layout, and a card's/annotation's comes from its content, so
   // their inline height is always cleared and left to CSS. The one node that ISN'T resizable is an
   // outline row inside a stack — its width is derived from the stack's, so it gets the width but no
@@ -759,9 +593,7 @@ export function paintNode(n: MindNode): void {
   else if (n.tabStripEl) { n.tabStripEl.remove(); n.tabStripEl = null; }
   // Don't clobber a CONTAINER's label while it's being renamed on itself (ui.titleEdit — the user is
   // typing into this very element). A card needs no such guard: its name is the leading `# ` line of its
-  // one text field, and while that's open the whole row is hidden (`.card-editing`). A query card has no
-  // name on show either — its title slot always shows the live query text, so the card reads as "what
-  // it's searching for".
+  // one text field, and while that's open the whole row is hidden (`.card-editing`).
   if (!(ui.titleEdit && ui.titleEdit.id === n.id)) {
     const titleEl = el.querySelector('.title') as HTMLElement;
     // A folded tab group shows its OPEN TAB's title, not its own (foldedTab) — everything else its own.
@@ -806,11 +638,10 @@ export function paintNode(n: MindNode): void {
       el.classList.toggle('no-title',
         !isDockedTab(n) && !frameLabelled(n) && ui.titleEdit?.id !== n.id);
     } else {
-      const text = isQueryBox(n) ? ((n.query ?? '').trim() || nodeLabel(n)) : '';
-      titleEl.textContent = text;
+      titleEl.textContent = '';
       titleEl.removeAttribute('title');
       delete titleEl.dataset.md;    // retyped away from a frame: don't let the stale key match later
-      el.classList.toggle('no-title', !text);
+      el.classList.toggle('no-title', true);
     }
   }
   const bodyEl = el.querySelector('.body') as HTMLElement;
@@ -828,31 +659,24 @@ export function paintNode(n: MindNode): void {
       hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
     }
   }
-  if (isQueryBox(n)) {
-    const qInput = el.querySelector('.query-input') as HTMLInputElement;
-    // don't clobber the field while the user is actively typing into it
-    if (!(ui.queryEdit && ui.queryEdit.id === n.id)) qInput.value = n.query ?? '';
-    renderQueryResults(n);
-  }
   // tag pills — skipped for frames (whose fixed box (n.h) holds arbitrary child cards rather than
   // its own content, so there's no natural place for a tag row to live) and for annotations (no
   // room on a title-less pinned note, and their frontmatter's own `tags` — if any, e.g. inherited
   // from converting an existing card — is deliberately ignored, never rendered or editable here).
-  // Image/query cards ARE shown despite also being fixed-size boxes — the whole row floats outside
+  // Image cards ARE shown despite also being fixed-size boxes — the whole row floats outside
   // the card's own border (styles.css), so it doesn't compete for interior space either way. The
   // row is pinned to the card's bottom-right corner; a leading "+" (only present on the selected
   // card, rendered FIRST so it ends up leftmost) is where the NEXT tag will land. Newly added tags
   // are prepended in DOM order — most-recently-added right after the button — so each addition only
   // ever fills the button's current slot and nudges the button one slot further left; every
   // previously-placed tag keeps the exact screen position it already had (n.tags itself still
-  // stores oldest-first, insertion order — only the on-screen order is reversed). Keyed like
-  // renderQueryResults: only rebuild when the tag list or the button's presence actually changed, so
+  // stores oldest-first, insertion order — only the on-screen order is reversed). Keyed: only rebuild when the tag list or the button's presence actually changed, so
   // an unrelated repaint mid-drag can't destroy a pointer-captured pill (features/tags.ts's
   // bindCardTagPills).
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
   // isDockedTab: a strip of tabs has no room for pills hanging off each label (they'd overlap the
   // next tab), and a tab is a handle on a box rather than a note you'd tag.
-  const noTagRow = isFrameBox(n) || isAnnotation(n) || isQueryBox(n) || isDockedTab(n);
+  const noTagRow = isFrameBox(n) || isAnnotation(n) || isDockedTab(n);
   const tagsKey = noTagRow ? '' : n.tags.join(' ') + (showAddTag ? ' +' : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
@@ -885,11 +709,10 @@ export function paintNode(n: MindNode): void {
 // showing its name in one typeface in the row and another in the note.
 // A STACK renders the same way — its header IS its text, above its rows — which is what makes "write
 // `# Name` if you want a heading" one rule instead of a card rule plus a container exception.
-// A QUERY card keeps its body alone: its title slot shows the live query text instead, so hoisting the
-// name into the note would print a heading nobody wrote. (An image card needs no arm of its own — it is
-// untitled by definition, so joinHeading hands back the picture markdown unchanged.)
+// (An image card needs no arm of its own — it is untitled by definition, so joinHeading hands back the
+// picture markdown unchanged.)
 function cardMarkdown(n: MindNode): string {
-  return isQueryCard(n) ? n.body : joinHeading(n.title, n.body, n.titleGap !== false);
+  return joinHeading(n.title, n.body, n.titleGap !== false);
 }
 // …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
 // follows it. Still MARKDOWN, fed to the same renderer, which is the whole point — `# Name` folds to a
@@ -963,10 +786,9 @@ function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: bo
   const foldable = rendersAsFrame(n) ? hasKids : (hasKids || hasBody);
   if (!foldable) return '';
   // An annotation IS its body (no title row at all), so folding it would leave an empty shell —
-  // it keeps double-click/X but is never invited to. A query card is a box whose whole content is the
-  // point, and its corner is already spoken for by the results. An IMAGE card is invited: it folds to
+  // it keeps double-click/X but is never invited to. An IMAGE card is invited: it folds to
   // a 40px icon of its own picture (isImageFold), which is a thumbnail rather than an empty shell.
-  if (isAnnotation(n) || isQueryCard(n)) return '';
+  if (isAnnotation(n)) return '';
   // toggleCollapse refuses a locked node, so it must not offer a button that does nothing. Its
   // folded COUNT above is unaffected: that's information, not a control.
   if (isLockedEffective(n)) return '';
@@ -1000,7 +822,6 @@ export const FRAME_TAB_DROP = FRAME_TAB_H - 1;   // 39
 // interior fixed when the tab height changes (declared after FRAME_TAB_DROP so the sum is in scope).
 export const FRAME_W = 360, FRAME_H = 260 + FRAME_TAB_DROP;
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
-export const QUERY_W = 280, QUERY_H = 320;   // default query-card size (world px)
 // Stack geometry (a framed, auto-sized outliner node kind — see isStack in view/layout.ts). Its
 // width is AUTHORED (n.w, defaulting to STACK_W — it takes the EW handle set like a card); its
 // height auto-fits its children and is never authored (computed in layoutSubtree).
@@ -1082,12 +903,10 @@ function isImageBox(n: MindNode): boolean { return imageLook(n) && !n.collapsed;
 // on the same metric as a folded frame's tab and a collapsed card's line.
 export const IMAGE_FOLD = 40;
 function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed; }
-// A query card: a resizable leaf with a search field + scrollable results list — no children.
-function isQueryBox(n: MindNode): boolean { return n.type === 'query' && !n.collapsed; }
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
 // below. A stack is a box too (it gets a size + a .frame-content wrapper) but authors only a width,
 // so it takes the EW handles in paintNode and is covered by isContainerBox instead.
-function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n) || isQueryBox(n); }
+function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n); }
 // Any node that renders as a child-containing BOX with a size + clipping wrapper: a resizable frame
 // OR an auto-sized stack. Used for the size/wrapper plumbing in paintNode.
 // A DOCKED TAB counts even though it draws no box: it still HOSTS its children in the box its group
@@ -1110,7 +929,7 @@ function inStack(n: MindNode): boolean {
 // and vanishes into it. Nearest container only, so a card in a stack in a frame stays a stack row.
 // Plain cards only: every other kind is a shape with its own fill rules — a nested stack already
 // steps DOWN inside a frame, a nested frame's fill is tied to the --frame-stroke its border and title
-// tab share, an image/query card is deliberately image-only / outline-only, and an annotation never
+// tab share, an image card is deliberately image-only, and an annotation never
 // inherits a colour in the first place (it takes the theme's contrast colour, which the tint would
 // wash out).
 // containerHost again, and here it MATTERS rather than merely reading better: an OPEN frame hosts no
@@ -1124,14 +943,14 @@ function inStack(n: MindNode): boolean {
 // a washed-out fill (the active tab, being expanded, was fine — which is what made it look like an
 // inactive-tab opacity bug). Together the two tests mean "a frame in any state".
 function inFrame(n: MindNode): boolean {
-  if (isContainer(n) || isFrameFold(n) || isImageBox(n) || isQueryBox(n) || isAnnotation(n)) return false;
+  if (isContainer(n) || isFrameFold(n) || isImageBox(n) || isAnnotation(n)) return false;
   const h = containerHost(n);
   return !!h && isFrame(h);
 }
-function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : isQueryBox(n) ? QUERY_W : FRAME_W; }
-function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQueryBox(n) ? QUERY_H : FRAME_H; }
+function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRAME_W; }
+function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
 // A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
-// mm_w — and every kind can carry one: a frame/image/query card sizes its whole box with it, while a
+// mm_w — and every kind can carry one: a frame/image card sizes its whole box with it, while a
 // card/annotation/stack authors only this axis (their height comes from content/outline instead).
 // The two widths that are NOT authored come first, so they win: an outline ROW inside a stack is
 // stretched to the width its indent depth allows (stackRowW, derived — a row can't be resized, and a
@@ -1143,7 +962,7 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : isQ
 // the kind sitting in it. The box kinds are the ones that would otherwise insist on their own, being
 // the ones that author a size — a 600px photo or an 800px frame dropped into a 240px stack used to
 // hang out of it. What each does with the HEIGHT is still its own business: an image card derives it
-// from the picture's ratio (nodeH below), a frame and a query card keep the one they author. The
+// from the picture's ratio (nodeH below), a frame keeps the one it authors. The
 // authored w/h are untouched meanwhile, exactly as a plain card's authored width is: drag it back out
 // and it comes out at the size it went in with.
 function stackBoxRow(n: MindNode): number | null { return isBoxNode(n) ? stackRowW(n) : null; }
@@ -1427,7 +1246,6 @@ function frameContentEl(f: MindNode): HTMLElement {
 export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120 + FRAME_TAB_DROP;
 // An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
 // (startNodeResize below), so there is no smaller expanded size to clamp at.
-export const MIN_QUERY_W = 200, MIN_QUERY_H = 160;      // a query card keeps room for the search field + a couple of rows
 // The one exception to "a kind's default width is its floor": an annotation shrink-wraps its text
 // (styles.css), so it has no fixed natural width to floor at — it can be narrowed too, down to
 // something still readable.
@@ -1452,11 +1270,10 @@ function naturalW(n: MindNode): number {
 // one fall-through rather than three aliases that had to be kept equal by hand.
 function minWOf(n: MindNode): number {
   if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
-  if (isQueryBox(n)) return MIN_QUERY_W;
   if (isAnnotation(n)) return naturalW(n);
   return NODE_W;
 }
-function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) ? IMAGE_FOLD : isQueryBox(n) ? MIN_QUERY_H : MIN_FRAME_H; }
+function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) ? IMAGE_FOLD : MIN_FRAME_H; }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
@@ -2219,7 +2036,7 @@ function withoutScopeFade(): void {
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('scope-instant')));
 }
 // Bring `t` into reach from ANYWHERE: leave as many levels as it takes for it to be inside the scope
-// we land in. The deliberately UNSCOPED jumps (a [[wikilink]], a query card's result, an undo that
+// we land in. The deliberately UNSCOPED jumps (a [[wikilink]], an undo that
 // resurrects a node elsewhere) all go through here, so none of them can select a card that isn't on
 // the canvas — isSelectable refuses an out-of-scope id.
 export function popScopeFor(t: MindNode): void {
@@ -2652,7 +2469,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
   }
   if (key === 'e' && !mod && state.selId){
-    e.preventDefault(); const n = state.nodes.get(state.selId); if (n && !isQueryCard(n)) startBodyEdit(n); return;
+    e.preventDefault(); const n = state.nodes.get(state.selId); if (n) startBodyEdit(n); return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
   if (key === 'Tab' && state.selId){ e.preventDefault(); addChild(state.selId); return; }

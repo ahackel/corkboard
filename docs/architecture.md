@@ -79,7 +79,7 @@ is precisely the name that card must no longer be called — and a container nob
 `Untitled.md` on disk anyway. `N` counts nameless nodes in map order, so it renumbers when one is added or
 filled in; that is safe because nothing stores or matches on this string (a `[[wikilink]]` resolves against
 `n.title` and the filename, `focusByTitle`). `disambiguatedLabel` appends the parent for FLAT lists only
-(search hits, a query card's results); the outline's indentation already says where a row sits. On the canvas
+(search hits); the outline's indentation already says where a row sits. On the canvas
 only a CONTAINER falls back to `nodeLabel`: a card showing nothing is the point, but a frame's tab is the
 only thing you can grab the box by.
 
@@ -260,7 +260,7 @@ picks the DEPTH there — so a straight drag only re-slots and nesting takes a d
 - A row's width is **derived, not stored** (`stackRowW`: the stack's width, less border/padding, less one
   `STACK_INDENT` per depth) — deliberately, so it can't collide with the authored `n.w` a card carries in
   from outside. Drop a 400px card in and it renders as a stretched row while keeping its 400 for when it
-  comes back out. **The LEAF BOXES are no exception** — an image card, a query card — and they need saying
+  comes back out. **The LEAF BOXES are no exception** — an image card — and it needs saying
   because they're the ones that author a size of their own and are NOT demoted (a leaf holds no children,
   so there's nothing to outline; only containers become rows). As a row the stack gives them the width
   (`stackBoxRow`, `main.ts`), so a 600px photo dropped into a 420px stack fits the outline instead of
@@ -478,7 +478,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   interior is the whole canvas, so there's nowhere visible to rip to), and one guard keeps the rip preview and
   the commit agreeing. Leave the frame before moving a card out; dragging into nowhere remains intentionally
   unavailable while scoped inside it.
-- **Search and the outline are scoped; query cards, wikilinks and undo are not.** Search finds what's on the
+- **Search and the outline are scoped; wikilinks and undo are not.** Search finds what's on the
   canvas, so every hit can be shown and selected, and `sortedRoots` makes the outline's top level the open
   frame's children (which is also what makes dropping a row beside a top row mean "put it here"). The map-wide
   jumps come OUT of as many levels as it takes first (`popScopeFor`), because `isSelectable` refuses an
@@ -491,10 +491,8 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   re-points the stack by FILE before the first layout — deliberately not cleared like the undo history, since a
   background refocus reload must not kick you out of the frame you're working in.
 - **The mechanism is kind-agnostic:** `canOpen` is the one kind test — widen it there, never at a call site.
-  Frames and CARDS are in (see below); an ANNOTATION has no interior and a QUERY card's contents are derived,
-  so neither opens. Opening a tab GROUP opens its OPEN TAB and the crumbs skip the group. Ink stays visible
-  but is left out of the framing, or opening a frame would zoom back out to take in a stroke on the far side
-  of the map.
+  Frames and CARDS are in (see below); an ANNOTATION has no interior,
+  so it doesn't open. Opening a tab GROUP opens its OPEN TAB and the crumbs skip the group.
 
 **An OPENED CARD is its note** (`features/reading.ts`, `.node.reading-root`, `isReadingRoot` in
 `nav/scope.ts`) — the other half of "you can open things". A frame's interior is the CANVAS; a card's
@@ -815,7 +813,7 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
   bubble*: `.node[data-chip="fold"]:hover:not(:has(.node:hover))` out-specifies any plain class selector, so a
   rule like `.node.locked > .hidden-count { display:none }` silently loses on hover. Anything that shouldn't
   offer the button is refused in `chipFace` instead — annotations (an annotation IS its body, so folding
-  leaves an empty shell), query cards, and **locked** nodes (`toggleCollapse` refuses them, so the
+  leaves an empty shell) and **locked** nodes (`toggleCollapse` refuses them, so the
   control would do nothing; their folded *count* still shows, being information rather than a control). A
   frame's/stack's own body is never rendered, so only children make one collapsible.
 - **Both faces live in the button permanently** (`nodeEl` bakes the chevron in beside a `.cnt` span) and

@@ -99,6 +99,12 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(parseMd('---\nmm_layout: frame-v\n---\nx').mm).toMatchObject({ type: 'frame', layout: 'vertical' });
   });
 
+  it('opens a retired query card as a plain card, keeping its title and body', () => {
+    const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_type: query\nmm_query: p:Ideas\nmm_w: 280\nmm_h: 320\n---\n\n# Find ideas\n\nnotes\n');
+    expect(n.type).toBe('card');
+    expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\n---\n\n# Find ideas\n\nnotes\n');
+  });
+
   it('reads frontmatter from a file with Windows line endings', () => {
     const p = parseMd('---\r\ndate: 2026-01-02\r\ntags: [a]\r\n---\r\n\r\n# Title\r\n\r\nBody\r\n');
     expect(p.title).toBe('Title');

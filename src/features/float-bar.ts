@@ -7,7 +7,7 @@
 // existing generic context menu (openMenu, features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, isBoxType, isAnnotation, isQueryCard, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
+import { state, stage, setStatus, isBoxType, isAnnotation, type MindNode, type NodeType, type NodeLayout } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -23,7 +23,7 @@ import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
 import { frameBox } from '../view/camera.js';
-import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, QUERY_W, QUERY_H, relayout } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, subtreeIds, elTop, FRAME_BORDER, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, FRAME_TAB_DROP, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -80,13 +80,11 @@ const TYPE_ICONS: Record<NodeType, string> = {
   card: SVG_OPEN + '<rect x="3.5" y="6.5" width="17" height="11" rx="2"/></svg>',
   frame: SVG_OPEN + FOLDER_PATH + '</svg>',
   annotation: SVG_OPEN + '<path d="M4 4l3.5 3.5" stroke-dasharray="2 2"/><rect x="8" y="8" width="12" height="9" rx="2"/><path d="M10.5 12h7"/></svg>',
-  query: SVG_OPEN + '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="10" cy="10" r="3"/><path d="M12.3 12.3l3 3"/></svg>',
 };
 const NODE_TYPES: { key: NodeType; label: string; icon: string }[] = [
   { key:'card',  label:'Card — an ordinary note',                                        icon: TYPE_ICONS.card },
   { key:'frame', label:'Frame — a resizable box; drag cards inside to hold them, out to release', icon: TYPE_ICONS.frame },
   { key:'annotation', label:'Annotation — a title-less note pinned on top of its parent, ignored by layout', icon: TYPE_ICONS.annotation },
-  { key:'query', label:'Query — a resizable box with a search field over a scrollable list of matching cards', icon: TYPE_ICONS.query },
 ];
 // An ARRANGEMENT, one glyph per layout key — deliberately generic: none of them draws the container
 // it sits in, so the same chip means the same thing whichever kind offers it (`free` is shared by
@@ -122,10 +120,9 @@ const LAYOUTS_BY_TYPE: Record<NodeType, { key: NodeLayout; label: string; icon: 
     // one group that still can be, the folded pill.
   ],
   annotation: [],
-  query: [],
 };
 // The default layout for a freshly-set type — omitted from frontmatter (see serializeMd).
-const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', annotation: 'free', query: 'free' };
+const DEFAULT_LAYOUT: Record<NodeType, NodeLayout> = { card: 'inherit', frame: 'free', annotation: 'free' };
 // Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
 // no children it's left as-is, or given the default size when `orDefault` (used when a card first
@@ -223,9 +220,9 @@ function rebuildLayoutChips(type: NodeType): void {
 // Change the KIND of the selection: seed/reset the box, drop a now-invalid layout, reseed order.
 function setType(type: NodeType): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); if (!ids.length) return;
-  // annotation/query are leaves — refuse to flip a card that already has children into one
-  if ((type === 'annotation' || type === 'query') && ids.some(id => childrenOf(id).length)) {
-    setStatus(`A${type === 'query' ? ' query card' : 'n annotation'} can’t have children — move or delete them first`);
+  // an annotation is a leaf — refuse to flip a card that already has children into one
+  if (type === 'annotation' && ids.some(id => childrenOf(id).length)) {
+    setStatus('An annotation can’t have children — move or delete them first');
     return;
   }
   record(ids, () => {
@@ -242,7 +239,6 @@ function setType(type: NodeType): void {
       if (n.type === 'frame' && n.layout === 'tabs' && type !== 'frame') undockAllTabs(n);
       if (!isBoxType(type)) { n.h = undefined; if (isBoxType(n.type)) n.w = undefined; }
       if (type === 'frame') fitFrameToContent(n, true);   // give it a box enclosing its children
-      if (type === 'query' && (n.w == null || n.h == null)) { n.w = QUERY_W; n.h = QUERY_H; }
       n.type = type;
       // keep the current arrangement if the new type still supports it (e.g. free across card↔frame);
       // otherwise fall back to the type's default (card→inherit, frame→free, leaf kinds→none).
@@ -453,8 +449,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   // when the target isn't already part of the selection, select it first so they act on IT.
   const selectTargetFirst = () => { if (!multi) selectNode(n.id); };
   const isAnno = isAnnotation(n);   // a leaf with a body but no title, no children
-  const isQuery = isQueryCard(n);   // a leaf with its own search field, no body, but keeps its title
-  const isLeaf = isAnno || isQuery;   // neither can hold children
+  const isLeaf = isAnno;   // can't hold children
   const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
   const p = parentOf(n);
   const parentLocked = !!p && isLockedEffective(p);
@@ -463,9 +458,9 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   const entries: MenuEntry[] = [];
   if (!state.readOnly){
     if (!multi){
-      if (!isAnno && !isQuery) entries.push({ label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked });   // query has no renamable title — F2 edits its query instead (features/inline-edit.ts)
-      if (!isQuery) entries.push({ label:'Edit note', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });   // annotation keeps its body; query has none
-      if (!isQuery) entries.push({ label:'Insert image…', run: () => pickImagesForNode(n.id), disabled: locked });
+      if (!isAnno) entries.push({ label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked });
+      entries.push({ label:'Edit note', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });   // annotation keeps its body
+      entries.push({ label:'Insert image…', run: () => pickImagesForNode(n.id), disabled: locked });
       if (!isLeaf){
         entries.push('sep');
         entries.push({ label:'Add child', shortcut:'Tab', run: () => addChild(n.id), disabled: locked });

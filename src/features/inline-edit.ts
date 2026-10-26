@@ -10,7 +10,7 @@
 // it the draggable-ancestor dance that only a contenteditable needed — see setCardDraggable's obituary
 // in features/text-drag.ts), and `titleProblem`, which had nothing left to refuse once a title may be
 // empty (untitled cards) AND duplicated.
-import { state, setStatus, isAnnotation, isQueryCard, type MindNode } from '../core/state.js';
+import { state, setStatus, isAnnotation, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
@@ -19,7 +19,7 @@ import { outlineActive, startRowTitleEdit } from './outline.js';
 import { actionTarget, isTabsFrame, frameLabelled } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, startQueryEdit, toggleCollapse, relayout, remeasure, reframeForTab } from '../main.js';
+import { selectNode, toggleCollapse, relayout, remeasure, reframeForTab } from '../main.js';
 import { openBranchEditor, branchEditorOpen } from './branch-editor.js';
 import { extractToChild, discardNewCard } from './crud.js';
 import { touch, commitStep } from './history.js';
@@ -32,7 +32,7 @@ const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.tit
 
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
-// single rename FUNNEL, so the tab-group redirect, the annotation/query redirects, the outline-mode
+// single rename FUNNEL, so the tab-group redirect, the annotation redirect, the outline-mode
 // hand-off and the lock refusal all still happen in exactly one place.
 export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { isNew?: boolean } = {}): void {
   if (state.readOnly || !n) return;
@@ -48,8 +48,6 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   // An annotation has no title — its double-click / F2 / add-child rename all edit the BODY instead.
   if (isAnnotation(n)) { startBodyEdit(n); return; }
-  // A query card's title isn't renamable — its double-click / F2 / "Rename" all edit the query instead.
-  if (isQueryCard(n)) { startQueryEdit(n); return; }
   // In outline mode (which includes every phone-width screen — outline is forced on below
   // that breakpoint) the title is renamed right on its row (features/outline.ts), mirroring the
   // canvas' in-place rename. This is the single choke point, so F2 / double-click / add child / add

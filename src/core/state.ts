@@ -15,11 +15,8 @@ import { soleImage } from '../utils/markdown.js';
 //   · annotation — a leaf note pinned to its parent: no title, no children, doesn't take part in
 //                  layout, and renders ON TOP of everything (never clipped by a frame's mask). Its
 //                  own colour drives its always-dotted connector; it never inherits a background.
-//   · query      — a resizable box (mm_w/mm_h) with a search field over a scrollable list of
-//                  title/body matches across the whole map; no children, keeps its title UI.
-//                  Search text persisted as mm_query.
 // Extensible: new kinds slot in here. Persisted as `mm_type` (omitted for the `card` default).
-export type NodeType = 'card' | 'frame' | 'annotation' | 'query';
+export type NodeType = 'card' | 'frame' | 'annotation';
 // How a node ARRANGES its children. The valid set depends on the node's `type`:
 //   · card  → none: a card with children OUTLINES them inside its own box, so there is nothing to
 //             choose. `inherit`/`free`/`line`/`fan` survive in the type only to read old notes;
@@ -32,10 +29,10 @@ export type NodeType = 'card' | 'frame' | 'annotation' | 'query';
 // Persisted as `mm_layout` (only for card/frame, omitted when it equals the type's default).
 export type NodeLayout = 'inherit' | 'free' | 'line' | 'fan' | 'horizontal' | 'vertical' | 'tabs';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
-// sizing from title/body content — a frame or a query card. An IMAGE card authors a height too, but
+// sizing from title/body content — a frame. An IMAGE card authors a height too, but
 // it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
 // reads this asks isImageCard beside it (utils/frontmatter.ts serializeMd).
-export const isBoxType = (t: NodeType): boolean => t === 'frame' || t === 'query';
+export const isBoxType = (t: NodeType): boolean => t === 'frame';
 export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
 export type GridSize = 0 | 20 | 40 | 80 | 160 | 320;
 // The grid button's cycle order (least ink → most) and the size picker's choices, kept here beside
@@ -80,14 +77,10 @@ export interface MindNode {
   type: NodeType;                  // card | frame | annotation | query (persisted as mm_type)
   layout: NodeLayout;              // how it arranges its children — valid set depends on `type`
   // Resizable box size (world px). `w` is authored by every kind; `h` only by a frame (the box
-  // whose interior adopts cards dropped in), a query card (a leaf with a search field over a
-  // scrollable results list), and an IMAGE card — a card holding nothing but one `![alt](src)`,
+  // whose interior adopts cards dropped in) and an IMAGE card — a card holding nothing but one `![alt](src)`,
   // which is its picture and so owns both axes (isImageCard above). Persisted as mm_w/mm_h.
   w?: number;
   h?: number;
-  // type === 'query' only: the search text typed into the card's own search field, matched
-  // against every OTHER node's title/body across the whole map. Persisted as mm_query.
-  query?: string;
   title: string;
   color: string;                   // palette key, e.g. 'blue', or '' for none
   keepStatus: string;              // preserved `status:` frontmatter value
@@ -126,12 +119,10 @@ export function isImageCard(n: MindNode | null | undefined): boolean {
 }
 // An annotation: a title-less leaf note pinned on top of its parent (see NodeType above).
 export function isAnnotation(n: MindNode | null | undefined): boolean { return n?.type === 'annotation'; }
-// A query card: a resizable leaf with a search field over a scrollable results list (see NodeType above).
-export function isQueryCard(n: MindNode | null | undefined): boolean { return n?.type === 'query'; }
-// Leaf kinds that cannot hold children (annotation + query). Card/frame can — an image card
+// Leaf kinds that cannot hold children (annotation). Card/frame can — an image card
 // included, it being an ordinary card wearing a picture.
 export function isLeafType(n: MindNode | null | undefined): boolean {
-  return n?.type === 'annotation' || n?.type === 'query';
+  return n?.type === 'annotation';
 }
 
 export interface View { x: number; y: number; k: number; }

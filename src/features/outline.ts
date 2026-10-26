@@ -11,7 +11,7 @@
 // mm_collapsed, so jumping around the tree doesn't silently expand/save a pile of ancestors. All
 // edits reuse the existing kernels (crud / drag reparent / history), so undo, autosave and
 // read-only behave the same as on the canvas.
-import { state, setStatus, isAnnotation, isLeafType, isQueryCard, type MindNode } from '../core/state.js';
+import { state, setStatus, isAnnotation, isLeafType, type MindNode } from '../core/state.js';
 import { PHONE_MQ, PORTRAIT_MQ } from '../core/ui-state.js';
 import { nodeLabel, childrenOf, descendantCount, isLockedEffective, subtreeHasLocked, rootsInOrder, isHidden, ancestors } from '../utils/model.js';
 import { detachParentId, scopeRootNode } from '../nav/scope.js';
@@ -272,7 +272,7 @@ function walk(n: MindNode, depth: number, visible: Set<string> | null): void {
 const ROW_CONTROLS = '.ol-done, .ol-open, .ol-more, .ol-chip';
 // Which face the row's corner bubble wears — the outliner's counterpart of paintNode's chipFace, and
 // deliberately its own (simpler) predicate: a row lists a TITLE, never a body, so only children make
-// one foldable, and none of the canvas' kind cases (annotation / image / query / tab group) survive
+// one foldable, and none of the canvas' kind cases (annotation / image / tab group) survive
 // into a flat list. Same two faces and the same lock rule, though:
 //   'count' — folded: the "+N" that's tucked underneath. Shown even on a locked row: information.
 //   'fold'  — open and collapsible: the chevron, revealed on hover or while SELECTED (styles.css).
@@ -476,9 +476,8 @@ export function revealInOutline(id: string): void {
 // button, drag-to-reorder-or-reparent).
 function openRowMenu(n: MindNode, x: number, y: number): void {
   const locked = isLockedEffective(n);
-  const query = isQueryCard(n);   // no renamable title — its title slot shows the query text instead
   openMenu([
-    { label: 'Rename', run: () => startRowTitleEdit(n), disabled: locked || query },
+    { label: 'Rename', run: () => startRowTitleEdit(n), disabled: locked },
     { label: 'Duplicate', shortcut: 'D', run: () => { selectNode(n.id); duplicateSelection({ edit: false }); } },
     { label: locked ? 'Unlock' : 'Lock', shortcut: 'L', run: () => setLockedSelection([n.id], !locked) },
     { label: 'Delete', shortcut: 'Del', run: () => deleteNode(n.id), danger: true, disabled: subtreeHasLocked(n.id) },

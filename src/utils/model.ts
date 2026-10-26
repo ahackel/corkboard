@@ -124,7 +124,7 @@ function namelessLabel(n: MindNode): string {
   return `No-title ${i || 1}`;   // `|| 1`: a node still being created isn't in state.nodes yet
 }
 // …and the label with its PARENT appended, but only where the label alone is ambiguous. Two cards may
-// share a title now, and in a FLAT list (search hits, a query card's results) two identical rows give
+// share a title now, and in a FLAT list (search hits) two identical rows give
 // you no way to tell which is which. The outline needs none of this: its indentation already says where
 // a row sits. The suffix is the parent rather than the filename because "which one" is a question about
 // the map, not about the disk — the file's ` 2` would answer it in bookkeeping nobody chose.

@@ -364,7 +364,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
 // ---------- merging cards into one ----------
 // What can FUSE with another note, on EITHER side of the gesture: a plain card or an annotation —
 // the two kinds whose whole content is a body (a card just also has a title above it). Every other
-// kind is a box or a leaf whose own shape is the point (a frame, a stack, an image, a query card),
+// kind is a box or a leaf whose own shape is the point (a frame, a stack, an image),
 // so folding it into a body would throw away exactly what it is. One predicate rather than a
 // source/target pair, because the answer really is the same question both ways round.
 export const canMerge = (n: MindNode): boolean =>

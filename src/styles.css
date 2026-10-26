@@ -40,7 +40,7 @@
   --pal-black: #000000;
 
   /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 10px;   /* board cards + the ghost/template card, and every box kind (frame/stack/image/query) */
+  --r-card: 10px;   /* board cards + the ghost/template card, and every box kind (frame/stack/image) */
   /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 4px is
      FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
      against the corners it's supposed to sit inside. */
@@ -114,7 +114,7 @@ body.light {
    fill's WCAG contrast and injects a --pal-ink-* plus --pal-scrim-* pair per key (utils/ink.ts) —
    so ink is a property of the CARD's colour, not of the theme and not of an enumerated exception
    list. That's why nothing below this line ever names a colour key to fix its text: one
-   `color: var(--ink)` on each surface that wears a .c-* class (.node, .query-item, .oc-card,
+   `color: var(--ink)` on each surface that wears a .c-* class (.node, .oc-card,
    .ol-row) replaces the four per-surface "which keys are exceptions" lists that used to have to
    agree with each other, and an off-palette colour gets legible text for free. */
 .c-slate  { --card:var(--pal-slate);  --ink:var(--pal-ink-slate);  --scrim:var(--pal-scrim-slate); }
@@ -525,7 +525,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
   /* Padding as a PAIR OF VARIABLES, not literals, because the untitled card's absolutely positioned
      checkbox has to start where the content starts and a stack's row halves these (.node.stack-child).
      Same reasoning as --donebox-w/--title-gap below: one declaration, read by everything that has to
-     agree with it. Kinds that own their whole interior (.frame, .stack, image/query cards) still set
+     agree with it. Kinds that own their whole interior (.frame, .stack, image cards) still set
      `padding` outright — they have no checkbox to line up. */
   border-radius:var(--r-card); padding:var(--pad-y) var(--pad-x); cursor:default; color:var(--ink, #ffffff);
   user-select:none; -webkit-touch-callout:none; touch-action:none;
@@ -1009,7 +1009,7 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
 
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
-   box (frame / image card / query card) gets all 8: 4 edge bands inset from the corners, plus 4
+   box (frame / image card) gets all 8: 4 edge bands inset from the corners, plus 4
    corner squares at the very corners, which is what those insets leave un-contested. A width-only
    kind (card / annotation / stack) gets just fh-e/fh-w, restyled further down.
    `>` throughout, and no per-kind prefix: handles only exist on a node that was given them, and
@@ -1035,8 +1035,8 @@ svg#dragEdges path.ghost-edge { stroke-width:2; }
      constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
    · a taller band (4px inset, not 12px): there are no corner squares here to leave room for, and on
      a 32px-tall annotation a 12px inset either side would leave an 8px strip nobody can hit. */
-.node:not(.frame):not(.image-card):not(.query-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
-.node:not(.frame):not(.image-card):not(.query-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
+.node:not(.frame):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
+.node:not(.frame):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
 /* Nothing to grab while the card is being typed into (the zones would sit over the text caret's own
    edges) or while it's read-only/locked — mirrors the .addnote/.tag-add-btn rules further down. */
 .node:has(.title.editing) > .fh, .node:has(.body.editing) > .fh,
@@ -1137,82 +1137,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
-/* ---------- query card: a resizable box with a search field over a scrollable results list ---------- */
-/* z-index:2, same as an image card (not the frame's 1): a query card is a self-contained leaf
-   widget you interact with directly, not a container other cards render inside — see isQueryBox
-   in main.ts. Border tinted to the card's own colour via --frame-stroke, same as a frame/image box
-   (set generically for any box node in paintNode); background always stays empty regardless of the
-   card's own colour — same "outline only" look an uncoloured (c-none) frame has — so the box never
-   competes visually with the coloured result cards it contains. Keeps its title row (unlike
-   image/annotation), but the title itself isn't renamable — it always shows the live query text
-   (see paintNode); only its (unused) body is hidden. */
-.node.query-card { z-index:2; min-height:0; border-radius:var(--r-card); background:transparent;
-  border:4px solid var(--frame-stroke, var(--edge)); padding:8px 10px;
-  display:flex; flex-direction:column; }
-.node.query-card > .body, .node.query-card .progress { display:none; }
-/* direct-child combinator — a query card is fixed-size chrome with no tag row of its own, but a
-   CHILD card nested inside it (a real DOM descendant, see main.ts paintNode) still needs its own
-   .tag-row/.addnote to render. */
-.node.query-card > .addnote, .node.query-card > .tag-row { display:none !important; }
-.node.query-card .title-row { flex:none; position:relative; }
-/* magnifier glyph folded INTO the field (like the toolbar's #searchWrap icon-in-input), not a
-   separate button beside it: pulled out of the title-row's flex flow and absolutely positioned in
-   its own left gutter, so it never moves when .query-editing swaps the title for the query-input —
-   both reserve the same padding-left below. Click toggles .query-editing on the title row (see the
-   query-icon click handler in main.ts, and startQueryEdit for the shared open path). */
-.query-icon, .query-input { display:none; }
-.node.query-card .query-icon { display:inline-flex; align-items:center; justify-content:center;
-  position:absolute; left:0; top:50%; transform:translateY(-50%); z-index:1;
-  width:16px; height:16px; cursor:pointer; opacity:.7; }
-.node.query-card .query-icon:hover { opacity:1; }
-.node.query-card .query-icon svg { width:100%; height:100%; }
-/* Fixed height/line-height on BOTH the title and the input (below) — a plain <div> and an <input>
-   don't necessarily agree on line box metrics for the same font, and any difference there would
-   resize the title-row (and, with it, the icon's top:50% anchor and everything below in this
-   column-flex card) the instant .query-editing toggles. Reserving the exact same box up front,
-   for both states, is what actually keeps everything still — nothing here is animated away, the
-   space is just never different to begin with. Single line + ellipsis, like the toolbar's own
-   search box, rather than the multi-line wrap a normal card title allows. */
-.node.query-card .title { padding-left:22px; height:20px; line-height:20px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.node.query-card .title-row.query-editing .title { display:none; }
-/* Same box as .title (margin-bottom copied from the base .node .title rule below, padding-left
-   matching the icon gutter above) so the text doesn't jump when the field swaps in — an outline
-   (not a border/background box), exactly like the canvas' own .node .title.editing, since an
-   outline is painted outside the box and never shifts layout. */
-.node.query-card .title-row.query-editing .query-input { display:block; flex:1 1 auto; min-width:0;
-  box-sizing:border-box; height:20px; line-height:20px; margin-bottom:9px; padding:0 16px 0 22px;
-  border:none; border-radius:4px; color:inherit; font:inherit; font-size:14px; font-weight:600;
-  outline:2px solid var(--accent); outline-offset:2px; background:var(--scrim);
-  box-shadow:0 0 0 2px var(--scrim); }   /* fill the outline-offset gap, same trick as .title.editing */
-.node.query-card .query-input::placeholder { color:inherit; opacity:.6; }
-.query-box { display:none; }   /* hidden by default — only a query card's own paintNode branch shows it */
-.node.query-card .query-box { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
-.node.query-card .query-results { flex:1 1 auto; min-height:0; overflow-y:auto; }
-/* each result reads as a small card — the outline's .ol-row (styles.css's .ol-row block) in
-   miniature: its own colour via the shared .c-* palette classes, a lock badge, a checklist done
-   box, and a "⋮" actions menu (see queryItemHTML/openQueryItemMenu in main.ts). No drag handle —
-   these are search hits, not siblings to reorder. */
-.node.query-card .query-item { position:relative; display:flex; align-items:center; gap:6px;
-  width:100%; box-sizing:border-box; padding:5px 7px; margin:2px 0; border-radius:8px;
-  background:var(--card, transparent); color:var(--ink); cursor:pointer; }
-.node.query-card .query-item:hover { filter:brightness(1.12); }
-.node.query-card .query-item.done .qi-title { text-decoration:line-through; opacity:.65; }
-.node.query-card .qi-title { flex:1 1 auto; min-width:0; font-size:12px; font-weight:600;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.node.query-card .qi-lock { flex:none; width:13px; height:13px; color:inherit; display:inline-flex; }
-.node.query-card .qi-lock svg { width:100%; height:100%; }
-.node.query-card .qi-done { -webkit-appearance:none; appearance:none; width:13px; height:13px;
-  margin:0; border:none; outline:none; border-radius:3px; background:#fff; cursor:pointer; flex:none; position:relative; }
-.node.query-card .qi-done:checked { background:var(--accent); }
-.node.query-card .qi-done:checked::after { content:""; position:absolute; left:3px; top:1px; width:4px; height:7px;
-  border:solid #fff; border-width:0 2px 2px 0; transform:rotate(45deg); }
-.node.query-card .qi-more { flex:none; width:20px; height:20px; padding:0; border:0; border-radius:6px;
-  background:transparent; color:inherit; opacity:.6; font-size:15px; line-height:1; cursor:pointer;
-  display:flex; align-items:center; justify-content:center; }
-.node.query-card .qi-more:hover { opacity:1; background:color-mix(in srgb, var(--ink) 12%, transparent); }
-.node.query-card .query-empty { padding:5px 7px; font-size:12px; opacity:.65; }
-/* resize handles: the shared `.node > .fh-*` hit-zones above cover this card too */
 /* ---------- annotation: a title-less note pinned ON TOP of its parent ---------- */
 /* Above every card layer (a card, its chrome, a frame's tab) AND above every line: an annotation is
    not part of the map's drawing, it is a remark laid on top of it, so nothing the map draws — a card,
@@ -1242,9 +1166,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    the editing width above, so a resized annotation keeps its size while its body is edited. */
 .node.annotation.w-set { max-width:none; }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
-/* while editing a title/body/query in place, drop the card's selection ring so only the editor's
+/* while editing a title/body in place, drop the card's selection ring so only the editor's
    own outline shows */
-.node.sel:has(.title.editing), .node.sel:has(.body.editing), .node.sel:has(.title-row.query-editing) { box-shadow:none; }
+.node.sel:has(.title.editing), .node.sel:has(.body.editing) { box-shadow:none; }
 /* the dragged card (and its subtree) floats above every other card, above every line, and above the
    landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
    (below), not per card, so overlapping dragged items don't shine through each other. */
@@ -1321,7 +1245,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    the selected card, appended last — see paintNode in main.ts) is this row's own right-anchored
    end, so it always sits exactly where the next tag would land; existing tags shift further left
    as new ones are added, the button itself never moves. One rule now covers every card type,
-   including image/query cards — no more overlay-bar special case. Each tag is a single emoji (no
+   including image cards — no more overlay-bar special case. Each tag is a single emoji (no
    name, no colour — the emoji itself is the visual identity); clicking a card's own pill removes it
    (features/tags.ts's bindCardTagPills). z-index:3 — above a frame/image card's own resize handles
    (.fh, z-index:2), which live in the same bottom-right corner: the emoji row and its add button
@@ -1586,7 +1510,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
    containing block exactly when it's positioned, i.e. when it's a FRAME's title tab, so a frame's chip
    rides its tab instead of sitting 43px lower on the box, and a folded frame / docked tab (whose label
    IS the element) needs no special case at all.
-   Where the row is in FLOW (card, stack, query card) the offsets resolve against the node's own
+   Where the row is in FLOW (card, stack) the offsets resolve against the node's own
    padding box instead — which for a bordered box means adding its border back, hence the stack's
    -12px (its title then sits at the same 8px from its outer corner as a card's). */
 .node.stack > .title-row > .hidden-count { right:-12px; top:-12px; }
@@ -1601,7 +1525,7 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 /* WHICH face shows is decided in ONE place — paintNode's chipFace, via data-chip — and never by a
    per-kind rule here: a `:hover`/`.sel` selector out-specifies any plain class, so a kind that
    wanted to hide the bubble could never win that fight. Hence no .hidden-count in the frame /
-   stack / image-card / query-card / docked-tab rules further up.
+   stack / image-card / docked-tab rules further up.
    The folded "+N" always shows. The chevron shows on hover, or while the card is SELECTED — every
    selected collapsible card carries one, including each card of a multi-selection (clicking it then
    folds them all, like X). Selected counts because touch has no hover: tap the card, tap the chip.
@@ -2019,8 +1943,8 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
      border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
      touch, so the zone being generous is the only affordance there is. The .addnote pill above grows
      to right:-14px on coarse pointers, but it's z-index:3 and still wins the overlap. */
-  .node:not(.frame):not(.image-card):not(.query-card) > .fh-e { right:-16px; width:16px; }
-  .node:not(.frame):not(.image-card):not(.query-card) > .fh-w { left:-16px;  width:16px; }
+  .node:not(.frame):not(.image-card) > .fh-e { right:-16px; width:16px; }
+  .node:not(.frame):not(.image-card) > .fh-w { left:-16px;  width:16px; }
 }
 
 /* ---- narrow screens: the floating bar docks to the BOTTOM EDGE instead of floating next to
