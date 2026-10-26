@@ -241,7 +241,9 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       // authoredW's junk-width filter is for the FRONTMATTER value only — a width in board.json was
       // written by this build and means exactly what it says.
       w: g?.w ?? authoredW(mm.w, mm.type, imageOnly),
-      h: g?.h ?? mm.h ?? undefined,
+      // A legacy frontmatter mm_h only ever meant a box's size; a card's own (minimum) height is newer
+      // than that and lives in board.json alone.
+      h: g?.h ?? (isBoxType(mm.type) || imageOnly ? mm.h : undefined) ?? undefined,
       ...rest, dirty:unmigrated, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
     };
     if (mm.wasStack) wasStack.add(node.id);

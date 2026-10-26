@@ -10,7 +10,7 @@
 // arrangement of it. `mm_parent` is the deliberate exception (see docs/architecture.md) — keeping
 // membership in the note is what lets a folder stand on its own if this file is lost.
 // ============================================================
-import { state, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type BoardEdge, type EdgeCap } from '../core/state.js';
+import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap } from '../core/state.js';
 import { store } from './persistence.js';
 import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';
@@ -103,13 +103,10 @@ function collectGeom(): Record<string, StoredGeom> {
   for (const n of state.nodes.values()) {
     if (!n.file) continue;                       // never saved yet: it has no key to be stored under
     const g: StoredGeom = { x: Math.round(n.rx), y: Math.round(n.ry) };
-    // The AUTHORED width — every kind can carry one (a card is resizable on this axis alone). The
-    // HEIGHT belongs to the kinds that own a box, plus the one card that IS one: an IMAGE card
-    // (core/state.ts isImageCard) is its picture, so both axes are authored. Any other card measures
-    // its height from its content, and a card with children derives its own from its outline, so
-    // storing an h for either would freeze a value they recompute anyway.
+    // The AUTHORED size — every kind can carry both axes. A frame's and an IMAGE card's h is its box;
+    // a plain card's is a MINIMUM its text can still grow past (main.ts paintNode).
     if (n.w != null) g.w = Math.round(n.w);
-    if ((isBoxType(n.type) || isImageCard(n)) && n.h != null) g.h = Math.round(n.h);
+    if (n.h != null) g.h = Math.round(n.h);
     if (n.collapsed) g.collapsed = true;
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     if (order.length > 1) g.order = order;       // a single child has no order worth writing

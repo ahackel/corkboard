@@ -89,9 +89,12 @@ write eat the first.
 **Hierarchy is `mm_parent`; a LINE is something the user drew.** A node's parent is `mm_parent` (the parent
 note's relative path) and the tree is computed from it — a card sits INSIDE the frame that is its parent, so
 no line is ever derived from it. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
-caps, label) and are drawn STRAIGHT from rim to rim, aimed at the two cards' centres (`view/free-edges.ts`
-`edgeGeometry`, the one place the geometry is computed). A line stores no face and never routes, so moving
-a card only pivots it (docs/PRODUCT.md, principle 2). You draw one from the four rings on a selected card
+caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `route` → `polyline`, behind
+`edgeGeometry`, the one place the geometry is computed): along the axis the two cards are further apart
+on, a line runs straight across where they face each other, else leaves the middle of one side, turns
+(rounded, `CORNER_R`) halfway across the gap and enters the middle of the other. Overlapping cards get the
+plain centre-to-centre line. A line stores no face: the route is re-derived from the cards on every paint,
+so there is nothing on disk to go stale when one moves (docs/PRODUCT.md, principle 2). You draw one from the four rings on a selected card
 onto ANY point of another card; an end handle moves that end. Older boards may carry JUNCTIONS (points
 where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
 into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
@@ -402,16 +405,19 @@ text at all.
 
 ## Sizing
 
-**`n.w` is always AUTHORED; `n.h` only for the 2D box kinds.** Every kind can be resized horizontally by
-dragging its left/right edge, and `n.w` (→ `mm_w`) is that dragged width and nothing else — never a value a
-layout pass computed. Two axes' worth of handles come off that split (`ensureResizeHandles`, `main.ts`):
+**`n.w` and `n.h` are always AUTHORED; a card's `n.h` is a MINIMUM.** Every kind gets the same 8 resize
+zones (`FRAME_DIRS`, `ensureResizeHandles` in `main.ts`), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
+dragged size and nothing else — never a value a layout pass computed. What the height MEANS splits:
 
 - `frame` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
   `isBoxType`). For a **frame** these are its box; its label hangs outside, above it.
 - An **IMAGE card** is the third, and the one that isn't a kind: see below.
-- `card` is **width-only** — 2 side zones (`EW_DIRS`), and its height is never authored, written inline
-  or persisted: a card measures it from its content (`nodeH` → `offsetHeight`). Minimum width is the kind's own natural width, so a
-  card only ever gets *wider*; drag back to it and `n.w` is dropped rather than persisting a redundant `mm_w`.
+- `card` — its `n.h` is painted as `min-height`, never `height`: drag a card taller and it stays that
+  tall, but its text can always make it taller still, so a card never clips its note and `nodeH` still
+  MEASURES it (`offsetHeight`). The resize can't go below the text's natural height at the start width
+  (`natural()` in `startNodeResize`). Minimum width is the kind's natural width; drag back to either
+  natural size and that axis is dropped rather than persisting a redundant value. A legacy frontmatter
+  `mm_h` is read for boxes only — a card's height is newer than that and lives in `board.json` alone.
 
 **A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
 in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
@@ -464,7 +470,7 @@ other follows and the picture never distorts or crops. Four things follow:
   generic `IMAGE_W`×`IMAGE_H` box instead of its own shape — and, being an image card, would then have
   taken that wrong ratio into its aspect-locked resize.
 
-Widening a width-only node changes its measured height as text re-wraps, so the resize gesture paints *then*
+Resizing a card changes its measured height as text re-wraps, so the resize gesture paints *then*
 re-lays-out on every frame (the same paint-before-measure rule as `prepRow`).
 
 ## Storage and boot
@@ -807,9 +813,12 @@ picker rings the colour it SHOWS (`effectiveColor`) — the selected chip wears 
 default ink IS `stone`, so the line picker needs no "default" chip either.
 
 **Selection, ports and lines are FigJam's.** A lone selection shows a white rounded square on each corner
-(drawn on the corner resize zones, `.node.solo > .fh-*::after`; a card's corners resize its width only), and
-four PORTS float `SOCKET_OUT` outside its sides — a blue dot in a white rim that becomes a ⊕ under the
-pointer (free-edges.ts). The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
+(drawn on the corner resize zones, `.node.solo > .fh-*::after`), and four PORTS float `SOCKET_OUT` outside
+its sides — a blue dot in a white rim that becomes a ⊕ under the pointer (free-edges.ts). DRAG from a port
+to draw a line; CLICK it (a press under `MIN_DRAG_PX`) and `spawnConnected` (edge-tools.ts) makes a card
+`CONNECT_GAP` away on that side — the source's colour and size, in the source's home, joined by a line,
+open for typing — stepping past cards already there so repeated clicks fan out. It is one undo step with
+the card, so an abandoned empty card takes its line with it (`discardNewCard` → `deleteNodes`). The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the

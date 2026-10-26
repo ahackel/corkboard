@@ -7,7 +7,7 @@
 // is what lets the rings be always-available on a selected card without accidental connectors.
 // A line goes from CARD to CARD: drop it anywhere on the target. There is nothing else to aim at.
 // ============================================================
-import { state, stage, setStatus, type BoardEdge } from '../core/state.js';
+import { state, stage, setStatus, type BoardEdge, type EdgeSide } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { makeEdge, scheduleSaveBoard } from '../data/board.js';
 import { paintFreeEdges, connectable } from '../view/free-edges.js';
@@ -15,7 +15,9 @@ import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges, commitStep } from './history.js';
 import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
-import { paintAll, nodeW, nodeH } from '../main.js';
+import { paintAll, nodeW, nodeH, snapPt } from '../main.js';
+import { createNode } from './crud.js';
+import { SPACING } from '../utils/guides.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
@@ -112,7 +114,8 @@ export function installEdgeTools(): void {
     const hit    = t.closest('[data-edge]') as SVGElement | null;
     if (socket && !state.readOnly) {
       beginDraw(ev, { sourceId: socket.getAttribute('data-node')!, to: screenToWorld(ev.clientX, ev.clientY),
-                      grabbedAt: screenToWorld(ev.clientX, ev.clientY) });
+                      grabbedAt: screenToWorld(ev.clientX, ev.clientY),
+                      side: socket.getAttribute('data-socket') as EdgeSide });
       return;
     }
     if (handle && !state.readOnly) {
@@ -194,6 +197,8 @@ const MIN_DRAG_PX = 12;
 function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   const travelled = Math.hypot(at.x - draw.grabbedAt.x, at.y - draw.grabbedAt.y) * (state.view.k || 1);
   const target = draw.overId;
+  // A CLICK on a port (FigJam's ⊕): a new card on that side, joined to this one.
+  if (travelled < MIN_DRAG_PX && draw.side && !draw.edgeId) { spawnConnected(draw.sourceId, draw.side); return; }
   // A press that never travelled, or a release over no card: nothing changes. Moving an end off into
   // empty space leaves the line where it was — Delete is how a line goes away.
   if (travelled < MIN_DRAG_PX || !target) { paintFreeEdges(); return; }
@@ -213,6 +218,32 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   if (!made) { paintFreeEdges(); return; }
   selectEdge(made.id);
   commitStep();
+}
+
+// FigJam's ⊕: click a port and a new card appears CONNECT_GAP away on that side — the same colour and
+// size as the card it came from, joined to it by a line, and open for typing. Click again and the
+// next one lands beside the last instead of on it. Its home is the source's: a card's frame, or for a
+// frame the place the frame itself sits. One undo step with the card (createNode's rename session
+// commits it), so an abandoned empty card takes its line with it (crud.ts discardNewCard).
+const CONNECT_GAP = 80;
+function spawnConnected(srcId: string, side: EdgeSide): void {
+  const src = state.nodes.get(srcId); if (!src || state.readOnly) return;
+  const isCard = src.type !== 'frame';
+  const w = isCard ? nodeW(src) : 240, h = isCard ? nodeH(src) : 64;
+  const sw = nodeW(src), sh = nodeH(src);
+  const horiz = side === 'left' || side === 'right';
+  let x = side === 'right' ? src.x + sw + CONNECT_GAP : side === 'left' ? src.x - CONNECT_GAP - w : src.x + (sw - w) / 2;
+  let y = side === 'down' ? src.y + sh + CONNECT_GAP : side === 'up' ? src.y - CONNECT_GAP - h : src.y + (sh - h) / 2;
+  // Step past whatever already stands there: down a column on the left/right, along a row up/down.
+  const blocked = (): boolean => [...state.nodes.values()].some(o => o.parent === src.parent && o !== src && !isHidden(o)
+    && x < o.x + nodeW(o) && x + w > o.x && y < o.y + nodeH(o) && y + h > o.y);
+  for (let i = 0; i < 50 && blocked(); i++) { if (horiz) y += h + SPACING; else x += w + SPACING; }
+  const at = snapPt({ x, y });
+  const n = createNode({ ...at, parent: src.parent, color: isCard ? src.color : '',
+                         w: isCard ? src.w : undefined, h: isCard ? src.h : undefined });
+  if (!n) return;
+  addEdge(srcId, n.id);
+  paintFreeEdges();
 }
 
 // Delete/Backspace with edges selected — handled before the card path in main.ts's key handler. All

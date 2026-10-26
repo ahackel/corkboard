@@ -113,7 +113,7 @@ export interface View { x: number; y: number; k: number; }
 // here, no direction implied" — it marks the endpoint without claiming a flow.
 export type EdgeCap = 'none' | 'dot' | 'arrow';
 // One of a card's four faces — where the rings you drag a new line from sit (view/free-edges.ts).
-// UI only: a line itself stores no face, it runs straight between the two cards.
+// UI only: a line itself stores no face — its elbow route is derived from where the two cards are.
 export type EdgeSide = 'up' | 'down' | 'left' | 'right';
 export interface BoardEdge {
   id: string;

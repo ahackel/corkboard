@@ -83,8 +83,8 @@ zoomed out · emoji tags presented as stamps · export a selection or board as P
 
 ## Known friction to fix (from daily use)
 
-- **Layout fights me**: card sizes and overlaps need constant fixing. (Fixed so far: lines run straight
-  from card to card; dropping never nests a card by accident; guides line cards up while dragging.)
+- **Layout fights me**: card sizes and overlaps need constant fixing. (Fixed so far: lines route as
+  tidy elbows from card to card; dropping never nests a card by accident; guides line cards up while dragging.)
 - **Boards get messy** over weeks. First try a routine with existing features (a "This week" frame;
   on Friday, write a summary card, move the week's cards into it, collapse it) before building
   anything for it.

@@ -5,7 +5,7 @@
 // render core (main.ts) and the feature modules split out of it (drag / inline-edit / gestures
 // / attachments). Imported `let` bindings are read-only, hence the holder-object pattern.
 // ============================================================
-import type { MindNode } from './state.js';
+import type { EdgeSide, MindNode } from './state.js';
 
 export type Pt = { x: number; y: number };
 // World-space line segment (axis-aligned for the insertion indicator).
@@ -72,8 +72,9 @@ export const ui = {
   // the card under it — the only thing a drop can land on. `edgeId`/`end` are set only when moving one
   // end of an existing edge. `grabbedAt` (world units) is where the press began: a drop only counts if
   // it travelled (features/edge-tools.ts MIN_DRAG_PX), so a twitch on a ring or a handle is a click.
+  // `side` is the port a fresh draw started from: a CLICK on it makes a connected card that way.
   edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string;
-                      edgeId?: string; end?: 'from' | 'to' } | null,
+                      edgeId?: string; end?: 'from' | 'to'; side?: EdgeSide } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,
   // ---- in-place card editing (features/inline-edit.ts) ----

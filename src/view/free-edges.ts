@@ -1,9 +1,10 @@
 // ---------- free-edge rendering ----------
 // The lines the user DREW between cards (core/state.ts BoardEdge). A line says "these two belong
-// together" and nothing more (docs/PRODUCT.md), so it is the simplest shape that can say it: a STRAIGHT
-// segment aimed at the two cards' centres, clipped to each card's rim. It stores no face and never
-// routes, so moving a card can't make a line jump to another side or take a detour — the line just
-// pivots to keep pointing at the card.
+// together" and nothing more (docs/PRODUCT.md). It is drawn as FigJam's ELBOW connector: it leaves
+// one card square to a side and enters the other square to a side, turning (with rounded corners) in
+// the middle of the gap between them — or runs dead straight when the two cards face each other. It
+// stores no side: the route is DERIVED from where the two cards are each time it is painted (`route`),
+// so there is nothing on disk to go stale when a card moves.
 //
 // This module paints three layers, and which is which is the whole of how an edge behaves:
 //   · #freeEdges — the lines, ABOVE the cards: a line is something the reader follows, and one that
@@ -34,17 +35,18 @@ const SOCKET_OUT = 18;
 // the rim the user reads as the card's edge). A frame's label hangs outside its bounds, so a line meets
 // the box it points at, not the label above it.
 const RING_MID = 1;
-function rimRect(n: MindNode): { x: number; y: number; w: number; h: number } {
+type Rect = { x: number; y: number; w: number; h: number };
+function rimRect(n: MindNode): Rect {
   return { x: n.x - RING_MID, y: n.y - RING_MID, w: nodeW(n) + 2*RING_MID, h: nodeH(n) + 2*RING_MID };
 }
-function centre(n: MindNode): Pt {
-  const r = rimRect(n);
+function centre(n: MindNode | Rect): Pt {
+  const r = 'id' in n ? rimRect(n) : n;
   return { x: r.x + r.w/2, y: r.y + r.h/2 };
 }
-// Where the segment from the card's centre toward `p` leaves its rim. Ray/box: the axis it reaches
+// Where the segment from the box's centre toward `p` leaves its rim. Ray/box: the axis it reaches
 // first decides.
-function rimPoint(n: MindNode, p: Pt): Pt {
-  const r = rimRect(n), c = centre(n);
+function rimPoint(n: MindNode | Rect, p: Pt): Pt {
+  const r = 'id' in n ? rimRect(n) : n, c = centre(r);
   const dx = p.x - c.x, dy = p.y - c.y;
   if (!dx && !dy) return c;
   const tx = dx ? (r.w/2) / Math.abs(dx) : Infinity, ty = dy ? (r.h/2) / Math.abs(dy) : Infinity;
@@ -54,7 +56,7 @@ function rimPoint(n: MindNode, p: Pt): Pt {
 
 // The four dots on a selected card — only where a NEW line starts from, floating a little OUTSIDE each
 // side the way FigJam's do, clear of the resize handles. The finished line doesn't remember which one:
-// it runs centre to centre like every other.
+// it is routed from where the two cards are, like every other (`route`).
 export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
   const r = rimRect(n), o = SOCKET_OUT;
   return [
@@ -76,22 +78,74 @@ function unit(p: Pt, q: Pt): Pt {
   const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
   return { x: dx / L, y: dy / L };
 }
-// A straight segment a→b, each end pulled in by its own trim, as a path plus what the caps need.
-function segment(a: Pt, b: Pt, trimA: number, trimB: number): { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt } {
-  const u = unit(a, b), len = Math.hypot(b.x - a.x, b.y - a.y);
-  if (len > (trimA + trimB) * 1.5) {
-    a = { x: a.x + u.x * trimA, y: a.y + u.y * trimA };
-    b = { x: b.x - u.x * trimB, y: b.y - u.y * trimB };
+// A path through `pts`, each end pulled in by its own trim along its own leg, as an SVG path plus what
+// the caps and the label need. Two points is a straight segment; more is an elbow, its corners rounded
+// (CORNER_R, shrunk to fit a short leg) the way FigJam's are.
+type Geometry = { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt };
+const CORNER_R = 10;
+function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
+  pts = pts.map(p => ({ ...p }));
+  const n = pts.length;
+  const lenOf = (i: number): number => Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
+  const tailU = unit(pts[1], pts[0]), tipU = unit(pts[n-2], pts[n-1]);
+  // A leg too short to give up its trim keeps it (two cards nearly touching): a line that turned
+  // inside out would be worse than one that touches.
+  const trimTail = n === 2 ? lenOf(0) > (trimA + trimB) * 1.5 : lenOf(0) > trimA * 1.5;
+  const trimTip = n === 2 ? trimTail : lenOf(n-2) > trimB * 1.5;
+  if (trimTail) pts[0] = { x: pts[0].x - tailU.x * trimA, y: pts[0].y - tailU.y * trimA };
+  if (trimTip) pts[n-1] = { x: pts[n-1].x - tipU.x * trimB, y: pts[n-1].y - tipU.y * trimB };
+  let d = `M ${pts[0].x} ${pts[0].y}`;
+  for (let i = 1; i < n - 1; i++) {
+    const p = pts[i], uin = unit(pts[i-1], p), uout = unit(p, pts[i+1]);
+    const r = Math.min(CORNER_R, lenOf(i-1) / 2, lenOf(i) / 2);
+    d += ` L ${p.x - uin.x * r} ${p.y - uin.y * r} Q ${p.x} ${p.y} ${p.x + uout.x * r} ${p.y + uout.y * r}`;
   }
-  return { a, b, d: `M ${a.x} ${a.y} L ${b.x} ${b.y}`, mid: { x: (a.x + b.x)/2, y: (a.y + b.y)/2 },
-           tipTan: u, tailTan: { x: -u.x, y: -u.y } };
+  d += ` L ${pts[n-1].x} ${pts[n-1].y}`;
+  // The label's spot: halfway along the line, which on an elbow is the middle of its middle leg.
+  let half = 0; for (let i = 0; i < n - 1; i++) half += lenOf(i);
+  half /= 2;
+  let mid = pts[0];
+  for (let i = 0; i < n - 1; i++) {
+    const L = lenOf(i);
+    if (half <= L) { const u = unit(pts[i], pts[i+1]); mid = { x: pts[i].x + u.x * half, y: pts[i].y + u.y * half }; break; }
+    half -= L;
+  }
+  return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU };
+}
+function segment(a: Pt, b: Pt, trimA: number, trimB: number): Geometry { return polyline([a, b], trimA, trimB); }
+
+// The elbow between two boxes (`to` may be a bare point — the pointer, while a line is being drawn).
+// The AXIS is the one the boxes are further apart along: side by side → it leaves a left/right side,
+// one above the other → top/bottom. Facing each other across that axis (their spans overlap), it runs
+// straight across the middle of the overlap; otherwise it leaves from the middle of one side, turns
+// halfway across the gap, and enters the middle of the other — a Z. Two boxes that overlap outright
+// have no gap to route through, so they get the plain centre-to-centre line.
+function route(ra: Rect, rb: Rect): Pt[] {
+  const ca = centre(ra), cb = centre(rb);
+  const gapX = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w));
+  const gapY = Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h));
+  if (gapX < 0 && gapY < 0) return [rimPoint(ra, cb), rimPoint(rb, ca)];
+  if (gapX >= gapY) {
+    const right = cb.x > ca.x;
+    const ax = right ? ra.x + ra.w : ra.x, bx = right ? rb.x : rb.x + rb.w;
+    const lo = Math.max(ra.y, rb.y), hi = Math.min(ra.y + ra.h, rb.y + rb.h);
+    if (hi >= lo) { const y = (lo + hi) / 2; return [{ x: ax, y }, { x: bx, y }]; }
+    const mx = (ax + bx) / 2;
+    return [{ x: ax, y: ca.y }, { x: mx, y: ca.y }, { x: mx, y: cb.y }, { x: bx, y: cb.y }];
+  }
+  const down = cb.y > ca.y;
+  const ay = down ? ra.y + ra.h : ra.y, by = down ? rb.y : rb.y + rb.h;
+  const lo = Math.max(ra.x, rb.x), hi = Math.min(ra.x + ra.w, rb.x + rb.w);
+  if (hi >= lo) { const x = (lo + hi) / 2; return [{ x, y: ay }, { x, y: by }]; }
+  const my = (ay + by) / 2;
+  return [{ x: ca.x, y: ay }, { x: ca.x, y: my }, { x: cb.x, y: my }, { x: cb.x, y: by }];
 }
 // The ONE place an edge's geometry is computed, so the painter, the label, the bar and the inline
 // editor can never disagree about where the line is.
-export function edgeGeometry(e: BoardEdge): ReturnType<typeof segment> | null {
+export function edgeGeometry(e: BoardEdge): Geometry | null {
   const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
   if (!from || !to) return null;
-  return segment(rimPoint(from, centre(to)), rimPoint(to, centre(from)), trim(e.fromCap), trim(e.toCap));
+  return polyline(route(rimRect(from), rimRect(to)), trim(e.fromCap), trim(e.toCap));
 }
 
 // An OPEN head — two strokes from the tip back to the corners, not a filled triangle: at the line's
@@ -202,13 +256,12 @@ export function paintFreeEdges(): void {
         + `<circle class="fe-port-dot" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`
         + `<g class="fe-port-plus"><circle cx="${p.x}" cy="${p.y}" r="${SOCKET_HOVER_R}"/>`
         + `<path d="M ${p.x - 5} ${p.y} H ${p.x + 5} M ${p.x} ${p.y - 5} V ${p.y + 5}"/></g></g>`;
-  // The edge being drawn right now, in its FINAL style: from the fixed card toward the pointer, or —
-  // once the pointer is over a card — all the way to that card's rim, exactly where it will land.
+  // The edge being drawn right now, in its FINAL style and route: from the fixed card to the pointer,
+  // or — once the pointer is over a card — all the way to that card, exactly where it will land.
   const draw = ui.edgeDraw;
   const src = draw ? state.nodes.get(draw.sourceId) : null;
   if (draw && src) {
     const over = draw.overId ? state.nodes.get(draw.overId) : null;
-    const end = over ? rimPoint(over, centre(src)) : draw.to;
     if (over) { const r = rimRect(over); tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`; }
     const edge = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
@@ -217,7 +270,7 @@ export function paintFreeEdges(): void {
     const movingFrom = draw.end === 'from';
     const anchorCap: EdgeCap = edge ? (movingFrom ? edge.toCap : edge.fromCap) : 'none';
     const movingCap: EdgeCap = edge ? (movingFrom ? edge.fromCap : edge.toCap) : 'arrow';
-    const s = segment(rimPoint(src, end), end, trim(anchorCap),
+    const s = polyline(route(rimRect(src), over ? rimRect(over) : { ...draw.to, w: 0, h: 0 }), trim(anchorCap),
       over ? trim(movingCap) : movingCap === 'arrow' ? ARROW_INSET : 0);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${s.d}"/>`
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);

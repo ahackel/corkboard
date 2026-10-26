@@ -371,9 +371,11 @@ export function paintNode(n: MindNode): void {
       placeSelf(n, np.x, np.y);
     }
   }
-  // Apply the node's size, and give it the resize hit-zones its kind supports. A frame / image card
-  // is its own 2D box (8 handles). A card authors only a WIDTH (2 side handles): its height comes from
-  // its content, so its inline height is always cleared and left to CSS.
+  // Apply the node's size, and give it the resize hit-zones its kind supports. Every kind gets all 8.
+  // A frame / image card is its own 2D box. A card's height is a MINIMUM (min-height): drag it taller
+  // and it stays that tall, but its text can always make it taller still — a card never clips its note.
+  if (!isBoxNode(n) && !isFrameFold(n) && !isImageFold(n)) el.style.minHeight = n.h != null && !isReadingRoot(n) ? n.h + 'px' : '';
+  else if (el.style.minHeight) el.style.minHeight = '';
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     el.style.height = nodeH(n) + 'px';
@@ -393,11 +395,11 @@ export function paintNode(n: MindNode): void {
     ensureResizeHandles(n, FRAME_DIRS);
   } else {
     // A plain card: an authored width if it has one (else back to the CSS-fixed card width), never an
-    // inline height.
+    // inline height — its authored height is the min-height set above.
     const authored = n.w != null || isReadingRoot(n);
     el.style.width = authored ? nodeW(n) + 'px' : '';
     if (el.style.height) el.style.height = '';
-    ensureResizeHandles(n, EW_DIRS);
+    ensureResizeHandles(n, FRAME_DIRS);
   }
   // After the whole chain, because a frame and a plain card each hand out their own handles: a DERIVED
   // size isn't resizable. The card
@@ -806,10 +808,6 @@ function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) 
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 type FrameDir = typeof FRAME_DIRS[number];
-// …and the width-only set: a card authors a WIDTH but never a height (its height stays whatever its
-// content measures), so it gets the two side bands — and the four corners FigJam shows square handles
-// on, which for a card move only their side's edge (startNodeResize writes no height: see sizeH).
-const EW_DIRS = ['e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 // Ensure the node has exactly the resize hit-zones its kind wants — one per edge/corner, added once
 // and reused. The corners of a lone selection draw FigJam's square handles (styles.css); the edges
 // have no grip, their resize cursor is the affordance.
@@ -850,13 +848,20 @@ function imageAspect(n: MindNode): number {
 function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   if (state.readOnly || isLockedEffective(n)) return;
   e.stopPropagation(); e.preventDefault();
-  // Does this kind author its own HEIGHT, or only a width? A card measures its height from
-  // its content, so for a card the resize writes w only.
-  // A FOLDED image card counts as a box here even though isBoxNode says no: its 40px icon is the small
-  // end of its own size range, and scaling it back up is how you unfold it (see `fold` in resize()).
+  // Is this a BOX (its size is exactly what's dragged) or a card (its height is a minimum over what
+  // its text measures)? A FOLDED image card counts as a box here even though isBoxNode says no: its
+  // 40px icon is the small end of its own size range, and scaling it back up is how you unfold it.
   const img = isImageBox(n) || isImageFold(n);
   const sizeH = isBoxNode(n) || img;
-  const minW = minWOf(n), minH = minHOf(n);
+  const minW = minWOf(n);
+  // A card can't be dragged shorter than its text at the width it starts from: below that the
+  // min-height does nothing, and a north edge would walk the card's top away from the pointer.
+  const natural = (): number => {
+    const el = n.el!, was = el.style.minHeight;
+    el.style.minHeight = ''; const h = el.offsetHeight; el.style.minHeight = was;
+    return h;
+  };
+  const minH = sizeH ? minHOf(n) : natural();
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
@@ -917,8 +922,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       if (fold) { n.dirty = true; return; }
     }
     n.x = left; n.w = right - left;
-    // a width-only kind never gets a y/h written — see sizeH
-    if (sizeH) { n.y = top; n.h = bottom - top; }
+    if (sizeH || north || south) { n.y = top; n.h = bottom - top; }
     n.dirty = true;
   };
   const move = (ev: PointerEvent): void => {
@@ -951,6 +955,8 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
     // a redundant mm_w on every card the user so much as nudges.
     if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
+    // …and the same for a card's height: no taller than its text → it has no authored height.
+    if (!sizeH && n.h != null) { paintNode(n); if (Math.round(n.h) <= natural() + 1) n.h = undefined; }
     // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
     // the DOM has it.
     paintNode(n);

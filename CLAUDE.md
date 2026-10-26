@@ -54,13 +54,13 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
 - **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the frame that is its parent;
-  free edges live in `board.json`, run STRAIGHT card to card, and mean nothing structural.
+  free edges live in `board.json`, ELBOW card to card (route derived, never stored), and mean nothing structural.
 - **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **Two kinds, card and frame (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
   through `holderOf`; a drop lands in the innermost frame under the card's centre (`frameAt`), else the top level.
-- **`n.w` is always AUTHORED; `n.h` only for a frame and an IMAGE card** — a card whose note is
+- **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed**. An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
 - **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
