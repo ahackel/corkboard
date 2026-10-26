@@ -312,8 +312,12 @@ export function effectiveColor(n: MindNode): string {
   let guard = 0;
   for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c))
     if (c.color) return c.color;
-  // light theme: the neutral fallback card reads better as white than as the dark-grey card
-  return document.body.classList.contains('light') ? 'white' : 'grey';
+  // Nothing in the chain is coloured. A CARD is a sticky note, and a sticky note is yellow (docs/PRODUCT.md:
+  // "a default card is a coloured sticky note") — derived here, never written, so a note on disk stays
+  // uncoloured and picking a colour is still the user's own act. A FRAME is a surface cards sit ON, so it
+  // keeps a neutral fill: white on the light board, charcoal on the dark one.
+  if (n.type === 'card') return 'amber';
+  return document.body.classList.contains('light') ? 'white' : 'black';
 }
 // A card shows a done checkbox only if its PARENT has `checklist` on — Trello-style: the
 // setting lives on the parent ("treat my children as a checklist"), not on the item itself, and

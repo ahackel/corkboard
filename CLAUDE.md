@@ -33,7 +33,7 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 - `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
   `flushSave`, `loadFromDir`, zip import/export) `board.ts` (the ONE sidecar), `save-alert.ts` (the only UI here).
 - `view/` — `camera.ts`, `layout.ts` (all placement, container predicates, the outliner),
-  `edges.ts`, `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
+  `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
   text-drag, attachments, clipboard, search, outline, float-bar, properties, breadcrumbs, history, …
@@ -96,4 +96,4 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
   fallback, FSA) · "Boot order" · "External-change reload".
 - Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its
-  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`".
+  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a paper board of sticky notes".

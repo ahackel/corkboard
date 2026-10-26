@@ -1,25 +1,33 @@
 /* App styles. Extracted from index.html. Vite bundles this (imported from main.ts) and
    vite-plugin-singlefile inlines it back into dist/index.html, keeping the single-file build. */
+/* The friendly rounded face (docs/PRODUCT.md, "Look and feel"): the system's own rounded sans where there
+   is one (SF Pro Rounded on Apple), else Nunito — bundled, latin subset (~39 KB, inlined into the single
+   file), so it works offline and from file://. OFL licence beside the file. */
+@font-face {
+  font-family:'Nunito'; font-style:normal; font-weight:200 1000; font-display:swap;
+  src:url(./assets/fonts/nunito-latin-wght-normal.woff2) format('woff2-variations');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
 :root {
   --frame-tab-h:40px;   /* FRAME_TAB_H (main.ts) — the folded stub asserts it when it has no text to fill it */
   /* tells the browser what colour to paint the viewport with BEFORE our own CSS/JS catches up
      (e.g. the newly-exposed strip while dragging the window edge to resize) — without this the
      browser defaults to white, which flashes at the growing edge on a dark theme. */
   color-scheme: dark;
-  --bg: #11151c;
-  --grid: #1b212c;
+  --bg: #17191f;
+  --grid: #22252d;
   /* the visible canvas grid pattern (view/grid.ts) wants more contrast than --grid's subtle
      border/divider use elsewhere, so blend it toward --text instead of a second hardcoded hex per
      theme — stays correct in both themes for free. */
   --grid-pat: color-mix(in srgb, var(--grid) 55%, var(--text) 45%);
-  --node: #1e2733;
-  --node-border: #34465c;
+  --node: #252932;
+  --node-border: #3a3f4b;
   --node-sel: #5aa9ff;
-  --edge: #4a5d75;
-  --text: #e6ecf3;
-  --muted: #8a99ad;
+  --edge: #7d8494;
+  --text: #eceef2;
+  --muted: #959cab;
   --accent: #5aa9ff;
-  --panel: #1f2734;   /* bar/chrome surface — brighter than the canvas */
+  --panel: #262a33;   /* bar/chrome surface — brighter than the canvas */
 
   /* 8-colour muted card palette + grey (the "no colour" fallback) + white/black — TRULY identical in
      both themes: body.light overrides none of them (it used to swap in a pastel set), so a card looks
@@ -27,20 +35,24 @@
      The SINGLE SOURCE OF TRUTH for these hexes: main.ts's SWATCH_BG reads them straight from
      here (getComputedStyle) at load, so JS (edges/backgrounds/swatch fills) and CSS (.c-*
      below, #ghostCard) never drift apart. Change a colour here only. */
-  --pal-slate: #4860c0;
-  --pal-red: #d62f48;
-  --pal-amber: #d18a1d;
-  --pal-green: #1ba85a;
-  --pal-teal: #129fb3;
-  --pal-blue: #2f7fe8;
-  --pal-violet: #7a42da;
-  --pal-pink: #d6368e;
-  --pal-grey: #3a4759;
-  --pal-white: #f2f4f7;
-  --pal-black: #000000;
+  /* Bright sticky-note fills (docs/PRODUCT.md): light enough to take DARK ink everywhere, so a board
+     reads like a wall of paper notes. The KEYS are the file format (`color: amber` in a note) and never
+     change; only these hexes do. `amber` is the classic sticky yellow, and the default for a card with
+     no colour of its own (main.ts effectiveColor). */
+  --pal-slate: #b9c3ff;
+  --pal-red: #ff9f8f;
+  --pal-amber: #ffdb6e;
+  --pal-green: #a9e4a0;
+  --pal-teal: #8fded3;
+  --pal-blue: #9fcbff;
+  --pal-violet: #cdb7ff;
+  --pal-pink: #ffb0d3;
+  --pal-grey: #dfe2e7;
+  --pal-white: #ffffff;
+  --pal-black: #2b2e35;
 
   /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 10px;   /* board cards + the ghost/template card, and every box kind (frame/stack/image) */
+  --r-card: 8px;   /* board cards + the ghost/template card, and every box kind (frame/stack/image) */
   /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 4px is
      FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
      against the corners it's supposed to sit inside. */
@@ -87,18 +99,18 @@
 /* ---- light theme: override the base variables ---- */
 body.light {
   color-scheme: light;
-  --bg: #d7dbe2;
-  --grid: #c3c9d4;
+  --bg: #f4f1ea;
+  --grid: #e3ddd0;
   /* redeclared (not just inherited) so its nested var(--grid)/var(--text) re-resolve against this
      theme's own values — a custom property's var() substitution freezes at its declaring element,
      so leaving this to inherit from :root would keep baking in the dark-theme colours. */
   --grid-pat: color-mix(in srgb, var(--grid) 55%, var(--text) 45%);
   --node: #ffffff;
-  --node-border: #cfd6e0;
+  --node-border: #ddd6c8;
   --node-sel: #2f6fe0;
-  --edge: #9aa6b6;
-  --text: #1a2230;
-  --muted: #5d6b7e;
+  --edge: #8a8476;
+  --text: #24221e;
+  --muted: #6f6a60;
   --accent: #2f6fe0;
   --panel: #ffffff;
 
@@ -143,7 +155,7 @@ body.light .c-none { --scrim:rgba(255,255,255,.62); }
 
 * { box-sizing: border-box; }
 html, body { margin:0; height:100%; overflow:hidden;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif;
   background: var(--bg); color: var(--text);
   user-select:none; -webkit-user-select:none;
   /* pan-x pan-y (not manipulation): blocks pinch-zoom AND double-tap zoom page-wide on iOS
@@ -467,11 +479,11 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
      the selection ring must appear INSTANTLY, so that a frame's ring (on its box) and its title
      tab's ring (styles.css .node.frame.sel > .title-row) land in the same frame instead of the box
-     fading in behind an already-ringed tab. */
-  transition: opacity .2s ease;
+     fading in behind an already-ringed tab. `scale` is the lift a card in hand gets (.dragging). */
+  transition: opacity .2s ease, scale .12s ease;
 }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
-.node.lt-anim { transition: opacity .2s ease,
+.node.lt-anim { transition: opacity .2s ease, scale .12s ease,
   left .3s cubic-bezier(.22,1,.36,1), top .3s cubic-bezier(.22,1,.36,1); }
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
    so the only thing left to remove here is the space that was separating the title from a body that
@@ -497,10 +509,10 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    400), not by taking up more room. So `# Name` reads as a heading without a card growing to hold it.
    The two line boxes below are spelled out rather than computed: `em` inside .title-row resolves against
    the CARD's font-size, not the body's. --h1-lh is --h1-size × the 1.2 pinned on `.node .body h1`;
-   --body-lh is 12px × the 1.4 pinned on `.node .body`. The collapsed clamp takes the TALLER of the two
+   --body-lh is 14px × the 1.4 pinned on `.node .body`. The collapsed clamp takes the TALLER of the two
    with max() rather than naming one, since which is taller flips with --h1-size — at 16px the heading's
    was, at 12px the paragraph's is. The checkbox centres on --body-lh. */
-.node { --pad-y:10px; --pad-x:12px; --h1-size:12px; --h1-lh:14.4px; --body-lh:16.8px;
+.node { --pad-y:12px; --pad-x:14px; --h1-size:14px; --h1-lh:16.8px; --body-lh:19.6px;
   --donebox-w:14px; --title-gap:8px; }
 .node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
@@ -633,8 +645,8 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    Deliberately kept ABOVE .node.stack.drop-target further down: that rule's white dash has the same
    specificity, so it only wins the border while it's the later of the two. */
 .node.stack:not(.c-none) {
-  background:   color-mix(in srgb, var(--card, var(--node)) 86%, #000);
-  border-color: color-mix(in srgb, var(--frame-stroke, var(--edge)) 86%, #000); }
+  background:   color-mix(in srgb, var(--card, var(--node)) 94%, #000);
+  border-color: color-mix(in srgb, var(--frame-stroke, var(--edge)) 94%, #000); }
 /* ---------- a frame's title: a folder TAB above the box's top-left corner ---------- */
 /* Above the box, not inside it, for two reasons: the box's whole interior belongs to the cards it
    holds (a child dropped at the top-left used to cover the title), and the box paints BELOW the edges
@@ -744,14 +756,10 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    HALF the normal card padding so it fits inside the narrow (normal-card-width) stack box.
    Its corners take --r-inner (one step inside the box's border) — a row on the full card radius
    bulged against the stack's corners instead of sitting inside them.
-   The step is toward the fill's OWN --ink, not a literal #fff, and that's what makes it work on
-   every colour: --ink is by construction the direction that HAS contrast against this fill (the .c-*
-   block up top derives it that way), so the step lands where there's room. #fff has none on a pale
-   fill — the light theme's default card is #f2f4f7, whose row came out ~1 unit off it, i.e. flat.
-   The two switch over together, which is why nothing that used to step visibly changes: deriveInk
-   only hands out dark ink BELOW its contrast floor, i.e. exactly on the fills that were too pale for
-   a white step to show. Everything else still has white ink, and so still brightens by the same 7%. */
-.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 93%, var(--ink, #fff));
+   The step is toward the fill's own --scrim — the backdrop an editor paints behind its ink, i.e. the
+   direction AWAY from the text colour — so a row is a lighter strip on a pale sticky (dark ink) and a
+   darker one on a dark fill (white ink), and its text keeps its contrast either way. */
+.node.stack-child { background: color-mix(in srgb, var(--card, var(--node)) 55%, var(--scrim, #fff));
   /* the VARIABLES, not `padding` — the checkbox offset above is derived from them (see `.node`) */
   --pad-y:5px; --pad-x:6px; border-radius:var(--r-inner); }
 /* …and a card inside a FRAME's box takes the SAME step, for the same reason (main.ts .frame-child):
@@ -940,7 +948,14 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
+/* A sticky note sits ON the board: a soft two-layer shadow under every free-standing card (not a row in an
+   outline, not a frame, not a card inside a frame — those sit on a surface of their own). Selected, the
+   ring is added on top of the same shadow rather than replacing it, so selecting never flattens a card. */
+.node { --lift: 0 1px 2px rgba(40,30,10,.10), 0 3px 10px rgba(40,30,10,.10); }
+body:not(.light) .node { --lift: 0 1px 2px rgba(0,0,0,.35), 0 4px 12px rgba(0,0,0,.30); }
+.node:not(.frame):not(.stack-child):not(.frame-child):not(.c-none) { box-shadow:var(--lift); }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
+.node.sel:not(.frame):not(.stack-child):not(.frame-child):not(.c-none) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 /* while editing a title/body in place, drop the card's selection ring so only the editor's
    own outline shows */
 .node.sel:has(.title.editing), .node.sel:has(.body.editing) { box-shadow:none; }
@@ -948,6 +963,18 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
    (below), not per card, so overlapping dragged items don't shine through each other. */
 .node.dragging { z-index:9; }
+/* ---- motion: a new card POPS in, a card in hand LIFTS ----
+   `scale` (the individual property) rather than `transform`, which the drag and the relayout animation
+   own. The pop is a data attribute, not a class: paintNode rewrites className wholesale, which would
+   cut the animation short on the very next paint (features/crud.ts createNode sets it). */
+@keyframes card-pop { from { scale:.8; opacity:0; } 65% { scale:1.04; opacity:1; } to { scale:1; } }
+.node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
+.node.dragging:not(.frame):not(.stack):not(.stack-child) { scale:1.03;
+  box-shadow:0 2px 4px rgba(0,0,0,.12), 0 14px 32px rgba(0,0,0,.22); }
+@media (prefers-reduced-motion: reduce) {
+  .node[data-pop] { animation:none; }
+  .node.dragging:not(.frame):not(.stack):not(.stack-child) { scale:none; }
+}
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
    .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
    raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
@@ -956,7 +983,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.frame.dragging, .node.stack.dragging { z-index:auto; }
 /* the group-opacity layer: while dragging, main.ts moves the dragged cards in here. Opacity on the layer composites
    the whole set once — you see the canvas below, but the items never show through one another. */
-#dragLayer { position:absolute; top:0; left:0; z-index:9; opacity:.75; pointer-events:none; }
+#dragLayer { position:absolute; top:0; left:0; z-index:9; opacity:.9; pointer-events:none; }
 #dragLayer > .node, #dragLayer > .frame-content { pointer-events:auto; }
 /* while poised over a valid parent the dragged card becomes just a dotted outline,
    so the parent underneath stays visible. Border colour is set inline to match the
@@ -995,7 +1022,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    having. h2–h6 step down from it. `padding-right` is the fold chip's room and belongs to the title
    alone; a frame's TAB pins its own font-size/line-height/weight (and needs to — FRAME_TAB_H is 40px of
    exactly those), so nothing here can move a tab. */
-.node .title, .node .body h1 { font-weight:600; font-size:var(--h1-size); }
+.node .title, .node .body h1 { font-weight:750; font-size:var(--h1-size); }
 .node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
 /* inline title rename (double-click / F2 / on-create): edit the card's title in place.
    --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
@@ -1045,7 +1072,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    a card inside a stack or a frame then steps its fill 93% toward that same ink), so trimming another
    10% off came straight out of the thinnest margin in the app. It showed worst exactly where the
    screenshot showed it: ordinary un-bold text in a stack's row. */
-.node .body  { font-size:12px; color:inherit; line-height:1.4;
+.node .body  { font-size:14px; color:inherit; line-height:1.4;
   overflow-wrap:anywhere; overflow:hidden; }
 /* The note's first and last blocks give up their outer margins. Every block in here carries one (a `<p>`
    is .3em/.75em — see below), and at the EDGES of the body those margins are not spacing BETWEEN
@@ -1100,7 +1127,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    out at 12px while a frame's tab rendered the same heading at --h1-size, which is exactly the "frame
    headers are bigger than card headers" that this pair of rules kept producing. */
 .node .body h2,.node .body h3,
-.node .body h4,.node .body h5,.node .body h6 { margin:.3em 0; font-size:12px; font-weight:700; }
+.node .body h4,.node .body h5,.node .body h6 { margin:.3em 0; font-size:14px; font-weight:700; }
 /* …and h1 takes the card TITLE's metric instead (shared rule above), since on a card the leading `# ` line
    IS the title — there is no separate title element any more, this rule is what draws a card's name.
    `line-height` is PINNED rather than left at `normal`, and that's load-bearing twice over: it makes 14px
@@ -1126,18 +1153,16 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body li { margin:.5em 0; }
 .node .body li.task { list-style:none; margin-left:-1.4em; display:flex; align-items:flex-start; gap:.4em; }
 .node .body li.task .taskbox,
-/* Both states are TRANSLUCENT, so a checkbox reads as a dent in the card rather than a chip
-   sitting on it — the card's own fill shows through both, and the difference between them is
-   light-vs-dark rather than one colour vs another: 25% white when empty, 50% BLACK when ticked
-   (see :checked below), i.e. ticking DARKENS the card instead of stamping var(--accent) on it.
-   That's also what keeps the white tick legible: it's drawn on the darker of the two states. */
-.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:3px; background:color-mix(in srgb, #fff 25%, transparent); cursor:pointer; flex:none; position:relative; }
+/* Empty, a checkbox is an OUTLINE in the card's own ink at half strength — visible on every fill, pale
+   or dark, because the ink is by construction the colour with contrast against it. Ticked, it fills
+   with 50% black, i.e. ticking DARKENS the card instead of stamping var(--accent) on it, and the white
+   tick is drawn on that darker state. */
+.node .donebox { -webkit-appearance:none; appearance:none; width:var(--donebox-w); height:var(--donebox-w); border:none; outline:none; border-radius:4px; background:transparent; box-shadow:inset 0 0 0 1.5px color-mix(in srgb, var(--ink, #fff) 55%, transparent); cursor:pointer; flex:none; position:relative; }
 /* Sits 1px below the line box's top, which centres the 14px box on the first line's CAP BAND — the
    band the eye reads as "the text". flex-start (not center) is what keeps it on line ONE when the
    item wraps. px, not em, for exactly the reason .donebox spells out above: a checkbox's em is the
-   UA's control font (13.333px Arial), NOT the card's 12px body, so the .15em here was resolving to
-   2px and dropping the box a pixel and a half below the text it labels. */
-.node .body li.task .taskbox { margin:1px 0 0; }
+   UA's control font (13.333px Arial), NOT the card's body. (19.6px line − 14px box) / 2 ≈ 3px. */
+.node .body li.task .taskbox { margin:3px 0 0; }
 .node .body li.task .taskbox:checked,
 .node .donebox:checked { background:color-mix(in srgb, #000 50%, transparent); }
 .node .body li.task .taskbox:checked::after,
@@ -1149,7 +1174,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    took dark ink, a white-ish code patch or a white rule was a bright hole in the middle of dark
    text. Mixing toward --ink keeps each one a faint shade of the text it decorates, so all of them
    follow the fill automatically — the same reason .node's `color` is var(--ink). */
-.node .body code { font-family:ui-monospace,Menlo,monospace; font-size:11px;
+.node .body code { font-family:ui-monospace,Menlo,monospace; font-size:12.5px;
   background:color-mix(in srgb, var(--ink) 16%, transparent); padding:0 3px; border-radius:3px; }
 /* a shade weaker than an inline code span: `pre` covers whole lines, so the same 16% read as a slab */
 .node .body pre { background:color-mix(in srgb, var(--ink) 11%, transparent);
@@ -1367,14 +1392,13 @@ body.light .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#ff
   position:fixed; left:calc(12px + var(--sa-l)); bottom:calc(12px + var(--sa-b)); z-index:20;
   width:96px; height:48px;
   display:flex; align-items:center; justify-content:center;
-  background:var(--pal-grey); border:none; border-radius:var(--r-card);
-  color:var(--pal-ink-grey); font-size:22px; font-weight:400;
+  /* a little sticky note: what it makes is what it looks like (new cards are yellow — main.ts
+     effectiveColor). It has no .c-* class to carry --ink, so it names the fill's computed ink directly. */
+  background:var(--pal-amber); border:none; border-radius:var(--r-card);
+  color:var(--pal-ink-amber); font-size:22px; font-weight:400; box-shadow:var(--lift, 0 3px 10px rgba(0,0,0,.15));
   cursor:grab; user-select:none; touch-action:none;
   transition:box-shadow .15s, opacity .15s;
 }
-/* light theme: new cards default to white (see effectiveColor's fallback in main.ts). The ghost has
-   no .c-* class to carry --ink, so it names the two fills' computed inks directly. */
-body.light #ghostCard { background:var(--pal-white); color:var(--pal-ink-white); }
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
 body.readonly #ghostCard { opacity:.35; pointer-events:none; }
 

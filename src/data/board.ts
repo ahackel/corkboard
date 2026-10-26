@@ -221,7 +221,11 @@ export async function loadBoard(): Promise<void> {
   // No board.json: an older vault. Read the settings sidecar it replaced, once. Nothing deletes it —
   // the next save simply writes board.json beside it, so the old file stays readable by an older
   // build of the app until the user removes it.
-  applySettings(await readJSON(SETTINGS_FILE));
+  const legacy = await readJSON(SETTINGS_FILE);
+  // A brand-new map (no board, no old settings) starts on a dotted board — the paper-and-sticky look
+  // (docs/PRODUCT.md). An existing map keeps whatever grid it saved.
+  if (!legacy) state.gridStyle = 'dot';
+  applySettings(legacy);
 }
 
 // Turn each edge's stored PATHS into live node ids. Called by loadFromDir once every note is in

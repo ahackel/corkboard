@@ -77,6 +77,9 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout(); selectNode(id);
+  // A new card pops in (styles.css card-pop) — only one the user just made, never on a load.
+  const el = n.el;
+  if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
   if (opts.edit !== false) startInlineEdit(n, { isNew: opts.isNew ?? true });
   else commitStep();   // no rename session follows, so the create step ends here
   scheduleSave();

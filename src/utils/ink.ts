@@ -7,7 +7,7 @@
 // CARD it sits on, and a card keeps its colour in both themes. The dark one is the #2b3645 the
 // white card already used rather than pure black — on a light fill it reads as ink, not as a hole.
 export const INK_LIGHT = '#ffffff';
-export const INK_DARK = '#2b3645';
+export const INK_DARK = '#2b2822';   // warm charcoal, to sit on the paper-and-sticky palette
 // ONE threshold, for every colour and both themes (the --pal-* set is shared now, so a colour has
 // exactly one ink wherever the map is opened): light ink is the map's default look, so it's kept
 // unless its contrast drops below this — NOT simply whichever ink contrasts more. Max-contrast would

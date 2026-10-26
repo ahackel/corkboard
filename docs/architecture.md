@@ -847,8 +847,18 @@ stays put.
 **ONE card palette for both themes.** `body.light` overrides no `--pal-*` value, so a card is the same colour
 wherever the map is opened — and therefore has one ink, decided by the colour itself. `refreshPalette` still
 re-reads on a theme toggle (a no-op now, kept so a future per-theme colour would work) and still repaints,
-because what *does* differ per theme is `effectiveColor`'s fallback for an uncoloured card, plus
-`c-none`'s ink.
+because what *does* differ per theme is `effectiveColor`'s fallback for an uncoloured FRAME (white / charcoal),
+plus `c-none`'s ink. The palette is bright sticky-note pastels that all take DARK ink, and an uncoloured CARD
+falls back to `amber`, the sticky yellow — derived, never written, so the note on disk stays uncoloured. The
+keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
+
+**The look: a paper board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
+(bundled latin subset, `src/assets/fonts`, OFL). Free-standing cards carry a soft shadow (`--lift`), which a
+selection ring is ADDED to, never replaces. Motion uses the `scale` property, never `transform` (the drag and
+the relayout animation own that): a new card pops in via a `data-pop` attribute (a class would be wiped by
+paintNode's wholesale `className` rewrite), a card in hand lifts. Both stand down under reduced motion.
+An outline row steps toward its card's `--scrim` (away from its ink), so rows are lighter strips on a pale
+sticky and darker ones on a dark fill.
 
 **A card's text colour is DERIVED from its fill, never authored.** The palette hexes are the `--pal-*` custom
 properties in `styles.css` (one source of truth, read into JS as `SWATCH_BG`), but the **ink** each demands is
