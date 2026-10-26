@@ -646,7 +646,10 @@ card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`t
 double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘K's **Collapse all** / **Expand
 all** (`foldScope`: the selected frames and everything in them, else every frame and card in the place
 you're looking at — hidden ones included, so Expand all brings everything back). Folding drops anything
-it hid from the selection (`dropHiddenFromSelection`).
+it hid from the selection (`dropHiddenFromSelection`). It ANIMATES (`withLayoutAnimation`): positions glide
+(`animateReflow`) and every box whose size changed plays from its old size to its new one (`animateSizes`,
+Web Animations on width/height with the content clipped, a frame's content wrapper with it). Fit
+(`autoSizeSelection`) goes through the same path (`animateLayout`).
 
 - **A folded FRAME** is its label pill at the box's top-left corner: its name, a round count of the
   notes inside (`.frame-count`, `descendantCount`). `nodeH` = `FRAME_TAB_H` (40px: 20px line + 9px padding

@@ -593,7 +593,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 /* a frame's note is drawn on its LABEL (name + description line), never in the box, which holds cards;
    and it never shows the "add note" pill (the !important beats the .solo.no-body show rule). */
 .node.frame > .body { display:none; }
-.node.frame .addnote { display:none !important; }
+.node.frame .addnote, .node.frame-folded > .addnote { display:none !important; }   /* folded, too */
 /* drop-into-a-frame preview: the box rings in the selection blue, so it reads as "the card lands in
    here" (see drag.ts updateDropTarget). */
 .node.frame.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }

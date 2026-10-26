@@ -42,7 +42,7 @@ test('resting the mouse on a folded card peeks at the whole note', async ({ page
 
 test('⌘K collapses and expands every card and frame', async ({ page }) => {
   await openBoard(page);
-  const a = await makeCard(page, 300, 200, '# A\none\ntwo');
+  await makeCard(page, 300, 200, '# A\none\ntwo');
   await makeCard(page, 300, 420, '# B\none\ntwo');
   await makeCard(page, 650, 200, '# C\none\ntwo');
   await palette(page, 'Collapse all');
@@ -82,4 +82,22 @@ test('a checklist card wears its progress, and folded its chip says it', async (
   await expect(c.locator('.fold-more')).toHaveText('2/3');
   const plain = await makeCard(page, 650, 250, 'No tasks here');
   await expect(plain.locator('.task-meter')).toBeHidden();
+});
+
+test('folding and Fit animate the size instead of jumping', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Groceries\nmilk\neggs\nbread');
+  await select(page, c);
+  const running = () => c.evaluate(el => el.getAnimations().length);
+  await page.locator('#fbFold').click();
+  expect(await running()).toBeGreaterThan(0);
+  await page.waitForTimeout(450);
+  expect(await running()).toBe(0);
+  await page.locator('#fbFold').click();                       // expand
+  await page.waitForTimeout(450);
+  const s = (await c.locator(':scope > .fh-s').boundingBox())!;  // drag it taller, then Fit
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down(); await page.mouse.move(s.x + s.width / 2, s.y + 120, { steps: 5 }); await page.mouse.up();
+  await page.locator('#fbFit').click();
+  expect(await running()).toBeGreaterThan(0);
 });

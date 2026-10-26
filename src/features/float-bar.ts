@@ -21,7 +21,7 @@ import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, remeasure } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -111,14 +111,15 @@ export function canFit(n: MindNode): boolean {
 export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
   if (!ids.length) return;
-  record(ids, () => {
+  // animated, like a fold: the box glides to its new size (main.ts animateLayout)
+  record(ids, () => animateLayout(() => {
     for (const id of ids){
       const n = state.nodes.get(id); if (!n) continue;
       if (n.type === 'frame') fitFrameToContent(n); else { n.h = undefined; n.clip = undefined; }
       n.dirty = true; n.dirtyLayout = true;
     }
-  });
-  remeasure(); scheduleSave();
+  }));
+  scheduleSave();
 }
 // Wrap the selected cards in a fresh frame: the frame lands as a child of the nearest
 // NON-selected ancestor of the first selected card (walking up past any selected ancestor —

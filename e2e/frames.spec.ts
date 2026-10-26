@@ -72,6 +72,7 @@ test('a frame folds to its label pill: its cards hide, its lines meet the pill, 
   const again = page.locator('#world .node.frame-folded', { hasText: 'Todo' });
   await again.dblclick();
   await expect(frame(page, 'Todo')).toBeVisible();
+  await page.waitForTimeout(450);                                // the box grows back, animated
   const milk = (await card(page, 'Buy milk').boundingBox())!, box = (await frame(page, 'Todo').boundingBox())!;
   expect(milk.x).toBeGreaterThan(box.x); expect(milk.x + milk.width).toBeLessThan(box.x + box.width);
   expect(errors).toEqual([]);
@@ -107,4 +108,13 @@ test('a dragged frame is what lifts: it casts the shadow, its cards keep their r
   expect(await shadow('#world .node.frame.dragging')).toContain('32px');
   expect(await shadow('#world .node.carried')).not.toContain('32px');
   await page.mouse.up();
+});
+
+test('a selected folded frame offers no card buttons (add note, emoji)', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const old = page.locator('#world .node.frame-folded', { hasText: 'Old' });
+  await old.click();
+  await expect(old.locator('.addnote')).toBeHidden();
+  await expect(old.locator('.tag-add-btn')).toHaveCount(0);
 });

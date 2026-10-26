@@ -287,7 +287,7 @@ export function paintNode(n: MindNode): void {
   // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
   // matter how many cards are selected; the emoji it adds still applies to every selected card
   // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && !isFrameBox(n) && !state.readOnly && !isLockedEffective(n);
+  const showAddTag = n.id === state.selId && n.type !== 'frame' && !state.readOnly && !isLockedEffective(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
@@ -306,7 +306,7 @@ export function paintNode(n: MindNode): void {
     // editor calls paintAll() itself right after opening.
     + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
-    + (isFrameBox(n) || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
+    + (n.type === 'frame' || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
     + (ui.drag && n.hostFrameId != null && ui.drag.targets.has(n.hostFrameId) ? ' carried' : '')   // riding a dragged frame
     + (state.searchMatch && !state.searchMatch.has(n.id) ? ' search-dim' : '')
@@ -483,7 +483,7 @@ export function paintNode(n: MindNode): void {
   // an unrelated repaint mid-drag can't destroy a pointer-captured pill (features/tags.ts's
   // bindCardTagPills).
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
-  const noTagRow = isFrameBox(n);
+  const noTagRow = n.type === 'frame';
   const tagsKey = noTagRow ? '' : n.tags.join(' ') + (showAddTag ? ' +' : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
@@ -1057,13 +1057,44 @@ function layoutSnapshot(): Map<string, Pt> {
 export function animateLayout(mutate: () => void): void { withLayoutAnimation(mutate); }
 function withLayoutAnimation(mutate: () => void): void {
   const before = layoutSnapshot();
+  const sizes = sizeSnapshot();
   mutate();
   paintAll();          // reveal/hide DOM and measure real heights
   applyLayouts();      // compute FINAL positions into n.x/n.y (DOM not updated yet)
   animateReflow(before);
+  animateSizes(sizes);
 }
 // CSS-animate every visible card from its snapshotted `before` spot to its current (final)
 // n.x/n.y. Just-revealed cards (absent from `before`) fade in from their nearest ancestor.
+// …and the SIZES: a fold shrinks a card to its chip or a frame to its pill, Fit hugs a frame round its
+// cards. The final size is already on screen (paintAll ran); each element that changed is played from
+// its old box to its new one with the Web Animations API, which owns width/height only for the 320ms and
+// then hands them straight back to the inline/CSS sizing — nothing is written, nothing to clean up. The
+// content is clipped meanwhile, so a card's text doesn't spill out of the box as it closes. A frame's
+// content wrapper (its interior clip) follows the box, else its cards would pop in or out at once.
+type Size = { w: number; h: number };
+function sizeSnapshot(): Map<HTMLElement, Size> {
+  const out = new Map<HTMLElement, Size>();
+  for (const m of state.nodes.values()) {
+    if (!m.el || isHidden(m)) continue;
+    out.set(m.el, { w: m.el.offsetWidth, h: m.el.offsetHeight });
+    if (m.frameContentEl) out.set(m.frameContentEl, { w: m.frameContentEl.offsetWidth, h: m.frameContentEl.offsetHeight });
+  }
+  return out;
+}
+const SIZE_EASE = 'cubic-bezier(.22,1,.36,1)';
+function animateSizes(before: Map<HTMLElement, Size>): void {
+  if (prefersReducedMotion()) return;
+  for (const [el, a] of before) {
+    if (!el.isConnected || el.style.display === 'none') continue;
+    const b = { w: el.offsetWidth, h: el.offsetHeight };
+    if (Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1) continue;
+    el.animate([
+      { width: a.w + 'px', height: a.h + 'px', minHeight: '0px', maxWidth: 'none', overflow: 'hidden' },
+      { width: b.w + 'px', height: b.h + 'px', minHeight: '0px', maxWidth: 'none', overflow: 'hidden' },
+    ], { duration: 320, easing: SIZE_EASE });
+  }
+}
 function animateReflow(before: Map<string, Pt>): void {
   const visible = [...state.nodes.values()].filter(m => m.el && !isHidden(m));
   const tok = ++ui.animToken;                           // supersede any in-flight animation
