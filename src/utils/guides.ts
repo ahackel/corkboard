@@ -3,7 +3,7 @@
 //
 // Per axis, the box is pulled (within `tol`) to the NEAREST of:
 //  - ALIGNMENT: one of its edges onto a neighbour's edge, or its centre onto a neighbour's centre;
-//  - SPACING: the same gap as the pair it continues (a column of cards keeps its rhythm), or the
+//  - SPACING: exactly SPACING (20px) from a neighbour it faces, the same gap as the pair it continues (a column of cards keeps its rhythm), or the
 //    middle between the two neighbours it sits between.
 // Nothing moves on its own: this only runs while the user drags, and only ever by a few pixels.
 export interface Box { x: number; y: number; w: number; h: number; }
@@ -13,6 +13,7 @@ export interface Guide { axis: 'x' | 'y'; at: number; from: number; to: number; 
 export interface Gap { axis: 'x' | 'y'; from: number; to: number; at: number; }
 export interface Snap { dx: number; dy: number; guides: Guide[]; gaps: Gap[]; }
 
+export const SPACING = 20;
 type Axis = 'x' | 'y';
 const other = (a: Axis): Axis => a === 'x' ? 'y' : 'x';
 const lo = (b: Box, a: Axis): number => a === 'x' ? b.x : b.y;
@@ -54,6 +55,12 @@ function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
   // a gap marker between p and q, drawn across the middle of where they overlap
   const gap = (p: Box, q: Box): Gap => ({ axis: a, from: hi(p, a), to: lo(q, a),
     at: (Math.max(lo(p, o), lo(q, o)) + Math.min(hi(p, o), hi(q, o))) / 2 });
+  // the house spacing: an edge SPACING away from a facing neighbour's edge, so cards are easy to set
+  // a standard distance apart
+  for (const n of others) if (facing(n, box, a)) {
+    offer(hi(n, a) + SPACING - lo(box, a), bx => [gap(n, bx)]);
+    offer(lo(n, a) - SPACING - hi(box, a), bx => [gap(bx, n)]);
+  }
   const A = before(box, others, a), B = after(box, others, a);
   if (A) {
     const A2 = before(A, others, a);

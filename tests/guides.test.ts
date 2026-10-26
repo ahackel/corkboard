@@ -39,4 +39,10 @@ describe('snapBox', () => {
     const s = snapBox(b(2, 200), [b(0, 0)], 6);
     expect(s.guides.filter(g => g.axis === 'x').map(g => g.at)).toEqual([0, 100]);
   });
+  it('keeps 20px from a facing neighbour', () => {
+    const s = snapBox(b(0, 73), [b(0, 0)], 6);   // 23px below a 50px-tall card → 20px
+    expect(s.dy).toBe(-3);
+    expect(s.gaps).toEqual([{ axis: 'y', from: 50, to: 70, at: 50 }]);
+    expect(snapBox(b(500, 73), [b(0, 0)], 6).gaps).toEqual([]);   // not facing: no spacing pull
+  });
 });

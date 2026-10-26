@@ -13,6 +13,7 @@ import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
+import { SPACING } from '../utils/guides.js';
 import { scheduleSaveBoard } from '../data/board.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
@@ -93,7 +94,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
 // whose top-left is `at`, in ONE undo step. Each text splits like a card's own (splitHeading).
 // The column is stacked from MEASURED heights, so it has to paint first: lay out, read each card's
 // height, then restack with an even gap. Under a parent the cards become its children, in order.
-const LIST_GAP = 12;
+const LIST_GAP = SPACING;   // the house spacing, the same one the smart guides pull to
 export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
   if (state.readOnly || !texts.length) return [];
   const parentId = parent ?? detachParentId();

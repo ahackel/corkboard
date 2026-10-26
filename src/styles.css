@@ -973,12 +973,11 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    cut the animation short on the very next paint (features/crud.ts createNode sets it). */
 @keyframes card-pop { from { scale:.8; opacity:0; } 65% { scale:1.04; opacity:1; } to { scale:1; } }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
-.node.dragging:not(.frame):not(.stack):not(.stack-child) { scale:1.03;
+/* The lift is a SHADOW only, never a scale: a card in hand keeps its exact size, so the smart guides
+   (features/guides.ts) line up with the edges you actually see. */
+.node.dragging:not(.frame):not(.stack):not(.stack-child) {
   box-shadow:0 2px 4px rgba(0,0,0,.12), 0 14px 32px rgba(0,0,0,.22); }
-@media (prefers-reduced-motion: reduce) {
-  .node[data-pop] { animation:none; }
-  .node.dragging:not(.frame):not(.stack):not(.stack-child) { scale:none; }
-}
+@media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
    .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
    raising the box to 6 made its own opaque fill swallow everything it holds the moment you started

@@ -640,7 +640,10 @@ delta — `snappedDelta` keys off `drag.active` for that reason.
 **Smart guides PULL a drag by a few pixels, and win over the grid when they do.** `snapBox`
 (`utils/guides.ts`, pinned by `tests/guides.test.ts`) takes the union box of the drag's roots at the
 RAW pointer position and, per axis, pulls it within 6 screen px to the nearest edge-on-edge or
-centre-on-centre alignment, the gap of the pair it continues, or the middle between two neighbours.
+centre-on-centre alignment, exactly `SPACING` (20px) from a neighbour it faces, the gap of the pair it
+continues, or the middle between two neighbours. `SPACING` is the house gap: a pasted list and an
+Enter column use it too (`LIST_GAP`). A card in hand lifts by SHADOW only, never scale, so the
+edges the guides align are the edges you see.
 Neighbours are the drag's siblings in the same space, on screen. `features/guides.ts` draws one
 pink rule per aligned position (the centre rule only when no edge lines up) and a ticked bar per equal
 gap. An axis the guides claim skips the grid: guides read the RAW position because a 20px grid step
