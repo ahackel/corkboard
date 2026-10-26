@@ -150,7 +150,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     color: s.color,
     tags: [...s.tags], body: s.body,
     type: s.type,
-    w: s.w, h: s.h,   // a frame/image card's own box size
+    w: s.w, h: s.h, clip: s.clip,   // a frame/image card's own box size; a clipped card's exact height
     // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
     // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
     // visibly on an image card, whose fold is its icon). titleGap rides along with the body it

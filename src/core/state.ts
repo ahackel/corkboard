@@ -60,6 +60,10 @@ export interface MindNode {
   // which is its picture and so owns both axes (isImageCard above). Persisted as mm_w/mm_h.
   w?: number;
   h?: number;
+  // A plain card dragged SHORTER than its text: `h` is then its exact height and the rest of the note is
+  // clipped under a fade (main.ts paintNode), instead of a minimum the text grows past. Persisted as
+  // `clip` in board.json; Fit (float bar ↔) clears it.
+  clip?: boolean;
   title: string;
   color: string;                   // palette key, e.g. 'blue', or '' for none
   keepStatus: string;              // preserved `status:` frontmatter value

@@ -246,7 +246,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // (which an unnamed frame doesn't draw), so there's one way to write on a frame whether it's named.
   if (isFrameBox(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
   // A FRAME's interior gets a new card WHERE YOU POINTED. Going in is ⌥-double-click (above), ↑, the
-  // float bar's ⤢ or ⋯ → Open. isFrameBox: a folded frame has no interior on screen, so it falls through.
+  // float bar's Open (→]) or ⋯ → Open. isFrameBox: a folded frame has no interior on screen, so it falls through.
   if (isFrameBox(n)) { addCardInside(n.id, screenToWorld(cx, cy)); return; }
   startBodyEdit(n, { x: cx, y: cy });
 }
@@ -372,7 +372,8 @@ export function paintNode(n: MindNode): void {
   }
   // Apply the node's size, and give it the resize hit-zones its kind supports. Every kind gets all 8.
   // A frame / image card is its own 2D box. A card's height is a MINIMUM (min-height): drag it taller
-  // and it stays that tall, but its text can always make it taller still — a card never clips its note.
+  // and it stays that tall, but its text can always make it taller still — unless it was dragged SHORTER
+  // than its text (n.clip), when the same n.h is exact and the body is capped (end of paintNode).
   // While its editor is open a card also holds the height it had (BodyEdit.holdH): the raw markdown
   // is a different height from the rendered note, and the card must not jump as editing starts.
   if (!isBoxNode(n) && !isImageFold(n)) {
@@ -513,7 +514,18 @@ export function paintNode(n: MindNode): void {
     meter.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
     meter.classList.toggle('all-done', tp.total > 0 && tp.done === tp.total);
     meter.title = tp.total ? `${tp.done} of ${tp.total} task${tp.total === 1 ? '' : 's'} done (${Math.round(tp.done / tp.total * 100)}%)` : '';
-  }
+  }  // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
+  // what's left under the padding and the rest is cut under a fade (`.clipped`, only while something IS
+  // cut). Not while folded, opened as a page, or edited — the editor shows the whole note, then it clips again.
+  const clipH = clipHeight(n, !!editingBody);
+  if (clipH != null){
+    const cap = Math.max(0, clipH - bodyEl.offsetTop - parseFloat(getComputedStyle(el).paddingBottom));
+    if (bodyEl.style.maxHeight !== cap + 'px') bodyEl.style.maxHeight = cap + 'px';
+    el.classList.toggle('clipped', bodyEl.scrollHeight > bodyEl.clientHeight + 1);
+  } else if (bodyEl.style.maxHeight){ bodyEl.style.maxHeight = ''; el.classList.remove('clipped'); }
+}
+function clipHeight(n: MindNode, editing: boolean): number | null {
+  return n.clip && n.h != null && !n.collapsed && !editing && !isBoxNode(n) && !isImageFold(n) && !isReadingRoot(n) ? n.h : null;
 }
 // The markdown a node RENDERS — its whole note, title included.
 //
@@ -797,6 +809,8 @@ function minWOf(n: MindNode): number {
   if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
   return NODE_W;
 }
+// The shortest a CLIPPED card goes: about one line of text under its padding.
+const CLIP_MIN_H = 44;
 function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) ? IMAGE_FOLD : MIN_FRAME_H; }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
@@ -848,14 +862,18 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   const img = isImageBox(n) || isImageFold(n);
   const sizeH = isBoxNode(n) || img;
   const minW = minWOf(n);
-  // A card can't be dragged shorter than its text at the width it starts from: below that the
-  // min-height does nothing, and a north edge would walk the card's top away from the pointer.
+  // A card's text height at the width it starts from is where its min-height stops and its clip starts.
+  // (A clipped card's body cap is lifted too, or it would measure as its own clip.)
   const natural = (): number => {
-    const el = n.el!, was = el.style.minHeight;
-    el.style.minHeight = ''; const h = el.offsetHeight; el.style.minHeight = was;
+    const el = n.el!, body = el.querySelector(':scope > .body') as HTMLElement;
+    const was = el.style.minHeight, wasMax = body.style.maxHeight;
+    el.style.minHeight = ''; body.style.maxHeight = ''; const h = el.offsetHeight;
+    el.style.minHeight = was; body.style.maxHeight = wasMax;
     return h;
   };
-  const minH = sizeH ? minHOf(n) : natural();
+  // …but it CAN be dragged shorter than that, down to a line: then it CLIPS (n.clip) instead of growing.
+  const natural0 = sizeH ? 0 : natural();
+  const minH = sizeH ? minHOf(n) : Math.min(natural0, CLIP_MIN_H);
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
@@ -916,7 +934,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       if (fold) { n.dirty = true; return; }
     }
     n.x = left; n.w = right - left;
-    if (sizeH || north || south) { n.y = top; n.h = bottom - top; }
+    if (sizeH || north || south) { n.y = top; n.h = bottom - top; if (!sizeH) n.clip = n.h < natural0 - 1 || undefined; }
     n.dirty = true;
   };
   const move = (ev: PointerEvent): void => {
@@ -950,7 +968,13 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // a redundant mm_w on every card the user so much as nudges.
     if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
     // …and the same for a card's height: no taller than its text → it has no authored height.
-    if (!sizeH && n.h != null) { paintNode(n); if (Math.round(n.h) <= natural() + 1) n.h = undefined; }
+    // Shorter than its text (at the width it ended at) → it clips; else it's a minimum again.
+    if (!sizeH && n.h != null) {
+      paintNode(n);
+      const nat = natural();
+      if (Math.round(n.h) < nat - 1) n.clip = true;
+      else { n.clip = undefined; if (Math.round(n.h) <= nat + 1) n.h = undefined; }
+    }
     // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
     // the DOM has it.
     paintNode(n);
@@ -964,6 +988,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       growFramesToHold(released);
     }
     relayout(); scheduleSave(); commitStep();
+    syncFloatBar();   // a card that now has an authored height offers Fit (↔)
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
@@ -1779,7 +1804,7 @@ window.addEventListener('keydown', (e) => {
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
   if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection(); return; }
-  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: auto-size selected frames to fit
+  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected frames and cards to their contents
   if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
   // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.

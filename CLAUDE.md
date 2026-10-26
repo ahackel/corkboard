@@ -61,7 +61,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **Two kinds, card and frame (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
   through `holderOf`; a drop lands in the innermost frame under the card's centre (`frameAt`), else the top level.
-- **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed**. An IMAGE card is a card whose note is
+- **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed** (dragged shorter, `n.clip`: exact, clipped). An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
 - **Visibility has ONE gate, `isHidden`**: the open-frame scope (ephemeral). A fold hides only a card's

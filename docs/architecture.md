@@ -233,7 +233,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 - **Double-click is still the way OUT, but no longer the way IN.** The empty canvas — which, once you're
   inside, is that same interior — leaves it (`features/gestures.ts`); at the top level there's nowhere to
   leave to, so the canvas keeps its "new card here". Going in is ⌥-double-click / two-finger double-tap, `↑`,
-  the float bar's `⤢` or `⋯ → Open`. The crumb path and `↓` are the other ways out.
+  the float bar's Open (`→]`) or `⋯ → Open`. The crumb path and `↓` are the other ways out.
 - **Leaving pops every SYNTHESIZED level under you, not one crumb at a time.** A level with no `back` is
   one nobody stepped through (`setScopeStack` records a back only on the level you newly enter), so opening
   something three frames deep pushes those frames as crumbs — and leaving one at a time would walk you out
@@ -360,11 +360,11 @@ text at all.
   was a docked side panel: a panel and a card would show one note at once, which is what reads as two apps.
   (Scrintal takes cards "full screen to focus"; Obsidian Canvas's split-view-beside-canvas is a community
   plugin, not the design.)
-- **`↑` / the float bar's `⤢` / `⋯ → Open` open it — NEVER double-click.** Double-click on a card's text edits
+- **`↑` / the float bar's Open (`→]`) / `⋯ → Open` open it — NEVER double-click.** Double-click on a card's text edits
   it, because that is what a double-click means on text nearly everywhere and it is the commonest action in
   the app; gesture cost follows frequency. So `activateNode` tests the raw `type === 'frame'` rather than
   `canOpen` — the one call site where those two questions genuinely differ, and the line that stops widening
-  `canOpen` from silently stealing the edit gesture. `⤢` lives on the float bar because that is the only
+  `canOpen` from silently stealing the edit gesture. Open lives on the float bar because that is the only
   action surface identical on desktop and touch (it docks to the bottom on coarse pointers); its test
   (`canOpenSelection`) also drops it on the card you are already inside, which `openFrame` would refuse.
 - **`containerBox`/`frameInterior` and friends must NOT see it as a viewport.** The geometry helpers ask
@@ -419,11 +419,18 @@ dragged size and nothing else — never a value a layout pass computed. What the
   `isBoxType`). For a **frame** these are its box; its label hangs outside, above it.
 - An **IMAGE card** is the third, and the one that isn't a kind: see below.
 - `card` — its `n.h` is painted as `min-height`, never `height`: drag a card taller and it stays that
-  tall, but its text can always make it taller still, so a card never clips its note and `nodeH` still
-  MEASURES it (`offsetHeight`). The resize can't go below the text's natural height at the start width
-  (`natural()` in `startNodeResize`). Minimum width is the kind's natural width; drag back to either
-  natural size and that axis is dropped rather than persisting a redundant value. A legacy frontmatter
-  `mm_h` is read for boxes only — a card's height is newer than that and lives in `board.json` alone.
+  tall, but its text can always make it taller still, and `nodeH` still MEASURES it (`offsetHeight`).
+  Minimum width is the kind's natural width; drag back to either natural size and that axis is dropped
+  rather than persisting a redundant value. A legacy frontmatter `mm_h` is read for boxes only — a card's
+  height is newer than that and lives in `board.json` alone.
+- **…unless it was dragged SHORTER than its text: then it CLIPS** (`n.clip`, `board.json` `clip`). The
+  resize goes down to `CLIP_MIN_H` (about a line); ending below the text's natural height (`natural()` in
+  `startNodeResize`, measured with the clip lifted) sets the flag, ending at or above it clears it. Clipped,
+  the same `n.h` is exact: paintNode caps `.body`'s `max-height` to what's left under the padding and,
+  only while something IS cut, `.clipped` fades the bottom. No scrolling — it's a sticky note, not a
+  viewport. Folded, opened as a page or open in the editor it doesn't clip (the editor shows the whole
+  note). **Fit** (`autoSizeSelection`: the float bar's ↔, `⇧A`, "Fit to contents") drops a card's `h` and
+  `clip` — and fits a frame to its cards, as before; `canFit` says which selections offer it.
 
 **A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
 in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
@@ -663,7 +670,7 @@ gesture means on text nearly everywhere and is far and away the commonest thing 
 the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
 is why it can mean the same thing on a card and a frame. Its touch spelling is a TWO-FINGER
 double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `↑`, the float bar's
-`⤢` and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
+Open and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
 the exemption `openFrame` itself takes: looking inside something isn't changing it.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
 `.title-row` (a card's title row, a frame's folder tab) renames via
@@ -873,7 +880,7 @@ untrimmed ends included), or below when there's no room, and its pickers open on
 **The context menu is FigJam's** (`#ctxMenu`, `features/context-menu.ts`; a card's entries are
 `buildCardMenu` in float-bar.ts, shared with the bar's ⋯). Groups, in FigJam's order: the clipboard
 (Copy/Cut/Paste/Duplicate), Delete, what you can do with it (Edit or Rename, Open, Collapse, Group,
-Fit frame), where it goes outside the map (file path, download, share), and Lock last. Only actions with
+Fit to contents), where it goes outside the map (file path, download, share), and Lock last. Only actions with
 no easier home: a new card beside one is the port ⊕, a card inside a frame is a double-click, zooming is
 F. Rows are 24px, text 16px from the edges, the shortcut grey at the right, the hover a rounded blue row
 inset 8px, and no red Delete.

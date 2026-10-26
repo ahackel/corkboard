@@ -98,7 +98,7 @@ export function makeEdge(from: string, to: string): BoardEdge {
 // Entries that don't resolve are ignored and children missing from the list are appended by position
 // (view/layout.ts orderedKids already does exactly this), so the list cannot lie about the tree — at
 // worst it is incomplete, and incomplete degrades to filename order.
-export interface StoredGeom { x?: number; y?: number; w?: number; h?: number; collapsed?: boolean; order?: string[] }
+export interface StoredGeom { x?: number; y?: number; w?: number; h?: number; clip?: boolean; collapsed?: boolean; order?: string[] }
 let geom = new Map<string, StoredGeom>();
 export function boardGeom(path: string | null): StoredGeom | undefined {
   return path ? geom.get(path) : undefined;
@@ -112,6 +112,7 @@ function collectGeom(): Record<string, StoredGeom> {
     // a plain card's is a MINIMUM its text can still grow past (main.ts paintNode).
     if (n.w != null) g.w = Math.round(n.w);
     if (n.h != null) g.h = Math.round(n.h);
+    if (n.clip) g.clip = true;                   // …unless it was dragged SHORTER than its text: then exact
     if (n.collapsed) g.collapsed = true;
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     if (order.length > 1) g.order = order;       // a single child has no order worth writing
@@ -158,6 +159,7 @@ function applyGeom(v: unknown): void {
     if (!raw || typeof raw !== 'object') continue;
     geom.set(path, {
       x: num(raw.x), y: num(raw.y), w: num(raw.w), h: num(raw.h),
+      clip: raw.clip === true,
       collapsed: raw.collapsed === true,
       order: Array.isArray(raw.order) ? raw.order.filter(p => typeof p === 'string') : undefined,
     });

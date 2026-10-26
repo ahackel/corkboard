@@ -244,6 +244,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
       // A legacy frontmatter mm_h only ever meant a box's size; a card's own (minimum) height is newer
       // than that and lives in board.json alone.
       h: g?.h ?? (isBoxType(mm.type) || imageOnly ? mm.h : undefined) ?? undefined,
+      clip: !!g?.clip,
       ...rest, dirty:unmigrated, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
     };
     if (mm.wasStack) wasStack.add(node.id);

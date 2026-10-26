@@ -6,7 +6,7 @@
 // features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, type MindNode } from '../core/state.js';
+import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -21,7 +21,7 @@ import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, toggleCollapse, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, remeasure } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -31,6 +31,7 @@ const fbColorDot = byId('fbColorDot');
 const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbTidy = byId<HTMLButtonElement>('fbTidy');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
+const fbFit = byId<HTMLButtonElement>('fbFit');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbMore = byId<HTMLButtonElement>('fbMore');
 const colorPop = byId('fbColorPop');
@@ -99,12 +100,24 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
   }
   return grew;
 }
-// Auto-size every selected frame to fit its content (shortcut / context menu).
+// FIT — the float bar's ↔, ⇧A and the menu's "Fit to contents": every selected frame hugs its cards
+// (fitFrameToContent), every selected card drops its authored height — a minimum it was dragged out to,
+// or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
+export function canFit(n: MindNode): boolean {
+  if (isLockedEffective(n)) return false;
+  return n.type === 'frame' || (n.h != null && !isImageCard(n));
+}
 export function autoSizeSelection(): void {
-  const ids = selectedIds().filter(id => state.nodes.get(id)?.type === 'frame' && !isLockedEffective(state.nodes.get(id)!));
+  const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
   if (!ids.length) return;
-  record(ids, () => { for (const id of ids){ const n = state.nodes.get(id); if (n) { fitFrameToContent(n); n.dirty = true; } } });
-  relayout(); scheduleSave();
+  record(ids, () => {
+    for (const id of ids){
+      const n = state.nodes.get(id); if (!n) continue;
+      if (n.type === 'frame') fitFrameToContent(n); else { n.h = undefined; n.clip = undefined; }
+      n.dirty = true; n.dirtyLayout = true;
+    }
+  });
+  remeasure(); scheduleSave();
 }
 // Wrap the selected cards in a fresh frame: the frame lands as a child of the nearest
 // NON-selected ancestor of the first selected card (walking up past any selected ancestor —
@@ -150,9 +163,10 @@ export function groupSelectionIntoFrame(): void {
   relayout(); selectNode(frameId); scheduleSave();
   setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a frame`);
 }
-// ⤢ go IN: shown only when the selection can be opened (canOpenSelection below).
+// Open (→]) go IN: shown only when the selection can be opened (canOpenSelection below).
 function markOpen(): void {
   fbOpen.style.display = canOpenSelection() ? '' : 'none';
+  fbFit.style.display = selectedIds().some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }) ? '' : 'none';
   fbTidy.style.display = canTidy() ? '' : 'none';
   const n = anchorNode();
   const oneFrame = state.sel.size === 1 && n?.type === 'frame';
@@ -297,8 +311,8 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
   if (!ro){
     entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: someLocked });
-    if (anyFrame)
-      entries.push({ label: multi ? 'Fit frames to contents' : 'Fit frame to contents', shortcut:'⇧A',
+    if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }))
+      entries.push({ label: 'Fit to contents', shortcut:'⇧A',
         run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
   }
   entries.push('sep');
@@ -330,7 +344,7 @@ fbMore.addEventListener('click', (e) => {
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
-// ⤢ go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
+// Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
 // desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (main.ts navArrow): you can only stand
 // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
 // kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
@@ -339,6 +353,7 @@ export function canOpenSelection(): boolean {
   return !!n && canOpen(n) && !isScopeRoot(n);
 }
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
+fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;

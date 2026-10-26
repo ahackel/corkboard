@@ -881,6 +881,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body.editing { overflow:visible; opacity:1; }
 .node .body-edit { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:13px; line-height:var(--h1-lh); color:inherit;
+  caret-color:var(--accent);
   background:transparent; border:none; border-radius:0; padding:0;
   outline:none; resize:none; overflow:hidden;
   white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -1114,6 +1115,10 @@ body.zoom-far .node > .addnote { display:none !important; }
   max-height:60vh; overflow:auto; box-shadow:var(--shadow-ui); cursor:default; user-select:text; -webkit-user-select:text;
   touch-action:auto; }
 #peek.node.open { display:block; }
+/* a CLIPPED card (n.clip, paintNode): dragged shorter than its note, the cut text fades out at the bottom
+   rather than ending mid-line — the sign that there's more. Double-click shows it all in the editor. */
+.node.clipped > .body { -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  mask-image:linear-gradient(to bottom, #000 calc(100% - 22px), transparent); }
 .node > .fold-more { display:none; }
 .node.collapsed > .fold-more:not(:empty) { display:block; width:max-content; margin-top:2px; font-size:11px; line-height:16px;
   opacity:.55; cursor:pointer; }
