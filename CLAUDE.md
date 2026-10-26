@@ -63,10 +63,10 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed**. An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
-- **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
-  open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
+- **Visibility has ONE gate, `isHidden`**: the open-frame scope (ephemeral). A fold hides only a card's
+  own text, never a node. Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
-  make writes no-ops. Collapsing and opening a frame stay allowed in read-only — they mutate nothing.
+  make writes no-ops. Folding a card and opening a frame stay allowed in read-only — they mutate nothing.
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
   layout pass reads `offsetHeight`, so it needs current DOM (the paint-before-measure rule).

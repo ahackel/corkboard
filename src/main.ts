@@ -44,7 +44,7 @@ import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.j
 import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
-import { installPeek } from './features/peek.js';
+import { installPeek, peekCard } from './features/peek.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
@@ -101,6 +101,11 @@ function nodeEl(n: MindNode): HTMLElement {
   // drag/select. On a card that's part of a MULTI-selection it folds the whole selection (like X); with
   // ⌥ it folds every card BESIDE this one (the same frame, or the top level) to the state this one goes
   // to — the outliner's ⌥-click on a disclosure triangle.
+  // "N more lines" under a folded card shows the whole note (features/peek.ts) — the tap for touch,
+  // which has no hover to peek with.
+  const foldMore = el.querySelector(':scope > .fold-more')!;
+  foldMore.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
+  foldMore.addEventListener('click', (e)=>{ e.stopPropagation(); peekCard(el); });
   const foldChip = el.querySelector(':scope > .title-row > .hidden-count')!;
   foldChip.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   foldChip.addEventListener('click', (e)=>{
@@ -184,7 +189,7 @@ function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
 }
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
-const NODE_CONTROLS = '.hidden-count, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
+const NODE_CONTROLS = '.hidden-count, .fold-more, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
 // What a gesture at these viewport coords actually hits. Deliberately NOT the event's own `target`:
 // bindNodeDrag takes a POINTER CAPTURE on the node's element, and a capture retargets the click (and
 // so the dblclick) that follows to the capturing element — so by the time a double-click arrives its
@@ -1176,25 +1181,14 @@ export function subtreeIds(id: string): string[] {
 // ---------- pan / zoom / marquee-select gestures live in features/gestures.ts ----------
 
 
-// Focus a card: un-collapse hiding ancestors (and, when openTarget, the card itself), select
-// it, frame it + all its visible descendants. Ancestors are expanded shallowest-first with a
-// layout pass after EACH level, so every newly revealed level lays out on the already-settled
-// positions above it — expanding a nested chain in one shot mis-spaces the shallow branches.
+// Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {
   if (!target) return;
   const before = layoutSnapshot();             // pre-reveal frame to glide away from
-  const toReveal: MindNode[] = [];
-  for (const p of ancestors(target)) toReveal.push(p);
-  toReveal.reverse();                          // root → immediate parent (shallowest first)
-  if (openTarget) toReveal.push(target);       // open the card itself last (deepest level)
+  // Only the target itself can be folded away (frames don't fold, cards hold no cards).
   let revealed = false;
-  record(toReveal.map(n => n.id), () => {
-    for (const n of toReveal){
-      if (!n.collapsed) continue;
-      n.collapsed = false; n.dirtyLayout = true; revealed = true;
-      paintAll(); applyLayouts();              // settle this level before revealing the next
-    }
-  });
+  if (openTarget && target.collapsed)
+    record([target.id], () => { target.collapsed = false; target.dirtyLayout = true; revealed = true; });
   selectNode(target.id);                       // select → the card shows its full body (grows)
   relayout();                  // reflow siblings around the now-taller selection
   animateReflow(before);                       // one glide from the pre-reveal frame to the final

@@ -195,10 +195,6 @@ export function pickImagesAt(sx: number | null, sy: number | null, parent: strin
 // a parent frame it goes inside it. Created as-is — no rename editor opens.
 function cardOptsAt(sx: number | null, sy: number | null, parent: string | null):
     { x?: number; y?: number; parent: string | null; edit: false } {
-  if (parent){
-    const pn = state.nodes.get(parent);
-    if (pn?.collapsed){ touch(parent); pn.collapsed = false; }   // reveal so the new child is visible
-  }
   const p = sx != null && sy != null ? screenToWorld(sx, sy) : null;
   return { ...(p ? centredAt(p) : {}), parent, edit: false };
 }

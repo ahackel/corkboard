@@ -1091,7 +1091,9 @@ body.zoom-far .node > .addnote { display:none !important; }
   touch-action:auto; }
 #peek.node.open { display:block; }
 .node > .fold-more { display:none; }
-.node.collapsed > .fold-more:not(:empty) { display:block; margin-top:2px; font-size:11px; line-height:16px; opacity:.55; }
+.node.collapsed > .fold-more:not(:empty) { display:block; width:max-content; margin-top:2px; font-size:11px; line-height:16px;
+  opacity:.55; cursor:pointer; }
+.node.collapsed > .fold-more:hover { opacity:.9; text-decoration:underline; }   /* tap/click: peek (features/peek.ts) */
 
 /* ---------- the dock: FigJam's main toolbar, bottom centre ----------
    One white island on the soft shadow holding the new-card sticky, the board's own settings (canvas

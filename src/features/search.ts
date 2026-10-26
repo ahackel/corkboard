@@ -1,6 +1,6 @@
 // ---------- find a card (search box + dropdown) ----------
 // Filters on title OR body. Every match is highlighted by dimming the non-matching cards
-// (state.searchMatch, applied in paintAll); a match buried in a collapsed branch highlights
+// (state.searchMatch, applied in paintAll); a match outside the open frame highlights
 // the first visible parent containing it instead. The active dropdown option's card gets an
 // extra white outline (state.searchActiveId). searchBox is exported so the global "/"
 // shortcut can focus it.
@@ -62,7 +62,7 @@ export function runSearch(): void {
   scheduleUrlSync();
 }
 // Point state.searchActiveId at the active dropdown option's card (or the first visible
-// parent containing it when it's collapsed away) so paintNode gives it a white outline.
+// parent containing it when it isn't on the canvas) so paintNode gives it a white outline.
 function markActive(): void {
   const hit = searchHits[searchActive];
   state.searchActiveId = hit ? firstVisible(hit).id : null;

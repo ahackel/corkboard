@@ -651,7 +651,8 @@ folds every card BESIDE that one (same frame or top level) to the state it goes 
 - **Peek** (`features/peek.ts`): resting the mouse on a folded card for `PEEK_DELAY` floats its whole note
   beside it, in its colour. Nothing changes — no fold state, layout or save. Mouse only; any press, key or
   wheel puts it away. The panel is a `.node > .body` outside `#world`, so card text styles apply and nothing
-  that walks the canvas sees it.
+  that walks the canvas sees it. Tapping a folded card's "N more lines" (`peekCard`) opens it on any device — the touch
+  way in, since touch has no hover.
 
 **A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — no plain
 double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the

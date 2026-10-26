@@ -86,5 +86,6 @@ zoomed out · emoji tags presented as stamps · export a selection or board as P
 - **Layout fights me**: card sizes and overlaps need constant fixing. (Fixed so far: lines route as
   tidy elbows from card to card; dropping never nests a card by accident; guides line cards up while dragging.)
 - **Boards get messy** over weeks. First try a routine with existing features (a "This week" frame;
-  on Friday, write a summary card, move the week's cards into it, collapse it) before building
-  anything for it.
+  on Friday, write a summary card, fold the week's cards — ⌘K "Collapse all cards" with the frame
+  selected — and move on to next week's frame) before building anything for it. A dedicated daily-log
+  design (a checklist card per day, a done counter, a Today command) is sketched and parked.

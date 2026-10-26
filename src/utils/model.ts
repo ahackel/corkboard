@@ -33,37 +33,30 @@ export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
   return [...state.nodes.values()].filter(n => isRoot(n) && (!keep || keep(n)))
     .sort((a, b) => a.y - b.y || a.x - b.x || (a.file ?? a.title).localeCompare(b.file ?? b.title));
 }
-// THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both.
+// THE ONE VISIBILITY GATE. Its one term today is the SCOPE; a fold used to be the other, but a fold
+// only ever hides part of a card's OWN text now (frames don't fold, cards hold no cards), so it no
+// longer hides any node. A new term goes IN here, never beside it.
 //
-//  1. FOLD (persisted, mm_collapsed): `collapsed` on a node hides its CHILDREN but keeps the node
-//     itself visible, so a node is hidden iff one of its ANCESTORS is collapsed.
-//  2. SCOPE (ephemeral, nav/scope.ts): while a frame is OPEN, only what's inside it is on the
+//  SCOPE (ephemeral, nav/scope.ts): while a frame is OPEN, only what's inside it is on the
 //     canvas. Reaching the open frame on the way up means we're inside it; running out of
 //     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS
 //     the open frame, which is precisely what stops its box, border, tab and fill from being
 //     painted. No per-kind CSS, no second predicate.
 //
-// Nothing writes through this function. That matters: term 1 is backed by a saved flag while term 2
-// must never touch disk, and the only mover keyed on isHidden is layoutSubtree — which applyLayouts
-// confines to the current scope, so opening a frame can't dirty a file outside it.
-// The open frame is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
-// own collapsed flag nor anything above it can hide what's inside — which is also what lets a frame
-// buried in a folded branch be opened from a URL and still show its contents.
+// Nothing writes through this function: the scope must never touch disk.
 export function isHidden(n: MindNode): boolean {
   const scopeId = scope.rootId;            // null in the overwhelmingly common case
   // A plain loop rather than `ancestors`: this is the hottest walk in the app (~38 call sites, every
   // one of them on the paint path), so it keeps the early returns and skips the generator.
-  for (let p = parentOf(n); p; p = parentOf(p)){
-    if (p.id === scopeId) return false;
-    if (p.collapsed) return true;
-  }
+  if (scopeId === null) return false;
+  for (let p = parentOf(n); p; p = parentOf(p)) if (p.id === scopeId) return false;
   // Nothing above n is the open frame, so n is outside it — EXCEPT when n is an open CARD, whose note
   // is what the scope exists to show (isReadingRoot). A new term IN here, not a predicate beside it.
-  return scopeId !== null && !isReadingRoot(n);
+  return !isReadingRoot(n);
 }
 // The visible card standing in for n: n itself when it's shown, otherwise its nearest
 // ancestor that is still visible. Search uses this to highlight the first visible parent
-// containing a match that's buried inside a collapsed branch.
+// containing a match that isn't on the canvas (outside the open frame).
 export function firstVisible(n: MindNode): MindNode {
   if (!isHidden(n)) return n;
   for (const p of ancestors(n)) if (!isHidden(p)) return p;
