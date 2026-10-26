@@ -11,11 +11,11 @@ import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf, parentOf, ancestors } from '../utils/model.js';
-import { applyLayouts, collapseAtDepth, commitRel, orderedKids, moveSubtreeTo, ancestorDepth, frameLabelH } from '../view/layout.js';
+import { applyLayouts, commitRel, orderedKids, moveSubtreeTo, ancestorDepth, frameLabelH } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
-import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import { paintAll, paintNode, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
@@ -282,13 +282,8 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   const folded = foldCardsIntoFrames();
   // advance the runtime id counter past everything we just loaded so new nodes don't collide
   state.idSeq = seq + 1;
-  // Auto-collapse a big map ONLY the very first time this folder is opened. After that we
-  // always restore exactly the saved frontmatter state — reopening must look like you left it.
-  const seenKey = store.seenKey;   // stable per map (names can be renamed / collide)
-  const firstEver = !seenFolders().includes(seenKey);
-  if (!keepView && firstEver && state.nodes.size > 40)
-    collapseAtDepth(1);   // applyLayouts() below resolves positions
-  if (!keepView) markFolderSeen(seenKey);
+  // Frames don't fold any more (main.ts canFold): one saved folded by an older build opens as its box.
+  for (const n of state.nodes.values()) if (n.type === 'frame' && n.collapsed) { n.collapsed = false; n.dirtyLayout = true; }
   // Re-point the open-frame scope at the freshly minted ids BEFORE the first layout/paint, so a
   // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).

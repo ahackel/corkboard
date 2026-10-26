@@ -20,14 +20,13 @@ import { pasteFromClipboard } from './attachments.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, toggleCollapse, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout } from '../main.js';
+import { selectedIds, selectNode, toggleCollapse, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
 const bar = byId('floatBar');
 const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbColorDot = byId('fbColorDot');
-const fbHide = byId<HTMLButtonElement>('fbHide');
 const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
@@ -155,17 +154,7 @@ function markOpen(): void {
   const n = anchorNode();
   const oneFrame = state.sel.size === 1 && n?.type === 'frame';
   fbTitle.style.display = oneFrame ? '' : 'none';
-  fbHide.style.display = oneFrame ? '' : 'none';
-  fbHide.classList.toggle('off', !!n?.collapsed);
-  fbHide.title = n?.collapsed ? 'Show contents (X)' : 'Hide contents (X)';
 }
-// 👁 — FigJam's "hide contents" on a section: folds the frame to its label, and back. The same fold
-// X and the chip do (toggleCollapse); the button shows a struck-out eye while the contents are hidden.
-fbHide.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closePopovers();
-  const n = anchorNode(); if (n?.type === 'frame') { toggleCollapse(n.id); syncControls(); }
-});
 // T — a frame's TITLE. An untitled frame shows no label at all (its text was deleted, FigJam-style),
 // so this is how one comes back: it seeds a name and selects it, ready to type over. A named frame just
 // opens its label with the name selected — the same editor F2 and a double-click on the label open.
@@ -301,8 +290,8 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push(isFrame ? { label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked }
                          : { label:'Edit', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
   if (!multi && canOpen(n)) entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
-  if (!multi && isFrame)
-    entries.push({ label: n.collapsed ? 'Show contents' : 'Hide contents', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
+  if (!multi && canFold(n))
+    entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
   if (!ro){
     entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: someLocked });
     if (anyFrame)

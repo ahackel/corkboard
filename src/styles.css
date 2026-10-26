@@ -9,7 +9,6 @@
   unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 :root {
-  --frame-tab-h:40px;   /* FRAME_TAB_H (main.ts) — the folded stub asserts it when it has no text to fill it */
   /* ONE theme, FigJam's (docs/PRODUCT.md, "Look and feel"): a pale grey board, white chrome, Figma
      blue for selection, pastel stickies. There is no dark mode — a board looks the same everywhere. */
   color-scheme: light;
@@ -547,22 +546,18 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   max-width:calc(100% + 4px); align-items:center;
   padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
-.node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
+.node.frame > .title-row > .title {
   /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a frame whose
      text is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1
-     rule below, exactly as a card does. The line box is pinned at 20px: the folded pill's height is the
-     constant FRAME_TAB_H (main.ts), whatever the label renders. */
+     rule below, exactly as a card does. */
   margin-bottom:0; padding-right:0; font-size:12px; font-weight:600; line-height:20px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 /* The markdown a label renders has to become ONE line: every block markdown produces goes inline with its
    margins dropped, and anything after the first block is left off (a label shows a name, not a note — the
    text is still all there in the file and in the editor). */
-.node.frame > .title-row > .title > *,
-.node.frame-folded > .title-row > .title > * { display:inline; margin:0; }
-.node.frame > .title-row > .title > :not(:first-child),
-.node.frame-folded > .title-row > .title > :not(:first-child) { display:none; }
-.node.frame > .title-row > .title h1,
-.node.frame-folded > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
+.node.frame > .title-row > .title > * { display:inline; margin:0; }
+.node.frame > .title-row > .title > :not(:first-child) { display:none; }
+.node.frame > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
 /* the expanded label's NAME is bigger and bolder than a card's, as FigJam's section names are */
 .node.frame > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
 .node.frame > .title-row > .title h1 { font-size:16px; }
@@ -573,24 +568,9 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .frame-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
 .frame-desc > * + *::before, .frame-desc li + li::before { content:' · '; }
 /* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
-.node.frame > .title-row > .title.editing,
-.node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+.node.frame > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 /* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
 .node.frame > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
-/* ---------- a COLLAPSED frame: just its pill ---------- */
-/* Folding hides the box: the element IS the pill now (no .frame class, so none of the box rules above
-   apply), at the bounds top. The element carries the padding/radius and shrink-wraps its (single-line)
-   title, so its .title-row goes back in flow; main.ts nodeW measures that width and nodeH reports the
-   FRAME_TAB_H constant: nothing sets a height here, so 20px of line + 9px padding + 1px border top and
-   bottom MUST total it. */
-.node.frame-folded {
-  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); min-height:0; padding:9px 10px;
-  border-radius:8px;
-  width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling */
-  background:var(--card, #fff); color:var(--ink, var(--text)); }
-.node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
-/* a frame never shows body text, folded or not (the +N chip does the "there's more inside" work) */
-.node.frame-folded > .body { display:none; }
 /* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
    sized to the frame's INTERIOR (inside its border — see FRAME_BORDER), holding every card (and
    nested frame) it hosts as flat DOM children — same "everyone flat under one container" model the
@@ -610,19 +590,8 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    here" (see drag.ts updateDropTarget). */
 .node.frame.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }
 /* A frame with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
-   that case. The float bar's title button (T) brings one back.
-   NOT display:none, though: the fold CHIP lives inside this row (`> .title-row >` in every one of its
-   selectors), and hiding the row would take the only way to unfold the frame with it. So the row goes
-   invisible and collapses onto the BOX's own top edge, where the chip then hangs off the corner exactly
-   as a card's does, and the chip is shown again. */
-.node.frame.no-title > .title-row {
-  visibility:hidden; bottom:auto; top:0; left:0; right:0; height:0; padding:0; max-width:none; }
-.node.frame.no-title > .title-row > .hidden-count { visibility:visible; }
-/* …and FOLDED, the pill keeps its own shape but shows nothing in it. The title still has to hold the
-   40px open — an empty inline has no line box, and nodeH ASSERTS FRAME_TAB_H for a folded frame. */
-.node.frame-folded.no-title { min-height:var(--frame-tab-h); }
-.node.frame-folded.no-title > .title-row { visibility:hidden; }
-.node.frame-folded.no-title > .title-row > .hidden-count { visibility:visible; }
+   that case. The float bar's title button (T) brings one back. */
+.node.frame.no-title > .title-row { display:none; }
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (frame / image card) gets all 8: 4 edge bands inset from the corners, plus 4
@@ -655,7 +624,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   content:''; position:absolute; inset:2px; box-sizing:border-box;
   background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
 /* the fold chevron would sit on the top-right handle — on a lone-selected card it steps inside it */
-.node.solo:not(.frame):not(.frame-folded) > .title-row > .hidden-count { right:14px; }
+.node.solo:not(.frame) > .title-row > .hidden-count { right:14px; }
 /* The WIDTH-ONLY kind — a card. Two differences from a box's side bands:
    · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
      constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
@@ -762,9 +731,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
 /* A STICKY at rest wears FigJam's soft lift (--lift); frames, folded pills and pictures stay flat. A card
    in hand casts a deeper one (.dragging). The selection ring is laid over whatever lift the card has. */
-.node:not(.frame):not(.frame-folded):not(.image-card) { box-shadow:var(--lift); }
+.node:not(.frame):not(.image-card) { box-shadow:var(--lift); }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
-.node.sel:not(.frame):not(.frame-folded):not(.image-card) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
+.node.sel:not(.frame):not(.image-card) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 /* While a frame's label is being renamed, drop the frame's ring so only the label's own outline shows.
    While a CARD is being edited, the card itself is the field (FigJam): no box inside it, the ring goes
    to a DIMMED blue round the card's border, and the corner handles stand down. */
@@ -820,8 +789,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    anywhere further down the note), and the two must not drift — a card whose name is styled unlike the
    `# heading` it literally is reads as a separate field, which is exactly what this format stopped
    having. h2–h6 step down from it. `padding-right` is the fold chip's room and belongs to the title
-   alone; a frame's TAB pins its own font-size/line-height/weight (and needs to — FRAME_TAB_H is 40px of
-   exactly those), so nothing here can move a tab. */
+   alone; a frame's label pins its own font-size/line-height/weight, so nothing here can move it. */
 .node .title, .node .body h1 { font-weight:750; font-size:var(--h1-size); }
 .node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
 /* inline title rename (double-click / F2 / on-create): edit the card's title in place.
@@ -834,8 +802,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
   -webkit-user-select:text; user-select:text; }
 /* …and, as for a card, it's the PILL that shows the edit, not a box inside it: the same dimmed 3px blue
    ring (--edit-ring) round the label — or round the whole element when folded, since that IS the pill. */
-.node.frame > .title-row:has(> .title.editing),
-.node.frame-folded:has(> .title-row > .title.editing) { box-shadow:0 0 0 3px var(--edit-ring); }
+.node.frame > .title-row:has(> .title.editing) { box-shadow:0 0 0 3px var(--edit-ring); }
 /* tag pills on a card — float along the card's lower edge, OUTSIDE the border, the same way
    .addnote floats at the opposite (bottom-left) corner, so a tagged card is exactly as tall as an
    untagged one: tags never take up in-flow space. Anchored to the right and growing leftward as
@@ -1092,19 +1059,9 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node[data-chip="count"] > .title-row > .hidden-count svg,
 .node[data-chip="fold"]  > .title-row > .hidden-count .cnt { display:none; }
 /* BOTH faces sit in the SAME spot in every state, so folding never moves the button: hanging off the
-   TITLE's top-right corner. That's what living inside .title-row buys (see nodeEl) — the row is the
-   containing block exactly when it's positioned, i.e. when it's a FRAME's title tab, so a frame's chip
-   rides its tab instead of sitting 43px lower on the box, and a folded frame (whose label
-   IS the element) needs no special case at all.
-   Where the row is in FLOW (a card) the offsets resolve against the node's own padding box instead. */
-/* A tab-shaped label — a frame's title TAB, a folded frame's pill — is only FRAME_TAB_H
-   (40px) tall on a --r-card corner, and centring the chip on that corner (the -8px above, i.e. half the
-   chip) reads as having slid DOWN into the rounded corner instead of straddling it: at the chip's own x
-   the label's fill has already curved away beneath it. Lift it to a 4px overlap, which is the "sitting on
-   the edge" look the -8px gives a full-height card. Both the tab and the pill, so folding a frame still
-   never moves the button. */
-.node.frame > .title-row > .hidden-count,
-.node.frame-folded > .title-row > .hidden-count { top:-12px; }
+   TITLE's top-right corner (see nodeEl). Only cards fold (main.ts canFold), and a card's row is in
+   flow, so the offsets resolve against the node's own padding box. */
+
 /* WHICH face shows is decided in ONE place — paintNode's chipFace, via data-chip — and never by a
    per-kind rule here: a `:hover`/`.sel` selector out-specifies any plain class, so a kind that
    wanted to hide the bubble could never win that fight. Hence no .hidden-count in the frame /
@@ -1338,8 +1295,6 @@ body.canvas-interacting .addnote { display:none !important; }
 .fb-dd:hover .fb-chev { opacity:1; }
 .fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
 /* the eye shows the state it would CHANGE: open eye while the contents show, struck-out while hidden */
-#fbHide .ic-off, #fbHide.off .ic-on { display:none; }
-#fbHide.off .ic-off { display:block; }
 
 /* small popover anchored under/over its trigger button (colour / layout / arrow pickers) —
    borderless, same "floating island" style as #floatBar, no shadow either. It sizes to its

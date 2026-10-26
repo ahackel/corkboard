@@ -18,7 +18,6 @@ export const opfsStore = {
   _mapName: 'On-device storage',
   get isOpen(){ return this._opened; },
   get name(){ return this._mapName; },
-  get seenKey(){ return 'device:' + this._mapId; },
 
   // Resolve a map id to its directory handle ('vault' lives at the root, the rest under maps/).
   async _mapDir(id: string, create: boolean): Promise<FileSystemDirectoryHandle> {

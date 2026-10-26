@@ -161,9 +161,9 @@ naming, renaming, describing or un-naming a frame never moves the box or anythin
 the geometry (interior, drops, lines, the reading view) has to know about the label. What does: anything
 that FITS a box around frames — `subtreeBox` counts `frameLabelH` (the pill's measured height + its gap)
 above an expanded labelled frame, so Auto-size, grow-to-hold, Group and the load migration's column leave
-a nested frame's name room instead of clipping it. Folded, a frame is nothing but its pill at `n.y`
-(`.frame-folded`, `isFrameFold`, `nodeH` = `FRAME_TAB_H` = 40px: 20px line + 9px padding + 1px border, top
-and bottom — pinned in CSS, since `nodeH` asserts it rather than measuring).
+a nested frame's name room instead of clipping it. **Frames don't fold** (`canFold` in main.ts — only a
+card or image card with a note can): hiding a frame's contents was cut, along with its eye button and the
+first-open auto-fold of big maps. A frame saved folded by an older build opens as its box (loadFromDir).
 
 **A frame's note is drawn on its LABEL: the name, and its DESCRIPTION under it.** The `# ` heading is the
 name; the rest of the note is the description (`frameDescription`), one muted ellipsised line under the
@@ -441,8 +441,7 @@ other follows and the picture never distorts or crops. Four things follow:
   states where the card shows something else and so measures like any card: while its EDITOR is open (that's
   markdown, which wraps), and while FOLDED. Type a word into the note and the padding and the measured
   height come back on commit, and `mm_h` stops being written — nothing to migrate, the file says it.
-- **Folded, it's a 40px square of itself** (`isImageFold`, `IMAGE_FOLD` — the `FRAME_TAB_H` metric, so it
-  sits on the same line as a folded frame's tab). A card with no title has nothing else to fold to, and an
+- **Folded, it's a 40px square of itself** (`isImageFold`, `IMAGE_FOLD`). A card with no title has nothing else to fold to, and an
   empty shell is worse than a thumbnail. The picture FILLS that square: `.body` has to override the
   one-line `max-height` every other collapsed body wants (that cap is for text, and it left the image
   letterboxed across the top), after which `object-fit:cover` crops the square out of any aspect.
@@ -653,10 +652,8 @@ tap the chip — and every card of a multi-selection carries one, whose click fo
   length of a resize drag.
 - **The chip lives INSIDE `.title-row`** (hence the `> .title-row >` in every one of its selectors), which
   puts both faces in the same spot in every state — hanging 8px off the TITLE's top-right corner — so folding
-  never moves the button: the row is the containing block exactly when it's positioned, i.e. when it's a
-  frame's label pill, so a frame's chip rides its label instead of sitting on the box, and
-  a folded frame (whose label IS the element) needs no special case. Where the row is in flow (a card) the
-  offsets resolve against the node's own padding box.
+  never moves the button. Only cards fold, and a card's row is in flow, so the offsets resolve against
+  the node's own padding box.
 - The hover rule needs `:not(:has(.node:hover))` because child cards are DOM-nested (a deep hover would
   otherwise light up every ancestor's chip at once), and the chip's `pointerdown` must `stopPropagation` so
   `bindNodeDrag`'s `el`-level handler never turns the click into a select/drag — the touch double-tap counter
@@ -835,7 +832,7 @@ are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a 
 
 **The context menu is FigJam's** (`#ctxMenu`, `features/context-menu.ts`; a card's entries are
 `buildCardMenu` in float-bar.ts, shared with the bar's ⋯). Groups, in FigJam's order: the clipboard
-(Copy/Cut/Paste/Duplicate), Delete, what you can do with it (Edit or Rename, Open, Hide contents, Group,
+(Copy/Cut/Paste/Duplicate), Delete, what you can do with it (Edit or Rename, Open, Collapse, Group,
 Fit frame), where it goes outside the map (file path, download, share), and Lock last. Only actions with
 no easier home: a new card beside one is the port ⊕, a card inside a frame is a double-click, zooming is
 F. Rows are 24px, text 16px from the edges, the shortcut grey at the right, the hover a rounded blue row

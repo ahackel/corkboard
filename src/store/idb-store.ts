@@ -37,7 +37,6 @@ export const idbStore = (() => {
   return {
     get isOpen(){ return _opened; },
     get name(){ return _mapName; },
-    get seenKey(){ return 'device:' + _mapId; },
 
     openMap(id: string, name?: string){ _mapId = id; if (name) _mapName = name; },
     async createMap(id: string, name: string){ await put(prefixOf(id) + MAP_META_FILE, serializeMapMeta(name)); },

@@ -197,16 +197,9 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
 export function applyLayouts(): void {
   // The open frame may have just been deleted / undone away / vanished on disk.
   pruneScope();
-  // …and while a frame is open it is never FOLDED — a reload or an undo can re-collapse it, which
-  // would leave the canvas blank.
+  // …and the card you have OPENED is never folded — a reload or an undo can re-collapse it, which
+  // would leave the page blank.
   const open = scopeRootNode();
   if (open?.collapsed) { open.collapsed = false; open.dirty = true; open.dirtyLayout = true; }
 }
 
-// ---------- auto-collapse a big map on first open ----------
-// Fold every frame at a given depth, so a first look at a big map shows its top-level frames as tabs.
-export function collapseAtDepth(depth = 1): void {
-  for (const n of state.nodes.values()){
-    n.collapsed = ancestorDepth(n) === depth && childrenOf(n.id).length > 0;
-  }
-}

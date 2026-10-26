@@ -4,7 +4,6 @@
 // never fires twice).
 import { idbDel, idbGet } from '../utils/idb.js';
 import { readMaps, upsertMap, removeMapRef } from './maps.js';
-import { readJSON, writeJSON } from '../utils/local-json.js';
 
 // A picker returns a new key every time. Collapse only entries for the same directory; names are
 // not identities, so two folders called "notes" must both remain reopenable.
@@ -22,15 +21,6 @@ export async function rememberFolder(key: string, name: string, handle: FileSyst
 export async function forgetRecent(key: string): Promise<void> {
   removeMapRef(key);
   try { await idbDel(key); } catch {}
-}
-
-// Maps we've already auto-arranged once (keyed by store.seenKey). Used so the
-// one-time auto-collapse never fires again — every later open restores the saved state verbatim.
-const SEEN_KEY = 'corkboard.seenFolders';
-export function seenFolders(): string[] { return readJSON<string[]>(SEEN_KEY, []); }
-export function markFolderSeen(name: string): void {
-  const s = seenFolders();
-  if (!s.includes(name)) { s.push(name); writeJSON(SEEN_KEY, s); }
 }
 
 // The store layer must not render UI. main wires this to renderRecents so the FSA adapter

@@ -10,7 +10,6 @@ export type PickResult = 'ok' | 'cancel' | 'denied' | 'unsupported' | 'error' | 
 export interface Store {
   readonly isOpen: boolean;
   readonly name: string;
-  readonly seenKey: string;                 // stable first-open key (name can be renamed / collide)
   pick(): Promise<PickResult>;
   openRecent(key?: string): Promise<PickResult>;
   resume?(key: string): Promise<boolean>;   // FSA only: silent reopen if permission persists

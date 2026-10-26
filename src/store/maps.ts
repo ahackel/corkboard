@@ -89,7 +89,6 @@ export async function renameDeviceMap(s: DeviceStore, id: string, name: string):
 // renames every `mindmap.*` key to `corkboard.*` before anything here reads one.
 const LEGACY_RECENTS_KEY = 'corkboard.recentFolders';
 const LEGACY_LAST_STORE_KEY = 'corkboard.lastStore';
-const SEEN_KEY = 'corkboard.seenFolders';
 
 export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
   if (readMaps().length) return;
@@ -103,10 +102,6 @@ export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
   if (!refs.length) return;
   writeMaps(refs);
   try { localStorage.removeItem(LEGACY_RECENTS_KEY); } catch {}
-  // carry the vault's "seen" mark to its new key, so the one-time auto-collapse never re-fires
-  const seen = readJSON<string[]>(SEEN_KEY, []);
-  if (seen.includes('On-device storage') && !seen.includes('device:vault'))
-    writeJSON(SEEN_KEY, [...seen, 'device:vault']);
   // legacy last-store → last-map, so boot() reopens what the user last had open
   if (!getLastMap()) {
     let legacy: string | null = null;

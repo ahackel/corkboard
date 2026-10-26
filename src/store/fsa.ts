@@ -22,7 +22,6 @@ export const fsaStore = {
   get name(){ return this._dir ? this._dir.name : ''; },
   // The registry key distinguishes two folders with the same display name. It is assigned before
   // loading, so first-open layout state cannot leak from one "notes" folder into another.
-  get seenKey(){ return 'folder:' + (this._key ?? this.name); },
   // Which map (registry id) the last pick/openRecent/resume landed on — callers use this
   // as the MapRef id instead of guessing it back out of the registry.
   get currentKey(){ return this._key; },
