@@ -50,13 +50,13 @@
   --r-ctl: 10px;    /* inputs, list rows, small controls */
   --r-full: 999px;  /* pills + fully round icon buttons */
 
-  /* every toolbar-style bar (#toolbar, #floatBar, .floating-btn, .oc-back) shares one icon-button
+  /* every bar (#floatBar, .floating-btn, .oc-back) shares one icon-button
      size — redefined below for coarse pointers, so every consumer picks up the bigger touch
      target automatically with no per-selector overrides. The layout popover's chips use this same
      scale (see .layoutchip below) so it's the same height as #floatBar itself; the colour popover's
      swatches stay their own smaller, fixed scale . */
   /* the NARROW crumb strip's own height (styles.css's @media 700px block): one line of text and a
-     hair. Named because #toolbar has to drop by exactly it. */
+     hair. Named because the centred bars have to drop by exactly it. */
   --crumb-bar-h: 26px;
   --bar-btn: 32px;
   --bar-icon: 21px;
@@ -163,18 +163,6 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
   background:rgba(255,255,255,.2); color:inherit; cursor:pointer; }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
 
-/* floating "island" toolbar — no border, rounded, soft shadow (Excalidraw-style) */
-#toolbar {
-  position: fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
-  width:max-content; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
-  display:flex; align-items:center; gap:7px; padding:4px 8px;
-  background: var(--panel); border-radius:var(--r-full);
-  /* touch-action isn't inherited from body, so floating chrome sitting on top of the canvas
-     needs its own pan-x pan-y — otherwise old iOS Safari (still ignoring user-scalable=no)
-     treats a pinch that starts on the toolbar as native page-zoom instead of canvas zoom. */
-  touch-action:pan-x pan-y;
-}
-#toolbar h1 { font-size:12px; font-weight:600; margin:0 6px 0 0; letter-spacing:.2px; }
 /* The group dividers are .fb-sep (see the floating bars) — the same 1px rule, so a group of
    buttons is marked the same way wherever it appears. It used to be `.sep { flex:1 }`, which in a
    width:max-content bar has no free space to claim and so drew nothing at all. */
@@ -186,37 +174,34 @@ button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color:#fff; border-color: var(--accent); font-weight:600; }
 button.active { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity:.45; cursor:default; }
-/* toolbar buttons are borderless, monochrome clickable icons (icon = currentColor) */
-#toolbar button {
-  display:inline-flex; align-items:center; justify-content:center;
-  width:var(--bar-btn); height:var(--bar-btn); padding:0; border-radius:var(--r-full);
-  background:transparent; border:none; color:var(--muted);
-  flex:none;   /* icons never squash — a narrow window shrinks the search box / folder name instead */
-}
-#toolbar button:hover { background:color-mix(in srgb, var(--text) 8%, transparent); color:var(--text); }
-#toolbar button.primary { color:var(--accent); }
-#toolbar button.active { color:var(--accent); }
-/* …but a MODE you are inside (outline) is a state you have to be able to see at a glance
-   and get back out of, so it wears the solid accent fill — the same cue it had as a corner circle. */
-#toolbar button#outlineBtn.active, #toolbar button#outlineBtn.active:hover {
-  background:var(--accent); color:#fff; }
-#toolbar button#roBtn.locked { color:#e0564f; }   /* red while read-only is locked */
-#toolbar button#roBtn.locked:hover { color:#e0564f; background:color-mix(in srgb, var(--text) 8%, transparent); }
-/* .ic is display:contents, so the svg itself is the flex item — flex:none keeps icons from
-   squashing when a shrinking neighbour (folder name / search box) fights for space */
-#toolbar button svg { width:var(--bar-icon); height:var(--bar-icon); display:block; flex:none; }
-#status { display:none; }   /* transient log messages are not shown in the toolbar */
-/* floating toolbar-less buttons pinned to the canvas corners */
+/* the read-only pill, top centre: the one mode that must be visible at a glance (and the way out of it) */
+#roBadge { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
+  border:none; background:var(--panel); color:#e0564f; font-weight:600; touch-action:pan-x pan-y; }
+#roBadge[hidden] { display:none; }
+/* The ⌘K palette: a Spotlight-style box near the top over a faint scrim. */
+#palette { position:fixed; inset:0; z-index:45; background:rgba(0,0,0,.18);
+  padding:calc(12vh + var(--sa-t)) calc(16px + var(--sa-r)) 16px calc(16px + var(--sa-l)); }
+#palette[hidden] { display:none; }
+.pal-box { margin:0 auto; max-width:520px; background:var(--panel); border-radius:var(--r-panel);
+  box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden; }
+#palInput { width:100%; box-sizing:border-box; padding:16px 18px; font-size:16px; border:none;
+  border-bottom:1px solid var(--node-border); background:transparent; color:var(--text); }
+#palList { max-height:min(60vh, 420px); overflow-y:auto; padding:6px; }
+.pal-item { display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:9px 12px; border-radius:10px; cursor:pointer; color:var(--text); font-size:14px; }
+.pal-item.active { background:color-mix(in srgb, var(--accent) 22%, transparent); }
+.pal-item kbd { font-family:inherit; font-size:12px; color:var(--muted); }
+.pal-empty { padding:12px; color:var(--muted); font-size:14px; }
+/* floating buttons pinned to the canvas corners */
 .floating-btn {
   position:fixed; z-index:20;
   width:var(--bar-btn); height:var(--bar-btn); display:inline-flex; align-items:center; justify-content:center;
   padding:0; border:none; border-radius:var(--r-full); background:var(--panel); color:var(--muted); cursor:pointer;
-  touch-action:pan-x pan-y;   /* same reasoning as #toolbar: touch-action isn't inherited from body */
+  touch-action:pan-x pan-y;   /* touch-action isn't inherited from body, and a pinch starting here must zoom the canvas */
 }
 .floating-btn:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, var(--panel)); }
 .floating-btn svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-/* canvas kebab — now the ONLY thing in the top-right corner: outline moved into #toolbar
-   (they are modes, this is a menu). Unlike them it stays
+/* canvas kebab — the ONLY thing in the top-right corner. Unlike them it stays
    visible AND above the outliner at every width — z-index above #outline (21), mirroring #homeBar's
    own exception on the opposite corner. Still below true modals (#ctxMenu/#startScreen/etc: z:40+). */
 #canvasMenuBtn { top:calc(12px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:30; }
@@ -227,11 +212,11 @@ button:disabled { opacity:.45; cursor:default; }
    which owns that corner while it is open). */
 @media (pointer: fine) { #canvasMenuBtn { display:none; } }
 /* home / storage — floating bar in the top-left; the loaded-folder name sits BESIDE the button.
-   z-index above #outline (21) and everything in its drawer — unlike #toolbar/#searchWrap (which
+   z-index above #outline (21) and everything in its drawer — unlike #searchWrap (which
    the outline drawer is meant to cover, see #outline's comment), the home button must stay
    reachable/visible even while outline rows scroll past underneath it. Still below true modals
    (#ctxMenu/#startScreen/#editorSheet: z:40+). */
-/* ONE PILL, like #toolbar: a single --panel capsule holding the home button and every path segment,
+/* ONE PILL: a single --panel capsule holding the home button and every path segment,
    all of them borderless and transparent until hovered. Not a capsule per segment — nothing else in
    the app looks like that, and a path is one thing. The pill also does real work now the canvas can be
    any colour (syncCanvasBackground): text drawn straight onto a teal canvas has no dependable contrast. */
@@ -245,7 +230,7 @@ button:disabled { opacity:.45; cursor:default; }
 #homeBar #homeBtn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
 #folderName:empty { display:none; }   /* icon-only until a map is loaded */
 /* ---------- the open-frame path (features/breadcrumbs.ts) ----------
-   Segments match #toolbar's buttons: no border, no fill, hover-highlight only, muted until they're the
+   Segments are like the corner buttons: no border, no fill, hover-highlight only, muted until they're the
    level you're actually in. The map name is the first of them (#folderName), so going into a frame ADDS
    segments rather than swapping loose text for pills.
    NOT touched by `zoom-far`: that rule drops PER-CARD badges, of which there is one per card on screen.
@@ -266,16 +251,10 @@ body.scoped #scopeBar { display:flex; }
 .sc-crumb.sc-cur { color:var(--text); pointer-events:none; }
 .sc-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
-/* The pill still stops short of the CENTRED #toolbar (~290px wide, hence half of it plus a gap). With
-   the middle folded into `…` the segment count is bounded, so this cap now actually holds instead of
-   being overflowed by icons and separators that can't shrink. */
+/* The pill stops short of the CENTRED search / read-only bar (~260px wide, hence half of it plus a gap). */
 @media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }
-/* NARROW: no room beside the CENTRED toolbar at all. The pill used to drop to its own line UNDER the
-   toolbar, which read as a stray capsule floating in the canvas and put the one-way door out of a
-   frame below the tools you use inside it. It stays ABOVE instead, and stops being a pill: a
-   full-width strip one line of text tall with a rule under it — a document header, which is what a
-   path is. The toolbar drops by exactly its height, hence the shared variable: two rules that must
-   agree about where the strip ends, spelled once. */
+/* NARROW: the pill becomes a full-width strip one line of text tall with a rule under it — a document
+   header, which is what a path is. The centred bars drop by exactly its height (--crumb-bar-h). */
 @media (max-width:700px){
   body.scoped #homeBar {
     top:0; left:0; right:0; max-width:none; box-sizing:border-box; gap:0;
@@ -288,7 +267,7 @@ body.scoped #scopeBar { display:flex; }
   body.scoped #homeBar #homeBtn svg { width:15px; height:15px; }
   /* …and the segments give up the vertical padding that made them capsules. */
   body.scoped #homeBar .sc-crumb { padding:2px 7px; }
-  body.scoped #toolbar { top:calc(8px + var(--sa-t) + var(--crumb-bar-h)); }
+  body.scoped #searchWrap, body.scoped #roBadge { top:calc(8px + var(--sa-t) + var(--crumb-bar-h)); }
 }
 /* Narrower still: drop the map name (the expendable segment) and let the rest ellipsise. Nothing
    collapses to an icon-only segment — the segments carry no icon, so that would leave empty buttons;
@@ -302,24 +281,19 @@ body.scoped #scopeBar { display:flex; }
 }
 /* …and follow #homeBar's own retreat while an outline row is being edited. */
 @media (max-width:700px){ body.ol-editing #scopeBar { display:none; } }
-/* find / jump-to-card — opened by #searchBtn, and it TAKES THE TOOLBAR'S PLACE (same top/centring)
-   rather than dropping below it: search is a temporary mode, so the bar it replaces goes away while
-   it's up (the rule below). The toolbar can't be hidden by a sibling combinator — it comes BEFORE
-   #searchWrap in the DOM — hence `body:has()`, which also keeps `.open` the single open-state flag.
-   Because the magnifier goes with the toolbar, #searchClear stays visible unconditionally: empty, it
-   closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
+/* find / jump-to-card — opened with / or from the palette, top centre. #searchClear stays visible
+   unconditionally: empty, it closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
    field IS the bar (see #searchBox), not an inset box floating in one. */
 #searchWrap { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
   display:none; align-items:center; width:260px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
   background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
-body:has(#searchWrap.open) #toolbar { display:none; }
+body:has(#searchWrap.open) #roBadge { display:none; }
 #searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
   display:block; color:var(--muted); pointer-events:none; flex:none; }
 /* The field FILLS the bar — transparent, no fill of its own and no focus ring, so the whole pill
    reads as one surface (and clicking anywhere in it lands in the input). The bar being the only
-   surface is also why the height is spelled out here: --bar-btn plus what #toolbar pads with, so
-   the pill matches the toolbar it stands in for. */
+   surface is also why the height is spelled out here. */
 #searchBox { flex:1; min-width:0; box-sizing:border-box; height:calc(var(--bar-btn) + 8px);
   padding:0 34px; border-radius:var(--r-full); font-size:13px;
   background:transparent; border:none; color:var(--text); }
@@ -1416,11 +1390,13 @@ body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
 #ghostHint { left:calc(120px + var(--sa-l)); bottom:calc(23px + var(--sa-b)); }   /* right of the ghost card */
 #ghostHint span { position:relative; top:-5px; }        /* nudge only the label up, arrow stays */
 /* grid toggle — bottom-right corner */
-#gridBtn { right:calc(12px + var(--sa-r)); bottom:calc(12px + var(--sa-b)); }
+#paletteBtn { right:calc(12px + var(--sa-r)); bottom:calc(12px + var(--sa-b)); width:auto; padding:0 12px;
+  font-size:13px; font-weight:600; }
+#gridBtn { right:calc(12px + var(--sa-r) + 58px + 8px); bottom:calc(12px + var(--sa-b)); }
 /* grid size picker — one slot further left again, showing the current cell size as a number. The one
    .floating-btn whose content is TEXT, so it drops the shared flex centring for the numeric-badge
    rule next to .hidden-count (which centres digits rather than their line box). */
-#canvasColorBtn { right:calc(12px + var(--sa-r) + var(--bar-btn) + 8px); bottom:calc(12px + var(--sa-b)); }
+#canvasColorBtn { right:calc(12px + var(--sa-r) + 58px + 8px + var(--bar-btn) + 8px); bottom:calc(12px + var(--sa-b)); }
 #canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; }
 /* Nothing to pick in read-only — setColor refuses there, so the button would be a dead control. */
 body.readonly #canvasColorBtn { display:none; }
@@ -1466,7 +1442,7 @@ body.readonly #canvasColorBtn { display:none; }
    card (position set by features/float-bar.ts's rAF follow loop, tracking pan/zoom/drag) ---- */
 #floatBar {
   position:fixed; top:0; left:0; z-index:20;   /* left/top overwritten per-frame in JS; BELOW #outline (21) —
-    the outline drawer covers it where they overlap, same as #toolbar/#homeBar/#searchWrap (also z:20) */
+    the outline drawer covers it where they overlap, same as #homeBar/#searchWrap (also z:20) */
   display:flex; align-items:center; gap:2px; padding:4px;
   background:var(--panel); border-radius:var(--r-full);
   opacity:0; pointer-events:none; transition:opacity .15s ease;
@@ -1549,7 +1525,7 @@ body.canvas-interacting .addnote { display:none !important; }
 #floatBar .fb-swatch, #edgeBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
 
 /* small popover anchored under/over its trigger button (colour / layout / arrow pickers) —
-   borderless, same "floating island" style as #toolbar/#floatBar, no shadow either. It sizes to its
+   borderless, same "floating island" style as #floatBar, no shadow either. It sizes to its
    CONTENT and is a rounded panel rather than a pill: every one of these now holds a column of items
    or a grid of swatches, so it reads as a menu dropped from its button instead of a second bar
    sitting beside the first. (--r-full clamps to half the SHORTER side, which on a tall box paints a
@@ -1701,15 +1677,12 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 /* icon placeholders (filled by mountIcons): transparent to layout so the injected <svg> sits where it would have */
 .ic { display:contents; }
 
-/* ---- toolbar section for editing the selected card(s) ---- */
-#toolbar button:disabled, #toolbar button:disabled:hover { background:transparent; opacity:.3; cursor:default; }
 
 /* ---- coarse pointer (touch) : slightly larger hit targets than desktop ----
    Bar/icon-button sizing itself comes from --bar-btn/--bar-icon being redefined at :root above —
-   every bar (#toolbar, #floatBar, .floating-btn, .oc-back, .layoutchip) picks that up for free. */
+   every bar (#floatBar, .floating-btn, .oc-back, .layoutchip) picks that up for free. */
 @media (pointer: coarse) {
-  #toolbar { gap:8px; padding:5px 10px; }
-  #searchBox { height:calc(var(--bar-btn) + 10px); }   /* follow #toolbar's taller padding — the bar replaces it */
+  #searchBox { height:calc(var(--bar-btn) + 10px); }
   .node .addnote { width:28px; height:28px; right:-14px; }
   .node .addnote svg { width:16px; height:16px; }
   .node .tag-row { bottom:-14px; gap:6px; }
@@ -1748,13 +1721,6 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   #folderName { display:none; }
 }
 
-/* On a PHONE (coarse pointer + a short axis, EITHER orientation — an iPhone in landscape is wide
-   but still short) the outline/canvas mode is dictated by orientation, not user choice
-   (features/outline.ts's phoneWantsOutline) — hide the toggle so there's nothing to tap into a
-   mode the current orientation doesn't allow. MUST mirror PHONE_MQ in core/ui-state.ts. */
-@media (pointer: coarse) and (max-width: 700px), (pointer: coarse) and (max-height: 700px) {
-  #outlineBtn { display:none !important; }
-}
 
 /* ---- outline mode: the map as a collapsible tree list (body.outline, toggled in
    features/outline.ts). Rows render into #outline. Two treatments, split at the same 700px
@@ -1763,9 +1729,9 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
        chrome hide entirely (see the max-width:700px block below)
      · wide  (desktop/tablet, or a phone rotated to landscape) → a drawer sliding in from the
        right OVER a still-visible canvas, mirroring the storage sidebar's left drawer.
-   On a phone the mode itself is locked to orientation (features/outline.ts's phoneWantsOutline,
-   #outlineBtn hidden above) rather than user-toggled. */
-/* above #toolbar/#searchWrap (z:20): the drawer covers them where it overlaps, rather than the
+   On a phone the mode itself is locked to orientation (features/outline.ts's phoneWantsOutline)
+   rather than user-toggled. */
+/* above #searchWrap (z:20): the drawer covers them where it overlaps, rather than the
    app chrome floating over its edge. #homeBar is the one exception (z:30, see its own rule) —
    the home button stays reachable even under the drawer / above scrolling outline rows. */
 #outline { position:fixed; z-index:21; }
@@ -1776,11 +1742,11 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 .ol-scroll { position:absolute; inset:0; overflow:hidden auto; -webkit-overflow-scrolling:touch; }
 /* Canvas tools are hidden in outline mode. The outliner is a drawer over a
    still-visible canvas, so a card can stay selected there — the floating edit bar stays hidden
-   too since it would float over the drawer. #outlineBtn joins them here: once open, #olCloseBtn
+   too since it would float over the drawer. Once open, #olCloseBtn
    (the drawer's top-LEFT, sharing #ocBack's spot) is the way to close it. #canvasMenuBtn is the
    deliberate exception (see its own z-index rule) — it must stay reachable from the outliner too. */
-body.outline #gridBtn,
-body.outline #canvasColorBtn, body.outline #outlineBtn,
+body.outline #gridBtn, body.outline #paletteBtn,
+body.outline #canvasColorBtn,
 body.outline #floatBar { display:none !important; }
 
 /* Below the 700px breakpoint (MUST match NARROW_MQ), outline goes full-screen instead of a
@@ -1788,9 +1754,8 @@ body.outline #floatBar { display:none !important; }
    phone in portrait (features/outline.ts forces outline on there) and, as before, on any other
    narrow-width session (e.g. a shrunk desktop window) that happens to have outline toggled on. */
 @media (max-width: 700px) {
-  /* nothing to act on behind a full-screen outline — hide the canvas toolbar + its chrome too */
-  body.outline #toolbar, body.outline #stage, body.outline #ghostCard, body.outline #ghostHint,
-  body.outline #fitBtn { display:none !important; }
+  /* nothing to act on behind a full-screen outline — hide the canvas and its chrome too */
+  body.outline #stage, body.outline #ghostCard, body.outline #ghostHint { display:none !important; }
   /* fill the whole screen and inset the content from the top instead of parking the panel below
      the header — so cards scroll UP UNDER the floating home / + buttons (iOS-style) rather than
      being clipped at a fixed top edge. */
@@ -2075,8 +2040,7 @@ body.outline:not(.readonly) .ol-head.kb-docked { padding:6px 10px; gap:8px; }
    one consistent top-left control), and mutually exclusive with it: #ocBack shows while the
    branch editor is open (body.ol-editing), this shows the rest of the time — visible in read-only
    too, since closing isn't a mutating action. Hidden on narrow screens, where outline is
-   forced/non-closable (matches the toolbar's own outline toggle, hidden there via #toolbar's
-   display:none) — there's nothing to close back TO on a phone. */
+   forced/non-closable — there's nothing to close back TO on a phone. */
 .ol-close { display:none; position:absolute; top:10px; left:12px; z-index:5;
   width:var(--bar-btn); height:var(--bar-btn); padding:0; border:none; border-radius:var(--r-full);
   align-items:center; justify-content:center;

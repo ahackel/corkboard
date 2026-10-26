@@ -1,12 +1,8 @@
 // ---------- theme (light / dark) ----------
 // Persisted in localStorage, driven by CSS variables defined at the top of <style>.
-// Icons are .svg assets imported as raw strings (Vite inlines them in the single-file build).
-import moonIcon from '../assets/icons/moon.svg?raw';
-import sunIcon from '../assets/icons/sun.svg?raw';
 import { refreshPalette } from '../main.js';
 
 const THEME_KEY = 'corkboard.theme';
-let themeBtn: HTMLElement | null = null;   // cached at setupTheme; applyTheme only runs after that
 // iOS Safari colours the status-bar / URL-bar area from <meta name="theme-color">, not from any
 // CSS — without this it stays whatever was in index.html regardless of theme, a visible mismatch
 // with the canvas behind it. Read --bg straight off the (already-toggled) body so this can never
@@ -19,7 +15,6 @@ function syncThemeColorMeta(): void {
 function applyTheme(theme: string): void {
   const light = theme === 'light';
   document.body.classList.toggle('light', light);
-  if (themeBtn) themeBtn.innerHTML = light ? sunIcon : moonIcon;   // icon = the ACTIVE theme
   syncThemeColorMeta();
 }
 function initTheme(): void {
@@ -30,15 +25,13 @@ function initTheme(): void {
   applyTheme(saved);   // runs before main.ts's own top-level code (PALETTE etc.), so it must NOT
                         // touch refreshPalette — SWATCH_BG picks up the class via document.body anyway
 }
-function toggleTheme(): void {
+export function toggleTheme(): void {
   const next = document.body.classList.contains('light') ? 'dark' : 'light';
   applyTheme(next);
   try { localStorage.setItem(THEME_KEY, next); } catch {}
   refreshPalette();   // --pal-* differ between themes; re-read the hexes and repaint (safe post-boot)
 }
-// Wire the toolbar button and apply the saved/OS theme. Called once at startup.
+// Apply the saved/OS theme. Called once at startup; toggled from the command palette.
 export function setupTheme(): void {
-  themeBtn = document.getElementById('themeBtn');
-  if (themeBtn) themeBtn.onclick = toggleTheme;
   initTheme();
 }

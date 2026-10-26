@@ -1,4 +1,4 @@
-// ---------- find a card (toolbar search box + dropdown) ----------
+// ---------- find a card (search box + dropdown) ----------
 // Filters on title OR body. Every match is highlighted by dimming the non-matching cards
 // (state.searchMatch, applied in paintAll); a match buried in a collapsed branch highlights
 // the first visible parent containing it instead. The active dropdown option's card gets an
@@ -15,22 +15,19 @@ import { byId } from '../utils/dom.js';
 
 export const searchBox = byId<HTMLInputElement>('searchBox');
 const searchWrap = byId('searchWrap');
-const searchBtn = byId<HTMLButtonElement>('searchBtn');
 const searchResults = byId('searchResults');
 const searchClear = byId<HTMLButtonElement>('searchClear');
 let searchHits: MindNode[] = [], searchActive = -1;
 // Open the search bar and focus the box (also the "/" shortcut entry point). The bar sits where
-// the main toolbar does and hides it for as long as it's open (styles.css keys off `.open`).
+// a toolbar would.
 export function openSearch(): void {
   searchWrap.classList.add('open');
-  searchBtn.classList.add('active');
   searchBox.focus(); searchBox.select();
 }
 // Close the bar and drop any active highlight.
 function closeSearch(): void {
   searchBox.value = ''; clearSearch();   // clearSearch() also drops q from the hash
   searchWrap.classList.remove('open');
-  searchBtn.classList.remove('active');
 }
 export function runSearch(): void {
   const q = searchBox.value.trim().toLowerCase();
@@ -107,16 +104,12 @@ searchResults.addEventListener('click', (e: MouseEvent) => {
   const item = (e.target as Element).closest('.sr-item');
   if (item) gotoHit((item as HTMLElement).dataset.id!);
 });
-// clear-or-close, exactly like Escape: with the toolbar hidden behind the bar, this is the only
-// visible way out, so an empty box makes the × dismiss the whole mode instead of doing nothing.
+// clear-or-close, exactly like Escape: this is the only visible way out, so an empty box makes the × dismiss the whole mode instead of doing nothing.
 searchClear.addEventListener('click', () => {
   if (searchBox.value){ searchBox.value = ''; runSearch(); searchBox.focus(); } else closeSearch();
-});
-searchBtn.addEventListener('click', () => {   // toolbar icon toggles the floating bar
-  if (searchWrap.classList.contains('open')) closeSearch(); else openSearch();
 });
 document.addEventListener('pointerdown', (e: PointerEvent) => {           // click-away closes the bar
   if (!searchWrap.classList.contains('open')) return;
   const t = e.target as Element;
-  if (!t.closest('#searchWrap') && !t.closest('#searchBtn')) closeSearch();
+  if (!t.closest('#searchWrap')) closeSearch();
 });

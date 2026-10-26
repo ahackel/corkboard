@@ -37,9 +37,10 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
   text-drag, attachments, clipboard, search, outline, float-bar, properties, breadcrumbs, history, …
+  `palette.ts` is ⌘K, the ONLY list of every action (no toolbar) — add a new action to `paletteCommands` (main.ts).
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry: the render core (`paintNode`/`paintAll`/`effectiveColor`), selection, read-only
-  mode, global keyboard/toolbar wiring. Its `main`↔feature cycles are deliberate and runtime-only.
+  mode, global keyboard wiring and the palette's command list. Its `main`↔feature cycles are deliberate and runtime-only.
 
 ## Non-negotiable invariants
 

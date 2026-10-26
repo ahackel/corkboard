@@ -18,8 +18,8 @@ import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor } from './utils/ink.js';
 import { childrenOf, isHidden, nodeLabel, descendantCount, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
-import { setupTheme } from './view/theme.js';
-import { setupGrid } from './view/grid.js';
+import { setupTheme, toggleTheme } from './view/theme.js';
+import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand } from './view/camera.js';
 import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, subtreeBox, frameFlow, isStack, isFrame, isContainer, insideStack, frameLabelled, stackRowW } from './view/layout.js';
@@ -38,10 +38,10 @@ import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoF
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
-import { commitStep, record, touch, undo, redo, updateUndoButtons } from './features/history.js';
+import { commitStep, record, touch, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
-import { store, scheduleSave, flushSave, loadFromDir } from './data/persistence.js';
+import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/persistence.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
 import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
@@ -51,6 +51,7 @@ import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelect
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
 import { snapTo } from './utils/num.js';
+import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupTheme();
@@ -1967,23 +1968,20 @@ syncFloatBar();
 // View & collapse only: nothing saves, the sidebar hides, editing icons grey out, and the
 // add-child + is hidden. Collapsing is allowed but in-memory only — leaving read-only reloads
 // from disk so the saved collapse state is restored.
-const roBtn = byId('roBtn');
+const roBadge = byId<HTMLButtonElement>('roBadge');
 // open padlock (unlocked); the closed one is LOCK_BADGE_SVG up top — one glyph shared by the
-// locked-card badge, the float bar's lock toggle (features/float-bar.ts) and this button.
+// locked-card badge and the float bar's lock toggle (features/float-bar.ts).
 export const ICON_LOCK_OPEN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
 export function applyReadOnly(): void {
   const ro = state.readOnly;
   document.body.classList.toggle('readonly', ro);
-  roBtn.classList.toggle('locked', ro);          // red when locked
-  roBtn.innerHTML = ro ? LOCK_BADGE_SVG : ICON_LOCK_OPEN;
-  roBtn.title = ro ? 'Read-only — click to unlock & edit (R)' : 'Lock to read-only (R) — view & collapse only';
+  roBadge.hidden = !ro;
   // ghost card visibility is driven by body.readonly CSS rule
-  updateUndoButtons();
   syncFloatBar();
   setStatus(ro ? 'Read-only — nothing is saved' : 'Editing enabled');
   scheduleUrlSync();
 }
-applyReadOnly();   // set the initial open-padlock icon
+applyReadOnly();
 async function setReadOnly(on: boolean): Promise<void> {
   if (on === state.readOnly) return;
   if (on){
@@ -1996,7 +1994,7 @@ async function setReadOnly(on: boolean): Promise<void> {
   }
   applyReadOnly();
 }
-roBtn.onclick = () => setReadOnly(!state.readOnly);
+roBadge.onclick = () => setReadOnly(false);
 
 // Select exactly one node (or clear with null), replacing any multi-selection.
 export function selectNode(id: string | null): void {
@@ -2179,11 +2177,50 @@ window.addEventListener('keyup', (e) => {
     window.addEventListener('pointercancel', onCancel);
   });
 }
-byId('fitBtn').onclick = focusOrFit;
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
 
 // (rename/duplicate/export/delete on-screen actions now live in the floating bar's kebab menu —
 // features/float-bar.ts)
+
+// ---------- the ⌘K command palette's list ----------
+// Every action the app has, with the shortcut that does the same — built here because every action
+// function is in scope here. `when` hides what can't apply right now (features/palette.ts).
+const MOD = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl ';
+const editable = (): boolean => !state.readOnly && store.isOpen;
+const hasSel = (): boolean => state.sel.size > 0 && editable();
+const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : undefined;
+function paletteCommands(): Command[] {
+  return [
+    { label: 'New card', shortcut: 'N', keywords: 'add create note', when: editable, run: newCardAtPointer },
+    { label: 'Find a card', shortcut: '/', keywords: 'search', run: openSearch },
+    { label: 'Undo', shortcut: MOD + 'Z', when: editable, run: undo },
+    { label: 'Redo', shortcut: '⇧' + MOD + 'Z', when: editable, run: redo },
+    { label: state.selId ? 'Focus the selection' : 'Fit the map to the screen', shortcut: 'F', keywords: 'zoom view', run: focusOrFit },
+    { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2) },
+    { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2) },
+    { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
+    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
+    { label: 'Add a card inside', shortcut: 'Tab', keywords: 'child', when: () => editable() && !!oneSel(), run: () => addChild(state.selId!) },
+    { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
+    { label: 'Open', shortcut: '↑', keywords: 'enter frame read', when: () => { const n = oneSel(); return !!n && canOpen(n) && !isScopeRoot(n); }, run: () => openFrame(oneSel()) },
+    { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
+    { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
+    { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
+    { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
+    { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
+    { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
+    { label: outlineActive() ? 'Back to the canvas' : 'Outline view', shortcut: 'O', keywords: 'list tree', run: toggleOutlineView },
+    { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
+    { label: document.body.classList.contains('light') ? 'Dark theme' : 'Light theme', keywords: 'theme colour mode', run: toggleTheme },
+    { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },
+    { label: 'Canvas colour…', keywords: 'background', when: () => !state.readOnly, run: () => byId('canvasColorBtn').click() },
+    { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
+    { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
+  ];
+}
+setPaletteSource(paletteCommands);
+byId('paletteBtn').textContent = MOD.trim() === '⌘' ? '⌘K' : 'Ctrl K';
+byId('paletteBtn').onclick = (e) => { e.stopPropagation(); if (paletteOpen()) closePalette(); else openPalette(); };
 
 // keyboard shortcuts: ⌘S force-save, ⌘A select-all, ⌘Z/⇧⌘Z/⌘Y undo-redo  (duplicate = D, new node = Space)
 window.addEventListener('keydown', (e) => {
@@ -2191,6 +2228,7 @@ window.addEventListener('keydown', (e) => {
   if (!mod) return;
   const k = e.key.toLowerCase();
   if (k === 's') { e.preventDefault(); flushSave(); return; }
+  if (k === 'k' && !isTypingInField()) { e.preventDefault(); openPalette(); return; }
   // While typing, ⌘A belongs to the field.
   if (k === 'a' && !isTypingInField()) { e.preventDefault(); selectAll(); return; }
   // While typing in a field, leave ⌘Z to the browser's native undo inside that editor.

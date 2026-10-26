@@ -30,7 +30,6 @@ import { byId } from '../utils/dom.js';
 
 const outlineScrollEl = byId('olScroll');
 const rowsEl = byId('olRows');
-const outlineBtn = byId<HTMLButtonElement>('outlineBtn');
 const olCloseBtn = byId<HTMLButtonElement>('olCloseBtn');
 
 // ---- view-local fold state (browsing-only reveals — see the header comment) ----
@@ -127,14 +126,12 @@ export function setOutline(on: boolean, persist = true): void {
   if (on === outlineActive()) return;
   if (!on) { closeBranchEditor(); olSearchInput.value = ''; outlineQuery = ''; disarmKeyboardTracking(); }   // leaving outline: drop any open branch editor + search filter
   document.body.classList.toggle('outline', on);
-  outlineBtn.classList.toggle('active', on);
   if (persist) { try { localStorage.setItem(VIEW_KEY, on ? 'outline' : 'canvas'); } catch {} }
   if (on) renderOutline();
   // back to the canvas: orient at whatever you were just reading in the list
   else if (state.selId) focusNode(state.nodes.get(state.selId), true);
   scheduleUrlSync();
 }
-outlineBtn.onclick = toggleOutlineView;
 olCloseBtn.onclick = toggleOutlineView;
 // The effective mode: dictated by orientation on a phone, else the saved preference.
 function wantOutline(): boolean {
@@ -152,7 +149,7 @@ PORTRAIT_MQ.addEventListener('change', () => setOutline(wantOutline(), false));
 // renderOutline reaches into main.ts (effectiveColor / nodeH / …), which is still mid-evaluation
 // during this circular main↔outline import; calling it here throws. boot()'s first paintAll()
 // renders the list (paintAll → renderOutline), so setting the class alone is enough + flash-free.
-if (wantOutline()) { document.body.classList.add('outline'); outlineBtn.classList.add('active'); }
+if (wantOutline()) document.body.classList.add('outline');
 
 // ---- search (bottom bar, next to the + button) ----
 // Filters the row list to matches (title OR body) plus their ancestors, so a hit stays reachable

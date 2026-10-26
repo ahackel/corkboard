@@ -40,32 +40,19 @@
     <nav id="scopeBar" aria-label="Open frame"></nav>
   </div>
 
-  <!-- Three groups, told apart by the same 1px .fb-sep the floating bars use: what you just DID
-       (undo / redo / fit), the MODE you are in (outline / read-only), and how the app is
-       dressed or searched (theme / find). Outline lives here rather than in a corner
-       because it is a global toggle exactly like read-only — see .floating-btn in styles.css for
-       what stays a loose corner circle instead. -->
-  <div id="toolbar">
-    <button id="undoBtn" disabled title="Undo (Ctrl/⌘ Z)" aria-label="Undo">
-      <span class="ic" data-icon="undo"></span></button>
-    <button id="redoBtn" disabled title="Redo (Ctrl Y / ⇧⌘Z)" aria-label="Redo">
-      <span class="ic" data-icon="redo"></span></button>
-    <button id="fitBtn" title="Focus selected card · fit whole map if none (F)" aria-label="Focus selected or fit map">
-      <span class="ic" data-icon="fit"></span></button>
-    <span class="fb-sep"></span>
-    <span id="status"></span>
-    <button id="outlineBtn" title="Outline view (O) — browse & edit the map as a list" aria-label="Toggle outline view">
-      <span class="ic" data-icon="outline"></span></button>
-    <button id="roBtn" title="Read-only mode (R) — view & collapse only, nothing is saved" aria-label="Toggle read-only mode">
-      <span class="ic" data-icon="lock"></span></button>
-    <span class="fb-sep"></span>
-    <button id="themeBtn" title="Toggle light / dark mode" aria-label="Toggle theme"></button>
-    <button id="searchBtn" title="Find card (/)" aria-label="Find a card">
-      <span class="ic" data-icon="search"></span></button>
+  <!-- No toolbar: every action is in the ⌘K palette (features/palette.ts), with its shortcut beside
+       it. #status is a sink for the transient log messages setStatus writes (shown nowhere). -->
+  <span id="status" hidden></span>
+  <!-- the ONE mode that needs to be visible at a glance, since nothing can be edited in it -->
+  <button id="roBadge" hidden title="Read-only — click to edit again (R)">Read-only · click to edit</button>
+  <div id="palette" hidden>
+    <div class="pal-box" role="dialog" aria-label="Command palette">
+      <input id="palInput" type="text" placeholder="Type a command…" autocomplete="off" spellcheck="false" aria-label="Command" />
+      <div id="palList" role="listbox"></div>
+    </div>
   </div>
 
-  <!-- floating search bar: opened by #searchBtn, and it REPLACES the toolbar above while open
-       (same position; #toolbar is hidden by CSS for as long as it is) — see features/search.ts -->
+  <!-- floating search bar, top centre: opened with / or from the palette — see features/search.ts -->
   <div id="searchWrap">
     <span class="ic" data-icon="search"></span>
     <input id="searchBox" type="text" placeholder="Find a card…" title="Find card (/)" aria-label="Find a card" autocomplete="off" spellcheck="false" />
@@ -115,7 +102,7 @@
          screen. #ocBack / #olCloseBtn share the same top-left spot and are mutually exclusive
          (styles.css): the back arrow only while the branch editor is open, the close button
          otherwise (wide screens only — on a phone the outline is forced full-screen and can't be
-         closed, same as the toolbar's own outline toggle; visible in read-only too, since closing
+         closed; visible in read-only too, since closing
          isn't a mutating action). -->
     <button id="ocBack" class="oc-back" title="Back to list" aria-label="Back to list">
       <span class="ic" data-icon="back"></span></button>
@@ -226,6 +213,9 @@
        list as the right-click menu (features/context-menu.ts canvasMenuEntries). -->
   <button id="canvasMenuBtn" class="floating-btn" title="Canvas menu — new card, insert image…" aria-label="Canvas menu">
     <span class="ic" data-icon="kebab"></span></button>
+
+  <!-- the command palette's own button, bottom-right: the way in for touch, and the hint that ⌘K exists -->
+  <button id="paletteBtn" class="floating-btn" title="All commands (⌘K)" aria-label="All commands">⌘K</button>
 
   <!-- background grid: floating bottom-right. ONE button for both axes —
        its face shows the live style and a click opens a menu holding the styles AND the spacings

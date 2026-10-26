@@ -48,9 +48,10 @@ What it has been used for, and what it must stay good at:
 
 **Core — keep, and make each feel great:** cards with Markdown, free placement, nesting (a card
 with children is an outline; frames group), colour and tags, simple lines between cards, search,
-undo, pasted images, collapse, opening a card or frame to work inside it.
+undo, pasted images, collapse, opening a card or frame to work inside it, and the ⌘K command
+palette — every action, with its shortcut, in one searchable list.
 
-**To build, in order:** ⌘K command palette · paste a list → many cards · smart alignment guides
+**To build, in order:** paste a list → many cards · smart alignment guides
 while dragging · tidy-up of a selection (only on request) · frame titles that grow readable when
 zoomed out · emoji tags presented as stamps · export a selection or board as PNG · phone inbox.
 
@@ -61,10 +62,12 @@ zoomed out · emoji tags presented as stamps · export a selection or board as P
 - *Routed lines with ports and junction points* — a line only has to say "these belong together".
   Lines that reroute themselves broke principle 2.
 - *The permanent toolbar* — replaced by ⌘K and the selection bar.
+- *The help map* — the palette lists every action with its shortcut; that is the reference.
 
 ## Known friction to fix (from daily use)
 
-- **Layout fights me**: card sizes and overlaps need constant fixing; lines reroute when cards move.
+- **Layout fights me**: card sizes and overlaps need constant fixing. (Lines rerouting when cards
+  move is fixed: lines now run straight from card to card.)
 - **Boards get messy** over weeks. First try a routine with existing features (a "This week" frame;
   on Friday, write a summary card, move the week's cards into it, collapse it) before building
   anything for it.

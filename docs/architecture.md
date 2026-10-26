@@ -590,6 +590,13 @@ frontmatter kept verbatim, CRLF/BOM notes, and the pure naming rules in `utils/f
 
 ## Interaction
 
+**There is no toolbar; the ⌘K PALETTE is the one list of every action** (`features/palette.ts`, button
+`#paletteBtn` for touch). The palette only displays; `paletteCommands` in `main.ts` builds the list, where
+every action function is in scope. A command's `when` HIDES it while it can't apply rather than listing it
+disabled. Each entry shows its shortcut, which is how shortcuts are learned now that the help map is gone —
+so a new action gets a palette entry, or it is undiscoverable. Read-only shows a pill (`#roBadge`) that is
+also the way out of it.
+
 **Touch input:** pan/zoom on the canvas is a unified Pointer-Events gesture layer on `#stage` (one finger
 pans, two fingers pinch-zoom + pan); node drag/reparent uses the per-node pointer handlers in `bindNodeDrag`.
 `#stage`/`.node` set `touch-action:none`.

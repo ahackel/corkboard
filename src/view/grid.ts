@@ -163,7 +163,7 @@ const STYLE_LABELS: Record<GridStyle, string> = { none: 'Off', dot: 'Dots', mesh
 const sizeLabel = (size: GridSize): string => size ? `${size} px` : 'No snap';
 const tick = (on: boolean): string => on ? '✓ ' : '\u2007 ';   // figure space, so labels line up either way
 
-function openGridMenu(): void {
+export function openGridMenu(): void {
   const r = gridBtn!.getBoundingClientRect();
   // sy is clamped to fit above the viewport bottom (see openMenuAt in context-menu.ts), so passing
   // the button's own top edge naturally pushes the menu up from this bottom-corner button.

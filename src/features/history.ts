@@ -14,7 +14,6 @@ import { setSelectionSet, popScopeFor, nodeW, nodeH, remeasure } from '../main.j
 import { endInPlaceEdit } from './inline-edit.js';
 import { syncEdgeBar } from './edge-bar.js';
 import { isScopeRoot } from '../nav/scope.js';
-import { byId } from '../utils/dom.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
@@ -117,7 +116,6 @@ export function commitStep(): void {
   undoStack.push(step);
   if (undoStack.length > MAX_STEPS) undoStack.shift();
   redoStack.length = 0;
-  updateUndoButtons();
 }
 // Sugar for one-shot synchronous ops. Re-entrant: called while another step is already
 // pending (e.g. deleteNode inside a live drag), it only touches — the outer owner commits.
@@ -130,7 +128,6 @@ export function record(ids: Iterable<string | null | undefined>, fn: () => void)
 export function clearHistory(): void {
   undoStack.length = 0; redoStack.length = 0;
   pending = null; pendingCanvas = null; pendingEdges = null;
-  updateUndoButtons();
 }
 
 // Overwrite live state with one side of a step's images.
@@ -210,7 +207,6 @@ export function undo(): void {
   if (!step) { setStatus('Nothing to undo'); return; }
   redoStack.push(step);
   applyStep(step.before, step.canvas?.before, step.edges?.before, 'Undo');
-  updateUndoButtons();
 }
 export function redo(): void {
   if (state.readOnly) return;
@@ -220,16 +216,5 @@ export function redo(): void {
   if (!step) { setStatus('Nothing to redo'); return; }
   undoStack.push(step);
   applyStep(step.after, step.canvas?.after, step.edges?.after, 'Redo');
-  updateUndoButtons();
 }
 
-// ---------- toolbar buttons ----------
-const undoBtn = byId<HTMLButtonElement>('undoBtn');
-const redoBtn = byId<HTMLButtonElement>('redoBtn');
-undoBtn.onclick = undo;
-redoBtn.onclick = redo;
-export function updateUndoButtons(): void {
-  undoBtn.disabled = state.readOnly || !undoStack.length;
-  redoBtn.disabled = state.readOnly || !redoStack.length;
-}
-updateUndoButtons();
