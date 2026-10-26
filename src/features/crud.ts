@@ -13,7 +13,7 @@ import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, subtreeIds, snapPt, NODE_W, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
-import { gcJunctions, scheduleSaveBoard } from '../data/board.js';
+import { scheduleSaveBoard } from '../data/board.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -411,8 +411,6 @@ function deleteNodes(ids: Iterable<string>): void {
   if (state.edges.some(e => gone.has(e.from) || gone.has(e.to))) {
     touchEdges();
     state.edges = state.edges.filter(e => !gone.has(e.from) && !gone.has(e.to));
-    // A junction those edges met at may now have nothing ending at it. Same step, same ⌘Z.
-    gcJunctions();
     scheduleSaveBoard();
   }
 }

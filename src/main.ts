@@ -1097,7 +1097,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   let lastDx = 0, lastDy = 0;
   let subtreeRAF: number | null = null;
   const g = gridSnap();
-  // The grid on the SIZE — the same snap a dragged card and a dragged junction get (utils/num.ts), live
+  // The grid on the SIZE — the same snap a dragged card gets (utils/num.ts), live
   // on every move, so the box steps between grid sizes under the pointer instead of taking one up at
   // the end. One snapping rule for everything the pointer moves.
   const snap = (v: number): number => snapTo(v, g);

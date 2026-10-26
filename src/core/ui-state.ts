@@ -5,7 +5,7 @@
 // render core (main.ts) and the feature modules split out of it (drag / inline-edit / gestures
 // / attachments). Imported `let` bindings are read-only, hence the holder-object pattern.
 // ============================================================
-import type { MindNode, EdgeSide } from './state.js';
+import type { MindNode } from './state.js';
 
 export type Pt = { x: number; y: number };
 // World-space line segment (axis-aligned for the insertion indicator).
@@ -85,27 +85,12 @@ export const ui = {
   spaceHeld: false,
   spaceUsedForPan: false,
   pinch: null as Pinch | null,                    // active two-finger gesture
-  // A free EDGE being drawn or re-routed, following the pointer. `from` is the fixed end (a socket
-  // on the source card, or the endpoint that isn't being dragged); `to` is the pointer. `edgeId` is
-  // set only when RE-ROUTING an existing edge — a fresh draw has no edge until it lands.
-  // The live dock state of a draw, in two separate parts:
-  //  · hintId  — a card close enough that its four ports are worth SHOWING, so you can see what
-  //              there is to aim at. Generous.
-  //  · overId/overSide — the port actually SNAPPED to, which is tight (a small radius around the
-  //              port itself). Only this one decides where the edge lands; the hint is just an aid.
-  // Keeping them apart is what stopped the line lunging at a card from halfway across the canvas.
-  //  · overJunction — an existing meeting point the pointer has reached, snapped to exactly as a port
-  //              is: dropping there makes several lines meet at the one point.
-  //  · overEdge / overEdgeAt — another EDGE the pointer is on, which a drop SPLITS, and the exact point
-  //              it would be split at (already projected onto that line and put on the grid). Stored
-  //              rather than recomputed, so the ghost, the draft's own end and the drop all use the ONE
-  //              point — and the route it was projected from is not re-derived three times a frame.
-  //              Released over none of the three, a drop lands nothing at all: "mid-air" needs no state.
-  //  · grabbedAt — where the pointer went down, in world units. A drop only counts if it travelled
-  //              (features/edge-tools.ts MIN_DRAG_PX): a twitch on a socket or a handle is a click.
-  edgeDraw: null as { from: Pt; to: Pt; sourceId: string; fromSide: EdgeSide; grabbedAt: Pt;
-                      hintId?: string; overId?: string; overSide?: EdgeSide;
-                      overJunction?: string; overEdge?: string; overEdgeAt?: Pt;
+  // A free EDGE being drawn or re-routed, following the pointer. `sourceId` is the card at the fixed
+  // end (the one you dragged a ring off, or the end that isn't moving); `to` is the pointer; `overId`
+  // the card under it — the only thing a drop can land on. `edgeId`/`end` are set only when moving one
+  // end of an existing edge. `grabbedAt` (world units) is where the press began: a drop only counts if
+  // it travelled (features/edge-tools.ts MIN_DRAG_PX), so a twitch on a ring or a handle is a click.
+  edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string;
                       edgeId?: string; end?: 'from' | 'to' } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,

@@ -87,12 +87,20 @@ only thing you can grab the box by.
 `Notes.md` with `notes.md`, so an exact test would hand two nodes "their own" filename and let the second
 write eat the first.
 
-**Edges are derived, never stored.** A node's parent is `mm_parent` (the parent note's relative path); the
-tree and every edge is computed from it.
+**Hierarchy is `mm_parent`; a LINE is something the user drew.** A node's parent is `mm_parent` (the parent
+note's relative path) and the tree is computed from it — a child sits INSIDE its parent, so no line is ever
+derived from it. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
+caps, label) and are drawn STRAIGHT from rim to rim, aimed at the two cards' centres (`view/free-edges.ts`
+`edgeGeometry`, the one place the geometry is computed). A line stores no face and never routes, so moving
+a card only pivots it (docs/PRODUCT.md, principle 2). You draw one from the four rings on a selected card
+onto ANY point of another card; an end handle moves that end. Older boards may carry JUNCTIONS (points
+where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
+into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
 
 **Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`/`_y` (relative to the parent,
-world origin for a root — see `commitRel`), `mm_side`, `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`,
-plus the card flags `mm_locked`, `mm_done`, `mm_checklist`, `mm_query`. Serialization rewrites **only**
+world origin for a root — see `commitRel`), `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`,
+plus the card flags `mm_locked`, `mm_done`, `mm_checklist`, `mm_blank` (positions, sizes and collapse now
+live in `board.json` and are only READ from an older note). Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter field and the body verbatim —
 keep that property when touching `parseFM`/`fmSet`/`fmRemove`.
 
@@ -454,12 +462,11 @@ text at all.
   out their own: a DERIVED size isn't resizable, which is the rule the outline-row arm already states. Both
   were `display:none !important` first, which meant out-shouting the hover/`:has` rules that reveal a chip,
   and left drag.ts refusing the gesture while CSS hid the handle — two guards for one fact.
-- **It offers no edge PORTS while it's open** (`connectable` in `view/free-edges.ts`). Everything outside it
+- **It offers no line RINGS while it's open** (`connectable` in `view/free-edges.ts`). Everything outside it
   is out of scope and off the canvas, so there is nothing left to draw a line to — four rings offering a
   connection the canvas can't complete are worse than no rings. Added to `connectable` rather than beside it
   because that is the shared gate: the rings and the DROP refuse together, so nothing can be dragged onto the
-  open card either. `edgeVisible` keeps its own inlined copy of the rule on purpose (one lookup per end), so
-  this doesn't touch which edges are drawn — an edge to the open card is already hidden by its far end.
+  open card either. An edge to the open card is already hidden by its far end (`edgeVisible`).
 - **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
   move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
   refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
@@ -595,7 +602,7 @@ pans, two fingers pinch-zoom + pan); node drag/reparent uses the per-node pointe
 `#stage`/`.node` set `touch-action:none`.
 
 **The grid QUANTISES, and it is one rule for everything the pointer moves.** `snapTo` (utils/num.ts) is
-the whole of it: a dragged card, a resized frame or image card and a dragged junction dot are rounded to
+the whole of it: a dragged card and a resized frame or image card are rounded to
 the nearest grid multiple on EVERY move, so each of them is always sitting exactly on a grid position and
 steps to the next as the pointer crosses the halfway line. Nothing is corrected at release, because
 nothing is ever off the grid to correct. A card in a frame or stack snaps relative to THAT box's corner,

@@ -417,8 +417,8 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
      2     every .node                — the cards themselves
      3     a card's own chrome        — tag row, add-note bubble, hidden-count chip, resize handles
      4     a frame's TAB              — its title tab, lock badge: still the card
-     5     the port overlay (#toggles)— sockets and endpoint handles: above every CARD, so a port shows
-                                        on whatever it is fitted to — and under the lines (see below)
+     5     the ring overlay (#toggles)— the rings a new line starts from, endpoint handles, the drop
+                                        target's outline: above every CARD, so they're always grabbable
      6     EVERY LINE THE APP DRAWS   — free edges (#freeEdges)
      8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
      9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
@@ -426,10 +426,7 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
    reader is following, and one that dives under a card in its path loses them at exactly the moment
    they were tracing it. So what sits ABOVE the lines is only what a line may not cover: the drag
    ghosts and the cards in hand, which say what a drop is about to do and would be unreadable with
-   resting lines drawn over them.
-   …and a PORT sits under the lines (5): above the cards, because it belongs to the card it is fitted
-   to, but under its edges, because a line docked to a port ends AT it — with the ring on top, it
-   covered the last pixels of its own line and the edge read as stopping short of the card. */
+   resting lines drawn over them. */
 /* The free edges (the ones the user DREW — view/free-edges.ts) sit in ONE band, ABOVE the cards:
    they are lines to be followed. The layer takes NO pointer events at all: the clicks belong to the hit layer below the
    cards (next rule), which is what keeps a line drawn over a card from swallowing that card's press. */
@@ -441,10 +438,9 @@ svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:6; p
    behaviour from when the whole layer sat behind them. */
 svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
 .node { z-index:2; }                               /* the cards */
-/* The port overlay (view/free-edges.ts: sockets, endpoint handles, the live draw): above every CARD
-   layer, so a ring shows on whatever it is fitted to — a frame's tab, say — but UNDER the
-   lines, so an edge docked to a port runs all the way onto it instead of ending at a ring drawn over
-   the top of it. The layer takes no events; the rings and handles re-enable their own. */
+/* The ring overlay (view/free-edges.ts: rings, endpoint handles, the drop target): above every CARD
+   layer, so a ring shows on whatever it is fitted to. The layer takes no events; the rings and handles
+   re-enable their own. */
 svg#toggles { z-index:5; pointer-events:none; }
 /* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
 /* 4px: thick enough to read as a deliberate line rather than as a hairline someone forgot to style. */
@@ -469,31 +465,12 @@ svg#freeEdges circle.fe-dot { stroke:none; pointer-events:none; }
 svg#toggles circle.fe-socket { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8fe); stroke-width:2;
   pointer-events:auto; cursor:crosshair; }
 svg#toggles circle.fe-socket:hover { fill:var(--accent, #6ea8fe); }
-/* A ring that already carries an edge is filled — same reading as the draw preview's .on port. */
-svg#toggles circle.fe-socket.taken { fill:var(--accent, #6ea8fe); }
-/* The target card's ports during a draw: all four shown hollow, the one about to be taken filled. */
-svg#toggles circle.fe-port { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8fe); stroke-width:2;
-  opacity:.75; pointer-events:none; }
-svg#toggles circle.fe-port.on { fill:var(--accent, #6ea8fe); opacity:1; }
+/* The card a line being drawn would land on: its rim outlined in the accent, the one "this is where it
+   goes" cue — there are no ports to aim at, the whole card is the target. */
+svg#toggles rect.fe-target { fill:none; stroke:var(--accent, #6ea8fe); stroke-width:2; stroke-dasharray:6 4;
+  pointer-events:none; }
 svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:2;
   pointer-events:auto; cursor:grab; }
-/* A JUNCTION: where lines meet away from any card (core/state.ts Junction). A SOLID dot in the line
-   ink, deliberately the opposite reading to the hollow socket rings above — this is not a socket to
-   plug into, it is a piece of the drawing, the same mark a schematic puts where wires join. Drawn
-   always, not only on selection: it is the only thing showing that those ends are one point.
-   The transparent stroke is the HIT AREA — it makes a 6px dot a fingertip-sized target without
-   painting a 20px blob (SVG hit-testing counts the stroke, and a transparent one still counts). */
-svg#toggles circle.fe-junction { fill:var(--edge); stroke:transparent; stroke-width:14;
-  pointer-events:auto; cursor:grab; }
-svg#toggles circle.fe-junction:hover { fill:var(--accent, #6ea8fe); }
-body.readonly svg#toggles circle.fe-junction { cursor:default; }   /* nothing to drag there */
-/* The GHOST shown while an end is being dragged over a line: where the junction WOULD be inserted.
-   Hollow and dashed — it isn't there yet, and the difference from the solid dots is the whole point. */
-svg#toggles circle.fe-junction.ghost { fill:none; stroke:var(--accent, #6ea8fe); stroke-width:2;
-  stroke-dasharray:3 3; pointer-events:none; }
-/* …and filled with the accent while a dragged end is about to land on it — the same "this is the one"
-   cue .fe-socket.taken and the preview's .fe-port.on carry. */
-svg#toggles circle.fe-junction.on { fill:var(--accent, #6ea8fe); }
 
 /* A card SHRINKS TO FIT its text — it is its content and nothing more, so a one-line note is a one-line
    card. There is no minimum: the 10px/12px padding is the floor (a card can't measure 0, which matters,

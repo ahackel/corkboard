@@ -127,12 +127,8 @@ export interface View { x: number; y: number; k: number; }
 // `none|to|both` axis can't say it at all. `dot` is the terminator a diagram uses for "attaches
 // here, no direction implied" — it marks the endpoint without claiming a flow.
 export type EdgeCap = 'none' | 'dot' | 'arrow';
-// Which face of a card an edge is docked to. STORED per endpoint, not derived: an edge that
-// re-picked its nearest face every paint would slide around its cards as they move, and a diagram
-// you arranged would rearrange itself under you. Set when the edge is drawn (the socket you grabbed)
-// or re-routed, backfilled once from geometry for an edge saved before this existed, and otherwise
-// left alone. Same reasoning the old `mm_side` had — the difference is that this one describes a
-// LINE, which is a thing the user drew, rather than a card's place in a tree.
+// One of a card's four faces — where the rings you drag a new line from sit (view/free-edges.ts).
+// UI only: a line itself stores no face, it runs straight between the two cards.
 export type EdgeSide = 'up' | 'down' | 'left' | 'right';
 export interface BoardEdge {
   id: string;
@@ -140,27 +136,11 @@ export interface BoardEdge {
   to: string;
   fromPath?: string;               // transient: the on-disk path, resolved to `from` post-load
   toPath?: string;
-  fromSide: EdgeSide;              // the face each end is docked to — see EdgeSide above
-  toSide: EdgeSide;
   color: string;                   // palette key, an authored '#rrggbb', or '' for the default ink
   dashed: boolean;
   fromCap: EdgeCap;                // the cap at each end — see EdgeCap above
   toCap: EdgeCap;
   label: string;
-}
-
-// A JUNCTION: a point on the canvas an edge can end at instead of a card, so several lines can meet
-// somewhere that isn't a node. Deliberately NOT a node — it holds no content, so it gets no .md file
-// and no place in the hierarchy; it is pure ARRANGEMENT and lives in board.json beside the edges,
-// like the ink layer does. It exists only for as long as it is a BRANCH: one appears when an edge end is
-// dropped ON another line (splitting it), and dissolves the moment fewer than three lines meet there —
-// two are merged back into one line (gcJunctions in data/board.ts). Ids are board-local and persisted,
-// like an edge's — a node's are ephemeral
-// because a node has a FILE to be identified by, and a junction has nothing but this id.
-export interface Junction {
-  id: string;
-  x: number;                       // world coordinates, like a stroke's points
-  y: number;
 }
 
 export interface AppState {
@@ -180,7 +160,6 @@ export interface AppState {
   // open frame the canvas wears that frame's fill instead. See main.ts's canvasFill, the one resolver.
   canvasColor: string;
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
-  junctions: Junction[];           // the points where edges meet away from any card — see Junction above
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
   readOnly: boolean;               // read-only mode: no saves, no edits; collapse/expand only
@@ -200,7 +179,6 @@ export const state: AppState = {
   gridSize: 20,
   canvasColor: '',
   edges: [],
-  junctions: [],
   searchMatch: null,
   searchActiveId: null,
   readOnly: false,

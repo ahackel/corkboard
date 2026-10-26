@@ -6,7 +6,7 @@
 // gesture boundary calls commitStep() — pointer-up for drags, end-of-edit for inline editing,
 // record() for one-shot ops. A step whose before/after images are identical is discarded, so
 // plain clicks, cancelled drags and unchanged edits never pollute the history.
-import { state, stage, setStatus, type MindNode, type BoardEdge, type Junction } from '../core/state.js';
+import { state, stage, setStatus, type MindNode, type BoardEdge } from '../core/state.js';
 import { frameBox } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { scheduleSaveBoard } from '../data/board.js';
@@ -42,11 +42,7 @@ interface Step {
   canvas?: { before: string; after: string };
   edges?: { before: EdgeGraph; after: EdgeGraph };
 }
-// The edges AND the junctions they meet at, snapshotted together as one thing — which is what they
-// are: a junction exists only as the point some edges share (core/state.ts Junction), so restoring
-// one list without the other would leave lines ending nowhere, or a dot with nothing at it. Moving a
-// junction touches only the second half, which is why the comparison below has to see both.
-type EdgeGraph = { edges: BoardEdge[]; junctions: Junction[] };
+type EdgeGraph = { edges: BoardEdge[] };
 
 const MAX_STEPS = 100;
 const undoStack: Step[] = [];
@@ -57,7 +53,7 @@ let pendingEdges: EdgeGraph | null = null;       // edge-graph before-image for 
 
 const cloneGraph = (g: EdgeGraph): EdgeGraph => structuredClone(g);
 const sameGraph = (a: EdgeGraph, b: EdgeGraph): boolean => JSON.stringify(a) === JSON.stringify(b);
-const liveGraph = (): EdgeGraph => ({ edges: state.edges, junctions: state.junctions });
+const liveGraph = (): EdgeGraph => ({ edges: state.edges });
 
 // Fixed key order (so JSON-compare in commitStep is reliable) + deep copies of the arrays.
 function snap(n: MindNode): NodeSnap {
@@ -94,8 +90,8 @@ export function touchCanvas(): void {
   if (state.readOnly) return;
   if (pendingCanvas === null) pendingCanvas = state.canvasColor;
 }
-// Remember the edge graph before changing it — drawing, deleting, re-routing, restyling or MOVING a
-// junction, and the pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
+// Remember the edge list before changing it — drawing, deleting, re-routing, restyling, and the
+// pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
 // no-op in read-only mode, like the rest.
 export function touchEdges(): void {
   if (state.readOnly) return;
@@ -180,7 +176,7 @@ function applyStep(images: Images, canvas: string | undefined,
   // stops resolving, which is what closes its bar (features/edge-bar.ts syncEdgeBar).
   if (edges) {
     const g = cloneGraph(edges);
-    state.edges = g.edges; state.junctions = g.junctions;
+    state.edges = g.edges;
     for (const id of [...state.selEdges]) if (!state.edges.some(e => e.id === id)) state.selEdges.delete(id);
     scheduleSaveBoard();
   }

@@ -55,7 +55,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
 - **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card with children outlines them in
-  its own box; free edges live in `board.json`, may end at a junction POINT, and mean nothing structural.
+  its own box; free edges live in `board.json`, run STRAIGHT card to card, and mean nothing structural.
 - **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`, `mm_locked`, `mm_done`, `mm_checklist`,
   `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
