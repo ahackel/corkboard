@@ -88,7 +88,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
-- Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "A plain double-click
+- Interaction — "Collapse folds a CARD to its first line" (arrow, peek, fold all) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).

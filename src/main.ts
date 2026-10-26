@@ -16,7 +16,7 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { renderBodyHTML } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor, paleFill } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, descendantCount, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
+import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
@@ -44,6 +44,7 @@ import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.j
 import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
+import { installPeek } from './features/peek.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
@@ -72,27 +73,20 @@ const TAG_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 // add-emoji button living at the bottom-RIGHT, see the tag-row comment further down), now that
 // .addnote is a small icon button rather than a wide "Add note…" text pill.
 const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4a2.4 2.4 0 1 1 3.4 3.4L7.8 19 4 20l1-3.8Z"/><path d="M4 21.5h14"/></svg>`;
-// The two faces of the corner bubble (.hidden-count), which is also the fold BUTTON:
-//   folded   → "+5" — the + marks it as the expand control, the number is what's tucked underneath
-//              (a bare "+" when that's only a body).
-//   expanded → a down chevron ("push this in"), which reads as a control far better than a "−"
-//              would at 16px, and can't be mistaken for the count's own typography.
-// BOTH live in the button permanently — the count in its own `.cnt` span, the chevron beside it — and
-// `data-chip` shows one and hides the other (styles.css). That's what keeps paintNode off the chip's
-// innerHTML: re-parsing this <svg> for every foldable node on every paint is real work, and paintAll
-// runs per animation FRAME for the length of a resize drag.
-const FOLD_PLUS = '+';
-export const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>`;
+// The fold ARROW (.hidden-count — the class outlived the "+N" bubble it once was): a disclosure
+// triangle in the card's left padding, level with its first line, the way an outliner's ▸ sits before
+// its row. ▾ while the note shows, turned to ▸ by CSS when folded — one glyph, so paintNode never
+// rewrites the button (paintAll runs per animation FRAME for the length of a resize drag).
+export const FOLD_CHIP_SVG = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 8h14l-7 9z"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
   el.dataset.id = n.id;
-  // The fold chip lives INSIDE .title-row, and that placement is load-bearing: it makes the chip hang
-  // off whatever element carries the title. For a card the row is in flow (so the chip resolves
-  // against the card, as it always did), but a FRAME's row is its absolutely-positioned title TAB —
-  // so the chip lands on the tab's own corner rather than 43px lower on the box. Being out of flow, it never disturbs the
-  // row's flex layout. Hence the `> .title-row >` in every .hidden-count selector in styles.css.
-  el.innerHTML = `<div class="title-row"><div class="title"></div><button type="button" class="hidden-count"><span class="cnt"></span>${FOLD_CHIP_SVG}</button></div><div class="body"></div>
+  // The fold arrow lives inside .title-row (hence the `> .title-row >` in its selectors in styles.css);
+  // the row is in flow on a card, so the arrow is positioned against the card itself. `.fold-more` is
+  // the "N more lines" a FOLDED card shows under its first line (paintNode).
+  el.innerHTML = `<div class="title-row"><div class="title"></div><button type="button" class="hidden-count">${FOLD_CHIP_SVG}</button></div><div class="body"></div>
+    <div class="fold-more"></div>
     <div class="tag-row"></div>
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>
     <button type="button" class="addnote" title="Add note" aria-label="Add note">${NOTE_ADD_SVG}</button>`;
@@ -103,15 +97,16 @@ function nodeEl(n: MindNode): HTMLElement {
   const addnote = el.querySelector('.addnote')!;
   addnote.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   addnote.addEventListener('click', (e)=>{ e.stopPropagation(); startBodyEdit(n); });
-  // the corner bubble is a real fold/unfold button (single click), not just a badge: stop the
-  // pointerdown so bindNodeDrag's el-level handler never starts a drag/select. Clicking the chip of
-  // a card that's part of a MULTI-selection folds the whole selection (matching X, and matching the
-  // fact that every selected card shows its own chip) — the chip never reduces the selection first.
+  // The arrow is a real fold/unfold button: stop the pointerdown so bindNodeDrag never starts a
+  // drag/select. On a card that's part of a MULTI-selection it folds the whole selection (like X); with
+  // ⌥ it folds every card BESIDE this one (the same frame, or the top level) to the state this one goes
+  // to — the outliner's ⌥-click on a disclosure triangle.
   const foldChip = el.querySelector(':scope > .title-row > .hidden-count')!;
   foldChip.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
   foldChip.addEventListener('click', (e)=>{
     e.stopPropagation();
-    if (state.sel.size > 1 && state.sel.has(n.id)) toggleCollapseSelection(state.sel);
+    if ((e as MouseEvent).altKey) setCollapsedSelection(childrenOf(n.parent).filter(c => !isHidden(c)).map(c => c.id), !n.collapsed);
+    else if (state.sel.size > 1 && state.sel.has(n.id)) toggleCollapseSelection(state.sel);
     else toggleCollapse(n.id);
   });
   const bodyEl = el.querySelector('.body')!;
@@ -291,12 +286,9 @@ export function paintNode(n: MindNode): void {
   if (n.frameContentEl && !hostsContent(n)) { n.frameContentEl.remove(); n.frameContentEl = null; }
   if (isHidden(n)) { el.style.display = 'none'; return; }   // an ancestor is folded: nothing to paint
   el.style.display = '';
-  const kids = childrenOf(n.id);
-  const hasKids = kids.length > 0;
   const editingBody = ui.bodyEdit && ui.bodyEdit.id === n.id;    // body editor open on this card
   const hasBody = editingBody || !!(n.body && n.body.trim());  // keep the body slot while editing
-  const collapsedKids = n.collapsed && hasKids;            // hidden children → +N chip
-  const collapsed = n.collapsed && n.type !== 'frame' && (hasKids || hasBody);   // folded to just its title (canFold)
+  const collapsed = n.collapsed && canFold(n);   // folded to its first line
   // selected card gets an inline "+" at the end of its tag row (features/tags.ts's openEmojiPicker) —
   // frames have no natural place for a tag row at all (see the tag-row comment below). Only the
   // selection ANCHOR (state.selId — the same card the floating toolbar anchors to, float-bar.ts's
@@ -313,6 +305,7 @@ export function paintNode(n: MindNode): void {
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
     + (collapsed ? ' collapsed' : '')
+    + (n.type !== 'frame' && n.title ? ' titled' : '')   // its first line is a heading (the fold arrow's height)
     + (n.locked ? ' locked' : '')
     // While this card's ONE text field is open, its rendered title row stands down — the name is the
     // `# ` line inside the textarea (styles.css .card-editing). Driven from here rather than toggled by
@@ -492,20 +485,17 @@ export function paintNode(n: MindNode): void {
       (noTagRow ? '' : [...n.tags].reverse().map(t => tagPillHTML(t)).join(''));
     bindCardTagPills(tagRowEl, n);
   }
-  // The corner bubble, in its two faces — `data-chip` is the SINGLE thing that decides which one
-  // shows (see chipFace + styles.css): 'count' is the folded "+5", 'fold' the expanded chevron.
+  // The fold arrow — `data-chip` is the SINGLE thing that decides whether and how it shows (see
+  // chipFace + styles.css): 'count' = folded (▸), 'fold' = foldable and open (▾).
   const chip = el.querySelector(':scope > .title-row > .hidden-count') as HTMLElement;
-  const face = chipFace(n, hasKids, hasBody, collapsed);
+  const face = chipFace(n, collapsed);
   if (el.dataset.chip !== face) { if (face) el.dataset.chip = face; else delete el.dataset.chip; }
-  // `wide` only when there are digits to make room for: a bare "+" and the chevron stay perfect
-  // 16px circles rather than being stretched into lozenges by the side padding (styles.css).
-  chip.classList.toggle('wide', face === 'count' && collapsedKids);
-  if (face === 'count') {
-    (chip.querySelector('.cnt') as HTMLElement).textContent = FOLD_PLUS + (collapsedKids ? descendantCount(n.id) : '');
-    chip.title = collapsedKids ? 'Expand (X)' : 'Unfold note (X)';
-  } else if (face === 'fold') {
-    chip.title = hasKids ? 'Collapse (X)' : 'Fold note away (X)';
-  }
+  if (face) chip.title = (face === 'count' ? 'Expand' : 'Collapse') + ' (X) · ⌥-click: every card beside it';
+  // …and under a folded card's first line, how much it's hiding.
+  const more = el.querySelector(':scope > .fold-more') as HTMLElement;
+  const hidden = collapsed && !imageLook(n) ? hiddenLineCount(n) : 0;
+  const moreText = hidden ? `${hidden} more line${hidden === 1 ? '' : 's'}` : '';
+  if (more.textContent !== moreText) more.textContent = moreText;
 }
 // The markdown a node RENDERS — its whole note, title included.
 //
@@ -532,29 +522,27 @@ function cardMarkdown(n: MindNode): string {
 function collapsedMarkdown(n: MindNode): string {
   const lines = cardMarkdown(n).split('\n');
   const i = firstTextLine(lines);
-  if (i < 0) return '';
-  const more = lines.slice(i + 1).some(l => l.trim());
-  return more ? lines[i].replace(/\s+$/, '') + '…' : lines[i];
+  return i < 0 ? '' : lines[i];
 }
-// Which face the corner bubble wears — the ONE predicate behind it, so no per-kind CSS rule has to
-// out-specify the :hover/.sel ones (that fight is unwinnable: `:hover:not(:has(.node:hover))` beats
-// any plain class selector). '' hides the bubble entirely.
-//   'count' — folded: "+N" hidden descendants, or a bare "+" when only a body is tucked away.
-//   'fold'  — expanded and collapsible: the chevron, which styles.css reveals on hover or while
-//             SELECTED. Every kind that can actually fold gets it, so the gesture is discoverable
-//             on frames too, not just plain cards.
-function chipFace(n: MindNode, hasKids: boolean, hasBody: boolean, collapsed: boolean): '' | 'count' | 'fold' {
-  // Folding the card you are standing INSIDE would leave you looking at nothing, so it offers no chip
-  // at all. Here rather than in CSS: chipFace is the single authority for "no chip", and a display:none
-  // in styles.css would have to out-shout the hover/:has rules that reveal it.
+// How many non-blank lines a fold tucks away below the first one — the "N more lines" under it.
+function hiddenLineCount(n: MindNode): number {
+  const lines = cardMarkdown(n).split('\n');
+  const i = firstTextLine(lines);
+  return i < 0 ? 0 : lines.slice(i + 1).filter(l => l.trim()).length;
+}
+// How the fold arrow shows — the ONE predicate behind it (styles.css keys off nothing but the data-chip
+// this returns). '' = no arrow.
+//   'count' — folded: ▸, always visible (it's the one sign there's more).
+//   'fold'  — foldable and open: ▾, faint until the card is hovered or selected.
+function chipFace(n: MindNode, collapsed: boolean): '' | 'count' | 'fold' {
+  // Folding the card you are standing INSIDE would leave you looking at nothing, so it offers no arrow.
   if (isReadingRoot(n)) return '';
   if (collapsed) return 'count';
-  // Frames don't fold (canFold); a card folds its text down to one line.
-  if (n.type === 'frame' || !(hasKids || hasBody)) return '';
+  if (!canFold(n)) return '';
   // An IMAGE card is invited: it folds to a 40px icon of its own picture (isImageFold), which is a
   // thumbnail rather than an empty shell.
   // toggleCollapse refuses a locked node, so it must not offer a button that does nothing. Its
-  // folded COUNT above is unaffected: that's information, not a control.
+  // folded arrow above is unaffected: that's information, not a control.
   if (isLockedEffective(n)) return '';
   return 'fold';
 }
@@ -577,9 +565,12 @@ export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world p
 // Whether a node renders as a frame BOX — every frame does: frames don't fold (canFold). Shared by the
 // geometry helpers below.
 function isFrameBox(n: MindNode): boolean { return isFrame(n); }
-// What CAN fold: a card (or image card) with a note to tuck away. Never a frame — hiding a frame's
-// contents is deliberately not a feature. The one rule the chip, X, ←/→ and the menus all ask.
-export function canFold(n: MindNode): boolean { return n.type !== 'frame' && !!(n.body && n.body.trim()); }
+// What CAN fold: a card with something below its first line to tuck away, or an image card (which folds
+// to a 40px icon of itself). Never a frame — hiding a frame's contents is deliberately not a feature. The
+// one rule the arrow, X, ←/→, the menus and ⌘K's Collapse all ask.
+export function canFold(n: MindNode): boolean {
+  return n.type !== 'frame' && (isImageCard(n) || hiddenLineCount(n) > 0);
+}
 // Whether `n` currently holds its children in a content wrapper of its own (frameContentEl) — the two
 // case paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from it: an
 // expanded frame BOX.
@@ -1093,6 +1084,15 @@ export function toggleCollapseSelection(ids: Iterable<string>): void {
   const cards = foldableSelection(ids);
   if (!cards.length) return;
   applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
+}
+// What "Collapse/Expand all cards" (⌘K) act on: the cards INSIDE the selected frames when frames are
+// selected, else every card on the canvas you're looking at (the open frame's interior, or the map).
+export function foldScope(): MindNode[] {
+  const frames = [...state.sel].map(id => state.nodes.get(id)).filter((n): n is MindNode => n?.type === 'frame');
+  const pool = frames.length
+    ? frames.flatMap(f => subtreeIds(f.id).map(id => state.nodes.get(id)!))
+    : [...state.nodes.values()].filter(n => !isHidden(n));
+  return pool.filter(n => canFold(n) && !isLockedEffective(n));
 }
 // The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
 // leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
@@ -1904,6 +1904,8 @@ function paletteCommands(): Command[] {
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
+    { label: 'Collapse all cards', keywords: 'fold every', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
+    { label: 'Expand all cards', keywords: 'unfold every', when: () => foldScope().some(n => n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), false) },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
@@ -1933,5 +1935,6 @@ window.addEventListener('keydown', (e) => {
 
 
 installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan
+installPeek();        // hover a folded card to read it (features/peek.ts)
 
 boot();   // local-first: open straight into the last map

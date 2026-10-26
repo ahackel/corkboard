@@ -631,33 +631,27 @@ cached (the float bar re-places itself every frame while it's open) and dropped 
 floating panel, popover and context menu ends in — measures its margin from the safe edge rather than
 `window.innerWidth/Height`, which under `cover` now includes the hardware.
 
-**Collapse has FOUR entry points, all funnelling through `toggleCollapse`/`toggleCollapseSelection`:** the
-corner chip, `X`, the ⋯ menu, and the `←`/`→` arrow keys — which unlike the other three are DIRECTIONAL
-rather than toggles. The **chip** is `.hidden-count`: one `<button>` at the node's top-right with two faces —
-folded it reads `+N` (the hidden-descendant count, a bare `+` when only a body is tucked away), expanded it
-shows a chevron, and *that* face is revealed only on hover or while SELECTED (the touch story: tap the card,
-tap the chip — and every card of a multi-selection carries one, whose click folds them all like `X` and
-`←`/`→`, without reducing the selection first).
+**Collapse folds a CARD to its first line; frames don't fold.** `canFold` (main.ts) is the one rule: a card
+with something below its first line, or an image card (which folds to a 40px icon). Entry points, all
+through `toggleCollapse`/`toggleCollapseSelection`/`setCollapsedSelection`: the fold ARROW, `X`, the ⋯ menu,
+`←`/`→` (directional, not toggles), and ⌘K's **Collapse all cards** / **Expand all cards** (`foldScope`: the
+cards inside the selected frames, else every card on the canvas you're looking at). ⌥-click on an arrow
+folds every card BESIDE that one (same frame or top level) to the state it goes to.
 
-- **`paintNode`'s `chipFace` is the single thing that decides which face shows.** `styles.css` keys off
-  nothing but the `data-chip` it writes (`'count'`/`'fold'`/absent), and *no per-kind rule may hide the
-  bubble*: `.node[data-chip="fold"]:hover:not(:has(.node:hover))` out-specifies any plain class selector, so a
-  rule like `.node.locked > .hidden-count { display:none }` silently loses on hover. Anything that shouldn't
-  offer the button is refused in `chipFace` instead — **locked** nodes (`toggleCollapse` refuses them, so the
-  control would do nothing; their folded *count* still shows, being information rather than a control). A
-  frame's own body is never rendered in its box, so only children make one collapsible.
-- **Both faces live in the button permanently** (`nodeEl` bakes the chevron in beside a `.cnt` span) and
-  `data-chip` picks which is visible, so `paintNode` never rewrites the chip's `innerHTML` — re-parsing that
-  `<svg>` per foldable node per paint is real work, and `paintAll` runs once per animation FRAME for the
-  length of a resize drag.
-- **The chip lives INSIDE `.title-row`** (hence the `> .title-row >` in every one of its selectors), which
-  puts both faces in the same spot in every state — hanging 8px off the TITLE's top-right corner — so folding
-  never moves the button. Only cards fold, and a card's row is in flow, so the offsets resolve against
-  the node's own padding box.
-- The hover rule needs `:not(:has(.node:hover))` because child cards are DOM-nested (a deep hover would
-  otherwise light up every ancestor's chip at once), and the chip's `pointerdown` must `stopPropagation` so
-  `bindNodeDrag`'s `el`-level handler never turns the click into a select/drag — the touch double-tap counter
-  in `features/drag.ts` exempts it (via `NODE_CONTROLS`) for the same reason.
+- **The arrow** is `.hidden-count` (the name outlived the old "+N" bubble): a ▾ in the card's left padding,
+  level with the first line (`.titled` gives it a heading's height), turned to ▸ when folded. Faint until the
+  card is hovered or selected; a FOLDED card shows it plainly. On an image card it's a small white button at
+  the top-right. `chipFace` is the single thing that decides whether it shows (`data-chip`: `'count'` folded,
+  `'fold'` open, absent = none) — locked and opened cards get none while open. It lives inside `.title-row`,
+  and its `pointerdown` stops propagation so `bindNodeDrag` never turns the click into a drag
+  (`NODE_CONTROLS` in drag.ts exempts it from the touch double-tap too).
+- **A folded card** renders only its first line (`collapsedMarkdown`), greyed when the card is untitled
+  (so it reads as the start of a note, not a name), and under it `.fold-more`: "N more lines"
+  (`hiddenLineCount`, non-blank lines after the first).
+- **Peek** (`features/peek.ts`): resting the mouse on a folded card for `PEEK_DELAY` floats its whole note
+  beside it, in its colour. Nothing changes — no fold state, layout or save. Mouse only; any press, key or
+  wheel puts it away. The panel is a `.node > .body` outside `#world`, so card text styles apply and nothing
+  that walks the canvas sees it.
 
 **A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — no plain
 double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the

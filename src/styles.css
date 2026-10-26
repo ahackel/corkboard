@@ -392,7 +392,7 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
      auto  a frame/stack BOX          — under the cards it holds (and not a stacking context, so the
                                         parts of a frame that must lift can)
      2     every .node                — the cards themselves
-     3     a card's own chrome        — tag row, add-note bubble, hidden-count chip, resize handles
+     3     a card's own chrome        — tag row, add-note bubble, fold arrow, resize handles
      4     a frame's TAB              — its title tab, lock badge: still the card
      5     the ring overlay (#toggles)— the rings a new line starts from, endpoint handles, the drop
                                         target's outline: above every CARD, so they're always grabbable
@@ -506,9 +506,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .node { --pad-y:12px; --pad-x:14px; --h1-size:14px; --h1-lh:16.8px; --body-lh:19.6px; --title-gap:8px; }
 .node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
-/* locked card: a small padlock badge at the upper-LEFT corner — the mirror image of
-   .hidden-count's upper-right collapse bubble (same footprint, opposite corner so the two never
-   collide on a card that's both locked and collapsed). That badge is the ONLY cue — no dashed
+/* locked card: a small padlock badge at the upper-LEFT corner. That badge is the ONLY cue — no dashed
    outline: it read as noise on every locked card. See isLockedEffective (utils/model.ts).
    Filled glyph (no circle backing), colour inherited from the card so it always matches the
    title text exactly (see .node's color / .c-* overrides above). */
@@ -624,7 +622,6 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   content:''; position:absolute; inset:2px; box-sizing:border-box;
   background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
 /* the fold chevron would sit on the top-right handle — on a lone-selected card it steps inside it */
-.node.solo:not(.frame) > .title-row > .hidden-count { right:14px; }
 /* The WIDTH-ONLY kind — a card. Two differences from a box's side bands:
    · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
      constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
@@ -654,10 +651,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
 /* The row is EMPTY on an image card (untitled by definition) but must NOT be display:none: it carries
-   the fold chip (.hidden-count lives inside .title-row), which is how the card folds to its icon. Zero
-   height instead, so the picture still starts at the card's top edge — and the chip keeps its -8px
-   corner either way, being positioned against the NODE (an unpositioned row is not its containing
-   block; see the .hidden-count note below). */
+   the fold arrow (.hidden-count lives inside .title-row). Zero height instead, so the picture still
+   starts at the card's top edge; the arrow is positioned against the NODE either way. */
 .node.image-card > .title-row { height:0; }
 .node.image-card > .title-row > .title { display:none; }
 /* FOLDED, an image card is an icon of itself: a 40px square of the picture (main.ts IMAGE_FOLD, which
@@ -1021,74 +1016,34 @@ body.grabbing .node .tag-add-btn { display:none !important; }
 .node:has(.body.editing)  .addnote,
 .node:has(.title.editing) .tag-add-btn,
 .node:has(.body.editing)  .tag-add-btn { display:none !important; }
-/* collapse BUTTON at the card's upper-right corner, clear of the add-child (+) button at the
-   lower-centre. Two states, one bubble (paintNode fills it):
-     folded   — "+5": expand, and how much is tucked under there ("+" alone for a folded note).
-     expanded — a chevron, and only while the card is hovered or selected, so a resting canvas stays
-                as clean as it was when fold was double-click-only. Selected counts too because touch
-                has no hover: tap once to select, then tap the chip.
-   It's a <button> (single click folds — see nodeEl), hence the appearance/border/font reset. */
-/* A perfect 16px CIRCLE by default — the chevron and a bare "+" are single glyphs, so side padding
-   would only stretch them into a lozenge. Only a "+N" opts into `.wide` (paintNode, when there really
-   are hidden descendants to count) and grows for its digits; the 8px radius keeps its ends round at
-   this height either way. `right` pins the RIGHT edge, so growing leftwards never moves the corner. */
-.node .hidden-count { position:absolute; right:-8px; top:-8px; z-index:3;
-  box-sizing:border-box; width:16px; height:16px; padding:0;
-  -webkit-appearance:none; appearance:none; border:none; font-family:inherit;
-  background:#fff; color:#000; font-size:11px; font-weight:700; border-radius:var(--r-full);
-  line-height:1; display:none; align-items:center; justify-content:center; cursor:pointer; }
-.node .hidden-count.wide { width:auto; min-width:16px; padding:0 5px; }
-.node .hidden-count svg { width:11px; height:11px; display:block; }
-/* ── NUMERIC BADGES: centre the DIGITS, not the font's line box ────────────────────────────────
-   Every white pill that holds a number — this chip's "+N", the grid-size
-   button — was centring its text with `align-items:center`, which centres the text's LINE BOX. That
-   box reserves the font's full DESCENT under a "12" that has none, so the digits sat ~1px low in a
-   16px pill and the badge read as sagging. Line-height is not the lever it looks like: grow the box
-   and the baseline moves down by exactly the same half, so it cancels out of the centring entirely
-   — the offset is the pure font-metric constant (ascent - descent)/2 - capHeight/2. `text-box` is,
-   because it trims the box down to cap-height→baseline, i.e. to the ink the badge actually shows;
-   centring THAT centres the digits. It has to sit on the box that holds the text, which on a flex
-   badge is the child element (.cnt) — a bare text node is an anonymous item and can't take it, hence
-   the block form for the other two (align-content centres a block's own line box, and neither of
-   them holds an icon, so neither needed to be flex). .tag-pill is deliberately left out: an emoji
-   has no cap height to trim to. Where text-box is unsupported a badge just keeps the old 1px sag. */
-.node .hidden-count .cnt { text-box:trim-both cap alphabetic; }
-/* Both faces live in the button permanently (nodeEl bakes the chevron into the template, so paintNode
-   never rewrites its innerHTML) — data-chip picks which one is visible, the same single switch that
-   decides whether the button shows at all. */
-.node[data-chip="count"] > .title-row > .hidden-count svg,
-.node[data-chip="fold"]  > .title-row > .hidden-count .cnt { display:none; }
-/* BOTH faces sit in the SAME spot in every state, so folding never moves the button: hanging off the
-   TITLE's top-right corner (see nodeEl). Only cards fold (main.ts canFold), and a card's row is in
-   flow, so the offsets resolve against the node's own padding box. */
-
-/* WHICH face shows is decided in ONE place — paintNode's chipFace, via data-chip — and never by a
-   per-kind rule here: a `:hover`/`.sel` selector out-specifies any plain class, so a kind that
-   wanted to hide the bubble could never win that fight. Hence no .hidden-count in the frame /
-   image-card rules further up.
-   The folded "+N" always shows. The chevron shows on hover, or while the card is SELECTED — every
-   selected collapsible card carries one, including each card of a multi-selection (clicking it then
-   folds them all, like X). Selected counts because touch has no hover: tap the card, tap the chip.
-   :not(:has(.node:hover)) because child cards are DOM-NESTED inside their parent, so a hover on a
-   deep card would otherwise light up the chevron of every ancestor above it at once — only the
-   innermost hovered card shows one. */
-.node[data-chip="count"] > .title-row > .hidden-count { display:inline-flex; }
-/* …except on a folded IMAGE card, where the chip is the only thing between you and a clean thumbnail.
-   It earns its place two ways: the card is SELECTED (you're working on it — and it's how you unfold
-   without a keyboard), or the "+N" is actually counting something (`.wide` is set by paintNode exactly
-   when hidden descendants exist). A bare "+" on an unselected icon is neither, so it goes. This is the
-   one per-kind exception to the rule above, and it can be one because it out-specifies the show rule
-   rather than fighting a `:hover`/`.sel` selector — an icon still unfolds by being scaled back up. */
-.node.image-card.collapsed[data-chip="count"]:not(.sel) > .title-row > .hidden-count:not(.wide) { display:none; }
-.node[data-chip="fold"]:hover:not(:has(.node:hover)) > .title-row > .hidden-count,
-.node[data-chip="fold"].sel > .title-row > .hidden-count { display:inline-flex; }
-/* READ-ONLY keeps the chip fully live — collapsing is allowed there, unlike .addnote above which
-   read-only hides. Mid-drag, and while the title/body is being edited in place, the chevron is just
-   noise: drop it exactly like .addnote/.tag-add-btn. A FOLDED node keeps its count while being
-   renamed (it's the only thing showing what's tucked underneath). */
-body.grabbing .node[data-chip="fold"] > .title-row > .hidden-count,
-.node[data-chip="fold"]:has(.title.editing) > .title-row > .hidden-count,
-.node[data-chip="fold"]:has(.body.editing)  > .title-row > .hidden-count { display:none; }
+/* The FOLD ARROW: a disclosure triangle in the card's left padding (--pad-x wide), level with the first
+   line — a heading's line when the card is titled (.titled), else a body line — the way an outliner's ▸
+   sits before its row. ▾ while the note shows, turned to ▸ when folded. Faint until hovered, so a board
+   of foldable cards isn't a column of arrows; a FOLDED card keeps it plainly visible, since it's the
+   one sign there's more. */
+.node .hidden-count { position:absolute; z-index:3; left:0; top:calc(var(--pad-y) + var(--text-drop));
+  width:var(--pad-x); height:var(--body-lh); padding:0; display:none; align-items:center; justify-content:center;
+  -webkit-appearance:none; appearance:none; border:none; background:none; color:inherit;
+  opacity:0; cursor:pointer; transition:opacity .12s; }
+.node.titled > .title-row > .hidden-count { height:var(--h1-lh); }
+.node .hidden-count svg { width:9px; height:9px; display:block; transition:transform .15s ease; }
+.node.collapsed > .title-row > .hidden-count svg { transform:rotate(-90deg); }
+/* WHICH state shows is decided in ONE place — paintNode's chipFace, via data-chip ('' = no arrow). */
+.node[data-chip] > .title-row > .hidden-count { display:flex; }
+.node[data-chip="count"] > .title-row > .hidden-count { opacity:.55; }
+.node[data-chip]:hover > .title-row > .hidden-count, .node[data-chip].sel > .title-row > .hidden-count { opacity:.55; }
+.node[data-chip] > .title-row > .hidden-count:hover { opacity:1; }
+/* An IMAGE card has no padding to put it in: there it's a small white button on the picture's top-RIGHT
+   corner (the magnifier has the left), shown on hover or while selected — on a folded 40px icon too. */
+.node.image-card > .title-row > .hidden-count { left:auto; right:4px; top:4px; width:18px; height:18px;
+  border-radius:50%; background:#fff; color:#1e1e1e; box-shadow:0 1px 3px rgba(0,0,0,.25); }
+.node.image-card[data-chip] > .title-row > .hidden-count { opacity:0; }
+.node.image-card[data-chip]:hover > .title-row > .hidden-count,
+.node.image-card[data-chip].sel > .title-row > .hidden-count { opacity:1; }
+.node.image-card.collapsed > .title-row > .hidden-count { top:-6px; right:-6px; }
+/* Mid-drag and while the card is being edited the arrow is noise. */
+body.grabbing .node > .title-row > .hidden-count,
+.node:has(.body.editing) > .title-row > .hidden-count { display:none; }
 /* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
 /* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
    not any one card. Every badge that hangs off a card is a few pixels wide there: the fold chip's "+7"
@@ -1125,6 +1080,18 @@ body.zoom-far .node > .addnote { display:none !important; }
 .node.collapsed > .body > :first-child > li:first-child {
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node.collapsed .title { margin-bottom:0; }
+/* An UNTITLED folded card has no name to show, so its first line stands in for one — greyed, so it reads
+   as "the start of a longer note" rather than as a title. */
+.node.collapsed:not(.titled):not(.image-card) > .body { opacity:.7; }
+/* …and under it, how much the fold is hiding (paintNode: "4 more lines"). Empty = not folded. */
+/* PEEK (features/peek.ts): a folded card's whole note, floating beside it in the card's colour. A `.node`
+   for the text styles, pulled out of the canvas's positioning and given a reading width. */
+#peek.node { position:fixed; z-index:30; display:none; left:0; top:0; width:auto; min-width:200px; max-width:340px;
+  max-height:60vh; overflow:auto; box-shadow:var(--shadow-ui); cursor:default; user-select:text; -webkit-user-select:text;
+  touch-action:auto; }
+#peek.node.open { display:block; }
+.node > .fold-more { display:none; }
+.node.collapsed > .fold-more:not(:empty) { display:block; margin-top:2px; font-size:11px; line-height:16px; opacity:.55; }
 
 /* ---------- the dock: FigJam's main toolbar, bottom centre ----------
    One white island on the soft shadow holding the new-card sticky, the board's own settings (canvas
