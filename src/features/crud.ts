@@ -107,6 +107,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
   if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return []; }
   const made: MindNode[] = [];
   record([parentId], () => {
+    if (p?.collapsed) p.collapsed = false;   // reveal the new cards
     texts.forEach((t, i) => {
       const { title, body } = splitHeading(t);
       const n = mkNode({ x: at.x, y: at.y + i * (NEW_CARD_H + LIST_GAP), parent: parentId, title, body });
@@ -206,6 +207,8 @@ export function addCardInside(frameId: string, at?: Pt): void {
   if (state.readOnly) return;
   const f = state.nodes.get(frameId); if (!f || f.type !== 'frame') return;
   if (isLockedEffective(f)) { setStatus('Locked — can’t add a card'); return; }
+  touch(frameId);   // the reveal below belongs to the create step
+  if (f.collapsed) f.collapsed = false;
   let pos: Pt;
   if (at) pos = centredAt(at);
   else {
@@ -340,6 +343,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
   const { title, body } = splitHeading(text);
+  if (parent?.collapsed){ touch(parent.id); parent.collapsed = false; }
   const card = mkNode({
     x: dest.at.x, y: dest.at.y,
     parent: parent?.id ?? null, title, body,

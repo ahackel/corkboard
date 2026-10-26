@@ -64,8 +64,8 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed** (dragged shorter, `n.clip`: exact, clipped). An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
-- **Visibility has ONE gate, `isHidden`**: the open-frame scope (ephemeral). A fold hides only a card's
-  own text, never a node. Add new terms IN it, never beside it. Nothing writes through it.
+- **Visibility has ONE gate, `isHidden`**: a FOLDED frame ancestor (persisted) and the open-frame scope
+  (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
   make writes no-ops. Folding a card and opening a frame stay allowed in read-only — they mutate nothing.
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
@@ -89,7 +89,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
-- Interaction — "Collapse folds a CARD to its first line" (arrow, peek, fold all) · "A plain double-click
+- Interaction — "Collapse folds a card to a CHIP and a frame to its PILL" (arrow, peek, fold all) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).

@@ -283,8 +283,6 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   const folded = foldCardsIntoFrames();
   // advance the runtime id counter past everything we just loaded so new nodes don't collide
   state.idSeq = seq + 1;
-  // Frames don't fold any more (main.ts canFold): one saved folded by an older build opens as its box.
-  for (const n of state.nodes.values()) if (n.type === 'frame' && n.collapsed) { n.collapsed = false; n.dirtyLayout = true; }
   // Re-point the open-frame scope at the freshly minted ids BEFORE the first layout/paint, so a
   // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).

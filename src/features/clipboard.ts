@@ -22,7 +22,7 @@ import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
 import { mkNode, deleteSelection } from './crud.js';
-import { record } from './history.js';
+import { touch, record } from './history.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
@@ -140,6 +140,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   record([], () => {
     const holder = holderOf(at.parent);
     const parentNode = holder ? state.nodes.get(holder) : undefined;
+    if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }   // reveal the drop
     const newIds = new Map<string, string>();   // payload name -> minted id
     for (const c of cards){
       const root = isPayloadRoot(c);
@@ -148,7 +149,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
         title: c.p.title,   // verbatim: a pasted card keeps its name, and duplicates are allowed now
         color: c.p.color, keepStatus: c.p.keepStatus,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
-        collapsed: c.p.mm.type !== 'frame' && c.p.mm.collapsed, type: c.p.mm.type,   // frames don't fold
+        collapsed: c.p.mm.collapsed, type: c.p.mm.type,
       });
       state.nodes.set(n.id, n);
       newIds.set(c.name, n.id);

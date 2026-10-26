@@ -5,9 +5,10 @@ const BOARD = {
   'Todo.md': note('# Todo', { 'mm_type': 'frame' }),
   'Milk.md': note('Buy milk', { 'mm_parent': 'Todo.md' }),
   'Loose.md': note('A loose card'),
-  // an OLD save: a frame stored folded — frames don't fold any more
+  // a frame saved FOLDED: it opens as its label pill
   'Old.md': note('# Old', { 'mm_type': 'frame', 'mm_collapsed': 'true' }),
-  'board.json': JSON.stringify({ version: 1, model: 2, settings: { grid: 'dot', gridSize: 20 }, edges: [], nodes: {
+  'board.json': JSON.stringify({ version: 1, model: 2, settings: { grid: 'dot', gridSize: 20 },
+    edges: [{ id: 'e1', from: 'Loose.md', to: 'Milk.md' }], nodes: {
     'Todo.md': { x: 0, y: 0, w: 300, h: 240 }, 'Milk.md': { x: 40, y: 60 },
     'Loose.md': { x: 0, y: 420 }, 'Old.md': { x: 400, y: 0, w: 260, h: 200, collapsed: true } } }),
 };
@@ -44,14 +45,36 @@ test('a frame collects what it is moved over, and lets go when moved away', asyn
   expect(errors).toEqual([]);
 });
 
-test('frames never fold: an old folded frame opens as its box, with no fold arrow', async ({ page }) => {
+test('a frame folds to its label pill: its cards hide, its lines meet the pill, a double-click opens it', async ({ page }) => {
+  const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, BOARD);
-  const old = frame(page, 'Old');
+  // saved folded → a 40px pill, no box
+  const old = page.locator('#world .node.frame-folded', { hasText: 'Old' });
   await expect(old).toBeVisible();
-  expect((await old.boundingBox())!.height).toBeGreaterThan(100);
-  await expect(page.locator('#world .node.frame[data-chip]')).toHaveCount(0);
-  await expect(page.locator('#fbHide')).toHaveCount(0);
+  expect(Math.round((await old.boundingBox())!.height)).toBe(40);
+  // fold Todo with the arrow on its label
+  const todo = frame(page, 'Todo');
+  await todo.hover();
+  await todo.locator(':scope > .title-row > .hidden-count').click();
+  const pill = page.locator('#world .node.frame-folded', { hasText: 'Todo' });
+  await expect(pill).toBeVisible();
+  await expect(pill.locator('.frame-count')).toHaveText('1');
+  await expect(card(page, 'Buy milk')).toBeHidden();
+  await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);   // Loose → Milk now ends on the pill
+  // drag the pill; its hidden card comes along
+  const pb = (await pill.boundingBox())!;
+  await page.mouse.move(pb.x + 30, pb.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(pb.x + 130, pb.y + 20, { steps: 8 });
+  await page.mouse.up();
+  await reload(page);
+  const again = page.locator('#world .node.frame-folded', { hasText: 'Todo' });
+  await again.dblclick();
+  await expect(frame(page, 'Todo')).toBeVisible();
+  const milk = (await card(page, 'Buy milk').boundingBox())!, box = (await frame(page, 'Todo').boundingBox())!;
+  expect(milk.x).toBeGreaterThan(box.x); expect(milk.x + milk.width).toBeLessThan(box.x + box.width);
+  expect(errors).toEqual([]);
 });
 
 test('an untitled frame gets its name back from the T button', async ({ page }) => {
@@ -70,4 +93,18 @@ test('an untitled frame gets its name back from the T button', async ({ page }) 
   await page.keyboard.type('Renamed');
   await page.keyboard.press('Enter');
   await expect(frame(page, 'Renamed')).toBeVisible();
+});
+
+test('a dragged frame is what lifts: it casts the shadow, its cards keep their resting one', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const todo = frame(page, 'Todo');
+  const lb = (await todo.locator(':scope > .title-row').boundingBox())!;
+  await page.mouse.move(lb.x + 10, lb.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + 60, lb.y + 40, { steps: 6 });
+  const shadow = (sel: string) => page.locator(sel).first().evaluate(el => getComputedStyle(el).boxShadow);
+  expect(await shadow('#world .node.frame.dragging')).toContain('32px');
+  expect(await shadow('#world .node.carried')).not.toContain('32px');
+  await page.mouse.up();
 });

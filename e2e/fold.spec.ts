@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openBoard, makeCard, palette, reload, clickAway, card, watchErrors } from './helpers';
 
-test('the arrow folds a card to its first line and says how much it hides', async ({ page }) => {
+test('the arrow folds a card to a one-line chip that says how much it hides', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   const g = await makeCard(page, 300, 250, '# Groceries\nmilk\neggs\nbread');
@@ -10,7 +10,13 @@ test('the arrow folds a card to its first line and says how much it hides', asyn
   await g.hover();
   await g.locator('.hidden-count').click();
   await expect(g).toHaveClass(/collapsed/);
-  await expect(g.locator('.fold-more')).toHaveText('3 more lines');
+  await expect(g.locator('.fold-more')).toHaveText('+3');
+  await expect(g.locator('.fold-more')).toHaveAttribute('title', '3 more lines');
+  expect((await g.boundingBox())!.width).toBeLessThan(200);   // shrink-wrapped to its line
+  await g.dblclick();                                           // a double-click unfolds it
+  await expect(g).not.toHaveClass(/collapsed/);
+  await g.hover();
+  await g.locator('.hidden-count').click();
   await expect(g).not.toContainText('eggs');
   await reload(page);
   await expect(card(page, 'Groceries')).toHaveClass(/collapsed/);
@@ -31,14 +37,14 @@ test('resting the mouse on a folded card peeks at the whole note', async ({ page
   await expect(g).toHaveClass(/collapsed/);   // reading changed nothing
 });
 
-test('⌘K collapses and expands every card; ⌥-click folds the cards beside one', async ({ page }) => {
+test('⌘K collapses and expands every card and frame; ⌥-click folds the cards beside one', async ({ page }) => {
   await openBoard(page);
   const a = await makeCard(page, 300, 200, '# A\none\ntwo');
   await makeCard(page, 300, 420, '# B\none\ntwo');
   await makeCard(page, 650, 200, '# C\none\ntwo');
-  await palette(page, 'Collapse all cards');
+  await palette(page, 'Collapse all');
   await expect(page.locator('#world .node.collapsed')).toHaveCount(3);
-  await palette(page, 'Expand all cards');
+  await palette(page, 'Expand all');
   await expect(page.locator('#world .node.collapsed')).toHaveCount(0);
   await a.hover();
   await a.locator('.hidden-count').click({ modifiers: ['Alt'] });
@@ -61,7 +67,7 @@ test.describe('on a touch screen', () => {
   });
 });
 
-test('a checklist card wears its progress, open or folded, and it follows the ticks', async ({ page }) => {
+test('a checklist card wears its progress, and folded its chip says it', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 300, 250, '# Trip\n- [x] tickets\n- [ ] hotel\n- [ ] bags');
   const meter = c.locator('.task-meter');
@@ -72,8 +78,8 @@ test('a checklist card wears its progress, open or folded, and it follows the ti
   await c.hover();
   await c.locator('.hidden-count').click();
   await expect(c).toHaveClass(/collapsed/);
-  await expect(meter).toBeVisible();
-  await expect(meter).toHaveText('2/3');
+  await expect(meter).toBeHidden();
+  await expect(c.locator('.fold-more')).toHaveText('2/3');
   const plain = await makeCard(page, 650, 250, 'No tasks here');
   await expect(plain.locator('.task-meter')).toBeHidden();
 });

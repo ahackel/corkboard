@@ -14,7 +14,7 @@
 //   · #toggles — the rings and endpoint handles, above every card so they are always grabbable.
 import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { clamp } from '../utils/num.js';
-import { isHidden, resolveWikilink } from '../utils/model.js';
+import { isHidden, firstVisible, resolveWikilink } from '../utils/model.js';
 import { isReadingRoot } from '../nav/scope.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
@@ -218,10 +218,18 @@ function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | u
 }
 // The ONE place an edge's geometry is computed, so the painter, the label, the bar and the inline
 // editor can never disagree about where the line is.
+// A line to a card tucked inside a FOLDED frame attaches to that frame's pill instead (firstVisible), and
+// its pinned port there is dropped — the pill's faces aren't the card's. Ends the open frame hides map to null.
+function edgeEnd(id: string): MindNode | null {
+  const n = state.nodes.get(id); if (!n) return null;
+  const v = firstVisible(n);
+  return isHidden(v) ? null : v;
+}
 export function edgeGeometry(e: BoardEdge): Geometry | null {
-  const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
+  const from = edgeEnd(e.from), to = edgeEnd(e.to);
   if (!from || !to) return null;
-  return polyline(routeFor(rimRect(from), e.fromPort, rimRect(to), e.toPort), trim(e.fromCap), trim(e.toCap));
+  const pa = from.id === e.from ? e.fromPort : undefined, pb = to.id === e.to ? e.toPort : undefined;
+  return polyline(routeFor(rimRect(from), pa, rimRect(to), pb), trim(e.fromCap), trim(e.toCap));
 }
 // The port under a world point, if any: within PORT_SNAP screen px of a card's floating port dot OR of
 // the middle of that face — what a line end dropped there pins to (features/edge-tools.ts).
@@ -264,11 +272,11 @@ export function connectable(id: string): boolean {
   const n = state.nodes.get(id);
   return !!n && !isReadingRoot(n);
 }
-// An edge is drawn only when BOTH ends are visible — the same one gate everything else asks
-// (utils/model.ts isHidden: a collapsed ancestor, or the open-frame scope).
+// An edge is drawn when both ENDS are on the canvas — a card itself, or the folded frame standing in for
+// it (edgeEnd) — and they aren't the same pill: a line between two cards of one folded frame goes with them.
 export function edgeVisible(e: BoardEdge): boolean {
-  const a = state.nodes.get(e.from), b = state.nodes.get(e.to);
-  return !!a && !!b && !isHidden(a) && !isHidden(b);
+  const a = edgeEnd(e.from), b = edgeEnd(e.to);
+  return !!a && !!b && a !== b;
 }
 
 // ---------- the links a card holds, drawn ----------

@@ -32,7 +32,7 @@
   --bar-muted: #b3b3b3;
   --bar-hover: #444444;
   --bar-sep: #444444;
-  --shadow-ui: 0 2px 6px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.10);
+  --shadow-ui: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.10);
 
   /* FigJam's sticky palette (approximated) + grey + white/black. A card's ink is decided once, by the
      colour itself.
@@ -600,6 +600,26 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 /* A frame with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
    that case. The float bar's title button (T) brings one back. */
 .node.frame.no-title > .title-row { display:none; }
+/* ---------- a FOLDED frame: just its pill ---------- */
+/* Folding hides the box: the element IS the pill (no .frame class, so none of the box rules above apply),
+   at the box's top-left corner. It shrink-wraps its one-line label — the ▸, the name, how many notes are
+   inside — so main.ts nodeW measures it, and nodeH reports the FRAME_TAB_H constant: nothing sets a height
+   here, so 20px of line + 9px padding + 1px border, top and bottom, MUST total 40. */
+.node.frame-folded {
+  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); min-height:0; padding:9px 12px 9px 8px;
+  border-radius:10px; width:max-content; max-width:240px;
+  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
+.node.frame-folded > .title-row { align-items:center; min-height:0; margin:0; }
+.node.frame-folded > .title-row > .title { margin:0; padding:0; font-size:14px; font-weight:600; line-height:20px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node.frame-folded > .title-row > .title > * { display:inline; margin:0; font-size:inherit; }
+.node.frame-folded > .title-row > .title > :not(:first-child) { display:none; }
+.node.frame-folded > .body { display:none; }
+/* how many notes the pill holds — a small round count after the name */
+.node.frame-folded > .title-row > .title > .frame-count { display:inline-block; margin-left:8px; padding:0 6px;
+  min-width:18px; box-sizing:border-box; border-radius:var(--r-full); text-align:center;
+  font-size:11px; line-height:18px; font-weight:700; background:color-mix(in srgb, currentColor 14%, transparent); }
+.node.frame-folded > .title-row > .title > .frame-count:first-child { margin-left:0; }
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (frame / image card) gets all 8: 4 edge bands inset from the corners, plus 4
@@ -736,7 +756,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
 /* A STICKY at rest wears FigJam's soft lift (--lift); frames, folded pills and pictures stay flat. A card
    in hand casts a deeper one (.dragging). The selection ring is laid over whatever lift the card has. */
-.node:not(.frame):not(.image-card) { box-shadow:var(--lift); }
+.node:not(.frame):not(.frame-folded):not(.image-card) { box-shadow:var(--lift); }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 .node.sel:not(.frame):not(.image-card) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 /* While a frame's label is being renamed, drop the frame's ring so only the label's own outline shows.
@@ -758,8 +778,13 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
 /* The lift is a SHADOW only, never a scale: a card in hand keeps its exact size, so the smart guides
    (features/guides.ts) line up with the edges you actually see. */
-.node.dragging:not(.frame) {
+.node.dragging:not(.frame),
+.node.frame.dragging {
   box-shadow:0 2px 4px rgba(0,0,0,.12), 0 14px 32px rgba(0,0,0,.22); }
+/* A dragged FRAME is what's lifted: the cards it carries ride on it at their resting lift (main.ts paints
+   them `.carried`), rather than each casting the deep shadow of a card in hand. */
+.node.dragging.carried:not(.frame) { box-shadow:var(--lift); }
+.node.sel.dragging.carried:not(.frame) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 @media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
    .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
@@ -1051,7 +1076,14 @@ body.grabbing .node .tag-add-btn { display:none !important; }
   opacity:0; cursor:pointer; transition:opacity .12s; }
 .node.titled > .title-row > .hidden-count { height:var(--h1-lh); }
 .node .hidden-count svg { width:9px; height:9px; display:block; transition:transform .15s ease; }
-.node.collapsed > .title-row > .hidden-count svg { transform:rotate(-90deg); }
+.node.collapsed > .title-row > .hidden-count svg,
+.node.frame-folded > .title-row > .hidden-count svg { transform:rotate(-90deg); }
+/* On a FRAME the arrow sits IN its label, at the END — on the pill above the box, and on the folded pill
+   that replaces it — so folding a frame never moves the button, and the label's left edge, where a frame
+   is grabbed to drag it, stays all label. */
+.node.frame > .title-row > .hidden-count,
+.node.frame-folded > .title-row > .hidden-count { position:static; order:1; flex:none; width:16px; height:20px; margin:0 -4px 0 4px; }
+.node.frame > .title-row > .hidden-count { height:24px; }
 /* WHICH state shows is decided in ONE place — paintNode's chipFace, via data-chip ('' = no arrow). */
 .node[data-chip] > .title-row > .hidden-count { display:flex; }
 .node[data-chip="count"] > .title-row > .hidden-count { opacity:.55; }
@@ -1119,10 +1151,17 @@ body.zoom-far .node > .addnote { display:none !important; }
    rather than ending mid-line — the sign that there's more. Double-click shows it all in the editor. */
 .node.clipped > .body { -webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
   mask-image:linear-gradient(to bottom, #000 calc(100% - 22px), transparent); }
+/* A FOLDED card is a CHIP: one line in a row with its count, shrink-wrapped to its text (up to the width
+   it has open — paintNode's inline max-width) with tighter padding, so a board of folded cards packs. */
+.node.collapsed:not(.image-card) { --pad-y:7px; display:flex; align-items:center; gap:8px; width:max-content; }
+.node.collapsed:not(.image-card) > .title-row { flex:none; }
+.node.collapsed:not(.image-card) > .body { flex:0 1 auto; min-width:0; }
+.node.collapsed:not(.image-card) > .body > :first-child { margin-top:0; }
 .node > .fold-more { display:none; }
-.node.collapsed > .fold-more:not(:empty) { display:block; width:max-content; margin-top:2px; font-size:11px; line-height:16px;
-  opacity:.55; cursor:pointer; }
-.node.collapsed > .fold-more:hover { opacity:.9; text-decoration:underline; }   /* tap/click: peek (features/peek.ts) */
+.node.collapsed > .fold-more:not(:empty) { display:block; flex:none; padding:0 6px; border-radius:var(--r-full);
+  font-size:11px; line-height:18px; font-weight:700; font-variant-numeric:tabular-nums; cursor:pointer;
+  background:color-mix(in srgb, currentColor 12%, transparent); }
+.node.collapsed > .fold-more:hover { background:color-mix(in srgb, currentColor 22%, transparent); }   /* tap/click: peek (features/peek.ts) */
 
 /* ---------- the dock: FigJam's main toolbar, bottom centre ----------
    One white island on the soft shadow holding the new-card sticky, the board's own settings (canvas

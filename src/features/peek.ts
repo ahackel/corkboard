@@ -46,7 +46,7 @@ export function peekCard(cardEl: HTMLElement): void {
 }
 function show(cardEl: HTMLElement): void {
   const n = state.nodes.get(cardEl.dataset.id ?? '');
-  if (!n || !n.collapsed || busy() || !cardEl.isConnected) return;
+  if (!n || !n.collapsed || n.type === 'frame' || busy() || !cardEl.isConnected) return;   // a folded frame's pill is a count, not a note
   showing = n.id;
   // the card's own colour: its palette class, or a custom colour's variables
   panel.className = 'node open ' + [...cardEl.classList].filter(c => c.startsWith('c-')).join(' ');

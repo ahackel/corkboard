@@ -161,9 +161,8 @@ naming, renaming, describing or un-naming a frame never moves the box or anythin
 the geometry (interior, drops, lines, the reading view) has to know about the label. What does: anything
 that FITS a box around frames — `subtreeBox` counts `frameLabelH` (the pill's measured height + its gap)
 above an expanded labelled frame, so Auto-size, grow-to-hold, Group and the load migration's column leave
-a nested frame's name room instead of clipping it. **Frames don't fold** (`canFold` in main.ts — only a
-card or image card with a note can): hiding a frame's contents was cut, along with its eye button and the
-first-open auto-fold of big maps. A frame saved folded by an older build opens as its box (loadFromDir).
+a nested frame's name room instead of clipping it. **A frame FOLDS to its label pill** (`isFrameFold`,
+`.frame-folded`): see "Collapse folds a card to a CHIP and a frame to its PILL" below.
 
 **A frame's note is drawn on its LABEL: the name, and its DESCRIPTION under it.** The `# ` heading is the
 name; the rest of the note is the description (`frameDescription`), one muted ellipsised line under the
@@ -638,12 +637,28 @@ cached (the float bar re-places itself every frame while it's open) and dropped 
 floating panel, popover and context menu ends in — measures its margin from the safe edge rather than
 `window.innerWidth/Height`, which under `cover` now includes the hardware.
 
-**Collapse folds a CARD to its first line; frames don't fold.** `canFold` (main.ts) is the one rule: a card
-with something below its first line, or an image card (which folds to a 40px icon). Entry points, all
-through `toggleCollapse`/`toggleCollapseSelection`/`setCollapsedSelection`: the fold ARROW, `X`, the ⋯ menu,
-`←`/`→` (directional, not toggles), and ⌘K's **Collapse all cards** / **Expand all cards** (`foldScope`: the
-cards inside the selected frames, else every card on the canvas you're looking at). ⌥-click on an arrow
-folds every card BESIDE that one (same frame or top level) to the state it goes to.
+**Collapse folds a card to a CHIP and a frame to its PILL — something small, and nothing else moves.**
+That's what the apps that do it well do (Heptabase folds a card to its title; Obsidian's Advanced Canvas
+folds a group to its header), and what FigJam's "hide contents" doesn't: a hidden section keeps its size.
+`canFold` (main.ts) is the one rule: every frame, a card with something below its first line, or an image
+card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`toggleCollapseSelection`/
+`setCollapsedSelection`: the fold ARROW, `X`, the ⋯ menu, `←`/`→` (directional, not toggles), a
+double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘K's **Collapse all** / **Expand
+all** (`foldScope`: the selected frames and everything in them, else every frame and card in the place
+you're looking at — hidden ones included, so Expand all brings everything back). ⌥-click on an arrow folds
+every node BESIDE that one (same frame or top level) to the state it goes to. Folding drops anything it
+hid from the selection (`dropHiddenFromSelection`).
+
+- **A folded FRAME** is its label pill at the box's top-left corner: its name, a round count of the
+  notes inside (`.frame-count`, `descendantCount`), the arrow at the END of the label (so the label's left
+  edge, where a frame is grabbed, stays all label). `nodeH` = `FRAME_TAB_H` (40px: 20px line + 9px padding
+  + 1px border, top and bottom — pinned in CSS, since `nodeH` asserts it rather than measuring); `nodeW`
+  measures the pill. Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
+  when the pill is dragged (`moveSubtreeTo`'s `insideFrame`). It takes no drops (`isFrame` is false while
+  folded) and has no resize handles. Anything ADDED inside one — a paste, a new card, a dropped file or
+  text — unfolds it first; `focusNode` (search, links) unfolds the frames above its target.
+- **A line to a card inside a folded frame ends on the pill** (`edgeEnd` in view/free-edges.ts:
+  `firstVisible`, its pinned port dropped); a line between two cards of the same folded frame is hidden.
 
 - **The arrow** is `.hidden-count` (the name outlived the old "+N" bubble): a ▾ in the card's left padding,
   level with the first line (`.titled` gives it a heading's height), turned to ▸ when folded. Faint until the
@@ -652,17 +667,19 @@ folds every card BESIDE that one (same frame or top level) to the state it goes 
   `'fold'` open, absent = none) — locked and opened cards get none while open. It lives inside `.title-row`,
   and its `pointerdown` stops propagation so `bindNodeDrag` never turns the click into a drag
   (`NODE_CONTROLS` in drag.ts exempts it from the touch double-tap too).
-- **A folded card** renders only its first line (`collapsedMarkdown`), greyed when the card is untitled
-  (so it reads as the start of a note, not a name), and under it `.fold-more`: "N more lines"
-  (`hiddenLineCount`, non-blank lines after the first).
+- **A folded card is a CHIP**: one row — its first line (`collapsedMarkdown`, greyed when the card is
+  untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: a
+  checklist's "3/5", else "+N" (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
+  more lines"). It shrink-wraps (`width:max-content`, `--pad-y` 7px) up to the width it has open (an inline
+  `max-width`), so `nodeW` measures a folded card.
 - **A checklist wears its progress**: `.task-meter`, a "3/5" pill straddling the card's top edge at the
   right (paintNode, from `taskProgress` in utils/markdown.ts — the bullet tasks the renderer draws, fenced
-  code skipped), filled to the share done, a ✓ when all are. Open or folded, so a folded list still says it.
+  code skipped), filled to the share done, a ✓ when all are. Open cards only: folded, the chip's badge says it.
 - **Peek** (`features/peek.ts`): resting the mouse on a folded card for `PEEK_DELAY` floats its whole note
   beside it, in its colour. Nothing changes — no fold state, layout or save. Mouse only; any press, key or
   wheel puts it away. The panel is a `.node > .body` outside `#world`, so card text styles apply and nothing
-  that walks the canvas sees it. Tapping a folded card's "N more lines" (`peekCard`) opens it on any device — the touch
-  way in, since touch has no hover.
+  that walks the canvas sees it. Tapping a folded card's badge (`peekCard`) opens it on any device — the touch
+  way in, since touch has no hover. Cards only: a folded frame's pill is a count, not a note.
 
 **A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — no plain
 double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the
