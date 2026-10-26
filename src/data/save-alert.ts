@@ -1,6 +1,6 @@
 // ============================================================
-// A failed save must be SEEN. The toolbar's #status is hidden (styles.css), so a message written
-// there reaches nobody — and an unsaved edit the user doesn't know about is the worst failure this
+// A failed save must be SEEN, and must STAY seen: the #status toast fades after two seconds — and an
+// unsaved edit the user doesn't know about is the worst failure this
 // app has. Each writer (the notes, board.json) reports here by name; the banner stays up while ANY
 // of them is failing, retries on its own with a growing delay, and offers "Retry now".
 // ============================================================

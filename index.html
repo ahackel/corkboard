@@ -23,7 +23,7 @@
 </head>
 <body>
   <!-- a failed save, shown until a write lands (data/save-alert.ts): #status is hidden, so this is
-       the ONE place a lost write can surface -->
+       the ONE place a lost write can surface; it stays until fixed, where a toast fades -->
   <div id="saveAlert" role="alert" hidden>
     <span id="saveAlertMsg"></span>
     <button id="saveAlertRetry">Retry now</button>
@@ -41,8 +41,8 @@
   </div>
 
   <!-- No toolbar: every action is in the ⌘K palette (features/palette.ts), with its shortcut beside
-       it. #status is a sink for the transient log messages setStatus writes (shown nowhere). -->
-  <span id="status" hidden></span>
+       it. #status is the toast setStatus writes (core/state.ts): a pill at the bottom that fades. -->
+  <div id="status" role="status" aria-live="polite"></div>
   <!-- the ONE mode that needs to be visible at a glance, since nothing can be edited in it -->
   <button id="roBadge" hidden title="Read-only — click to edit again (R)">Read-only · click to edit</button>
   <div id="palette" hidden>

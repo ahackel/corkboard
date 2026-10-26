@@ -173,6 +173,17 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
 #saveAlert[hidden] { display:none; }
 #saveAlertRetry { flex:none; border:0; border-radius:8px; padding:6px 12px; font:inherit; font-weight:600;
   background:rgba(255,255,255,.2); color:inherit; cursor:pointer; }
+/* The toast (core/state.ts setStatus): a quiet pill that fades. A floating thing, so it may cast a
+   shadow; it sits where #saveAlert does and hides while that is up — the failure outranks it. */
+#status { position:fixed; bottom:calc(64px + var(--sa-b)); left:50%; z-index:55;
+  max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r)); box-sizing:border-box;
+  padding:8px 16px; border-radius:var(--r-full); background:var(--text); color:var(--bg);
+  font-size:13px; font-weight:600; text-align:center; pointer-events:none;
+  box-shadow:0 4px 16px rgba(0,0,0,.2); opacity:0; transform:translate(-50%, 8px);
+  transition:opacity .2s ease, transform .2s ease; }
+#status.show { opacity:1; transform:translate(-50%, 0); }
+body:has(#saveAlert:not([hidden])) #status { display:none; }
+@media (prefers-reduced-motion: reduce) { #status { transition:none; } }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
 
 /* The group dividers are .fb-sep (see the floating bars) — the same 1px rule, so a group of

@@ -199,4 +199,17 @@ export const togglesSvg = byId<SVGSVGElement>('toggles');
 // (see #dragLayer in styles.css / dragRoot() in main.ts).
 export const dragLayer = byId('dragLayer');
 export const statusEl = byId('status');
-export const setStatus = (t: string): void => { statusEl.textContent = t; };
+// What NOT to show. A toast is for what the canvas can't say itself — a refusal ("Locked — can't
+// delete"), the result of an action with nothing to see (Copied, Exported, Nothing to undo), a
+// warning. These messages only narrate what just happened on screen, or the save loop's heartbeat;
+// they are simply dropped.
+const QUIET = /^(Saving…|Saved \d|Collapsed|Expanded|Editing enabled|Selected \d|Opened “|Moved |Reordered|Re-parented|Detached|Adding image…|Image (moved|extracted|removed)$|Edge (moved|deleted)$|\d+ edges deleted|Drop to save|Pasted “|Pasted \d|Deleted \d|Cloned|Duplicated|Created “|Grouped|Extracted|Connected \d|Merged)|(is now a root|is now a top-level card|left the frame)$/;
+let toastTimer = 0;
+export const setStatus = (t: string): void => {
+  if (QUIET.test(t)) return;
+  statusEl.textContent = t;
+  statusEl.classList.add('show');
+  window.clearTimeout(toastTimer);
+  // long enough to read: ~2s, plus a beat per extra word for the longer warnings
+  toastTimer = window.setTimeout(() => statusEl.classList.remove('show'), 1600 + 60 * t.length);
+};

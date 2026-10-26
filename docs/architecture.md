@@ -577,6 +577,13 @@ own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`set
 reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
 it used to read over an edit made just before switching away (it cancelled the queued save instead).
 
+**A status message is a TOAST, and most messages are not shown.** `setStatus` (`core/state.ts`) pops
+`#status` at the bottom for about two seconds — for what the canvas can't show by itself: a refusal
+("Locked — can't delete"), an action with nothing to see (Copied, Exported, Nothing to undo), a warning.
+Messages that only narrate what just happened on screen (Moved, Pasted, Collapsed, Saved…) match
+`QUIET` and are dropped, so the toast stays rare enough to be read. A new message that narrates a
+visible change belongs in `QUIET`; a failed save is NOT a toast (it must stay up — `#saveAlert`).
+
 **A save is never LOST, and never SILENT.** Three rules in `data/persistence.ts` + `data/save-alert.ts`:
 - The 400ms debounce is flushed on `visibilitychange → hidden` and `pagehide`, and `beforeunload` asks the
   browser to hold the page while `hasUnsavedChanges()` — an edit made just before closing still lands.
