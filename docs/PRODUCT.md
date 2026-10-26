@@ -33,6 +33,7 @@ What it has been used for, and what it must stay good at:
 
 - Bright and playful, in the spirit of Excalidraw / tldraw (minimal chrome, instant) and Apple
   Freeform / FigJam (friendly, approachable).
+- **Flat**: nothing at rest casts a shadow; only a card being dragged lifts off the board.
 - A default card is a **coloured sticky note**. Type is a **friendly rounded sans** (the system's
   rounded face, with a bundled fallback so it works offline from the single file).
 

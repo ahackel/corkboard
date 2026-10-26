@@ -853,8 +853,8 @@ falls back to `amber`, the sticky yellow — derived, never written, so the note
 keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
 
 **The look: a paper board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
-(bundled latin subset, `src/assets/fonts`, OFL). Free-standing cards carry a soft shadow (`--lift`), which a
-selection ring is ADDED to, never replaces. Motion uses the `scale` property, never `transform` (the drag and
+(bundled latin subset, `src/assets/fonts`, OFL). Everything at rest is FLAT — no shadows; only a card in hand casts
+one (`.dragging`). Motion uses the `scale` property, never `transform` (the drag and
 the relayout animation own that): a new card pops in via a `data-pop` attribute (a class would be wiped by
 paintNode's wholesale `className` rewrite), a card in hand lifts. Both stand down under reduced motion.
 An outline row steps toward its card's `--scrim` (away from its ink), so rows are lighter strips on a pale

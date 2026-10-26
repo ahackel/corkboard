@@ -931,8 +931,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
   padding:calc(32px + var(--sa-t)) calc(32px + var(--sa-r)) calc(32px + var(--sa-b)) calc(32px + var(--sa-l));
   background:rgba(8,10,14,.88); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
 #imgViewer.open { display:grid; }
-#imgViewer .iv-img { max-width:100%; max-height:100%; object-fit:contain; border-radius:8px;
-  box-shadow:0 10px 40px rgba(0,0,0,.6); }
+#imgViewer .iv-img { max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; }
 #imgViewer .iv-close { position:fixed; top:calc(16px + var(--sa-t)); right:calc(20px + var(--sa-r));
   width:40px; height:40px; border:none; cursor:pointer;
   border-radius:50%; background:rgba(255,255,255,.12); color:#fff; font-size:24px; line-height:1; }
@@ -948,14 +947,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
-/* A sticky note sits ON the board: a soft two-layer shadow under every free-standing card (not a row in an
-   outline, not a frame, not a card inside a frame — those sit on a surface of their own). Selected, the
-   ring is added on top of the same shadow rather than replacing it, so selecting never flattens a card. */
-.node { --lift: 0 1px 2px rgba(40,30,10,.10), 0 3px 10px rgba(40,30,10,.10); }
-body:not(.light) .node { --lift: 0 1px 2px rgba(0,0,0,.35), 0 4px 12px rgba(0,0,0,.30); }
-.node:not(.frame):not(.stack-child):not(.frame-child):not(.c-none) { box-shadow:var(--lift); }
+/* Everything at rest is FLAT — no shadows (docs/PRODUCT.md). Only a card in hand casts one (.dragging). */
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
-.node.sel:not(.frame):not(.stack-child):not(.frame-child):not(.c-none) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 /* while editing a title/body in place, drop the card's selection ring so only the editor's
    own outline shows */
 .node.sel:has(.title.editing), .node.sel:has(.body.editing) { box-shadow:none; }
@@ -1395,7 +1388,7 @@ body.light .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#ff
   /* a little sticky note: what it makes is what it looks like (new cards are yellow — main.ts
      effectiveColor). It has no .c-* class to carry --ink, so it names the fill's computed ink directly. */
   background:var(--pal-amber); border:none; border-radius:var(--r-card);
-  color:var(--pal-ink-amber); font-size:22px; font-weight:400; box-shadow:var(--lift, 0 3px 10px rgba(0,0,0,.15));
+  color:var(--pal-ink-amber); font-size:22px; font-weight:400;
   cursor:grab; user-select:none; touch-action:none;
   transition:box-shadow .15s, opacity .15s;
 }
