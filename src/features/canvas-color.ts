@@ -48,7 +48,7 @@ function locked(): boolean {
 // ---------- writing ----------
 // Two targets, two kinds of undo entry, one gesture. A frame is an ordinary node edit (`record`); the
 // map's canvas colour isn't a node at all, so it goes through history's touchCanvas/commitStep pair —
-// the same shape the sketch layer uses for `state.strokes`. Both land in the one timeline, so ⌘Z after
+// the same shape the edge list uses. Both land in the one timeline, so ⌘Z after
 // a pick puts the colour back wherever you were standing (see history.ts's Step).
 function applyColor(color: string): void {
   const owner = canvasOwner();

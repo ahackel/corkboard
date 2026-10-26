@@ -10,7 +10,7 @@
 // arrangement of it. `mm_parent` is the deliberate exception (see docs/architecture.md) — keeping
 // membership in the note is what lets a folder stand on its own if this file is lost.
 // ============================================================
-import { state, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type Stroke, type BoardEdge, type EdgeCap, type EdgeSide, type Junction } from '../core/state.js';
+import { state, GRID_STYLES, GRID_SIZES, isBoxType, isImageCard, type BoardEdge, type EdgeCap, type EdgeSide, type Junction } from '../core/state.js';
 import { store } from './persistence.js';
 import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';
@@ -28,9 +28,11 @@ let loadedModel = BOARD_MODEL;
 // Did the map we just loaded predate containment? Only meaningful between loadBoard and the
 // migration that reads it.
 export function boardIsLegacy(): boolean { return loadedModel < BOARD_MODEL; }
-// Superseded sidecars: read once when there is no board.json yet, never written.
-export const SKETCH_FILE = 'sketch.json';
+// Superseded sidecar: read once when there is no board.json yet, never written.
 export const SETTINGS_FILE = 'settings.json';
+// The ink of the retired sketch layer (docs/PRODUCT.md, "Cut"). Nothing draws it any more, but a
+// board that has some keeps it, verbatim and untouched, so cutting the feature never deletes a drawing.
+let keptStrokes: unknown;
 
 export function boardJSON(): string {
   // rx/ry is the PERSISTED form of a node's position and is derived from the live x/y — refresh it
@@ -49,7 +51,7 @@ export function boardJSON(): string {
     edges: state.edges.map(serializeEdge).filter(Boolean),
     junctions: state.junctions,
     nodes: collectGeom(),
-    strokes: state.strokes,
+    ...(keptStrokes !== undefined ? { strokes: keptStrokes } : {}),
   });
 }
 
@@ -225,8 +227,6 @@ function applySettings(d: Record<string, unknown> | null | undefined): void {
   if (typeof d.canvasColor === 'string' && colorFill(d.canvasColor)) state.canvasColor = d.canvasColor;
 }
 
-function applyStrokes(v: unknown): void { if (Array.isArray(v)) state.strokes = v as Stroke[]; }
-
 function applyGeom(v: unknown): void {
   if (!v || typeof v !== 'object') return;
   const num = (x: unknown): number | undefined => typeof x === 'number' && isFinite(x) ? x : undefined;
@@ -288,7 +288,7 @@ function applyEdges(v: unknown): void {
 }
 
 export async function loadBoard(): Promise<void> {
-  state.strokes = []; state.edges = []; state.junctions = []; geom = new Map();
+  keptStrokes = undefined; state.edges = []; state.junctions = []; geom = new Map();
   state.gridStyle = 'none'; state.gridSize = 20; state.canvasColor = '';
   const board = await readJSON(BOARD_FILE);
   // No board file at all is the strongest legacy signal there is: every map written since this
@@ -299,13 +299,12 @@ export async function loadBoard(): Promise<void> {
     applyJunctions(board.junctions);
     applyEdges(board.edges);
     applyGeom(board.nodes);
-    applyStrokes(board.strokes);
+    keptStrokes = board.strokes;
     return;
   }
-  // No board.json: an older vault. Read the two sidecars it replaced, once. Nothing deletes them —
-  // the next save simply writes board.json beside them, so the old files stay readable by an older
-  // build of the app until the user removes them.
-  applyStrokes((await readJSON(SKETCH_FILE))?.strokes);
+  // No board.json: an older vault. Read the settings sidecar it replaced, once. Nothing deletes it —
+  // the next save simply writes board.json beside it, so the old file stays readable by an older
+  // build of the app until the user removes it.
   applySettings(await readJSON(SETTINGS_FILE));
 }
 

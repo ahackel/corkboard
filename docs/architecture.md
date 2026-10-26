@@ -754,7 +754,7 @@ Where it is applied, which is everywhere the USER decides a position — not jus
 through `centredAt` (the canvas double-click, Space/N, both "New card here" menus, a dropped image, a
 dragged-out selection), a duplicate (whose offset is a MEASURED card height, so it landed off-grid), a
 paste (the anchor its payload lines up on), and an image pulled out of a note. What is deliberately left
-unsnapped: a freehand sketch stroke (it is ink, not a position), and the point where a line is split —
+unsnapped: the point where a line is split —
 that one is snapped at creation but has to be able to sit anywhere along its edge afterwards. A Shift
 drag was the one gesture that slipped through: it swaps the drag to a CLONE (`applyDragClone` re-keys
 `drag.targets`), so a delta snapped for the original card found nothing and fell back to the raw pointer
@@ -783,7 +783,7 @@ The insets then become ours to pay back, and they're paid ONCE, by name: `styles
 `--sa-t/--sa-r/--sa-b/--sa-l` at `:root` from `env(safe-area-inset-*)` (with a `0px` fallback, so every
 `calc()` downstream is exact on the devices — all but a handful — that have no cutout at all), and each
 piece of fixed chrome adds the matching one on top of its own 10–12px margin: the two top bars, the four
-corner buttons, the ghost card, the sketch bar, the docked float bar, the image viewer, the sheets,
+corner buttons, the ghost card, the docked float bar, the image viewer, the sheets,
 and the two drawers. **Add the term to any new fixed control** — the failure mode is silent on every
 desktop and on an iPad, and only shows up as an untappable button on the one device you didn't test.
 

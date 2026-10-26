@@ -3,7 +3,7 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
-import { scopeActive, readingRootNode, readingWidth, readingLeft } from '../nav/scope.js';
+import { readingRootNode, readingWidth, readingLeft } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH, elTop } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -152,21 +152,6 @@ export function zoomAt(mx: number, my: number, factor: number): void {
   applyView();
 }
 
-// World-space bounding box of every sketch stroke (padded by half each stroke's width), or null
-// when the ink layer is empty. Folded into fit()/frameBox so framing never crops a drawing.
-export function strokesBounds(): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-  for (const s of state.strokes) {
-    const hw = s.width / 2;
-    for (const [x, y] of s.pts) {
-      any = true;
-      minX = Math.min(minX, x - hw); minY = Math.min(minY, y - hw);
-      maxX = Math.max(maxX, x + hw); maxY = Math.max(maxY, y + hw);
-    }
-  }
-  return any ? { minX, minY, maxX, maxY } : null;
-}
-
 // Stage dimensions for camera math. While OUTLINE mode is active #stage is display:none and
 // its rect is 0×0 — a fit()/frameBox() run then (e.g. loadFromDir on a boot that restores
 // outline mode) would compute k=0 and scale every card away. The stage is position:fixed
@@ -178,17 +163,12 @@ export function stageSize(): { width: number; height: number } {
 
 export function fit(): void {
   const ns = [...state.nodes.values()].filter(n => !isHidden(n));
-  // Ink is map-level data with no parent, so there's no per-stroke scope test to make — while a
-  // frame is OPEN it's simply left out of the framing, or fitting the frame's contents would zoom
-  // right back out to take in a stroke on the far side of the map. It stays visible; see nav/scope.ts.
-  const sb = scopeActive() ? null : strokesBounds();
-  if (!ns.length && !sb) return;
+  if (!ns.length) return;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of ns) {
     minX = Math.min(minX, n.x);          minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + nodeW(n)); maxY = Math.max(maxY, n.y + nodeH(n));
   }
-  if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const r = stageSize();
   const k = Math.min(1.4, Math.min(r.width/(maxX-minX+120), r.height/(maxY-minY+120)));
   state.view.k = k;
@@ -210,16 +190,14 @@ function bottomInset(): number {
 // Zoom + glide so a set of nodes fits, honouring the space the editor sidebar takes from the
 // right. Zoom is clamped so we never blow things up huge. Shared by focus-selected and fit-all.
 const FOCUS_MIN_K = 0.2, FOCUS_MAX_K = 1.0, FOCUS_PAD = 80;
-export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStrokes = false): void {
+export function frameBox(nodes: ReadonlyArray<MindNode | undefined>): void {
   const group = nodes.filter((n): n is MindNode => !!n && !isHidden(n));
-  const sb = includeStrokes ? strokesBounds() : null;
-  if (!group.length && !sb) return;
+  if (!group.length) return;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of group){
     minX = Math.min(minX, n.x);            minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + nodeW(n));   maxY = Math.max(maxY, n.y + nodeH(n));
   }
-  if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const bw = maxX - minX, bh = maxY - minY, cx = (minX+maxX)/2, cy = (minY+maxY)/2;
   const r = stageSize();   // available canvas = stage minus the docked edit bar (bottomInset)
   const availW = r.width;

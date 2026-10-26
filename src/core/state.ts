@@ -186,16 +186,6 @@ export interface Junction {
   y: number;
 }
 
-// A freehand sketch stroke drawn on the canvas. Stored (as pure data, not a node) in the
-// vault's board.json — see data/board.ts. `pts` are WORLD coordinates, so ink pans /
-// zooms with the map for free. Edges/nodes are unaffected; this is a separate ink layer.
-export interface Stroke {
-  id: string;
-  color: string;                   // CSS colour (hex)
-  width: number;                   // stroke width in world units
-  pts: [number, number][];         // world-space polyline
-}
-
 export interface AppState {
   dir: unknown;
   nodes: Map<string, MindNode>;    // id -> node
@@ -212,7 +202,6 @@ export interface AppState {
   // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
   // open frame the canvas wears that frame's fill instead. See main.ts's canvasFill, the one resolver.
   canvasColor: string;
-  strokes: Stroke[];               // freehand sketch layer (loaded from / saved to board.json)
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
   junctions: Junction[];           // the points where edges meet away from any card — see Junction above
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
@@ -233,7 +222,6 @@ export const state: AppState = {
   gridStyle: 'none',
   gridSize: 20,
   canvasColor: '',
-  strokes: [],
   edges: [],
   junctions: [],
   searchMatch: null,
@@ -245,8 +233,6 @@ export const state: AppState = {
 
 export const world = byId('world');
 export const stage = byId('stage');
-// Freehand sketch layer — sits behind the cards (see index.html / styles.css z-index).
-export const sketchSvg = byId<SVGSVGElement>('sketch');
 export const edgesSvg = byId<SVGSVGElement>('edges');
 // The free edges the user drew — see BoardEdge above and view/free-edges.ts.
 export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');

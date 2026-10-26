@@ -46,7 +46,6 @@ mm_collapsed: true
 - `/` — find
 - `O` — outline view
 - `R` — read-only
-- `S` — sketch
 
 ## History
 - `⌘/Ctrl Z` — undo

@@ -11,4 +11,4 @@ mm_collapsed: true
 
 # ⚡ Power features
 
-The handy extras: undo/redo, the right-click menu, pasting images, a freehand sketch layer, and a safe read-only mode.
+The handy extras: undo/redo, the right-click menu, pasting images, and a safe read-only mode.

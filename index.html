@@ -41,9 +41,9 @@
   </div>
 
   <!-- Three groups, told apart by the same 1px .fb-sep the floating bars use: what you just DID
-       (undo / redo / fit), the MODE you are in (sketch / outline / read-only), and how the app is
-       dressed or searched (theme / find). Sketch and outline live here rather than in a corner
-       because they are global toggles exactly like read-only — see .floating-btn in styles.css for
+       (undo / redo / fit), the MODE you are in (outline / read-only), and how the app is
+       dressed or searched (theme / find). Outline lives here rather than in a corner
+       because it is a global toggle exactly like read-only — see .floating-btn in styles.css for
        what stays a loose corner circle instead. -->
   <div id="toolbar">
     <button id="undoBtn" disabled title="Undo (Ctrl/⌘ Z)" aria-label="Undo">
@@ -54,8 +54,6 @@
       <span class="ic" data-icon="fit"></span></button>
     <span class="fb-sep"></span>
     <span id="status"></span>
-    <button id="sketchBtn" title="Sketch (S) — draw freehand on the canvas" aria-label="Toggle sketch mode">
-      <span class="ic" data-icon="sketch"></span></button>
     <button id="outlineBtn" title="Outline view (O) — browse & edit the map as a list" aria-label="Toggle outline view">
       <span class="ic" data-icon="outline"></span></button>
     <button id="roBtn" title="Read-only mode (R) — view & collapse only, nothing is saved" aria-label="Toggle read-only mode">
@@ -89,8 +87,6 @@
          transform (compositor-only); the gradients are rebuilt only when the level changes. -->
     <div id="grid"><div id="gridFine"></div></div>
     <div id="world">
-      <!-- freehand sketch layer: ink drawn on the canvas, always on top of the cards (z-index, see styles.css) -->
-      <svg id="sketch"></svg>
       <svg id="edges"></svg>
       <!-- free edges: the relations the user DREW (board.json), as opposed to #edges' derived
            parent connectors. The lines are drawn ABOVE the cards (see the layer ladder in
@@ -260,27 +256,6 @@
       <svg class="hint-arrow" viewBox="0 0 24 46" width="24" height="46" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M8 2 Q 20 22 12 42"/><path d="M12 42l-6-6M12 42l7-4"/></svg>
     </span></button>
-
-  <!-- sketch bar: pen / eraser / colours / widths, and it REPLACES #toolbar while sketch mode is on
-       (same slot, top centre — exactly how #searchWrap stands in for it; styles.css hides the toolbar
-       for as long as body.sketching is set). Same chrome as #floatBar, which hides itself in that mode
-       too, so the ink tools read as the same KIND of control strip as the card tools. Every choice is
-       one tap, no popovers: while drawing you swap colour and width constantly.
-       Because the toolbar is gone, so is the #sketchBtn that got you here — hence the trailing ✕,
-       the same escape hatch #searchClear is for search. `S` and Esc also leave. -->
-  <div id="sketchBar">
-    <button id="sketchPen" class="fb-icon" title="Pen — draw" aria-label="Pen">
-      <span class="ic" data-icon="sketch"></span></button>
-    <button id="sketchEraser" class="fb-icon" title="Eraser — remove a whole stroke" aria-label="Eraser">
-      <span class="ic" data-icon="eraser"></span></button>
-    <span class="fb-sep"></span>
-    <div id="sketchColors" class="sketch-dots colors"></div>
-    <span class="fb-sep"></span>
-    <div id="sketchWidths" class="sketch-dots widths"></div>
-    <span class="fb-sep"></span>
-    <button id="sketchDone" class="fb-icon" title="Leave sketch mode (S / Esc)" aria-label="Leave sketch mode">
-      <span class="ic" data-icon="close"></span></button>
-  </div>
 
   <!-- ghost card in the corner — drag it onto the canvas to create a new card -->
   <div id="ghostCard" title="Drag to create a new card">+</div>

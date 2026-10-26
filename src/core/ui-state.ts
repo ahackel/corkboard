@@ -131,12 +131,6 @@ export const ui = {
   sheetEdit: null as SheetEdit | null,
   // ---- panel title/body editing (outline mode; wired in main.ts) ----
   panelEdit: null as SheetEdit | null,
-  // ---- sketch / freehand drawing (features/sketch.ts) ----
-  sketchOn: false,                                // sketch mode active: canvas pointers draw, not select
-  // A stroke (pen) or erase gesture in progress; gestures.ts checks its truthiness to route
-  // single-pointer input to sketch.ts and to skip the disk-reload while mid-draw. The active
-  // stroke/path themselves live in features/sketch.ts module scope.
-  sketchDraw: null as { tool: 'pen' | 'eraser' } | null,
   // ---- animated relayout (main) ----
   animToken: 0,
   // ---- last known mouse position (window pointermove, main) ----

@@ -125,7 +125,6 @@ export function toggleOutlineView(): void { if (!outlineLocked()) setOutline(!ou
 // crossing a phone/orientation boundary doesn't overwrite what they picked elsewhere.
 export function setOutline(on: boolean, persist = true): void {
   if (on === outlineActive()) return;
-  if (document.body.classList.contains('sketching')) { setStatus('Leave sketch mode first (S)'); return; }
   if (!on) { closeBranchEditor(); olSearchInput.value = ''; outlineQuery = ''; disarmKeyboardTracking(); }   // leaving outline: drop any open branch editor + search filter
   document.body.classList.toggle('outline', on);
   outlineBtn.classList.toggle('active', on);

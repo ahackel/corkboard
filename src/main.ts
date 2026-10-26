@@ -37,7 +37,6 @@ import { refreshSwatches } from './features/properties.js';
 import { syncFloatBar, autoSizeSelection, fitFrameToContent, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
-import { toggleSketchMode, setSketchMode } from './features/sketch.js';   // also registers the sketch toolbar wiring
 import { bindCardTagPills, tagPillHTML } from './features/tags.js';
 import { commitStep, record, touch, undo, redo, updateUndoButtons } from './features/history.js';
 import { hydrateImages } from './features/images.js';
@@ -2014,8 +2013,7 @@ function focusByTitle(title: string, from?: MindNode): void {
 }
 // The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
 // frame the whole map when nothing is selected — both glide with the same easing. While a frame is
-// OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free
-// and only the strokes have to be dropped by hand (see fit/frameBox in view/camera.ts).
+// OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free.
 function focusOrFit(): void {
   if (state.selId && state.nodes.has(state.selId)) focusNode(state.nodes.get(state.selId));
   else focusScope();
@@ -2023,7 +2021,7 @@ function focusOrFit(): void {
 // Re-frame whatever is ON the canvas right now: the open frame's contents while scoped (isHidden
 // does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
 // this", shared by F-with-nothing-selected, every open/exit and the current crumb.
-export function focusScope(): void { frameBox([...state.nodes.values()], !scopeActive()); }
+export function focusScope(): void { frameBox([...state.nodes.values()]); }
 
 // ---------- OPENING a frame: the scoped canvas ----------
 // The ACTIONS; nav/scope.ts holds the model and the reasoning. They sit beside focusNode because
@@ -2536,8 +2534,6 @@ async function setReadOnly(on: boolean): Promise<void> {
   if (on){
     await flushSave();                                   // persist anything pending before locking (clears the save timer)
     state.readOnly = true;
-    // sketching stays available in read-only, but any strokes made there are in-memory only:
-    // leaving read-only reloads sketch.json below, discarding them (like the collapse state).
     selectNode(null);                                    // close any open edit
   } else {
     state.readOnly = false;
@@ -2603,11 +2599,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 'Escape'){
     e.preventDefault();
     if (typing) { active?.blur?.(); }
-    // Sketch mode owns the top bar while it lasts, so Esc leaves it the way it leaves search —
-    // ahead of the selection cases below, which have nothing to clear here (entering sketch mode
-    // deselects, and cards stay locked throughout).
-    else if (ui.sketchOn) setSketchMode(false);
-    // Inside an open card Esc leaves it, the way it leaves sketch and search — there is no selection
+    // Inside an open card Esc leaves it, the way it leaves search — there is no selection
     // in here for the two cases below to clear, so this can't shadow anything.
     else if (readingActive()) exitScope();
     else if (state.selEdges.size) clearEdgeSelection();
@@ -2622,7 +2614,6 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); navArrow(key); return;
   }
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
-  if (key === 's' && !mod){ e.preventDefault(); if (!outlineActive() && !readingActive()) toggleSketchMode(); return; }   // Sketch mode (canvas only)
   if (key === 'o' && !mod){ e.preventDefault(); toggleOutlineView(); return; }   // Outline view
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an

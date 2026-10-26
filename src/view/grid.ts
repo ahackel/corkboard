@@ -31,7 +31,7 @@
 // Cost per pan/zoom frame is one transform write plus one opacity write, both compositor-only;
 // the gradients are rebuilt only when the level actually changes.
 // Persisted per-map in settings.json (data/persistence.ts) — not localStorage, since it's a
-// property of the map/vault, like the sketch layer, and should travel with it.
+// property of the map/vault, and should travel with it.
 import gridOffIcon from '../assets/icons/grid-off.svg?raw';
 import gridDotIcon from '../assets/icons/grid-dot.svg?raw';
 import gridMeshIcon from '../assets/icons/grid-mesh.svg?raw';

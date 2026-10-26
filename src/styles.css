@@ -45,7 +45,7 @@
      FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
      against the corners it's supposed to sit inside. */
   --r-inner: calc(var(--r-card) - 4px);
-  --r-panel: 16px;  /* floating panels (editor, sketch, start card) */
+  --r-panel: 16px;  /* floating panels (editor, start card) */
   --r-menu: 12px;   /* dropdowns / context menus */
   --r-ctl: 10px;    /* inputs, list rows, small controls */
   --r-full: 999px;  /* pills + fully round icon buttons */
@@ -54,7 +54,7 @@
      size — redefined below for coarse pointers, so every consumer picks up the bigger touch
      target automatically with no per-selector overrides. The layout popover's chips use this same
      scale (see .layoutchip below) so it's the same height as #floatBar itself; the colour popover's
-     swatches stay their own smaller, fixed scale (matching the sketch sidebar's colour dots). */
+     swatches stay their own smaller, fixed scale . */
   /* the NARROW crumb strip's own height (styles.css's @media 700px block): one line of text and a
      hair. Named because #toolbar has to drop by exactly it. */
   --crumb-bar-h: 26px;
@@ -196,11 +196,9 @@ button:disabled { opacity:.45; cursor:default; }
 #toolbar button:hover { background:color-mix(in srgb, var(--text) 8%, transparent); color:var(--text); }
 #toolbar button.primary { color:var(--accent); }
 #toolbar button.active { color:var(--accent); }
-/* …but a MODE you are inside (sketch, outline) is a state you have to be able to see at a glance
-   and get back out of, so those two wear the solid accent fill the sketch bar's pen wears — the
-   same cue they had as corner circles. */
-#toolbar button#sketchBtn.active, #toolbar button#outlineBtn.active,
-#toolbar button#sketchBtn.active:hover, #toolbar button#outlineBtn.active:hover {
+/* …but a MODE you are inside (outline) is a state you have to be able to see at a glance
+   and get back out of, so it wears the solid accent fill — the same cue it had as a corner circle. */
+#toolbar button#outlineBtn.active, #toolbar button#outlineBtn.active:hover {
   background:var(--accent); color:#fff; }
 #toolbar button#roBtn.locked { color:#e0564f; }   /* red while read-only is locked */
 #toolbar button#roBtn.locked:hover { color:#e0564f; background:color-mix(in srgb, var(--text) 8%, transparent); }
@@ -208,7 +206,7 @@ button:disabled { opacity:.45; cursor:default; }
    squashing when a shrinking neighbour (folder name / search box) fights for space */
 #toolbar button svg { width:var(--bar-icon); height:var(--bar-icon); display:block; flex:none; }
 #status { display:none; }   /* transient log messages are not shown in the toolbar */
-/* floating toolbar-less buttons pinned to the canvas corners (sketch / home / help) */
+/* floating toolbar-less buttons pinned to the canvas corners (home / help) */
 .floating-btn {
   position:fixed; z-index:20;
   width:var(--bar-btn); height:var(--bar-btn); display:inline-flex; align-items:center; justify-content:center;
@@ -217,7 +215,7 @@ button:disabled { opacity:.45; cursor:default; }
 }
 .floating-btn:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, var(--panel)); }
 .floating-btn svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-/* canvas kebab — now the ONLY thing in the top-right corner: sketch and outline moved into #toolbar
+/* canvas kebab — now the ONLY thing in the top-right corner: outline moved into #toolbar
    (they are modes, this is a menu). Unlike them it stays
    visible AND above the outliner at every width — z-index above #outline (21), mirroring #homeBar's
    own exception on the opposite corner. Still below true modals (#ctxMenu/#startScreen/etc: z:40+). */
@@ -228,9 +226,6 @@ button:disabled { opacity:.45; cursor:default; }
    corner stays empty — one fewer permanent control floating over the board (and over the page panel,
    which owns that corner while it is open). */
 @media (pointer: fine) { #canvasMenuBtn { display:none; } }
-body.sketching #stage { cursor:crosshair; }
-body.sketching #ghostCard { display:none; }    /* the drag-to-create card would fight the pen */
-body.sketching .node { pointer-events:none; }   /* lock cards: no select / drag / edit while sketching */
 /* home / storage — floating bar in the top-left; the loaded-folder name sits BESIDE the button.
    z-index above #outline (21) and everything in its drawer — unlike #toolbar/#searchWrap (which
    the outline drawer is meant to cover, see #outline's comment), the home button must stay
@@ -395,7 +390,7 @@ body.grabbing, body.grabbing * { cursor:grabbing !important; }
    back to (camera.ts clears the inline override rather than re-asserting the keyword here). */
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
-svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
+svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; left:0; overflow:visible; }
 /* Screen-space background grid (view/grid.ts), behind #world and everything in it. view/grid.ts
    overrides `inset` with one major cell of overhang so panning can be a pure translate of an
    already-rasterized tile — the layer stays wider than the viewport, so no uncovered strip ever
@@ -428,7 +423,6 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
      7     an annotation              — a note laid ON TOP of the map: above the cards AND the lines
      8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
      9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
-    10     freehand ink (#sketch)     — never occluded by anything on the canvas
    EDGES ABOVE CARDS (6 > 4) is the rule that shapes the middle of the ladder: a line is the thing the
    reader is following, and one that dives under a card in its path loses them at exactly the moment
    they were tracing it. So what sits ABOVE the lines is only what a line may not cover: the drag
@@ -439,7 +433,6 @@ svg#sketch, svg#edges, svg#toggles, svg#dragEdges { position:absolute; top:0; le
    …and a PORT sits under the lines (5): above the cards, because it belongs to the card it is fitted
    to, but under its edges, because a line docked to a port ends AT it — with the ring on top, it
    covered the last pixels of its own line and the edge read as stopping short of the card. */
-svg#sketch { z-index:10; pointer-events:none; }     /* ink above every card AND every line — the top of the ladder */
 svg#edges { z-index:1; pointer-events:none; }      /* nothing paints here any more — view/edges.ts puts the tethers on #dragEdges */
 /* The free edges (the ones the user DREW — view/free-edges.ts) and the annotation tethers share ONE
    band, ABOVE the cards: they are the same kind of thing to a reader, and both are lines to be
@@ -1727,33 +1720,6 @@ body.readonly #canvasColorBtn { display:none; }
 /* override #toolbar button svg (15×15) so the in-button help arrow keeps its real size */
 #helpHint .hint-arrow { width:24px; height:46px; }
 
-/* sketch bar — the ink tools, shown only in sketch mode. It STANDS IN FOR #toolbar, in the toolbar's
-   own slot: sketch is a mode, and a mode owns the top-centre bar while it lasts, exactly as search
-   does (#searchWrap, same position, same body-level hide of the toolbar). The floating edit bar hides
-   itself here too — cards are locked while sketching, so it would have nothing to act on.
-   Same pill chrome and the same .fb-icon buttons as #floatBar, so a card's controls and the pen's read
-   as one kind of thing. It wraps rather than switching layout on a narrow screen: every colour and
-   width is one tap, and on a phone that row becomes two. */
-#sketchBar {
-  position:fixed; z-index:20; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%);
-  max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
-  display:none; flex-wrap:wrap; align-items:center; justify-content:center; gap:4px; padding:6px;
-  /* Deliberately OFF the --r-* scale, and it earns the exception by doing two jobs with one value:
-     on one row the bar is 44px tall, so 26px clamps to half the shorter side and paints a true PILL
-     (same face as #floatBar); once it wraps to two rows on a phone it stays a 26px rounded rect
-     instead of the lozenge --r-full would give a tall box. */
-  background:var(--panel); border-radius:26px;
-  touch-action:pan-x pan-y;
-}
-body.sketching #sketchBar { display:flex; }
-body.sketching #toolbar { display:none; }    /* …in the toolbar's slot, so the toolbar stands down */
-/* …and search, which wants that same slot, wins it for as long as it is open: it is the transient
-   one (Esc / its own ✕ closes it and the sketch bar comes back), whereas sketch mode persists. */
-body:has(#searchWrap.open) #sketchBar { display:none; }
-body.sketching #floatBar { display:none; }   /* nothing to edit: cards are locked while sketching */
-/* the way out, in the bar itself — the toolbar's #sketchBtn is hidden along with the toolbar */
-#sketchBar #sketchDone:hover { color:var(--text); }
-#sketchBar button.fb-icon.active { color:#fff; background:var(--accent); }
 /* emoji tag picker popover (features/emoji-picker.ts): a Slack-reaction-style grid of recent +
    curated + vault-wide emoji, opened off whichever ".tag-add-btn" triggered it — the selected
    card's own bottom-left button on the canvas (main.ts), or the outline properties sheet's tag row
@@ -1786,18 +1752,6 @@ body.sketching #floatBar { display:none; }   /* nothing to edit: cards are locke
   font-size:13px; line-height:1; display:inline-flex; align-items:center; justify-content:center;
 }
 .tag-add-btn:hover { border-color:var(--accent); color:var(--text); }
-/* colour & width pickers — round dots (plain buttons in the bar, so no #toolbar override) */
-.sketch-dots { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
-.sketch-dots .dot {
-  width:22px; height:22px; min-width:0; border-radius:50%; cursor:pointer; flex:none; box-sizing:border-box;
-  padding:0; border:1px solid var(--node-border); background:var(--sw, var(--muted)); }
-.sketch-dots .dot:hover { border-color:var(--accent); }
-.sketch-dots .dot.active { box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
-/* width picker: a centred ink blob whose size previews the stroke width */
-.sketch-dots.widths .dot { background:transparent; position:relative; }
-.sketch-dots.widths .dot::after {
-  content:""; position:absolute; inset:0; margin:auto; border-radius:50%;
-  width:var(--d); height:var(--d); background:var(--text); }
 /* rubber-band marquee drawn over the canvas while drag-selecting */
 #marquee { position:absolute; display:none; z-index:8; pointer-events:none;   /* the ghost band: a pending selection, over the lines */
   border:1px dotted var(--accent); background:color-mix(in srgb, var(--accent) 15%, transparent); }
@@ -1860,9 +1814,9 @@ body.canvas-interacting .tag-add-btn,
 body.canvas-interacting .addnote { display:none !important; }
 /* shared sizing only — background/colour live on .fb-icon so they never fight .swatch's own
    background on the colour trigger (an ID+type rule here would otherwise beat a plain class).
-   All three bars, one rule: a button in the card bar, the edge bar and the sketch bar is the same
-   object, so it is sized in one place rather than re-stated per bar. */
-#floatBar button, #floatBar label, #edgeBar button, #sketchBar button.fb-icon {
+   Both bars, one rule: a button in the card bar and the edge bar is the same object, so it is sized
+   in one place rather than re-stated per bar. */
+#floatBar button, #floatBar label, #edgeBar button {
   flex:none; width:var(--bar-btn); height:var(--bar-btn); padding:0; display:flex;
   align-items:center; justify-content:center;
   border-radius:var(--r-full); border:0; cursor:pointer;
@@ -1925,7 +1879,7 @@ body.canvas-interacting .addnote { display:none !important; }
    DEFINITE width to resolve against — see #fbColorPop's .swatches below; in the outline's branch
    sheet the row is block-width already. */
 .swatch-break { flex:0 0 100%; height:0; margin:0; }
-/* fixed size so colour chips match the sketch bar's colour dots (.sketch-dots .dot) exactly */
+/* colour chips: a fixed size */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
   border:0; background:var(--sw); }
 .swatch:hover  { box-shadow:0 0 0 2px color-mix(in srgb, var(--text) 45%, transparent); }
@@ -2119,7 +2073,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    too since it would float over the drawer. #outlineBtn joins them here: once open, #olCloseBtn
    (the drawer's top-LEFT, sharing #ocBack's spot) is the way to close it. #canvasMenuBtn is the
    deliberate exception (see its own z-index rule) — it must stay reachable from the outliner too. */
-body.outline #sketchBtn, body.outline #helpBtn, body.outline #gridBtn,
+body.outline #helpBtn, body.outline #gridBtn,
 body.outline #canvasColorBtn, body.outline #outlineBtn,
 body.outline #floatBar { display:none !important; }
 
@@ -2484,5 +2438,5 @@ body.sheet-open #editorSheet { display:flex; }
 .node.reading-root > .body code { font-size:13px; }
 /* Canvas tools with nothing to act on in here. Zoom and fit are already INERT (clampReadingView
    overrides whatever they set), so this is only about not offering a button that does nothing. */
-body.reading #sketchBtn, body.reading #gridBtn, body.reading #canvasColorBtn,
+body.reading #gridBtn, body.reading #canvasColorBtn,
 body.reading #fitBtn { display:none !important; }

@@ -19,13 +19,12 @@ import { opfsStore, fsaStore, resolveOnDeviceStore, seenFolders, markFolderSeen,
 import { paintAll, selectNode, NODE_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad } from '../nav/scope.js';
-import { paintStrokes } from '../features/sketch.js';
 import { refreshGrid } from '../view/grid.js';
-import { ui, isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
+import { isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
 import { byId } from '../utils/dom.js';
 import { saveFailed, saveSucceeded } from './save-alert.js';
-import { BOARD_FILE, SKETCH_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge } from './board.js';
+import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge } from './board.js';
 
 // Everything that is about the BOARD rather than about a note — the free edges, the ink layer, the
 // per-map view prefs — lives in one board.json beside the notes; see data/board.ts, which owns its
@@ -116,12 +115,9 @@ export async function importFiles(files: File[]): Promise<void> {
   }
   for (const e of md)  await store.write(e.name, e.text ?? '');
   for (const e of img) await store.write(e.name, new Blob([e.bytes! as BlobPart]));
-  // carry over the board file if the archive included one (matching the note top-folder strip),
-  // falling back to the sketch.json an older export would have packed instead
-  for (const name of [BOARD_FILE, SKETCH_FILE]){
-    const f = entries.find(e => e.text != null && (e.name === name || e.name === top + name));
-    if (f?.text != null) await store.write(name, f.text);
-  }
+  // carry over the board file if the archive included one (matching the note top-folder strip)
+  const board = entries.find(e => e.text != null && (e.name === BOARD_FILE || e.name === top + BOARD_FILE));
+  if (board?.text != null) await store.write(BOARD_FILE, board.text);
   hideStart();
   await loadFromDir();
   setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}.`);
@@ -301,7 +297,6 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   paintAll();
   applyLayouts();
   paintAll();
-  paintStrokes();      // render the sketch layer over the freshly loaded map
   if (!keepView) fit();
   // A migration is persisted BOARD FIRST, and awaited: the new edges and the model stamp have to be
   // on disk before any note loses its mm_parent, or a failed write between the two would drop the
@@ -502,7 +497,7 @@ export function flushSave(): Promise<void> {
   })();
   return savePromise;
 }
-// Write out everything still pending (debounced or in flight, notes AND sketch), awaiting
+// Write out everything still pending (debounced or in flight, notes AND board.json), awaiting
 // completion. MUST be called before retargeting the store at another map/folder — a straggling
 // autosave firing after the switch would write the old map's files into the new one.
 export async function settleSave(): Promise<void> {
@@ -548,7 +543,6 @@ export async function reloadFromDisk(): Promise<void> {
   // ui.sheetEdit counts even when no field is focused — on iOS the keyboard can be dismissed
   // while the editor sheet still holds uncommitted text.
   if (editSessionActive() || isTypingInField()) return;
-  if (ui.sketchDraw) return;          // mid-stroke: don't reload the ink layer under the pen
   reloading = true;
   try {
     // loadFromDir REPLACES every note with what's on disk, so whatever is still queued must reach the
@@ -556,7 +550,7 @@ export async function reloadFromDisk(): Promise<void> {
     // switching away was read over. If a write fails, memory holds the only copy: keep it, don't reload.
     await settleSave();
     if (hasUnsavedChanges()) return;
-    if (editSessionActive() || isTypingInField() || ui.sketchDraw) return;   // began during the write
+    if (editSessionActive() || isTypingInField()) return;   // began during the write
     await loadFromDir({ keepView:true });
     if (selBefore && state.nodes.has(selBefore)) selectNode(selBefore);
     else selectNode(null);

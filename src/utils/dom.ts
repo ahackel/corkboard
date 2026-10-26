@@ -3,7 +3,7 @@
 // `document.getElementById('x') as HTMLInputElement` pairs spelled out at ~40 sites, the
 // `as unknown as SVGSVGElement` double-casts the SVG layers needed (hence the `Element` constraint
 // rather than `HTMLElement`), and the three private copies of this same function that had drifted
-// into existence beside them (main.ts, features/float-bar.ts, features/sketch.ts).
+// into existence beside them (main.ts, features/float-bar.ts, and the since-retired sketch layer).
 // Anything genuinely OPTIONAL in the shell keeps its own nullable lookup — see features/canvas-color.ts,
 // view/grid.ts and view/theme.ts, which all test for the element before wiring it up.
 export function byId<T extends Element = HTMLElement>(id: string): T { return document.getElementById(id) as unknown as T; }
