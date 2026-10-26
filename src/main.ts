@@ -374,7 +374,13 @@ export function paintNode(n: MindNode): void {
   // Apply the node's size, and give it the resize hit-zones its kind supports. Every kind gets all 8.
   // A frame / image card is its own 2D box. A card's height is a MINIMUM (min-height): drag it taller
   // and it stays that tall, but its text can always make it taller still — a card never clips its note.
-  if (!isBoxNode(n) && !isFrameFold(n) && !isImageFold(n)) el.style.minHeight = n.h != null && !isReadingRoot(n) ? n.h + 'px' : '';
+  // While its editor is open a card also holds the height it had (BodyEdit.holdH): the raw markdown
+  // is a different height from the rendered note, and the card must not jump as editing starts.
+  if (!isBoxNode(n) && !isFrameFold(n) && !isImageFold(n)) {
+    const hold = ui.bodyEdit?.id === n.id ? ui.bodyEdit.holdH ?? 0 : 0;
+    const min = Math.max(n.h != null && !isReadingRoot(n) ? n.h : 0, hold);
+    el.style.minHeight = min ? min + 'px' : '';
+  }
   else if (el.style.minHeight) el.style.minHeight = '';
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';

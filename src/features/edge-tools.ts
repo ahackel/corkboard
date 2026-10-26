@@ -10,7 +10,7 @@
 import { state, stage, setStatus, type BoardEdge, type EdgeSide } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { makeEdge, scheduleSaveBoard } from '../data/board.js';
-import { paintFreeEdges, connectable } from '../view/free-edges.js';
+import { paintFreeEdges, connectable, portAt } from '../view/free-edges.js';
 import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges, commitStep } from './history.js';
 import { isHidden } from '../utils/model.js';
@@ -52,12 +52,15 @@ export function clearEdgeSelection(): void {
 function edgeBetween(a: string, b: string): BoardEdge | undefined {
   return state.edges.find(e => (e.from === a && e.to === b) || (e.from === b && e.to === a));
 }
-export function addEdge(fromId: string, toId: string): BoardEdge | null {
+// `fromPort`/`toPort` pin the ends to those faces (BoardEdge); left out, an end picks its face itself.
+export function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
   if (fromId === toId || !connectable(fromId) || !connectable(toId)) return null;
   const dup = edgeBetween(fromId, toId);
   if (dup) { selectEdge(dup.id); return dup; }
   touchEdges();
   const e = makeEdge(fromId, toId);
+  if (fromPort) e.fromPort = fromPort;
+  if (toPort) e.toPort = toPort;
   state.edges.push(e);
   scheduleSaveBoard();
   return e;
@@ -90,13 +93,17 @@ export function connectSelection(): void {
   setStatus(made ? `Connected ${made + 1} cards` : 'Already connected');
 }
 
-// The card under a point, topmost first — the drop target for both a fresh draw and a moved end.
-function nodeAt(p: Pt, exclude: string): string | null {
-  let hit: string | null = null;
+// What a line end dropped at `p` lands on: a card's PORT (pinning the end to that face — the floating
+// dots sit outside the card, so a port wins even off the card's body), else the card under the point,
+// topmost first — the drop target for both a fresh draw and a moved end.
+function dropAt(p: Pt, exclude: string): { id: string; side?: EdgeSide } | null {
+  let hit: { id: string; side?: EdgeSide } | null = null;
   for (const n of state.nodes.values()) {
     if (n.id === exclude || isHidden(n) || !connectable(n.id)) continue;
+    const side = portAt(n, p);
+    if (side) { hit = { id: n.id, side }; continue; }
     if (p.x < n.x || p.y < n.y || p.x > n.x + nodeW(n) || p.y > n.y + nodeH(n)) continue;
-    hit = n.id;      // later nodes paint over earlier ones; take the last match
+    if (!hit?.side) hit = { id: n.id };      // later nodes paint over earlier ones; take the last match
   }
   return hit;
 }
@@ -171,7 +178,8 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
   const move = (e: PointerEvent): void => {
     const draw = ui.edgeDraw!;
     draw.to = screenToWorld(e.clientX, e.clientY);
-    draw.overId = nodeAt(draw.to, draw.sourceId) ?? undefined;
+    const at = dropAt(draw.to, draw.sourceId);
+    draw.overId = at?.id; draw.overSide = at?.side;
     paintFreeEdges();
   };
   const up = (e: PointerEvent): void => {
@@ -208,13 +216,14 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
     const dup = edgeBetween(other, target);
     if (target === other || (dup && dup !== existing)) { paintFreeEdges(); return; }
     touchEdges();
-    if (draw.end === 'to') existing.to = target; else existing.from = target;
+    if (draw.end === 'to') { existing.to = target; existing.toPort = draw.overSide; }
+    else { existing.from = target; existing.fromPort = draw.overSide; }
     scheduleSaveBoard(); paintAll(); syncEdgeBar();
     commitStep();
     setStatus('Edge moved');
     return;
   }
-  const made = addEdge(draw.sourceId, target);
+  const made = addEdge(draw.sourceId, target, draw.side, draw.overSide);
   if (!made) { paintFreeEdges(); return; }
   selectEdge(made.id);
   commitStep();
@@ -242,7 +251,8 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   const n = createNode({ ...at, parent: src.parent, color: isCard ? src.color : '',
                          w: isCard ? src.w : undefined, h: isCard ? src.h : undefined });
   if (!n) return;
-  addEdge(srcId, n.id);
+  const opposite: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
+  addEdge(srcId, n.id, side, opposite[side]);
   paintFreeEdges();
 }
 

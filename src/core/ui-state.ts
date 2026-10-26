@@ -36,7 +36,9 @@ export interface Drag {
 // its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the
 // textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
 // cancels the CREATION rather than just the edit (it used to live on the title editor).
-export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; }
+// `holdH` is the card's height when the editor opened: held as its min-height until it closes, so a
+// card never jumps between its rendered and its raw size (main.ts paintNode).
+export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
 // A FRAME's label being renamed in place, on its tab.
 // A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
 // A frame can't do that, and the reason is structural rather than stylistic — its `.body` is
@@ -72,8 +74,9 @@ export const ui = {
   // the card under it — the only thing a drop can land on. `edgeId`/`end` are set only when moving one
   // end of an existing edge. `grabbedAt` (world units) is where the press began: a drop only counts if
   // it travelled (features/edge-tools.ts MIN_DRAG_PX), so a twitch on a ring or a handle is a click.
-  // `side` is the port a fresh draw started from: a CLICK on it makes a connected card that way.
-  edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string;
+  // `side` is the port a fresh draw started from (a CLICK on it makes a connected card that way, and a
+  // line drawn from it is pinned to it); `overSide` the target's port under the pointer, if any.
+  edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string; overSide?: EdgeSide;
                       edgeId?: string; end?: 'from' | 'to'; side?: EdgeSide } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,

@@ -21,6 +21,7 @@
   --node: #ffffff;
   --node-border: #e6e6e6;
   --node-sel: #0d99ff;
+  --edit-ring: color-mix(in srgb, var(--node-sel) 30%, #fff);   /* what's being TYPED in, dimmer than selection */
   --edge: #757575;
   --text: #1e1e1e;
   --muted: #757575;
@@ -444,6 +445,9 @@ svg#toggles g.fe-socket { pointer-events:auto; cursor:crosshair; }
 svg#toggles .fe-port-hit { fill:transparent; }
 svg#toggles .fe-port-dot { fill:#7cc4fa; stroke:#fff; stroke-width:2; }
 svg#toggles .fe-port-plus { display:none; }
+/* while a line end is being dragged, the TARGET card's ports — the one it would pin to filled in blue */
+svg#toggles .fe-drop-port { fill:#7cc4fa; stroke:#fff; stroke-width:2; pointer-events:none; }
+svg#toggles .fe-drop-port.on { fill:var(--node-sel); }
 svg#toggles .fe-port-plus circle { fill:#fff; stroke:var(--node-sel); stroke-width:2; }
 svg#toggles .fe-port-plus path { fill:none; stroke:var(--node-sel); stroke-width:2; stroke-linecap:round; }
 svg#toggles g.fe-socket:hover .fe-port-dot { display:none; }
@@ -765,7 +769,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    to a DIMMED blue round the card's border, and the corner handles stand down. */
 .node.sel:has(.title.editing) { box-shadow:var(--lift); }
 .node.sel.card-editing:not(.frame):not(.image-card) {
-  box-shadow:0 0 0 3px color-mix(in srgb, var(--node-sel) 30%, #fff), var(--lift); }
+  box-shadow:0 0 0 3px var(--edit-ring), var(--lift); }
 .node.card-editing > .fh::after { display:none; }
 /* the dragged card (and its subtree) floats above every other card, above every line, and above the
    landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
@@ -825,10 +829,12 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* Only a FRAME's label is ever `.editing` now — its tab (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
    is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
    `none` for the one element that IS text being edited. */
-.node .title.editing { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-inner);
-  cursor:text; white-space:pre-wrap; overflow:visible; background:var(--scrim);
-  -webkit-user-select:text; user-select:text;
-  box-shadow:0 0 0 2px var(--scrim); }   /* fill the outline-offset gap so the scrim reaches the border */
+.node .title.editing { outline:none; cursor:text; white-space:pre-wrap; overflow:visible;
+  -webkit-user-select:text; user-select:text; }
+/* …and, as for a card, it's the PILL that shows the edit, not a box inside it: the same dimmed 3px blue
+   ring (--edit-ring) round the label — or round the whole element when folded, since that IS the pill. */
+.node.frame > .title-row:has(> .title.editing),
+.node.frame-folded:has(> .title-row > .title.editing) { box-shadow:0 0 0 3px var(--edit-ring); }
 /* tag pills on a card — float along the card's lower edge, OUTSIDE the border, the same way
    .addnote floats at the opposite (bottom-left) corner, so a tagged card is exactly as tall as an
    untagged one: tags never take up in-flow space. Anchored to the right and growing leftward as

@@ -10,7 +10,7 @@
 // arrangement of it. `mm_parent` is the deliberate exception (see docs/architecture.md) — keeping
 // membership in the note is what lets a folder stand on its own if this file is lost.
 // ============================================================
-import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap } from '../core/state.js';
+import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide } from '../core/state.js';
 import { store } from './persistence.js';
 import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';
@@ -55,6 +55,10 @@ export function boardJSON(): string {
 type StoredEdge = { id: string; from: string; to: string;
                     fromJ?: string; toJ?: string;      // legacy: a JUNCTION end (read, flattened, never written)
                     color?: string; dashed?: boolean; fromCap?: EdgeCap; toCap?: EdgeCap;
+                    // The pinned faces. NOT the `fromSide`/`toSide` an older build wrote on EVERY edge
+                    // (defaulting to right/left): reading those back would pin every old line to a
+                    // face nobody chose, so they stay ignored and these are new keys.
+                    fromPort?: EdgeSide; toPort?: EdgeSide;
                     arrows?: 'none' | 'to' | 'both';   // legacy: ONE direction axis, read never written
                     label?: string };
 function serializeEdge(e: BoardEdge): StoredEdge | null {
@@ -68,7 +72,8 @@ function serializeEdge(e: BoardEdge): StoredEdge | null {
   return { id: e.id, from, to,
            ...(e.color ? { color: e.color } : {}), dashed: e.dashed,
            ...(e.fromCap !== 'none' ? { fromCap: e.fromCap } : {}),
-           ...(e.toCap !== 'arrow' ? { toCap: e.toCap } : {}), ...(e.label ? { label: e.label } : {}) };
+           ...(e.toCap !== 'arrow' ? { toCap: e.toCap } : {}), ...(e.label ? { label: e.label } : {}),
+           ...(e.fromPort ? { fromPort: e.fromPort } : {}), ...(e.toPort ? { toPort: e.toPort } : {}) };
 }
 
 // A persisted id, unlike a node's — a node is identified by its file and an edge has no file.
@@ -180,6 +185,8 @@ function applyEdges(v: unknown): void {
     a === 'none' ? { from: 'none', to: 'none' }
   : a === 'both' ? { from: 'arrow', to: 'arrow' }
   : { from: 'none', to: 'arrow' };
+  const port = (s: unknown): EdgeSide | undefined =>
+    s === 'up' || s === 'down' || s === 'left' || s === 'right' ? s : undefined;
   for (const raw of v as StoredEdge[]) {
     if (!raw || typeof raw.from !== 'string' || typeof raw.to !== 'string') continue;
     // A legacy junction end is already an id — it needs no path lookup, so it goes straight into
@@ -196,6 +203,8 @@ function applyEdges(v: unknown): void {
       fromCap: cap(raw.fromCap, legacy(raw.arrows).from),
       toCap: cap(raw.toCap, legacy(raw.arrows).to),
       label: typeof raw.label === 'string' ? raw.label : '',
+      ...(port(raw.fromPort) ? { fromPort: port(raw.fromPort) } : {}),
+      ...(port(raw.toPort) ? { toPort: port(raw.toPort) } : {}),
     });
   }
 }

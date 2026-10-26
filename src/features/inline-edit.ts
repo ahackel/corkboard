@@ -192,7 +192,8 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   ta.className = 'body-edit'; ta.spellcheck = false; ta.value = text;
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
   // than just reverting the edit the way it does for an existing card.
-  ui.bodyEdit = { id:n.id, orig:text, el:bodyEl, ta, isNew };
+  ta.rows = 1;   // a textarea's default is 2 rows: a one-line card would grow a line just by opening
+  ui.bodyEdit = { id:n.id, orig:text, el:bodyEl, ta, isNew, holdH: n.el.getBoundingClientRect().height / (state.view.k || 1) };
   n.el.classList.remove('no-body');                            // give the body slot room while editing
   // The textarea REPLACES the rendered note, so the render cache paintNode keys `.body` on is no longer
   // describing what's in there — clear it, or committing an edit that changed nothing would leave the

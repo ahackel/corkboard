@@ -93,8 +93,12 @@ caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `route` → 
 `edgeGeometry`, the one place the geometry is computed): along the axis the two cards are further apart
 on, a line runs straight across where they face each other, else leaves the middle of one side, turns
 (rounded, `CORNER_R`) halfway across the gap and enters the middle of the other. Overlapping cards get the
-plain centre-to-centre line. A line stores no face: the route is re-derived from the cards on every paint,
-so there is nothing on disk to go stale when one moves (docs/PRODUCT.md, principle 2). You draw one from the four rings on a selected card
+plain centre-to-centre line. An end dropped on a PORT is PINNED to that face (`fromPort`/`toPort` in
+`board.json` — new keys: the `fromSide`/`toSide` an older build wrote on every edge stay ignored, or every
+old line would be pinned to a face nobody chose). A pinned line leaves/enters that face square and is
+routed by `pinnedRoute`: a few orthogonal shapes per allowed pair of faces (the middle Z first, then
+detours STUB out and round either box), keeping those that cross neither card, shortest + `BEND_COST` per
+bend wins. Only faces are stored; the route is re-derived on every paint (docs/PRODUCT.md, principle 2). You draw one from the four rings on a selected card
 onto ANY point of another card; an end handle moves that end. Older boards may carry JUNCTIONS (points
 where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
 into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
@@ -820,7 +824,11 @@ to draw a line; CLICK it (a press under `MIN_DRAG_PX`) and `spawnConnected` (edg
 open for typing — stepping past cards already there so repeated clicks fan out. It is one undo step with
 the card, so an abandoned empty card takes its line with it (`discardNewCard` → `deleteNodes`). While a card is
 being EDITED the card itself is the field: the textarea is bare (no box, no scrim), the ring turns a dimmed
-3px blue round the card's border and the corner handles stand down (`.node.sel.card-editing`). The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
+3px blue (`--edit-ring`) round the card's border and the corner handles stand down
+(`.node.sel.card-editing`); a frame's label being renamed rings its PILL the same way. The card never
+changes size as editing starts: the textarea is one row (`rows = 1`) and the card holds the height it
+had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — it only grows if you type
+past it. While a line end is dragged, the target card shows its ports; the one within `PORT_SNAP` fills. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the

@@ -140,12 +140,94 @@ function route(ra: Rect, rb: Rect): Pt[] {
   const my = (ay + by) / 2;
   return [{ x: ca.x, y: ay }, { x: ca.x, y: my }, { x: cb.x, y: my }, { x: cb.x, y: by }];
 }
+// ---------- a line with a PINNED end (dropped on a port) ----------
+// Each pinned end leaves its face square, from the face's midpoint; an unpinned end may use whichever
+// face routes best. The router tries a handful of orthogonal shapes for every allowed pair of faces —
+// straight, one bend, a Z through the middle, and the detours that step out STUB from each face and go
+// round either box — keeps those that leave and enter square and cross neither card, and takes the
+// shortest, each bend costing BEND_COST. Small enough to run per paint; nothing is stored but the faces.
+const DIR: Record<EdgeSide, Pt> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+const SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
+const STUB = 20, BEND_COST = 40;
+function facePoint(r: Rect, s: EdgeSide): Pt {
+  return s === 'up' ? { x: r.x + r.w/2, y: r.y } : s === 'down' ? { x: r.x + r.w/2, y: r.y + r.h }
+       : s === 'left' ? { x: r.x, y: r.y + r.h/2 } : { x: r.x + r.w, y: r.y + r.h/2 };
+}
+// Drop repeated points and the middle of three in a row; null if the path doubles back on itself.
+function simplify(pts: Pt[]): Pt[] | null {
+  const out: Pt[] = [];
+  for (const p of pts) if (!out.length || Math.hypot(p.x - out[out.length-1].x, p.y - out[out.length-1].y) > 0.5) out.push(p);
+  for (let i = 1; i < out.length - 1;) {
+    const a = out[i-1], b = out[i], c = out[i+1];
+    if ((Math.abs(a.x - b.x) < 0.5 && Math.abs(b.x - c.x) < 0.5) || (Math.abs(a.y - b.y) < 0.5 && Math.abs(b.y - c.y) < 0.5)) {
+      if ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) return null;
+      out.splice(i, 1);
+    } else i++;
+  }
+  return out.length >= 2 ? out : null;
+}
+// Does the axis-aligned segment p→q pass through the INSIDE of r (touching its rim is fine)?
+function crosses(p: Pt, q: Pt, r: Rect): boolean {
+  if (r.w < 2 || r.h < 2) return false;
+  const x0 = Math.min(p.x, q.x), x1 = Math.max(p.x, q.x), y0 = Math.min(p.y, q.y), y1 = Math.max(p.y, q.y);
+  return x1 > r.x + 1 && x0 < r.x + r.w - 1 && y1 > r.y + 1 && y0 < r.y + r.h - 1;
+}
+function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
+  let best: Pt[] | null = null, bestScore = Infinity;
+  for (const a of sa ? [sa] : SIDES) for (const b of sb ? [sb] : SIDES) {
+    const pa = facePoint(ra, a), pb = facePoint(rb, b), da = DIR[a], db = DIR[b];
+    const qa = { x: pa.x + da.x * STUB, y: pa.y + da.y * STUB }, qb = { x: pb.x + db.x * STUB, y: pb.y + db.y * STUB };
+    const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+    const xs = [qa.x, qb.x, Math.min(ra.x, rb.x) - STUB, Math.max(ra.x + ra.w, rb.x + rb.w) + STUB];
+    const ys = [qa.y, qb.y, Math.min(ra.y, rb.y) - STUB, Math.max(ra.y + ra.h, rb.y + rb.h) + STUB];
+    const shapes: Pt[][] = [[pa, pb], [pa, { x: pb.x, y: pa.y }, pb], [pa, { x: pa.x, y: pb.y }, pb],
+      [pa, { x: mx, y: pa.y }, { x: mx, y: pb.y }, pb], [pa, { x: pa.x, y: my }, { x: pb.x, y: my }, pb]];
+    for (const X of xs) shapes.push([pa, qa, { x: X, y: qa.y }, { x: X, y: qb.y }, qb, pb]);
+    for (const Y of ys) shapes.push([pa, qa, { x: qa.x, y: Y }, { x: qb.x, y: Y }, qb, pb]);
+    for (const raw of shapes) {
+      const pts = simplify(raw); if (!pts) continue;
+      let ok = true, len = 0;
+      for (let i = 0; i < pts.length - 1 && ok; i++) {
+        const p = pts[i], q = pts[i+1];
+        if (Math.abs(p.x - q.x) > 0.5 && Math.abs(p.y - q.y) > 0.5) ok = false;   // not orthogonal
+        else if (crosses(p, q, ra) || crosses(p, q, rb)) ok = false;
+        len += Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
+      }
+      if (!ok) continue;
+      // leaves A along its face's normal, and arrives at B moving INTO it
+      const u0 = unit(pts[0], pts[1]), u1 = unit(pts[pts.length-2], pts[pts.length-1]);
+      if (u0.x * da.x + u0.y * da.y < 0.99 || u1.x * db.x + u1.y * db.y > -0.99) continue;
+      const score = len + (pts.length - 2) * BEND_COST;
+      // A tie goes to the shape tried FIRST — the Z through the middle of the gap is listed before the
+      // detours, so equal-length routes turn halfway across rather than hugging one card.
+      if (score < bestScore - 0.5) { bestScore = score; best = pts; }
+    }
+  }
+  return best ?? [facePoint(ra, sa ?? 'right'), facePoint(rb, sb ?? 'left')];
+}
+// The route for two boxes and their pins: the plain elbow when neither end is pinned, else the router.
+function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
+  return sa || sb ? pinnedRoute(ra, sa, rb, sb) : route(ra, rb);
+}
 // The ONE place an edge's geometry is computed, so the painter, the label, the bar and the inline
 // editor can never disagree about where the line is.
 export function edgeGeometry(e: BoardEdge): Geometry | null {
   const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
   if (!from || !to) return null;
-  return polyline(route(rimRect(from), rimRect(to)), trim(e.fromCap), trim(e.toCap));
+  return polyline(routeFor(rimRect(from), e.fromPort, rimRect(to), e.toPort), trim(e.fromCap), trim(e.toCap));
+}
+// The port under a world point, if any: within PORT_SNAP screen px of a card's floating port dot OR of
+// the middle of that face — what a line end dropped there pins to (features/edge-tools.ts).
+const PORT_SNAP = 16;
+export function portAt(n: MindNode, p: Pt): EdgeSide | null {
+  const k = state.view.k || 1, r = rimRect(n);
+  let best: EdgeSide | null = null, bestD = PORT_SNAP / k;
+  for (const { side, p: dot } of socketPoints(n)) {
+    const face = facePoint(r, side);
+    const d = Math.min(Math.hypot(p.x - dot.x, p.y - dot.y), Math.hypot(p.x - face.x, p.y - face.y));
+    if (d < bestD) { bestD = d; best = side; }
+  }
+  return best;
 }
 
 // An OPEN head — two strokes from the tip back to the corners, not a filled triangle: at the line's
@@ -262,7 +344,13 @@ export function paintFreeEdges(): void {
   const src = draw ? state.nodes.get(draw.sourceId) : null;
   if (draw && src) {
     const over = draw.overId ? state.nodes.get(draw.overId) : null;
-    if (over) { const r = rimRect(over); tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`; }
+    if (over) {
+      const r = rimRect(over);
+      tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`;
+      // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot
+      for (const { side, p } of socketPoints(over))
+        tools += `<circle class="fe-drop-port${side === draw.overSide ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${side === draw.overSide ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
+    }
     const edge = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
     // The draft runs from the end that STAYS to the end being moved, so when it's the `from` end that
@@ -270,7 +358,8 @@ export function paintFreeEdges(): void {
     const movingFrom = draw.end === 'from';
     const anchorCap: EdgeCap = edge ? (movingFrom ? edge.toCap : edge.fromCap) : 'none';
     const movingCap: EdgeCap = edge ? (movingFrom ? edge.fromCap : edge.toCap) : 'arrow';
-    const s = polyline(route(rimRect(src), over ? rimRect(over) : { ...draw.to, w: 0, h: 0 }), trim(anchorCap),
+    const anchorPort = edge ? (movingFrom ? edge.toPort : edge.fromPort) : draw.side;
+    const s = polyline(routeFor(rimRect(src), anchorPort, over ? rimRect(over) : { ...draw.to, w: 0, h: 0 }, over ? draw.overSide : undefined), trim(anchorCap),
       over ? trim(movingCap) : movingCap === 'arrow' ? ARROW_INSET : 0);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${s.d}"/>`
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);

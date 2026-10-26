@@ -112,8 +112,9 @@ export interface View { x: number; y: number; k: number; }
 // `none|to|both` axis can't say it at all. `dot` is the terminator a diagram uses for "attaches
 // here, no direction implied" — it marks the endpoint without claiming a flow.
 export type EdgeCap = 'none' | 'dot' | 'arrow';
-// One of a card's four faces — where the rings you drag a new line from sit (view/free-edges.ts).
-// UI only: a line itself stores no face — its elbow route is derived from where the two cards are.
+// One of a card's four faces — where its PORTS sit (view/free-edges.ts). A line end dropped on a port is
+// PINNED to that face (BoardEdge.fromPort/toPort); an end dropped on the card's body has none, and its
+// face is chosen afresh on every paint from where the two cards are.
 export type EdgeSide = 'up' | 'down' | 'left' | 'right';
 export interface BoardEdge {
   id: string;
@@ -125,6 +126,8 @@ export interface BoardEdge {
   dashed: boolean;
   fromCap: EdgeCap;                // the cap at each end — see EdgeCap above
   toCap: EdgeCap;
+  fromPort?: EdgeSide;             // the face each end is pinned to; absent = auto (see EdgeSide)
+  toPort?: EdgeSide;
   label: string;
 }
 
