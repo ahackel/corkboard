@@ -568,7 +568,7 @@ export function gridSnap(): number { return state.gridSize || 1; }
 // than drag it: a new card at the pointer, a duplicate, a paste, an image dropped or pulled out of a
 // note. Anything the user positions ends up on the grid, however it got there.
 export function snapPt(p: Pt): Pt { const g = gridSnap(); return { x: snapTo(p.x, g), y: snapTo(p.y, g) }; }
-export const FRAME_BORDER = 1;   // must match .node.frame's CSS `border` width (styles.css)
+export const FRAME_BORDER = 2;   // must match .node.frame's CSS `border` width (styles.css)
 // Height of a FOLDED frame's pill (styles.css .frame-folded: 8 + 20 + 8 padding/line, plus a 2px
 // border top and bottom). A constant, so the pill is one ellipsised line and never measured.
 // An EXPANDED frame's label is not part of its geometry at all: it hangs ABOVE the box, outside the
@@ -807,10 +807,12 @@ function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) 
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
 type FrameDir = typeof FRAME_DIRS[number];
 // …and the width-only set: a card authors a WIDTH but never a height (its height stays whatever its
-// content measures), so it gets the two side bands and no corners.
-const EW_DIRS = ['e', 'w'] as const;
-// Ensure the node has exactly the (invisible) resize hit-zones its kind wants — one per edge/corner,
-// added once and reused. No visible grip: the resize cursors on the border are the affordance.
+// content measures), so it gets the two side bands — and the four corners FigJam shows square handles
+// on, which for a card move only their side's edge (startNodeResize writes no height: see sizeH).
+const EW_DIRS = ['e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
+// Ensure the node has exactly the resize hit-zones its kind wants — one per edge/corner, added once
+// and reused. The corners of a lone selection draw FigJam's square handles (styles.css); the edges
+// have no grip, their resize cursor is the affordance.
 // `:scope >` throughout, NOT a descendant query: child cards are DOM-nested inside their parent
 // (see place/settledHost), so a plain card containing a nested image card would otherwise see the
 // CHILD's handles, conclude it already had its own, and never get any.
@@ -1551,7 +1553,16 @@ window.addEventListener('resize', () => {
 // The hexes themselves live in ONE place — the --pal-* custom properties in styles.css's
 // :root — so CSS (.c-*, #ghostCard) and JS (edges/backgrounds fills, swatch dots below) can never
 // drift apart.
-export const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black'];
+// Every key a note may carry. `slate` predates FigJam's palette: it still paints, but the picker no
+// longer offers it.
+export const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black',
+  'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink'];
+// …and what the picker OFFERS, FigJam's two rows of eleven: the strong hues framed by black and white,
+// then the pastels — the sticky colours — framed by two greys (the custom chip ends that row).
+export const PICKER_ROWS: string[][] = [
+  ['black','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink','white'],
+  ['silver','grey','red','orange','amber','green','teal','blue','violet','pink'],
+];
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
 const SWATCH_KEYS = PALETTE;
 export const SWATCH_BG: Record<string, string> = Object.fromEntries(SWATCH_KEYS.map(c => [c, pal(c)]));
@@ -1573,11 +1584,14 @@ const THEME_BG = themeBg();
 // path entirely — it's 11 rules written twice per session, not per card per frame.
 const inkStyle = document.createElement('style');
 document.head.appendChild(inkStyle);
+// …and the `.c-<key>` class each key is worn by, generated here beside its ink rather than listed by
+// hand in styles.css, so adding a key to PALETTE (and its --pal-* hex) is the whole job.
 function deriveInk(): void {
   inkStyle.textContent = ':root{' + SWATCH_KEYS.map(c => {
     const bg = SWATCH_BG[c] ?? '';
     return `--pal-ink-${c}:${inkFor(bg)};--pal-scrim-${c}:${scrimFor(bg)};`;
-  }).join('') + '}';
+  }).join('') + '}' + SWATCH_KEYS.map(c =>
+    `.c-${c}{--card:var(--pal-${c});--ink:var(--pal-ink-${c});--scrim:var(--pal-scrim-${c})}`).join('');
 }
 deriveInk();
 // ---------- a colour VALUE: a palette key, or an authored hex ----------

@@ -17,7 +17,7 @@ import { touchEdges, commitStep } from './history.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { byId } from '../utils/dom.js';
 import { isInteracting } from './float-bar.js';
-import { PALETTE, SWATCH_BG, colorFill } from '../main.js';
+import { PICKER_ROWS, SWATCH_BG, colorFill } from '../main.js';
 import { safeInsets } from '../utils/dom.js';
 
 const bar = byId('edgeBar');
@@ -113,7 +113,7 @@ function wire(): void {
     const sw = (ev.target as Element).closest<HTMLElement>('[data-color]');
     const es = selectedEdges(); if (!sw || !es.length) return;
     touchEdges();
-    for (const e of es) e.color = sw.dataset.color === 'default' ? '' : sw.dataset.color!;
+    for (const e of es) e.color = sw.dataset.color!;
     closeColorPop(); commit(); commitStep();
   };
   document.addEventListener('pointerdown', (ev) => {
@@ -129,9 +129,11 @@ function commit(repaintBar = true): void {
 }
 
 function openColorPop(): void {
-  // '' is the default ink — offered as its own chip so a coloured edge can be put back.
-  let html = `<div class="swatch" data-color="default" title="Default" style="--sw:var(--edge)"></div>`;
-  for (const c of PALETTE) html += `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`;
+  // No separate "default" chip: the default ink IS the palette's `stone`, so that chip puts a coloured
+  // line back to how it looked.
+  let html = PICKER_ROWS.map(row => row.map(c =>
+    `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`).join('')).join(`<span class="swatch-break"></span>`);
+
   colorRow.innerHTML = html;
   colorPop.classList.add('open');
   placeColorPop();

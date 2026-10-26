@@ -27,6 +27,8 @@ import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 const bar = byId('floatBar');
 const fbColor = byId<HTMLButtonElement>('fbColor');
+const fbColorDot = byId('fbColorDot');
+const fbHide = byId<HTMLButtonElement>('fbHide');
 const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
@@ -153,8 +155,19 @@ export function groupSelectionIntoFrame(): void {
 function markOpen(): void {
   fbOpen.style.display = canOpenSelection() ? '' : 'none';
   const n = anchorNode();
-  fbTitle.style.display = state.sel.size === 1 && n?.type === 'frame' ? '' : 'none';
+  const oneFrame = state.sel.size === 1 && n?.type === 'frame';
+  fbTitle.style.display = oneFrame ? '' : 'none';
+  fbHide.style.display = oneFrame ? '' : 'none';
+  fbHide.classList.toggle('off', !!n?.collapsed);
+  fbHide.title = n?.collapsed ? 'Show contents (X)' : 'Hide contents (X)';
 }
+// 👁 — FigJam's "hide contents" on a section: folds the frame to its label, and back. The same fold
+// X and the chip do (toggleCollapse); the button shows a struck-out eye while the contents are hidden.
+fbHide.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closePopovers();
+  const n = anchorNode(); if (n?.type === 'frame') { toggleCollapse(n.id); syncControls(); }
+});
 // T — a frame's TITLE. An untitled frame shows no label at all (its text was deleted, FigJam-style),
 // so this is how one comes back: it seeds a name and selects it, ready to type over. A named frame just
 // opens its label with the name selected — the same editor F2 and a double-click on the label open.
@@ -166,15 +179,15 @@ fbTitle.addEventListener('click', (e) => {
 
 // ---------- colour trigger ----------
 // The trigger button reuses the SAME .swatch/.inherit/.nofill CSS look as the popover's chips
-// (see index.html: fbColor starts with class "fb-swatch swatch inherit") — just mirror whichever
+// (see index.html: fbColorDot starts with class "fb-swatch swatch inherit") — just mirror whichever
 // swatch is currently active.
 function markColorTrigger(): void {
   const active = edColors.querySelector<HTMLElement>('.swatch.active');
-  fbColor.classList.remove('inherit', 'nofill');
-  fbColor.style.removeProperty('--sw');
-  if (!active || active.classList.contains('inherit')) fbColor.classList.add('inherit');
-  else if (active.classList.contains('nofill')) fbColor.classList.add('nofill');
-  else fbColor.style.setProperty('--sw', active.style.getPropertyValue('--sw'));
+  fbColorDot.classList.remove('inherit', 'nofill');
+  fbColorDot.style.removeProperty('--sw');
+  if (!active || active.classList.contains('inherit')) fbColorDot.classList.add('inherit');
+  else if (active.classList.contains('nofill')) fbColorDot.classList.add('nofill');
+  else fbColorDot.style.setProperty('--sw', active.style.getPropertyValue('--sw'));
 }
 
 // ---------- lock toggle ----------
@@ -255,7 +268,7 @@ colorPop.addEventListener('input', (e) => {
 });
 document.addEventListener('pointerdown', (e) => {
   const t = e.target as Node;
-  if (activePopover && !colorPop.contains(t) && t !== fbColor) closePopovers();
+  if (activePopover && !colorPop.contains(t) && !fbColor.contains(t)) closePopovers();
 }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && activePopover) closePopovers(); }, true);
 
@@ -332,7 +345,7 @@ fbMore.addEventListener('click', (e) => {
 });
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
-const GAP = 20;
+const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
 // ⤢ go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
 // desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (main.ts navArrow): you can only stand
 // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the

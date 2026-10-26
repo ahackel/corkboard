@@ -25,7 +25,10 @@ import { esc } from '../utils/markdown.js';
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.
 export const HIT_W = 18;
 export const HANDLE_R = 7;          // endpoint grab handles, shown while one edge is selected
-export const SOCKET_R = 6;          // the four rings on a selected card you drag a new edge from
+// The four PORTS on a selected card you drag a new line from — FigJam's: a small blue dot in a white
+// rim, floating SOCKET_OUT outside each side, that becomes a ⊕ under the pointer (styles.css).
+const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
+const SOCKET_OUT = 18;
 
 // The rectangle a line meets: the node's bounds, grown by half the selection ring (so a line ends ON
 // the rim the user reads as the card's edge). A frame's label hangs outside its bounds, so a line meets
@@ -49,23 +52,26 @@ function rimPoint(n: MindNode, p: Pt): Pt {
   return { x: c.x + dx * t, y: c.y + dy * t };
 }
 
-// The four rings on a selected card — only where a NEW line starts from. The finished line doesn't
-// remember which one: it runs centre to centre like every other.
+// The four dots on a selected card — only where a NEW line starts from, floating a little OUTSIDE each
+// side the way FigJam's do, clear of the resize handles. The finished line doesn't remember which one:
+// it runs centre to centre like every other.
 export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
-  const r = rimRect(n);
+  const r = rimRect(n), o = SOCKET_OUT;
   return [
-    { side: 'up',    p: { x: r.x + r.w/2, y: r.y } },
-    { side: 'down',  p: { x: r.x + r.w/2, y: r.y + r.h } },
-    { side: 'left',  p: { x: r.x,         y: r.y + r.h/2 } },
-    { side: 'right', p: { x: r.x + r.w,   y: r.y + r.h/2 } },
+    { side: 'up',    p: { x: r.x + r.w/2,   y: r.y - o } },
+    { side: 'down',  p: { x: r.x + r.w/2,   y: r.y + r.h + o } },
+    { side: 'left',  p: { x: r.x - o,       y: r.y + r.h/2 } },
+    { side: 'right', p: { x: r.x + r.w + o, y: r.y + r.h/2 } },
   ];
 }
 
-// The line is drawn with round caps and a round-joined head, so the paint reaches STROKE_W/2 beyond the
-// geometric tip — land that tip ON a card's rim and the head's point sinks into the border it should be
-// pointing at. Pulling an arrow end back by exactly that overshoot puts the painted tip on the rim.
-const STROKE_W = 4;                  // must match path.fe / path.fe-arrow in styles.css
+// A line stops short of the cards it joins (END_GAP), FigJam-style, so it reads as pointing AT a card
+// rather than running under it. It is drawn with round caps and a round-joined head, so the paint
+// reaches STROKE_W/2 beyond the geometric tip — an arrow end is pulled back by that overshoot too.
+const STROKE_W = 3;                  // must match path.fe / path.fe-arrow in styles.css
+const END_GAP = 6;
 const ARROW_INSET = STROKE_W / 2;
+const trim = (cap: EdgeCap): number => END_GAP + (cap === 'arrow' ? ARROW_INSET : 0);
 function unit(p: Pt, q: Pt): Pt {
   const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
   return { x: dx / L, y: dy / L };
@@ -85,14 +91,13 @@ function segment(a: Pt, b: Pt, trimA: number, trimB: number): { a: Pt; b: Pt; d:
 export function edgeGeometry(e: BoardEdge): ReturnType<typeof segment> | null {
   const from = state.nodes.get(e.from), to = state.nodes.get(e.to);
   if (!from || !to) return null;
-  return segment(rimPoint(from, centre(to)), rimPoint(to, centre(from)),
-    e.fromCap === 'arrow' ? ARROW_INSET : 0, e.toCap === 'arrow' ? ARROW_INSET : 0);
+  return segment(rimPoint(from, centre(to)), rimPoint(to, centre(from)), trim(e.fromCap), trim(e.toCap));
 }
 
 // An OPEN head — two strokes from the tip back to the corners, not a filled triangle: at the line's
 // own weight it looks like the same pen drew it. Wide and shallow rather than a long thin dart.
-const ARROW_LEN = 9;     // tip → base, along the line
-const ARROW_W = 18;      // corner → corner, across it
+const ARROW_LEN = 11;    // tip → base, along the line
+const ARROW_W = 22;      // corner → corner, across it
 function arrowHead(tip: Pt, dir: Pt, ink: string): string {
   const nx = -dir.y, ny = dir.x;
   const bx = tip.x - dir.x * ARROW_LEN, by = tip.y - dir.y * ARROW_LEN;
@@ -192,7 +197,11 @@ export function paintFreeEdges(): void {
   if (one && !isHidden(one)) svg += linkEdges(one);
   if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one))
     for (const { side, p } of socketPoints(one))
-      tools += `<circle class="fe-socket" data-socket="${side}" data-node="${one.id}" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`;
+      tools += `<g class="fe-socket" data-socket="${side}" data-node="${one.id}">`
+        + `<circle class="fe-port-hit" cx="${p.x}" cy="${p.y}" r="${SOCKET_HIT_R}"/>`
+        + `<circle class="fe-port-dot" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`
+        + `<g class="fe-port-plus"><circle cx="${p.x}" cy="${p.y}" r="${SOCKET_HOVER_R}"/>`
+        + `<path d="M ${p.x - 5} ${p.y} H ${p.x + 5} M ${p.x} ${p.y - 5} V ${p.y + 5}"/></g></g>`;
   // The edge being drawn right now, in its FINAL style: from the fixed card toward the pointer, or —
   // once the pointer is over a card — all the way to that card's rim, exactly where it will land.
   const draw = ui.edgeDraw;
@@ -208,7 +217,8 @@ export function paintFreeEdges(): void {
     const movingFrom = draw.end === 'from';
     const anchorCap: EdgeCap = edge ? (movingFrom ? edge.toCap : edge.fromCap) : 'none';
     const movingCap: EdgeCap = edge ? (movingFrom ? edge.fromCap : edge.toCap) : 'arrow';
-    const s = segment(rimPoint(src, end), end, anchorCap === 'arrow' ? ARROW_INSET : 0, movingCap === 'arrow' ? ARROW_INSET : 0);
+    const s = segment(rimPoint(src, end), end, trim(anchorCap),
+      over ? trim(movingCap) : movingCap === 'arrow' ? ARROW_INSET : 0);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${s.d}"/>`
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);
   }

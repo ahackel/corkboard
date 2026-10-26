@@ -260,10 +260,9 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   selected, so nothing new exists for the case. It reads `canvasOwner` too, so the chip on its face shows the
   value it would overwrite. Four things to respect: the chips are `properties.ts`'s row, not a copy
   (`swatchRowHTML`/`markSwatchRow`/`renderRecentChips` were split out of `createProperties` for exactly this —
-  what can't be shared is that factory itself, being defined over node ids); the FIRST chip is the only
-  difference (`FirstChip` — a card inherits, so it gets the striped chip plus an explicit `none`; the map's
-  canvas has no parent, so it gets ONE "theme default" chip and no `none`, which there would mean the same
-  thing twice); both halves are undoable in the one timeline (a frame is an ordinary `record`, the map's colour
+  what can't be shared is that factory itself, being defined over node ids); the one difference is
+  `FirstChip` — the map's own canvas gets a reset chip in the board's grey, since nothing else gets it back
+  to "no colour"; both halves are undoable in the one timeline (a frame is an ordinary `record`, the map's colour
   goes through `touchCanvas`/`commitStep` and `Step`'s optional `canvas` field, as `state.strokes` already
   does); and the GRID INK is re-derived from whatever fill is behind it (`--grid-pat` on `#stage`, which
   `#grid` declares `--grid-ink` from — the theme's recipe with the canvas fill standing in for `--grid` and
@@ -602,7 +601,7 @@ The insets then become ours to pay back, and they're paid ONCE, by name: `styles
 `--sa-t/--sa-r/--sa-b/--sa-l` at `:root` from `env(safe-area-inset-*)` (with a `0px` fallback, so every
 `calc()` downstream is exact on the devices — all but a handful — that have no cutout at all), and each
 piece of fixed chrome adds the matching one on top of its own 10–12px margin: the two top bars, the four
-corner buttons, the ghost card, the docked float bar, the image viewer, the sheets,
+corner buttons, the dock, the docked float bar, the image viewer, the sheets,
 and the two drawers. **Add the term to any new fixed control** — the failure mode is silent on every
 desktop and on an iPad, and only shows up as an untappable button on the one device you didn't test.
 
@@ -794,14 +793,34 @@ stays put.
 **ONE theme, FigJam's.** There is no light/dark switch: a pale grey board (`--bg` #f5f5f5) with a dot grid,
 white chrome on a soft shadow (`--shadow-ui`), Figma blue (#0d99ff) for selection, and DARK islands for the
 object toolbar, its popovers and the context menu (`--bar-*`). One theme means a map looks the same
-everywhere, and a colour has exactly one ink. The card palette is FigJam's sticky pastels (approximated),
-which all take DARK ink; an uncoloured CARD falls back to `amber`, the sticky yellow — derived, never
-written, so the note on disk stays uncoloured — and an uncoloured FRAME to `white`. The keys (`amber`,
-`slate`, …) are the file format; only the hexes in `styles.css` may change.
+everywhere, and a colour has exactly one ink. An uncoloured CARD falls back to `amber`, the sticky
+yellow — derived, never written, so the note on disk stays uncoloured — and an uncoloured FRAME to `white`.
+The keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
+
+**The colour picker is FigJam's: two rows of eleven** (`PICKER_ROWS`, main.ts) — the STRONG hues framed by
+black and white (`stone`, `bold-red` … `bold-pink`), then the pastels, the sticky colours, framed by two
+greys and ending in the custom chip; recently used custom colours wrap onto a third row. `PALETTE` is every
+key a note may carry (a superset: `slate` still paints but is no longer offered), and its `.c-<key>`
+classes are GENERATED beside their ink (`deriveInk`), so a new key is its `--pal-*` hex plus one array
+entry. There are no "inherit" or "none" chips: a card nobody coloured keeps following its frame, and the
+picker rings the colour it SHOWS (`effectiveColor`) — the selected chip wears FigJam's violet ring. A line's
+default ink IS `stone`, so the line picker needs no "default" chip either.
+
+**Selection, ports and lines are FigJam's.** A lone selection shows a white rounded square on each corner
+(drawn on the corner resize zones, `.node.solo > .fh-*::after`; a card's corners resize its width only), and
+four PORTS float `SOCKET_OUT` outside its sides — a blue dot in a white rim that becomes a ⊕ under the
+pointer (free-edges.ts). The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
+are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron.
+
+**The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
+board's canvas colour and grid, and ⌘K, in groups split by hairlines. Its buttons are ordinary
+`.floating-btn`s that drop their own chrome inside it, and every popover/menu they open is placed from the
+button's rect, so none of them knows where the dock is.
 
 **The look: a FigJam board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
-(bundled latin subset, `src/assets/fonts`, OFL). Cards at rest are FLAT — no shadows; only a card in hand casts
-one (`.dragging`), and only the floating chrome sits on a soft shadow. Motion uses the `scale` property, never `transform` (the drag and
+(bundled latin subset, `src/assets/fonts`, OFL). A sticky is near-square-cornered (`--r-card`, 3px) and sits on
+FigJam's soft lift (`--lift`); a card in hand casts a deeper one (`.dragging`); frames, folded pills and
+pictures stay flat. Motion uses the `scale` property, never `transform` (the drag and
 the relayout animation own that): a new card pops in via a `data-pop` attribute (a class would be wiped by
 paintNode's wholesale `className` rewrite), and a card in hand lifts by a SHADOW only (never a scale, so
 the smart guides line up with the edges you see). The pop stands down under reduced motion.

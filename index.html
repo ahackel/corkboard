@@ -94,7 +94,9 @@
   <!-- starts closed (no "open" class) so it doesn't flash in before syncFloatBar() runs.
        Floats next to the selected card (features/float-bar.ts). -->
   <div id="floatBar">
-    <button id="fbColor" class="fb-swatch swatch inherit" title="Colour — click for the full palette" aria-label="Colour"></button>
+    <!-- FigJam's colour dropdown: the current colour's dot and a chevron, on a raised chip -->
+    <button id="fbColor" class="fb-dd" title="Colour — click for the full palette" aria-label="Colour">
+      <span id="fbColorDot" class="fb-swatch swatch inherit"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
     <span class="fb-sep"></span>
     <!-- lock toggle: icon (open/closed padlock) + title set from the selection in float-bar.ts.
          While the selection IS locked the bar collapses to just this button (see .locked-sel). -->
@@ -104,6 +106,9 @@
     <!-- a FRAME's title: names an untitled frame (seeding "Frame") and selects the name to type over -->
     <button id="fbTitle" class="fb-icon" title="Title (F2)" aria-label="Title">
       <span class="ic" data-icon="text"></span></button>
+    <!-- a FRAME's eye: hide its contents (fold it to its label) and show them again -->
+    <button id="fbHide" class="fb-icon" title="Hide contents (X)" aria-label="Hide contents">
+      <span class="ic ic-on" data-icon="eye"></span><span class="ic ic-off" data-icon="eye-off"></span></button>
     <button id="fbOpen" class="fb-icon" title="Open (↑)" aria-label="Open">
       <span class="ic" data-icon="expand"></span></button>
     <button id="fbLock" class="fb-icon" title="Lock (L)" aria-label="Lock"></button>
@@ -138,26 +143,34 @@
   <button id="canvasMenuBtn" class="floating-btn" title="Canvas menu — new card, insert image…" aria-label="Canvas menu">
     <span class="ic" data-icon="kebab"></span></button>
 
-  <!-- the command palette's own button, bottom-right: the way in for touch, and the hint that ⌘K exists -->
-  <button id="paletteBtn" class="floating-btn" title="All commands (⌘K)" aria-label="All commands">⌘K</button>
 
-  <!-- background grid: floating bottom-right. ONE button for both axes —
-       its face shows the live style and a click opens a menu holding the styles AND the spacings
-       (view/grid.ts). Two circles for one idea is what this replaced. -->
-  <button id="gridBtn" class="floating-btn" title="Background grid" aria-label="Background grid"></button>
 
   <!-- canvas colour: one slot further left again. Edits the colour of the canvas you're standing on —
        the MAP at the top level, the OPEN FRAME once you're inside one (features/canvas-color.ts). Its
        face is a .swatch rather than an icon, so it shows the colour it would overwrite. The popover
        holds properties.ts's own swatch row, built on first open. -->
-  <button id="canvasColorBtn" class="floating-btn" title="Canvas colour" aria-label="Canvas colour">
-    <span class="swatch inherit"></span></button>
   <div id="canvasColorPop" class="fb-pop">
     <div id="canvasColors" class="swatches"></div>
   </div>
 
-  <!-- ghost card in the corner — drag it onto the canvas to create a new card -->
-  <div id="ghostCard" title="Drag to create a new card">+</div>
+  <!-- the DOCK, bottom centre — FigJam's main toolbar: the sticky you drag a new card off, then the
+       board's own settings, then every command. -->
+  <div id="dock">
+    <!-- ghost card — drag it onto the canvas to create a new card -->
+    <div id="ghostCard" title="Drag to create a new card">+</div>
+    <span class="dock-sep"></span>
+    <!-- canvas colour: edits the colour of the canvas you're standing on — the MAP at the top level,
+         the OPEN FRAME once you're inside one (features/canvas-color.ts). Its face is a .swatch, so it
+         shows the colour it would overwrite. The popover holds properties.ts's own swatch rows. -->
+    <button id="canvasColorBtn" class="floating-btn" title="Canvas colour" aria-label="Canvas colour">
+      <span class="swatch inherit"></span></button>
+    <!-- background grid: ONE button for both axes — its face shows the live style and a click opens a
+         menu holding the styles AND the spacings (view/grid.ts). -->
+    <button id="gridBtn" class="floating-btn" title="Background grid" aria-label="Background grid"></button>
+    <span class="dock-sep"></span>
+    <!-- the command palette's own button: the way in for touch, and the hint that ⌘K exists -->
+    <button id="paletteBtn" class="floating-btn" title="All commands (⌘K)" aria-label="All commands">⌘K</button>
+  </div>
 
   <!-- first-run hints: shown only while the canvas is empty (body.empty-canvas) -->
   <div id="ghostHint" class="emptyhint" aria-hidden="true">

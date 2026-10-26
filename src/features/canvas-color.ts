@@ -22,7 +22,7 @@ import { scheduleSaveBoard } from '../data/board.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { paintAll, colorFill, canvasOwner, syncCanvasBackground } from '../main.js';
+import { paintAll, colorFill, canvasOwner, syncCanvasBackground, canvasSurface } from '../main.js';
 import { placeInViewport } from '../utils/dom.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
@@ -88,7 +88,7 @@ function setColor(color: string): void {
 
 // ---------- the button's own chip ----------
 // Mirrors the live value rather than the popover's `.active` swatch, so it's right before the popover
-// has ever been built. Reuses the same .swatch/.inherit/.nofill look the chips have (see index.html).
+// has ever been built. Reuses the .swatch look the chips have (see index.html).
 export function markCanvasColorBtn(): void {
   const chip = btn?.querySelector<HTMLElement>('.swatch');
   if (!btn || !chip) return;
@@ -97,8 +97,8 @@ export function markCanvasColorBtn(): void {
   chip.classList.remove('inherit', 'nofill');
   chip.style.removeProperty('--sw');
   if (v === 'none') chip.classList.add('nofill');
-  else if (fill) chip.style.setProperty('--sw', fill);
-  else chip.classList.add('inherit');
+  // nothing authored: the colour actually behind you — the board's own grey at the top level
+  else chip.style.setProperty('--sw', fill ?? canvasSurface());
   const owner = canvasOwner();
   btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the frame you’re in` : 'Canvas colour of this map';
 }

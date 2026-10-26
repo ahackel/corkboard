@@ -31,10 +31,10 @@ What it has been used for, and what it must stay good at:
 
 ## Look and feel
 
-- **FigJam's look**, one theme (no dark mode): a pale grey dotted board, pastel sticky notes, white
-  chrome floating on a soft shadow, a dark toolbar over whatever is selected, Figma blue for selection.
-  Minimal chrome and instant, in the spirit of Excalidraw / tldraw.
-- **Flat cards**: no card casts a shadow at rest; only a card being dragged lifts off the board.
+- **FigJam's look**, one theme (no dark mode): a pale grey board, pastel sticky notes on a soft
+  shadow, white chrome, a dark toolbar over whatever is selected, FigJam's selection handles, ports and
+  two-row colour picker, a dock at the bottom centre. Minimal chrome and instant, in the spirit of
+  Excalidraw / tldraw.
 - A default card is a **coloured sticky note**. Type is a **friendly rounded sans** (the system's
   rounded face, with a bundled fallback so it works offline from the single file).
 

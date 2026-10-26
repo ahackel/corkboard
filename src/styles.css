@@ -51,16 +51,31 @@
   --pal-blue: #80caff;
   --pal-violet: #d9b8ff;
   --pal-pink: #ffbdf2;
-  --pal-grey: #e6e6e6;
+  --pal-grey: #d9d9d9;
   --pal-white: #ffffff;
-  --pal-black: #2c2c2c;
+  --pal-black: #1e1e1e;
+  /* the rest of FigJam's picker (main.ts PICKER_ROWS): a light orange and grey to complete the pastel
+     row, a mid grey, and the STRONG row — the same hues at full strength */
+  --pal-orange: #ffd3a8;
+  --pal-silver: #b3b3b3;
+  --pal-stone: #757575;
+  --pal-bold-red: #f24822;
+  --pal-bold-orange: #ff9e42;
+  --pal-bold-yellow: #ffc943;
+  --pal-bold-green: #66d575;
+  --pal-bold-teal: #5ad8cc;
+  --pal-bold-blue: #3d9eff;
+  --pal-bold-violet: #874fff;
+  --pal-bold-pink: #f849c1;
 
   /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 8px;   /* board cards + the ghost/template card, and every box kind (frame/image) */
-  /* one step INSIDE a card/box — nested rows, clip wrappers, in-place editors. The 1px is
-     FRAME_BORDER; anything sitting within a box's border wants this, not --r-card, or it bulges
-     against the corners it's supposed to sit inside. */
+  --r-card: 3px;   /* board cards (FigJam's near-square stickies), the ghost card, image cards */
+  --r-frame: 12px; /* a frame's box — rounder, like a FigJam section */
+  /* one step INSIDE a card — in-place editors. Anything sitting within a box wants an inner radius,
+     not the outer one, or it bulges against the corners it's supposed to sit inside. */
   --r-inner: calc(var(--r-card) - 1px);
+  /* a sticky note at rest sits a hair off the board, on FigJam's soft shadow */
+  --lift: 0 1px 2px rgba(0,0,0,.06), 0 3px 10px rgba(0,0,0,.08);
   --r-panel: 16px;  /* floating panels (editor, start card) */
   --r-menu: 12px;   /* dropdowns / context menus */
   --r-ctl: 10px;    /* inputs, list rows, small controls */
@@ -108,17 +123,7 @@
    list. That's why nothing below this line ever names a colour key to fix its text: one
    `color: var(--ink)` on each surface that wears a .c-* class (.node) replaces the four per-surface "which keys are exceptions" lists that used to have to
    agree with each other, and an off-palette colour gets legible text for free. */
-.c-slate  { --card:var(--pal-slate);  --ink:var(--pal-ink-slate);  --scrim:var(--pal-scrim-slate); }
-.c-red    { --card:var(--pal-red);    --ink:var(--pal-ink-red);    --scrim:var(--pal-scrim-red); }
-.c-amber  { --card:var(--pal-amber);  --ink:var(--pal-ink-amber);  --scrim:var(--pal-scrim-amber); }
-.c-green  { --card:var(--pal-green);  --ink:var(--pal-ink-green);  --scrim:var(--pal-scrim-green); }
-.c-teal   { --card:var(--pal-teal);   --ink:var(--pal-ink-teal);   --scrim:var(--pal-scrim-teal); }
-.c-blue   { --card:var(--pal-blue);   --ink:var(--pal-ink-blue);   --scrim:var(--pal-scrim-blue); }
-.c-violet { --card:var(--pal-violet); --ink:var(--pal-ink-violet); --scrim:var(--pal-scrim-violet); }
-.c-pink   { --card:var(--pal-pink);   --ink:var(--pal-ink-pink);   --scrim:var(--pal-scrim-pink); }
-.c-grey   { --card:var(--pal-grey);   --ink:var(--pal-ink-grey);   --scrim:var(--pal-scrim-grey); }
-.c-white  { --card:var(--pal-white);  --ink:var(--pal-ink-white);  --scrim:var(--pal-scrim-white); }
-.c-black  { --card:var(--pal-black);  --ink:var(--pal-ink-black);  --scrim:var(--pal-scrim-black); }
+/* .c-<key> for every palette key is GENERATED (main.ts deriveInk), alongside the ink it derives. */
 /* "none" = no colour at all: truly transparent, not just canvas-bg-coloured (border returns when
    selected). The one key whose ink can't be computed — there's no fill to measure, the CANVAS shows
    through — so it's the one that follows the theme instead, and its scrim has to be flipped by hand
@@ -414,28 +419,35 @@ svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1
    re-enable their own. */
 svg#toggles { z-index:5; pointer-events:none; }
 /* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
-/* 4px: thick enough to read as a deliberate line rather than as a hairline someone forgot to style. */
-svg#freeEdges path.fe { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+/* 3px (STROKE_W, view/free-edges.ts): FigJam's connector weight against a sticky — a deliberate line,
+   not a hairline, and lighter than the notes it joins. */
+svg#freeEdges path.fe { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
 /* Selected: the same ring a card wears (--node-sel, 2px around the box) expressed as a line — the
    edge's own path drawn thicker and solid beneath it. Solid deliberately: a dashed edge's ring has to
    be continuous or the "outline" reads as just more dashes. */
-svg#freeEdges path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:8;
+svg#freeEdges path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:7;
   stroke-linecap:round; stroke-linejoin:round; }
 svg#freeEdgeHits path.fe-hit { fill:none; stroke:transparent; pointer-events:stroke; cursor:pointer; }
 /* Open head: stroked, never filled, at the line's own weight so the two read as one drawing. */
-svg#freeEdges path.fe-arrow { fill:none; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; }
+svg#freeEdges path.fe-arrow { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
 /* A draft edge (mid-draw) is painted onto the LINE layer with the finished ones — it IS an edge, and
    it is styled as the finished one rather than as a ghost, so the rules above already cover it. */
 /* An end DOT is centred ON the card's border, which used to mean the card ate half of it while the
    lines ran behind the cards; above them, both caps simply ride with their line. Never a click target:
    the line under it is what you grab (path.fe-hit, on the layer below the cards). */
 svg#freeEdges circle.fe-dot { stroke:none; pointer-events:none; }
-/* Hollow rings, not solid dots: a ring reads as a socket to plug into, a dot reads as a button to
-   press. They appear only on a SELECTED card, never on hover — an always-live dot is the one thing
-   Miro's users complain about, because it turns every drag past a shape into a maybe-connector. */
-svg#toggles circle.fe-socket { fill:var(--bg, #14161a); stroke:var(--accent, #6ea8fe); stroke-width:2;
-  pointer-events:auto; cursor:crosshair; }
-svg#toggles circle.fe-socket:hover { fill:var(--accent, #6ea8fe); }
+/* FigJam's PORTS (free-edges.ts socketPoints): a small pale-blue dot in a white rim, floating outside
+   each side, that turns into a ⊕ — white disc, blue rim and plus — under the pointer. The invisible
+   disc around it is the hit target. They appear only on a SELECTED card, never on hover — an
+   always-live dot turns every drag past a shape into a maybe-connector. */
+svg#toggles g.fe-socket { pointer-events:auto; cursor:crosshair; }
+svg#toggles .fe-port-hit { fill:transparent; }
+svg#toggles .fe-port-dot { fill:#7cc4fa; stroke:#fff; stroke-width:2; }
+svg#toggles .fe-port-plus { display:none; }
+svg#toggles .fe-port-plus circle { fill:#fff; stroke:var(--node-sel); stroke-width:2; }
+svg#toggles .fe-port-plus path { fill:none; stroke:var(--node-sel); stroke-width:2; stroke-linecap:round; }
+svg#toggles g.fe-socket:hover .fe-port-dot { display:none; }
+svg#toggles g.fe-socket:hover .fe-port-plus { display:inline; }
 /* The card a line being drawn would land on: its rim outlined in the accent, the one "this is where it
    goes" cue — there are no ports to aim at, the whole card is the target. */
 svg#toggles rect.fe-target { fill:none; stroke:var(--accent, #6ea8fe); stroke-width:2; stroke-dasharray:6 4;
@@ -512,24 +524,24 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is what
    lets its own label (below) lift above the edges/cards that would otherwise cover it.
    The FILL is the frame's colour (--card, from its .c-* class) washed most of the way to white, and the
-   1px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
-   colour, read clearly on it. Width 1px = FRAME_BORDER (main.ts). */
-.node.frame { z-index:auto; min-height:0; padding:0; border-radius:var(--r-card);
+   2px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
+   colour, read clearly on it. Width 2px = FRAME_BORDER (main.ts). */
+.node.frame { z-index:auto; min-height:0; padding:0; border-radius:var(--r-frame);
   background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
-  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); }
+  border:2px solid color-mix(in srgb, var(--card, #fff), #000 10%); }
 /* ---------- a frame's label: a pill above the box ---------- */
-/* Filled with the frame's own colour, so its text takes the ink that colour demands (--ink) like any
-   card's. It grows UPWARD from 6px above the box, so a description line never moves anything.
+/* FigJam's section name: a borderless pill a step darker than the frame's own colour (a white frame's
+   is light grey), its text the ink that colour demands (--ink) like any card's. It grows UPWARD from 7px
+   above the box (FRAME_LABEL_GAP, view/layout.ts), so a description never moves anything.
    Direct-child combinators throughout: a frame's own label only, never some descendant card's title.
-   An absolutely positioned child's containing block is the PADDING box, inside the 1px border, so the
+   An absolutely positioned child's containing block is the PADDING box, inside the 2px border, so the
    left offset adds it back to sit flush with the box's outer edge. */
 .node.frame > .title-row {
-  position:absolute; left:-1px; bottom:calc(100% + 7px);
+  position:absolute; left:-2px; bottom:calc(100% + 7px);
   z-index:4;                    /* over the box and over cards; see the ladder */
-  max-width:calc(100% + 2px); align-items:center;
-  padding:3px 8px; border-radius:6px;
-  background:var(--card, #fff); color:var(--ink, var(--text));
-  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); }
+  max-width:calc(100% + 4px); align-items:center;
+  padding:3px 10px; border-radius:8px;
+  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .node.frame > .title-row > .title, .node.frame-folded > .title-row > .title {
   /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a frame whose
      text is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1
@@ -546,6 +558,9 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .node.frame-folded > .title-row > .title > :not(:first-child) { display:none; }
 .node.frame > .title-row > .title h1,
 .node.frame-folded > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
+/* the expanded label's NAME is bigger and bolder than a card's, as FigJam's section names are */
+.node.frame > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
+.node.frame > .title-row > .title h1 { font-size:16px; }
 /* …and under the name, the frame's DESCRIPTION (main.ts paintNode, view/layout.ts frameDescription): one
    muted, ellipsised line, its markdown flattened inline with a dot between blocks. */
 .node.frame > .title-row > .title > .frame-desc { display:block; font-size:11px; line-height:16px;
@@ -555,8 +570,6 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 /* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
 .node.frame > .title-row > .title.editing,
 .node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
-/* a selected frame rings its label too, so the two read as one selected thing */
-.node.frame.sel > .title-row { box-shadow:0 0 0 2px var(--node-sel); border-color:transparent; }
 /* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
 .node.frame > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
 /* ---------- a COLLAPSED frame: just its pill ---------- */
@@ -567,7 +580,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    bottom MUST total it. */
 .node.frame-folded {
   border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); min-height:0; padding:9px 10px;
-  border-radius:var(--r-card);
+  border-radius:8px;
   width:max-content; max-width:200px;   /* NODE_W — a long title ellipsises rather than sprawling */
   background:var(--card, #fff); color:var(--ink, var(--text)); }
 .node.frame-folded > .title-row { position:static; align-items:center; padding:0; background:none; }
@@ -581,8 +594,8 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    z-order directly against everything outside it, e.g. a dragged card still floats above all via
    .dragging's z-index:9); pointer-events:none so clicking the frame's empty interior still reaches
    the frame's own element underneath instead of this invisible wrapper. */
-/* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
-.frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
+/* the box's radius less its 2px border, so the clip follows the INSIDE of the border */
+.frame-content { position:absolute; overflow:hidden; border-radius:calc(var(--r-frame) - 2px); pointer-events:none; }
 .frame-content > .node { pointer-events:auto; }
 /* a frame's note is drawn on its LABEL (name + description line), never in the box, which holds cards;
    and it never shows the "add note" pill (the !important beats the .solo.no-body show rule). */
@@ -598,7 +611,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    invisible and collapses onto the BOX's own top edge, where the chip then hangs off the corner exactly
    as a card's does, and the chip is shown again. */
 .node.frame.no-title > .title-row {
-  visibility:hidden; bottom:auto; top:0; left:0; right:0; height:0; padding:0; border:0; max-width:none; }
+  visibility:hidden; bottom:auto; top:0; left:0; right:0; height:0; padding:0; max-width:none; }
 .node.frame.no-title > .title-row > .hidden-count { visibility:visible; }
 /* …and FOLDED, the pill keeps its own shape but shows nothing in it. The title still has to hold the
    40px open — an empty inline has no line box, and nodeH ASSERTS FRAME_TAB_H for a folded frame. */
@@ -624,10 +637,20 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .node > .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
 .node > .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
 .node > .fh-w { left:-5px;   top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
-.node > .fh-ne { top:-6px;    right:-6px;  width:16px; height:16px; cursor:nesw-resize; }
-.node > .fh-nw { top:-6px;    left:-6px;   width:16px; height:16px; cursor:nwse-resize; }
-.node > .fh-se { bottom:-6px; right:-6px;  width:16px; height:16px; cursor:nwse-resize; }
-.node > .fh-sw { bottom:-6px; left:-6px;   width:16px; height:16px; cursor:nesw-resize; }
+.node > .fh-ne { top:-8px;    right:-8px;  width:16px; height:16px; cursor:nesw-resize; }
+.node > .fh-nw { top:-8px;    left:-8px;   width:16px; height:16px; cursor:nwse-resize; }
+.node > .fh-se { bottom:-8px; right:-8px;  width:16px; height:16px; cursor:nwse-resize; }
+.node > .fh-sw { bottom:-8px; left:-8px;   width:16px; height:16px; cursor:nesw-resize; }
+/* FigJam's selection handles: a small white square with a blue rim on each corner of a LONE selection,
+   centred on the corner (the 16px zone above is centred there too). Drawn on the zone itself, so the
+   square is exactly what you grab. (The corner zones are `z-index:auto` on a frame, which is not a
+   stacking context — the square still paints over its own fill.) */
+.node.solo > .fh-ne::after, .node.solo > .fh-nw::after,
+.node.solo > .fh-se::after, .node.solo > .fh-sw::after {
+  content:''; position:absolute; inset:2px; box-sizing:border-box;
+  background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
+/* the fold chevron would sit on the top-right handle — on a lone-selected card it steps inside it */
+.node.solo:not(.frame):not(.frame-folded) > .title-row > .hidden-count { right:14px; }
 /* The WIDTH-ONLY kind — a card. Two differences from a box's side bands:
    · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
      constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
@@ -732,11 +755,14 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
-/* Everything at rest is FLAT — no shadows (docs/PRODUCT.md). Only a card in hand casts one (.dragging). */
+/* A STICKY at rest wears FigJam's soft lift (--lift); frames, folded pills and pictures stay flat. A card
+   in hand casts a deeper one (.dragging). The selection ring is laid over whatever lift the card has. */
+.node:not(.frame):not(.frame-folded):not(.image-card) { box-shadow:var(--lift); }
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
+.node.sel:not(.frame):not(.frame-folded):not(.image-card) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 /* while editing a title/body in place, drop the card's selection ring so only the editor's
    own outline shows */
-.node.sel:has(.title.editing), .node.sel:has(.body.editing) { box-shadow:none; }
+.node.sel:has(.title.editing), .node.sel:has(.body.editing) { box-shadow:var(--lift); }
 /* the dragged card (and its subtree) floats above every other card, above every line, and above the
    landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
    (below), not per card, so overlapping dragged items don't shine through each other. */
@@ -1132,19 +1158,26 @@ body.zoom-far .node > .addnote { display:none !important; }
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node.collapsed .title { margin-bottom:0; }
 
-/* big new-card button, bottom-left of the canvas */
-/* ghost card — drag it onto the canvas to create a new card */
-/* Styled like the card it actually creates (an unconnected node — effectiveColor's 'grey'
-   fallback, same --card value as .c-grey), not a generic dashed placeholder, so it previews
-   the real result. */
+/* ---------- the dock: FigJam's main toolbar, bottom centre ----------
+   One white island on the soft shadow holding the new-card sticky, the board's own settings (canvas
+   colour, grid) and the ⌘K button, in groups split by hairlines. The buttons inside drop their own
+   floating-button chrome (shadow, fixed position) and become items in the bar. */
+#dock { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + var(--sa-b)); z-index:20;
+  display:flex; align-items:center; gap:4px; padding:6px;
+  background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
+#dock .floating-btn { position:static; box-shadow:none; background:transparent; }
+#dock .floating-btn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
+.dock-sep { flex:none; width:1px; align-self:stretch; margin:2px 4px; background:var(--node-border); }
+/* ghost card — drag it onto the canvas to create a new card. Styled like the card it actually creates
+   (a sticky in the default yellow), so it previews the real result. */
 #ghostCard {
-  position:fixed; left:calc(12px + var(--sa-l)); bottom:calc(12px + var(--sa-b)); z-index:20;
-  width:96px; height:48px;
+  position:relative; z-index:20;
+  width:56px; height:36px;
   display:flex; align-items:center; justify-content:center;
   /* a little sticky note: what it makes is what it looks like (new cards are yellow — main.ts
      effectiveColor). It has no .c-* class to carry --ink, so it names the fill's computed ink directly. */
-  background:var(--pal-amber); border:none; border-radius:var(--r-card);
-  color:var(--pal-ink-amber); font-size:22px; font-weight:400;
+  background:var(--pal-amber); border:none; border-radius:var(--r-card); box-shadow:var(--lift);
+  color:var(--pal-ink-amber); font-size:20px; font-weight:400;
   cursor:grab; user-select:none; touch-action:none;
   transition:box-shadow .15s, opacity .15s;
 }
@@ -1160,17 +1193,11 @@ body.readonly #ghostCard { opacity:.35; pointer-events:none; }
 }
 body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
 @media (prefers-reduced-motion: reduce) { .emptyhint { transition:none; } }
-#ghostHint { left:calc(120px + var(--sa-l)); bottom:calc(23px + var(--sa-b)); }   /* right of the ghost card */
-#ghostHint span { position:relative; top:-5px; }        /* nudge only the label up, arrow stays */
-/* grid toggle — bottom-right corner */
-#paletteBtn { right:calc(12px + var(--sa-r)); bottom:calc(12px + var(--sa-b)); width:auto; padding:0 12px;
-  font-size:13px; font-weight:600; }
-#gridBtn { right:calc(12px + var(--sa-r) + 58px + 8px); bottom:calc(12px + var(--sa-b)); }
-/* grid size picker — one slot further left again, showing the current cell size as a number. The one
-   .floating-btn whose content is TEXT, so it drops the shared flex centring for the numeric-badge
-   rule next to .hidden-count (which centres digits rather than their line box). */
-#canvasColorBtn { right:calc(12px + var(--sa-r) + 58px + 8px + var(--bar-btn) + 8px); bottom:calc(12px + var(--sa-b)); }
-#canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; }
+/* above the dock, pointing down at the sticky you drag */
+#ghostHint { left:50%; transform:translateX(-50%); bottom:calc(70px + var(--sa-b)); }
+#ghostHint .hint-arrow { display:none; }
+#paletteBtn { width:auto; padding:0 10px; font-size:13px; font-weight:600; }
+#canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18); }
 /* Nothing to pick in read-only — setColor refuses there, so the button would be a dead control. */
 body.readonly #canvasColorBtn { display:none; }
 .hint-arrow { flex:none; opacity:.85; }
@@ -1288,6 +1315,14 @@ body.canvas-interacting .addnote { display:none !important; }
    NOT --bar-btn (which the rule above would give it, and which read as an oversized bubble next to
    the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
 #floatBar .fb-swatch, #edgeBar .fb-swatch { width:22px; height:22px; margin:0 5px; }
+/* FigJam's colour DROPDOWN: the dot and a small chevron on a raised chip, wider than an icon button */
+#floatBar button.fb-dd { width:auto; gap:2px; padding:0 6px 0 0; background:#3a3a3a; color:var(--bar-ink); }
+#floatBar button.fb-dd:hover { background:#474747; }
+#floatBar .fb-dd .fb-swatch { pointer-events:none; }
+.fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
+/* the eye shows the state it would CHANGE: open eye while the contents show, struck-out while hidden */
+#fbHide .ic-off, #fbHide.off .ic-on { display:none; }
+#fbHide.off .ic-off { display:block; }
 
 /* small popover anchored under/over its trigger button (colour / layout / arrow pickers) —
    borderless, same "floating island" style as #floatBar, no shadow either. It sizes to its
@@ -1299,13 +1334,17 @@ body.canvas-interacting .addnote { display:none !important; }
   background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
-/* The colour pickers wrap at FOUR chips — a small block you take in at a glance, the same shape as
-   the menu of chips beside it, rather than one long strip of thirteen that has to be scanned. The
-   explicit width is what makes both that wrap and .swatch-break's row break land where they should
-   (a shrink-to-fit flex container resolves a 100% basis against nothing and lays every chip out on
-   one line instead). Three popovers, one rule: the card bar's, the edge bar's and the canvas one. */
+/* The colour pickers are FigJam's grid: rows of ELEVEN (main.ts PICKER_ROWS). The explicit width is
+   what makes .swatch-break's row breaks land where they should (a shrink-to-fit flex container
+   resolves a 100% basis against nothing and lays every chip out on one line instead); a break's own
+   empty line would add a second gap, which its negative margin takes back. Three popovers, one rule:
+   the card bar's, the edge bar's and the canvas one. */
 #fbColorPop .swatches, #canvasColorPop .swatches, #ebColorPop .swatches {
-  width:calc(4 * 22px + 3 * 6px); row-gap:6px; }
+  width:calc(11 * 24px + 10 * 8px); gap:8px; }
+/* FigJam's picker: bigger chips on a roomier island */
+.fb-pop .swatch { width:24px; height:24px; }
+#fbColorPop, #canvasColorPop, #ebColorPop { padding:14px; border-radius:16px; }
+.fb-pop .swatches .swatch-break { margin-top:-8px; }
 /* hides instantly while #floatBar itself does (see float-bar.ts's followLoop) — a stale popover
    position mid-pan/drag/zoom would otherwise float away from its (now-moved) trigger button. */
 .fb-pop.hide-interact, .fb-pop-connector.hide-interact { opacity:0; pointer-events:none; transition:none; }
@@ -1332,7 +1371,7 @@ body.canvas-interacting .addnote { display:none !important; }
 .swatch.active { box-shadow:0 0 0 2px var(--text); }
 /* …on the dark toolbar islands the rings are white */
 .fb-pop .swatch:hover, #floatBar .swatch:hover, #edgeBar .swatch:hover { box-shadow:0 0 0 2px rgba(255,255,255,.45); }
-.fb-pop .swatch.active { box-shadow:0 0 0 2px #fff; }
+.fb-pop .swatch.active { box-shadow:0 0 0 2px var(--bar-bg), 0 0 0 4px #8a5cf6; }   /* FigJam's violet ring */
 /* …and every chip on them carries a faint rim, so the black one doesn't vanish into the island */
 .fb-pop .swatch:not(:hover):not(.active), #floatBar .swatch:not(:hover) { box-shadow:inset 0 0 0 1px rgba(255,255,255,.22); }
 /* the bar's own buttons are rounded squares (FigJam's), but its colour trigger stays a dot */

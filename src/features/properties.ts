@@ -6,7 +6,7 @@ import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, SWATCH_BG, PALETTE } from '../main.js';
+import { paintAll, SWATCH_BG, PICKER_ROWS, effectiveColor } from '../main.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
 
@@ -28,36 +28,32 @@ const CUSTOM_FALLBACK = '#3f8cff';
 // canvas popover can't reuse is createProperties itself: that whole factory is defined over NODE ids
 // (state.nodes, isLockedEffective, record-per-id), and at the top level the target isn't a node.
 //
-// `first` is the one difference in the markup. A card's default is to INHERIT its parent's colour,
-// so it gets the striped chip plus a separate explicit `none`. The MAP's canvas has no parent to
-// inherit from — its fallback is the theme's own background — so it gets ONE reset chip and no
-// `none`, which there would mean the identical thing twice.
+// `first` is the one difference in the markup: 'default' (the map's canvas) adds a reset chip.
 export type FirstChip = 'inherit' | 'default';
 export function swatchRowHTML(first: FirstChip): string {
-  let html = first === 'inherit'
-    ? `<div class="swatch inherit" data-color="" title="inherit colour from parent (default)"></div>`
-    : `<div class="swatch inherit" data-color="" title="theme default — no canvas colour"></div>`;
-  for (const c of PALETTE)
-    html += `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`;
-  if (first === 'inherit')
-    html += `<div class="swatch nofill" data-color="none" title="no colour — don’t inherit"></div>`;
-  // Two rows in ONE flex container rather than two containers: a full-width break element makes
-  // the wrap happen exactly here (see .swatch-break), which keeps every chip a sibling — so a
-  // single delegated click handler, markSwatchRow's one querySelectorAll and the float bar's
-  // `.swatch.active` lookup all keep working over the whole picker, on both rows.
-  html += `<span class="swatch-break"></span>`;
+  // FigJam's picker: two rows of eleven (PICKER_ROWS), the second ending in the custom chip. A row
+  // break is a full-width element in ONE flex container rather than separate containers, so every
+  // chip stays a sibling — a single delegated click handler, markSwatchRow's one querySelectorAll and
+  // the float bar's `.swatch.active` lookup all keep working over the whole picker.
+  const chip = (c: string): string => `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`;
+  let html = PICKER_ROWS[0].map(chip).join('') + `<span class="swatch-break"></span>` + PICKER_ROWS[1].map(chip).join('');
   // Any colour at all — the card's ink follows automatically (utils/ink.ts), which is what makes an
   // off-palette colour safe to offer. A <label> WRAPPING the input, rather than a div that forwards
   // a click: that's the one form every platform opens natively from a single tap, including iOS,
-  // where the input is the only way to reach the system colour sheet (there's no EyeDropper API and
-  // showPicker() isn't dependable). The input itself is invisible and covers the chip (styles.css),
-  // so the chip keeps the same round-bubble look as its neighbours.
+  // where the input is the only way to reach the system colour sheet. The input itself is invisible
+  // and covers the chip (styles.css), so the chip keeps the round-bubble look its neighbours have.
   html += `<label class="swatch custom" title="custom colour — any colour you like">`
     + `<input type="color" value="${CUSTOM_FALLBACK}" aria-label="Custom colour"></label>`;
+  // No "inherit" or "none" chips, as in FigJam: a card nobody coloured still follows its frame (or is
+  // the default yellow), and the picker rings the colour it SHOWS (markSwatch). The custom colours used
+  // recently wrap onto a third row (renderRecentChips). The MAP's canvas alone gets a reset chip in
+  // the board's own grey, ahead of them, since there is no other way back to "no canvas colour".
+  if (first === 'default')
+    html += `<span class="swatch-break"></span><div class="swatch" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
   return html;
 }
-// The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered
-// after the custom chip so the row reads "pick a new one → the ones you already picked".
+// The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered at
+// the end of the third row, after the default chips.
 export function renderRecentChips(colors: HTMLElement): void {
   colors.querySelectorAll('.swatch.recent').forEach(el => el.remove());
   for (const c of recentColors())
@@ -93,9 +89,8 @@ export function markSwatchRow(colors: HTMLElement, active: string): void {
 // active card in the branch sheet. Empty → the controls no-op (nothing selected).
 export function createProperties(els: PropEls, getIds: () => string[]): PropertyControls {
   // ---- colour swatches ----
-  // Row 1: inherit ('') + the 11 palette keys + explicit none — a fixed set, so it's built once per
-  // theme. Row 2: the custom picker plus recently-used custom colours, which are NOT fixed (see
-  // features/color-recents.ts), so it's rebuilt on every sync — a colour picked from the sheet has to
+  // The palette rows are a fixed set, built once. The recently-used custom colours are NOT fixed (see
+  // features/color-recents.ts), so they're rebuilt on every sync — a colour picked from the sheet has to
   // appear as a chip straight away, and one recoloured away from has to stop being offered.
   function rebuildSwatches(): void {
     els.colors.innerHTML = swatchRowHTML('inherit');
@@ -147,10 +142,11 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
       setColor(input.value);
     });
   }
-  // active swatch = the value shared by every target; mixed (or nothing) → the inherit swatch.
+  // active swatch = the colour every target SHOWS — its own, or for one nobody coloured, the one it
+  // inherits or defaults to (effectiveColor). Mixed → nothing rings.
   function markSwatch(): void {
-    const colors = new Set(getIds().map(id => state.nodes.get(id)?.color || ''));
-    markSwatchRow(els.colors, colors.size === 1 ? ([...colors][0] || '') : '');
+    const colors = new Set(getIds().map(id => { const n = state.nodes.get(id); return n ? n.color || effectiveColor(n) : ''; }));
+    markSwatchRow(els.colors, colors.size === 1 ? [...colors][0] : '\u0000');
   }
 
   function sync(): void {
