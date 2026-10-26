@@ -533,7 +533,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    …and its ink follows the TITLE's rather than the box's (--tab-ink, see the tab rule below): it hangs
    off the tab, outside the box, so it's on the same surface the title is and its "colour inherited from
    the card so it always matches the title text" promise above only holds if it's measured there too. */
-.node.frame > .lock-badge { left:-12px; top:-51px; z-index:4; color:var(--tab-ink, var(--ink)); }
+.node.frame > .lock-badge { left:-12px; top:calc(-51px - var(--tab-extra, 0px)); z-index:4; color:var(--tab-ink, var(--ink)); }
 /* ---------- frame: a resizable container box whose children live freely inside ---------- */
 /* z-index:auto paints it BELOW every line and below normal cards (z-index:2) — a positioned `auto`
    element paints in the same step as z-index:0, in tree order.
@@ -615,6 +615,13 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 .node.frame-folded > .title-row > .title > :not(:first-child) { display:none; }
 .node.frame > .title-row > .title h1,
 .node.frame-folded > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
+/* …and under the name, the frame's DESCRIPTION (main.ts paintNode, view/layout.ts frameDescription): one
+   muted, ellipsised line, its markdown flattened inline with a dot between blocks. Its 16px line box is
+   FRAME_DESC_H, which the box drops by — keep the two in step. */
+.node.frame > .title-row > .title > .frame-desc { display:block; font-size:11px; line-height:16px;
+  font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.frame-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
+.frame-desc > * + *::before, .frame-desc li + li::before { content:' · '; }
 /* while renaming, let a long title wrap and spill out of the tab instead of being ellipsised */
 .node.frame > .title-row > .title.editing,
 .node.frame-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
@@ -680,8 +687,9 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 /* --r-inner, so the clip follows the INSIDE of the box's border rather than its outer corner */
 .frame-content { position:absolute; overflow:hidden; border-radius:var(--r-inner); pointer-events:none; }
 .frame-content > .node { pointer-events:auto; }
-/* a frame never shows the "add note" pill (the !important beats the .solo.no-body show rule that
-   would otherwise reveal it). */
+/* a frame's note is drawn on its TAB (name + description line), never in the box, which holds cards;
+   and it never shows the "add note" pill (the !important beats the .solo.no-body show rule). */
+.node.frame > .body { display:none; }
 .node.frame .addnote { display:none !important; }
 /* drop-into-a-frame preview: restyle the box's OWN border to a white dash, so it reads as "the card
    lands in here". No extra ring, no width change, no fill (see drag.ts updateDropTarget). */

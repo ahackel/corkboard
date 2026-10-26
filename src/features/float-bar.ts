@@ -10,7 +10,7 @@ import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { subtreeBox } from '../view/layout.js';
+import { subtreeBox, frameTabDrop } from '../view/layout.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, addCardInside, createSibling, mkNode } from './crud.js';
@@ -54,7 +54,7 @@ function props(): PropertyControls {
 // (the deliberate main↔features import cycle — see CLAUDE.md and the props() note above), so reading
 // FRAME_TAB_DROP at module scope throws "cannot access before initialization".
 const FRAME_FIT_PAD = 16;
-function frameFitTop(): number { return FRAME_TAB_DROP + FRAME_FIT_PAD; }
+function frameFitTop(f?: MindNode): number { return (f ? frameTabDrop(f) : FRAME_TAB_DROP) + FRAME_FIT_PAD; }
 export function fitFrameToContent(n: MindNode, orDefault = false): void {
   const kids = childrenOf(n.id).filter(k => !isHidden(k));
   const snapStep = gridSnap();
@@ -66,7 +66,7 @@ export function fitFrameToContent(n: MindNode, orDefault = false): void {
   }
   if (!isFinite(x0)) { if (orDefault) { n.w = FRAME_W; n.h = FRAME_H; } return; }
   n.x = snap(x0 - FRAME_FIT_PAD);
-  n.y = snap(y0 - frameFitTop());
+  n.y = snap(y0 - frameFitTop(n));
   n.w = Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - n.x));
   n.h = Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - n.y));
 }
@@ -92,7 +92,7 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
       x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
     }
     if (!isFinite(x0)) continue;
-    const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - frameFitTop()));
+    const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - frameFitTop(f)));
     const R = Math.max(f.x + (f.w ?? FRAME_W), up(x1 + FRAME_FIT_PAD)), B = Math.max(f.y + (f.h ?? FRAME_H), up(y1 + FRAME_FIT_PAD));
     if (L === f.x && T === f.y && R === f.x + (f.w ?? FRAME_W) && B === f.y + (f.h ?? FRAME_H)) continue;
     touch(f.id);

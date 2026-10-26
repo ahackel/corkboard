@@ -22,7 +22,7 @@ import { setupTheme, toggleTheme } from './view/theme.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
 import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand } from './view/camera.js';
-import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, isFrame, frameLabelled } from './view/layout.js';
+import { applyLayouts, hostFrame, containerHost, frameInterior, containerBox, isFrame, frameLabelled, frameDescription, frameTabDrop, FRAME_DESC_H } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -436,23 +436,30 @@ export function paintNode(n: MindNode): void {
     // below collapses the row away, keeping only the fold chip that lives in it) and cardMarkdown feeds
     // the whole note to the body below.
     // A FRAME's tab renders that same markdown, flattened to ONE inline line (styles.css) — so it obeys
-    // the same rule while staying a tab. It keeps a `.title` element rather than a body only because its
-    // geometry is fixed: FRAME_TAB_H is 40px of padding plus one 20px line box, and its own `.body` is
-    // display:none because the box below holds child cards, not a note.
+    // the same rule while staying a tab — plus one line of description under it when it has one. It
+    // keeps a `.title` element rather than a body because its geometry is fixed (FRAME_TAB_H, plus
+    // FRAME_DESC_H for the description), and its own `.body` is display:none because the box below
+    // holds cards, not a note.
     if (rendersAsFrame(n)) {
-      const md = collapsed ? collapsedMarkdown(label) : cardMarkdown(label);
-      const full = nodeLabel(label);
+      // …and under the name, on a second muted line, its DESCRIPTION (frameDescription — the note
+      // after the heading). Only on the open box: the folded pill is one line, FRAME_TAB_H tall.
+      const desc = isFrameBox(n) ? frameDescription(n) : '';
+      const md = collapsed ? collapsedMarkdown(label) : desc ? joinHeading(n.title, '', false) : cardMarkdown(label);
+      const full = nodeLabel(label) + (desc ? '\n' + desc : '');
+      el.style.setProperty('--tab-extra', (desc ? FRAME_DESC_H : 0) + 'px');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
       // destroys and rebuilds the tab's child nodes — where nothing about the label has changed. The
       // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
       // on its own, e.g. when the file is renamed) and `md` alone would never notice.
       // A frame with no text of its own renders NOTHING here.
-      if (titleEl.dataset.md !== md){
-        titleEl.dataset.md = md;
-        titleEl.innerHTML = md.trim() ? renderBodyHTML(md) : '';
+      const key = md + '\u0000' + desc;
+      if (titleEl.dataset.md !== key){
+        titleEl.dataset.md = key;
+        titleEl.innerHTML = (md.trim() ? renderBodyHTML(md) : '')
+          + (desc ? `<div class="frame-desc">${renderBodyHTML(desc)}</div>` : '');
       }
-      titleEl.title = full;   // one ellipsised line, so the full name lives in the tooltip
+      titleEl.title = full;   // ellipsised lines, so the full text lives in the tooltip
       // A frame with nothing written on it shows NO TITLE: expanded, that means no tab at all and no
       // strip reserved for one (elTop/frameInsetY); FOLDED, a bare stub of a pill. Either way its fold
       // CHIP stays visible (styles.css re-shows it inside the invisible row) — hiding that would leave a
@@ -751,23 +758,23 @@ function paintPos(n: MindNode): Pt {
 // A frame's bounds cover its tab only while it HAS one, so naming — or un-naming — one changes what its
 // stored y/h mean. Shift them by the tab's height in the opposite direction, so the BOX (the part anyone
 // is looking at, and the part its children sit in) doesn't move when the text crosses that line. Pass
-// what frameLabelled said BEFORE the text changed. Folded is left alone: the pill sits AT n.y, so moving
-// the bounds there would move the thing on screen instead of holding it still.
-export function reframeForTab(n: MindNode, wasLabelled: boolean): void {
+// what frameTabDrop said BEFORE the text changed — a description line appearing or going is the same
+// move, one line's worth. Folded is left alone: the pill sits AT n.y, so moving the bounds there would
+// move the thing on screen instead of holding it still.
+export function reframeForTab(n: MindNode, wasDrop: number): void {
   if (n.type !== 'frame' || n.collapsed) return;
-  const now = frameLabelled(n);
-  if (now === wasLabelled) return;
-  const d = now ? FRAME_TAB_DROP : -FRAME_TAB_DROP;
+  const d = frameTabDrop(n) - wasDrop;
+  if (!d) return;
   n.y -= d;
   if (n.h != null) n.h += d;
 }
 export function elTop(n: MindNode, y: number): number {
-  return isFrameBox(n) && frameLabelled(n) ? y + FRAME_TAB_DROP : y;
+  return isFrameBox(n) ? y + frameTabDrop(n) : y;
 }
 // elTop's inverse: the BOUNDS top for an element that paints at y. Only followEdges needs it — it
 // reads back interpolated left/top mid-animation to reproject them into world coordinates.
 function boundsTop(n: MindNode, y: number): number {
-  return isFrameBox(n) && frameLabelled(n) ? y - FRAME_TAB_DROP : y;
+  return isFrameBox(n) ? y - frameTabDrop(n) : y;
 }
 // Place an element at absolute world coords, expressed relative to its container: #world (or the drag
 // layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so

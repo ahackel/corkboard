@@ -15,7 +15,7 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
-import { frameLabelled } from '../view/layout.js';
+import { frameTabDrop } from '../view/layout.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure, reframeForTab } from '../main.js';
@@ -93,11 +93,13 @@ export function onTitleInput(n: MindNode): void {
 }
 export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.titleEdit || ui.titleEdit.id !== n.id) return;
-  if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); e.stopPropagation(); endTitleEdit(); }
+  // Enter finishes; ⇧Enter is a new line — the name is the first line, everything after it the
+  // frame's description (main.ts paintNode draws it under the name).
+  if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab'){ e.preventDefault(); e.stopPropagation(); endTitleEdit(); }
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
 // Commit (or cancel) a frame rename. The text is MARKDOWN, so it splits like any card's — `# Name` is a
-// heading on the tab, `Name` is plain text there — and an EMPTY commit is now accepted: a frame may have
+// heading on the tab with the lines below it the description, `Name` is plain text there — and an EMPTY commit is now accepted: a frame may have
 // no name, in which case it draws no tab at all and its bounds stop reserving one (main.ts frameLabelled
 // / elTop). That used to be refused, back when the tab was the only thing you could grab the box by; the
 // rim carries that job now (onFrameRim), so a nameless frame is a plain box and nothing is stranded.
@@ -107,6 +109,10 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   const te = ui.titleEdit; if (!te) return;
   ui.titleEdit = null;                                // null first → the blur handler becomes a no-op
   const n = state.nodes.get(te.id);
+  // Line breaks KEPT: `# Name` on the first line, the description below it (view/layout.ts
+  // frameDescription). Read while the editor is still `.editing` (white-space:pre-wrap) — innerText
+  // follows the CSS, and the tab's own nowrap would fold every line break into a space.
+  const val = (te.el.innerText ?? te.el.textContent ?? '').replace(/\r\n?/g, '\n').trim();
   setCardDraggable(n, true);
   te.el.removeAttribute('contenteditable');
   te.el.classList.remove('editing');
@@ -116,15 +122,14 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     discardNewCard(n.id, 'Cancelled new card');
     return;
   }
-  const val = (te.el.textContent ?? '').replace(/[\r\n]+/g, ' ').trim();   // a tab is a single line
   if (!cancel){
     // A frame that gains or loses its TEXT gains or loses its tab with it, and its bounds cover that tab
     // — so hold the box still across the change (reframeForTab), rather than letting it jump 39px the
     // first time someone names a frame.
-    const wasLabelled = frameLabelled(n);
+    const wasDrop = frameTabDrop(n);
     const { title, body, gap } = splitHeading(val);
     n.title = title; n.body = body; n.titleGap = gap;
-    reframeForTab(n, wasLabelled);
+    reframeForTab(n, wasDrop);
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow

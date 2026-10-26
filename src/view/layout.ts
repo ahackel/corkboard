@@ -140,14 +140,28 @@ export function frameInterior(f: MindNode): { x: number; y: number; w: number; h
 // NO tab and reserves no strip for one: its bounds ARE its box, because a tab with nothing written on
 // it is a label that says nothing while costing the box 39px.
 export function frameLabelled(f: MindNode): boolean { return !!(f.title.trim() || f.body.trim()); }
+// A frame's DESCRIPTION: its note under its name — the text after the `# ` heading, shown as one muted
+// line under the title on its tab. Only a NAMED frame has one: an untitled frame's tab shows the first
+// line of its text, which is its name in all but form, so splitting that again would just repeat it.
+export function frameDescription(f: MindNode): string { return f.title.trim() ? f.body.trim() : ''; }
+// The description line's height on the tab (styles.css `.frame-desc`: 16px line box). A described tab
+// is FRAME_TAB_H + this, and the box drops by the same — see frameTabDrop.
+export const FRAME_DESC_H = 16;
+// How far the BOX sits below the frame's bounds top: the tab's height, less its 1px overlap — none at
+// all for an unnamed frame (no tab), and one description line more for a described one. The single
+// spelling of the tab drop; main.ts elTop/reframeForTab and frameInsetY below read it.
+export function frameTabDrop(f: MindNode): number {
+  if (f.type !== 'frame' || !frameLabelled(f)) return 0;
+  return FRAME_TAB_DROP + (frameDescription(f) ? FRAME_DESC_H : 0);
+}
 // How far DOWN from a frame's BOUNDS top its interior starts — the vertical counterpart of the plain
 // FRAME_BORDER inset used on the other three sides, and the single spelling of it: shared by
 // frameInterior and by everything that projects a hosted child into its host's content wrapper
 // (main.ts's place/frameContentEl). A frame's bounds also cover its title tab, which sits above the
-// box (FRAME_TAB_DROP, main.ts). Keyed on `type`, not isFrame, so a paint landing mid-collapse can't
-// flip the inset under a hosted child.
+// box (frameTabDrop). Keyed on `type`, not isFrame, so a paint landing mid-collapse can't flip the
+// inset under a hosted child.
 export function frameInsetY(f: MindNode): number {
-  return FRAME_BORDER + (f.type === 'frame' && frameLabelled(f) ? FRAME_TAB_DROP : 0);
+  return FRAME_BORDER + frameTabDrop(f);
 }
 // Is `child`'s centre inside `frame`'s OUTER box? The test for "a frame child is still in its frame",
 // the same centre frameAt is asked about on drop.
