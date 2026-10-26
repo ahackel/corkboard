@@ -81,12 +81,15 @@ function unit(p: Pt, q: Pt): Pt {
 // A path through `pts`, each end pulled in by its own trim along its own leg, as an SVG path plus what
 // the caps and the label need. Two points is a straight segment; more is an elbow, its corners rounded
 // (CORNER_R, shrunk to fit a short leg) the way FigJam's are.
-type Geometry = { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt };
+// `box` bounds the whole route, its UNTRIMMED ends included — what the edge bar keeps clear of.
+type Geometry = { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt; box: { x0: number; y0: number; x1: number; y1: number } };
 const CORNER_R = 24;
 // A corner never eats the END legs down to nothing: the cap needs a straight stretch to sit on, or an
 // arrowhead lands on the bend and reads as a hook.
 const END_STRAIGHT = 16;
 function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
+  const box = { x0: Math.min(...pts.map(p => p.x)), y0: Math.min(...pts.map(p => p.y)),
+                x1: Math.max(...pts.map(p => p.x)), y1: Math.max(...pts.map(p => p.y)) };
   pts = pts.map(p => ({ ...p }));
   const n = pts.length;
   const lenOf = (i: number): number => Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
@@ -114,7 +117,7 @@ function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
     if (half <= L) { const u = unit(pts[i], pts[i+1]); mid = { x: pts[i].x + u.x * half, y: pts[i].y + u.y * half }; break; }
     half -= L;
   }
-  return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU };
+  return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU, box };
 }
 function segment(a: Pt, b: Pt, trimA: number, trimB: number): Geometry { return polyline([a, b], trimA, trimB); }
 

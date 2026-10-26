@@ -35,7 +35,7 @@ const arrowChips = byId('ebArrowChips');
 const dashPop = byId('ebDashPop');
 const dashChips = byId('ebDashChips');
 
-const GAP = 10;
+const GAP = 22;   // clear of the end handles (HANDLE_R) and the arrowhead
 
 // Inline SVG rather than the icon sheet: these three are specific to an edge and exist nowhere else,
 // and the glyph has to CHANGE with the control's state (a dashed line, one arrowhead or two), which
@@ -167,10 +167,13 @@ function openDashPop(): void {
   placePop(dashPop, dashBtn);
 }
 function closeDashPop(): void { dashPop.classList.remove('open'); }
+// A picker opens on the side of the bar AWAY from the line (barAbove, set by place()), so it never
+// covers what it's changing either.
+let barAbove = true;
 function placePop(pop: HTMLElement, anchor: HTMLElement): void {
-  const r = anchor.getBoundingClientRect();
+  const r = anchor.getBoundingClientRect(), br = bar.getBoundingClientRect();
   pop.style.left = Math.max(8, r.left + r.width / 2 - pop.offsetWidth / 2) + 'px';
-  pop.style.top = (r.bottom + 6) + 'px';
+  pop.style.top = (barAbove ? br.top - pop.offsetHeight - 8 : br.bottom + 8) + 'px';
 }
 function placeColorPop(): void { placePop(colorPop, colorBtn); }
 
@@ -183,23 +186,25 @@ function syncControls(): void {
   arrowsBtn.title = `Ends: ${CAP_NAME[e.fromCap]} → ${CAP_NAME[e.toCap]}`;
 }
 
-// The curve's midpoint in SCREEN space — where the bar hangs. Returns null when the edge has gone
-// (deleted, or an endpoint hidden), which is what closes the bar.
-function anchorPoint(): { x: number; y: number } | null {
+// The whole line's bounds in SCREEN space — what the bar hangs clear of. Returns null when the edge has
+// gone (deleted, or an endpoint hidden), which is what closes the bar.
+function lineBox(): { x0: number; y0: number; x1: number; y1: number } | null {
   const e = leadEdge();
   if (!e || !edgeVisible(e)) return null;
   const g = edgeGeometry(e); if (!g) return null;
-  // The route's midpoint BY ARC LENGTH — the same point the label sits on, so the bar always covers
-  // the thing it edits (view/free-edges.ts edgeGeometry).
-  return { x: g.mid.x * state.view.k + state.view.x, y: g.mid.y * state.view.k + state.view.y };
+  const k = state.view.k, sx = (x: number): number => x * k + state.view.x, sy = (y: number): number => y * k + state.view.y;
+  return { x0: sx(g.box.x0), y0: sy(g.box.y0), x1: sx(g.box.x1), y1: sy(g.box.y1) };
 }
 
+// FigJam's placement: ABOVE the whole line, centred on it, never on top of it — the bar is for the line,
+// and covering it hides what you're changing. Below it when there's no room above.
 function place(): boolean {
-  const p = anchorPoint(); if (!p) return false;
+  const b = lineBox(); if (!b) return false;
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
-  let top = p.y - bh - GAP;
-  if (top < safeInsets().top + 4) top = p.y + GAP;
-  const left = Math.min(Math.max(8, p.x - bw / 2), window.innerWidth - bw - 8);
+  let top = b.y0 - bh - GAP;
+  barAbove = top >= safeInsets().top + 4;
+  if (!barAbove) top = b.y1 + GAP;
+  const left = Math.min(Math.max(8, (b.x0 + b.x1) / 2 - bw / 2), window.innerWidth - bw - 8);
   bar.style.left = left + 'px';
   bar.style.top = Math.min(top, window.innerHeight - bh - 8) + 'px';
   if (colorPop.classList.contains('open')) placeColorPop();

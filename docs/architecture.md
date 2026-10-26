@@ -824,7 +824,9 @@ had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — i
 past it. While a line end is dragged, the target card shows its ports; the one within `PORT_SNAP` fills. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron. A lone selected line shows FigJam's end
 handles — white discs with a 3px blue rim, ON the card rims where it attaches (the drawn ends stepped back
-by their trim) — and no outline; a multi-selection, which has no handles, outlines each line instead.
+by their trim) — and no outline; a multi-selection, which has no handles, outlines each line instead. The
+line's toolbar (`#edgeBar`) never covers the line: it sits above the route's whole bounds (`Geometry.box`,
+untrimmed ends included), or below when there's no room, and its pickers open on the side away from it.
 
 **The context menu is FigJam's** (`#ctxMenu`, `features/context-menu.ts`; a card's entries are
 `buildCardMenu` in float-bar.ts, shared with the bar's ⋯). Groups, in FigJam's order: the clipboard
