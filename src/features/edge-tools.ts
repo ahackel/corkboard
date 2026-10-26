@@ -47,15 +47,17 @@ export function clearEdgeSelection(): void {
   syncEdgeBar();
 }
 
-// The edge already joining these two cards, either way round. Two lines between the same pair would
-// lie exactly on top of each other, so a second draw selects the first instead.
-function edgeBetween(a: string, b: string): BoardEdge | undefined {
-  return state.edges.find(e => (e.from === a && e.to === b) || (e.from === b && e.to === a));
+// The edge already joining these two cards THROUGH THE SAME PORTS, either way round (an unpinned end
+// counts as its own "port"). Two such lines would lie exactly on top of each other, so a second draw
+// selects the first instead — but the same two cards can be joined again through different ports.
+function edgeBetween(a: string, b: string, pa?: EdgeSide, pb?: EdgeSide): BoardEdge | undefined {
+  return state.edges.find(e => (e.from === a && e.to === b && e.fromPort === pa && e.toPort === pb)
+                            || (e.from === b && e.to === a && e.fromPort === pb && e.toPort === pa));
 }
 // `fromPort`/`toPort` pin the ends to those faces (BoardEdge); left out, an end picks its face itself.
 export function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
   if (fromId === toId || !connectable(fromId) || !connectable(toId)) return null;
-  const dup = edgeBetween(fromId, toId);
+  const dup = edgeBetween(fromId, toId, fromPort, toPort);
   if (dup) { selectEdge(dup.id); return dup; }
   touchEdges();
   const e = makeEdge(fromId, toId);
@@ -213,7 +215,8 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   const existing = draw.edgeId ? state.edges.find(e => e.id === draw.edgeId) : null;
   if (existing) {
     const other = draw.end === 'to' ? existing.from : existing.to;
-    const dup = edgeBetween(other, target);
+    const otherPort = draw.end === 'to' ? existing.fromPort : existing.toPort;
+    const dup = edgeBetween(other, target, otherPort, draw.overSide);
     if (target === other || (dup && dup !== existing)) { paintFreeEdges(); return; }
     touchEdges();
     if (draw.end === 'to') { existing.to = target; existing.toPort = draw.overSide; }

@@ -98,7 +98,9 @@ plain centre-to-centre line. An end dropped on a PORT is PINNED to that face (`f
 old line would be pinned to a face nobody chose). A pinned line leaves/enters that face square and is
 routed by `pinnedRoute`: a few orthogonal shapes per allowed pair of faces (the middle Z first, then
 detours STUB out and round either box), keeping those that cross neither card, shortest + `BEND_COST` per
-bend wins. Only faces are stored; the route is re-derived on every paint (docs/PRODUCT.md, principle 2). You draw one from the four rings on a selected card
+bend wins. Only faces are stored; the route is re-derived on every paint (docs/PRODUCT.md, principle 2). Two
+cards can be joined more than once as long as the ports differ: a draw is a duplicate (and selects the
+existing line instead) only when it joins the same two cards through the same ports (`edgeBetween`). You draw one from the four rings on a selected card
 onto ANY point of another card; an end handle moves that end. Older boards may carry JUNCTIONS (points
 where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
 into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
