@@ -15,7 +15,7 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { renderBodyHTML, taskProgress } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor, paleFill } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount } from './utils/model.js';
+import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount, nodesOf, nodeByFile } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
@@ -45,7 +45,7 @@ import { FRAME_NOTE } from './utils/filenames.js';
 import { afterReading, readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, canEnter, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
@@ -247,10 +247,10 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   if (onTitle) { startInlineEdit(n); return; }
   // A frame's own RIM edits its text — the chrome a frame has that isn't its interior or its tab
   // (which an unnamed frame doesn't draw), so there's one way to write on a frame whether it's named.
-  if (isFrameBox(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
+  if (isFrame(n) && onFrameRim(n, cx, cy)) { startInlineEdit(n); return; }
   // A FRAME's interior gets a new card WHERE YOU POINTED. Going in is ⌥-double-click (above), ↑, the
-  // float bar's Open (→]) or ⋯ → Open. isFrameBox: a folded frame has no interior on screen, so it falls through.
-  if (isFrameBox(n)) { addCardInside(n.id, screenToWorld(cx, cy)); return; }
+  // float bar's Open (→]) or ⋯ → Open. isFrame: a folded frame has no interior on screen, so it falls through.
+  if (isFrame(n)) { addCardInside(n.id, screenToWorld(cx, cy)); return; }
   startBodyEdit(n, { x: cx, y: cy });
 }
 // A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor (a frame).
@@ -278,9 +278,8 @@ export function effectiveColor(n: MindNode): string {
   // Nothing in the chain is coloured. A CARD is a sticky note, and a sticky note is yellow (docs/PRODUCT.md:
   // "a default card is a coloured sticky note") — derived here, never written, so a note on disk stays
   // uncoloured and picking a colour is still the user's own act. A FRAME is a surface cards sit ON, so it
-  // keeps a neutral white.
-  if (n.type === 'card') return 'amber';
-  return 'white';
+  // keeps a neutral white (above).
+  return 'amber';
 }
 // The card whose edge is being dragged right now (startNodeResize). Declared ahead of paintNode, which
 // reads it, so no paint can reach it before it exists.
@@ -326,7 +325,7 @@ export function paintNode(n: MindNode): void {
   el.className = 'node ' + colorClass(col)
     + (n.id === resizingId ? ' resizing' : '')
     + (arrivedIds.has(n.id) ? ' arrived' : '')   // just came in from outside (flashArrived)   // its tags step aside while it's resized (styles.css)
-    + (isFrameBox(n) ? ' frame' : '')
+    + (isFrame(n) ? ' frame' : '')
     + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare label pill (styles.css)
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
     + (state.sel.has(n.id) ? ' sel' : '')
@@ -374,11 +373,11 @@ export function paintNode(n: MindNode): void {
     // parent (n.x - parent.x — the live, staleness-proof form of rx/ry). So the parent carries its
     // whole subtree via the compositor: moving the parent's element moves every descendant with it,
     // no per-descendant left/top rewrite. Roots stay under #world; a direct frame child stays in the
-    // frame's overflow:hidden wrapper (place()). isFrameBox covers frames (image cards are leaves).
+    // frame's overflow:hidden wrapper (place()). isFrame covers frames (image cards are leaves).
     const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
     // (The OPEN frame is the canvas even while folded: its children are top-level, never nested in its pill.)
-    if (p && !isFrameBox(p) && !isScopeRoot(p) && !isFrameBox(n)) {
+    if (p && !isFrame(p) && !isScopeRoot(p) && !isFrame(n)) {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
@@ -409,7 +408,7 @@ export function paintNode(n: MindNode): void {
     el.style.width = nodeW(n) + 'px';
     el.style.height = nodeH(n) + 'px';
     ensureResizeHandles(n, FRAME_DIRS);
-    if (isFrameBox(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+    if (isFrame(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
   } else if (isFrameFold(n)) {
     // folded: the element is the bare pill, shrink-wrapped by CSS (.frame-folded) — no inline size,
     // no resize zones (unfolding gives the box back at its authored size).
@@ -440,7 +439,6 @@ export function paintNode(n: MindNode): void {
   // one text field, and while that's open the whole row is hidden (`.card-editing`).
   if (!(ui.titleEdit && ui.titleEdit.id === n.id)) {
     const titleEl = el.querySelector('.title') as HTMLElement;
-    const label = n;
     // A CARD HAS NO LABEL OF ITS OWN, titled or not: it is its text, rendered as markdown, and a leading
     // `# ` line is therefore an H1 in that text exactly as `- item` is a bullet — one renderer, one set of
     // rules, nothing hoisted out of the note into a field of its own. So the slot stays empty (`no-title`
@@ -451,18 +449,18 @@ export function paintNode(n: MindNode): void {
     // one. It keeps a `.title` element rather than a body because it hangs OUTSIDE the box (a pill
     // above it, FigJam-style), and its own `.body` is display:none because the box holds cards, not a
     // note.
-    if (isFrameBox(n) || isFrameFold(n)) {
+    if (isFrame(n) || isFrameFold(n)) {
       // …and under the name, on a second muted line, its DESCRIPTION (frameDescription — the note
       // after the heading). The
       // label grows UPWARD from the box's top edge, so a description never moves the box. FOLDED, the
       // pill is one line: the name, then how many notes it holds (`.frame-count`).
-      const desc = isFrameBox(n) ? frameDescription(n) : '';
-      const md = desc || isFrameFold(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(label) : cardMarkdown(label);
+      const desc = isFrame(n) ? frameDescription(n) : '';
+      const md = desc || isFrameFold(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(n) : cardMarkdown(n);
       // A folded frame whose notes weren't read knows only HOW MANY there are (data/lazy.ts).
       const count = isFrameFold(n) ? n.lazy ?? descendantCount(n.id) : 0;
       // …and, while a search is on, how many of them match it (features/search.ts).
       const hits = isFrameFold(n) ? searchHitsIn(n.id) : 0;
-      const full = nodeLabel(label) + (desc ? '\n' + desc : '');
+      const full = nodeLabel(n) + (desc ? '\n' + desc : '');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
       // destroys and rebuilds the tab's child nodes — where nothing about the label has changed. The
@@ -598,10 +596,7 @@ export const FRAME_BORDER = 2;   // must match .node.frame's CSS `border` width 
 // Default frame container size (world px).
 export const FRAME_W = 360, FRAME_H = 260;
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
-// Whether a node renders as a frame BOX — every frame does: frames don't fold (canFold). Shared by the
-// geometry helpers below.
-function isFrameBox(n: MindNode): boolean { return isFrame(n); }
-// …and the other half: a FOLDED frame renders as nothing but its label — a pill at the box's top-left
+// A FOLDED frame renders as nothing but its label — a pill at the box's top-left
 // corner (n.x, n.y), its cards hidden (utils/model.ts isHidden). Its element shrink-wraps the label,
 // so its width is measured (nodeW) and its height is the FRAME_TAB_H constant.
 function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.collapsed; }
@@ -614,6 +609,8 @@ export const FRAME_TAB_H = 40;
 export function canFold(n: MindNode): boolean {
   return n.type === 'frame' || isImageCard(n) || hiddenLineCount(n) > 0;
 }
+// …and may be folded or unfolded by the user right now: not locked, and not the open frame (it's the canvas).
+export const canToggleFold = (n: MindNode): boolean => canFold(n) && !isLockedEffective(n) && !isScopeRoot(n);
 // Whether `n` currently holds its children in a content wrapper of its own (frameContentEl) — the two
 // case paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from it: an
 // expanded frame BOX.
@@ -621,15 +618,7 @@ export function canFold(n: MindNode): boolean {
 // "a wrapper exists iff hostsContent(n)" with ONE drop, ahead of its isHidden early return.
 function hostsContent(n: MindNode): boolean {
   if (isHidden(n)) return false;
-  return isFrameBox(n);
-}
-// The width a frame's own title TAB renders at — MEASURED, since a title is as wide as its text (up
-// to the CSS max-width, which ellipsises it). When the frame is folded its element IS that tab;
-// otherwise the tab is the .title-row hanging above the box.
-export function frameLabelW(n: MindNode): number {
-  const lab = labelEl(n);
-  if (!lab || lab === n.el) return nodeW(n);   // labelEl returns the element itself for a fold/tab
-  return lab.offsetWidth || NODE_W;
+  return isFrame(n);
 }
 // WHICH element carries this node's visible title. Its own `.title-row`, except for a frame that
 // renders as nothing but its tab (folded or docked), where the element IS the label. Exported because
@@ -655,7 +644,7 @@ export const IMAGE_FOLD = 40;
 function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed; }
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
 // below.
-function isBoxNode(n: MindNode): boolean { return isFrameBox(n) || isImageBox(n); }
+function isBoxNode(n: MindNode): boolean { return isFrame(n) || isImageBox(n); }
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
 // A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
@@ -1081,8 +1070,7 @@ function layoutSnapshot(): Map<string, Pt> {
   return before;
 }
 // Run a structural change (a collapse toggle, a tidy-up) and CSS-animate the resulting reflow.
-export function animateLayout(mutate: () => void): void { withLayoutAnimation(mutate); }
-function withLayoutAnimation(mutate: () => void): void {
+export function animateLayout(mutate: () => void): void {
   const before = layoutSnapshot();
   const sizes = sizeSnapshot();
   mutate();
@@ -1195,8 +1183,8 @@ export function toggleCollapse(id: string): void {
   if (!canFold(n)) return;   // a card with nothing to tuck away
   // Unfolding a frame whose notes are still on disk reads them first (data/lazy.ts), then unfolds.
   if (n.collapsed && afterReading([id], () => toggleCollapse(id), false)) return;
-  // animate the reflow; withLayoutAnimation paints, measures heights, and lays out the children
-  record([id], () => withLayoutAnimation(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
+  // animate the reflow; animateLayout paints, measures heights, and lays out the children
+  record([id], () => animateLayout(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
   dropHiddenFromSelection();
   syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();
@@ -1214,7 +1202,7 @@ function dropHiddenFromSelection(): void {
 // Which of `ids` can actually be folded — the one filter both the toggling and the directional paths
 // below share, so the chip, X and ←/→ can't disagree about what counts.
 function foldableSelection(ids: Iterable<string>): MindNode[] {
-  return [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n)
+  return nodesOf(ids)
     .filter(n => !isLockedEffective(n))
     .filter(canFold);
 }
@@ -1222,7 +1210,7 @@ function foldableSelection(ids: Iterable<string>): MindNode[] {
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) return;
   record(cards.map(n => n.id),
-    () => withLayoutAnimation(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
+    () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
   syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();
@@ -1243,7 +1231,7 @@ export function foldScope(): MindNode[] {
   const pool = frames.length
     ? frames.flatMap(f => subtreeIds(f.id).map(id => state.nodes.get(id)!))
     : [...state.nodes.values()].filter(n => !outOfScope(n));
-  return pool.filter(n => canFold(n) && !isLockedEffective(n) && !isScopeRoot(n));
+  return pool.filter(canToggleFold);
 }
 // Expand all brings back the WHOLE lot, so every folded frame in reach is read to the bottom first
 // (data/lazy.ts) — and the set is taken again after, since what was read holds more to unfold.
@@ -1465,7 +1453,7 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   cancelViewAnim();
   const before = scope.rootId;
   const left = before ? state.nodes.get(before) : undefined;
-  withLayoutAnimation(() => {
+  animateLayout(() => {
     setScopeStack(target, opts.back ?? null);
     // settledHost caches which wrapper each element sits in (hostFrameId), and the scope just
     // changed which wrapper that IS. Drop the cache or the children keep being placed into a
@@ -1540,7 +1528,7 @@ export function goToScopeDepth(depth: number): void {
 // distinction only shows up on a back/forward step, where honouring the URL is the entire point.
 // No error either way; a shared link to a since-deleted frame should just open the map.
 export function restoreScopeFromFile(file: string | null): void {
-  const t = file ? [...state.nodes.values()].find(n => n.file === file) : undefined;
+  const t = file ? nodeByFile(file) : undefined;
   const want = t && canOpen(t) ? t : null;
   if (!want) { if (scopeActive()) { withoutScopeFade(); applyScope(null, { exiting: true, camera: false }); } return; }
   if (isScopeRoot(want)) return;
@@ -1591,24 +1579,19 @@ function hasAuthoredColor(n: MindNode): boolean {
 // standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
 // and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
 // writes can't become two different things.
-export function canvasOwner(): MindNode | null {
-  const open = scopeRootNode();
-  if (!open) return null;
-  return open;
-}
+export const canvasOwner = (): MindNode | null => scopeRootNode();
 // The fill actually behind the cards right now — the one input both the background and the grid ink
 // are derived from. null = none, and the theme's own background shows through as before.
 //
 // An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
-// rather than to nothing: what's behind an uncoloured container is whatever is behind IT. Standing inside a frame nobody coloured, or reading
-// a card whose parent nobody coloured, discarded the canvas colour the map itself was painted in — so
+// rather than to nothing: what's behind an uncoloured frame is whatever is behind IT. Standing inside a frame nobody coloured
+// used to discard the canvas colour the map itself was painted in — so
 // going in turned a teal board grey, and coming out turned it teal again.
 export function canvasFill(): string | null {
   const owner = canvasOwner();
-  if (!owner) return colorFill(state.canvasColor);
-  if (!hasAuthoredColor(owner)) return colorFill(state.canvasColor);
+  if (!owner || !hasAuthoredColor(owner)) return colorFill(state.canvasColor);
   const fill = colorFill(effectiveColor(owner));
-  return fill && owner.type === 'frame' ? paleFill(fill) : fill;
+  return fill && paleFill(fill);
 }
 // The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
 // free edge's label plate is painted in — a label is a small
@@ -1684,8 +1667,7 @@ export const PICKER_ROWS: string[][] = [
   ['silver','grey','red','orange','amber','green','teal','blue','violet','pink'],
 ];
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
-const SWATCH_KEYS = PALETTE;
-export const SWATCH_BG: Record<string, string> = Object.fromEntries(SWATCH_KEYS.map(c => [c, pal(c)]));
+export const SWATCH_BG: Record<string, string> = Object.fromEntries(PALETTE.map(c => [c, pal(c)]));
 // The canvas's own THEME fill, read and cached exactly like the palette above. It's canvasSurface's last
 // resort, when the map has no colour of its own. Cached rather than read live because it runs on every
 // edge paint.
@@ -1707,10 +1689,10 @@ document.head.appendChild(inkStyle);
 // …and the `.c-<key>` class each key is worn by, generated here beside its ink rather than listed by
 // hand in styles.css, so adding a key to PALETTE (and its --pal-* hex) is the whole job.
 function deriveInk(): void {
-  inkStyle.textContent = ':root{' + SWATCH_KEYS.map(c => {
+  inkStyle.textContent = ':root{' + PALETTE.map(c => {
     const bg = SWATCH_BG[c] ?? '';
     return `--pal-ink-${c}:${inkFor(bg)};--pal-scrim-${c}:${scrimFor(bg)};`;
-  }).join('') + '}' + SWATCH_KEYS.map(c =>
+  }).join('') + '}' + PALETTE.map(c =>
     `.c-${c}{--card:var(--pal-${c});--ink:var(--pal-ink-${c});--scrim:var(--pal-scrim-${c})}`).join('');
 }
 deriveInk();
@@ -1722,7 +1704,7 @@ deriveInk();
 //                null for 'none'/inherit/unknown, which callers already fall back to --edge for.
 //   colorClass — the CSS class to hang on the element. A hex can't be a class name (and there'd be
 //                nowhere to put its hexes), so a custom colour gets .c-custom + inline variables…
-//   colorVars  — …which are those variables: the same --card/--ink/--scrim triple a .c-* class
+//   applyColorVars — …which are those variables: the same --card/--ink/--scrim triple a .c-* class
 //                provides, just computed per node instead of once per palette key. Everything
 //                downstream keys off the variables alone, so a custom colour behaves exactly like a
 //                palette one — including the :not(.c-none) tests.
@@ -1731,10 +1713,7 @@ deriveInk();
 // every paint.
 export function colorFill(c: string): string | null { return SWATCH_BG[c] ?? (isHexColor(c) ? c : null); }
 export function colorClass(c: string): string { return isHexColor(c) ? 'c-custom' : 'c-' + c; }
-export function colorVars(c: string): string {
-  return isHexColor(c) ? `--card:${c};--ink:${inkFor(c)};--scrim:${scrimFor(c)}` : '';
-}
-// The element form of colorVars: SET for a custom colour, REMOVED otherwise. Removing matters —
+// SET for a custom colour, REMOVED otherwise. Removing matters —
 // recolouring a custom card back to a palette key has to drop the inline triple, or it would keep
 // overriding the .c-* class that now owns the colour (an inline custom property beats any selector).
 export function applyColorVars(el: HTMLElement, c: string): void {
@@ -1905,7 +1884,7 @@ window.addEventListener('keydown', (e) => {
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
   // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).
   // Both are bound: whichever the browser lets through does the same thing.
-  if (key === 'n' && !e.shiftKey && !e.altKey && !(mod && e.shiftKey)){ e.preventDefault(); newCardAtPointer(); return; }
+  if (key === 'n' && !e.shiftKey && !e.altKey){ e.preventDefault(); newCardAtPointer(); return; }
   // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
@@ -2039,9 +2018,9 @@ function paletteCommands(): Command[] {
     { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
     { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
     { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
-    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || (editable() && store.isOpen), run: goToInbox },
+    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || editable(), run: goToInbox },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
-    { label: 'Open', shortcut: '↑', keywords: 'enter frame', when: () => { const n = oneSel(); return !!n && canOpen(n) && !isScopeRoot(n); }, run: () => openFrame(oneSel()) },
+    { label: 'Open', shortcut: '↑', keywords: 'enter frame', when: () => canEnter(oneSel()), run: () => openFrame(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },

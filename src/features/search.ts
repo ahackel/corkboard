@@ -122,7 +122,6 @@ function matches(n: MindNode, text: string): boolean {
 
 // The query changed: recompute, and rebuild the dropdown (when the field has the focus).
 export function runSearch(showList = true): void {
-  searchBox.classList.toggle('has-value', !!searchBox.value);
   const { text, typing } = parts();
   if (!searchActive()) { clearResults(); paintAll(); scheduleUrlSync(); return; }
   paintAll();   // → refreshSearch
@@ -174,7 +173,6 @@ function markActive(): void {
 function clearResults(): void {
   searchResults.classList.remove('open'); searchResults.innerHTML = '';
   cardHits = []; tagRows = []; active = -1;
-  searchBox.classList.toggle('has-value', !!searchBox.value);
   state.searchActiveId = null;
 }
 // Make the `#word` being typed (or the suggestion picked for it) a chip.

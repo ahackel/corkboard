@@ -9,8 +9,8 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf } from '../utils/model.js';
-import { detachParentId, isScopeRoot } from '../nav/scope.js';
-import { isFrame, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
+import { detachParentId } from '../nav/scope.js';
+import { isFrame, collectsCards, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
@@ -614,7 +614,7 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
   const moved: string[] = [];
   for (const id of frameIds) {
     const f = state.nodes.get(id);
-    if (!f || !isFrame(f) || isHidden(f) || isScopeRoot(f) || isLockedEffective(f)) continue;
+    if (!f || !collectsCards(f)) continue;
     const b = containerBox(f);
     const inside = (m: MindNode): boolean => m.x >= b.x && m.y >= b.y && m.x + nodeW(m) <= b.x + b.w && m.y + nodeH(m) <= b.y + b.h;
     // let go of its own cards that left it…

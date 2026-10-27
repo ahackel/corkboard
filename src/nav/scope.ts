@@ -48,6 +48,9 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 export function canOpen(n: MindNode | null | undefined): boolean {
   return n?.type === 'frame';
 }
+// …and can be opened from where you stand: not the frame you are already in. (canOpen itself stays
+// true for that one — the scope stack below checks the frames on the path, the open one included.)
+export const canEnter = (n: MindNode | null | undefined): boolean => canOpen(n) && !isScopeRoot(n!);
 
 // The scope term of isHidden, on its own — for the few callers that must tell "folded away" from
 // "not in the frame I'm standing in" (isSelectable, the cross-scope jumps in main.ts). isHidden

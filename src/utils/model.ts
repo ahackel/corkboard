@@ -5,6 +5,17 @@ import { state, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
 import { scope } from '../nav/scope.js';
 
+// The nodes for some ids, skipping any that are gone.
+export function nodesOf(ids: Iterable<string>): MindNode[] {
+  const out: MindNode[] = [];
+  for (const id of ids) { const n = state.nodes.get(id); if (n) out.push(n); }
+  return out;
+}
+// The node a file path names (a path is a node's identity on disk), if it is in memory.
+export function nodeByFile(file: string): MindNode | undefined {
+  for (const n of state.nodes.values()) if (n.file === file) return n;
+  return undefined;
+}
 export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
 }
@@ -23,16 +34,12 @@ export function* ancestors(n: MindNode): Generator<MindNode> {
   let guard = 0;
   for (let p = parentOf(n); p && guard++ < 4096; p = parentOf(p)) yield p;
 }
-export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
-// The top level in its ONE canonical order — canvas y, then x, with the filename as a stable
-// tie-break so the sequence can't reshuffle between two reads of the same map. Roots have no parent
-// to hold a kidOrder (unlike orderedKids), so this is what stands in for it: the outline's top-level
-// list and the arrow-key walk (main.ts navSiblings) both read it, which is what makes them agree.
-// `keep` narrows it — the outline drops the row being dragged.
-export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
-  return [...state.nodes.values()].filter(n => isRoot(n) && (!keep || keep(n)))
-    .sort((a, b) => a.y - b.y || a.x - b.x || (a.file ?? a.title).localeCompare(b.file ?? b.title));
+// The OUTERMOST of some nodes: those with no ancestor among them (an inner one rides along with it).
+export function outermost(nodes: MindNode[]): MindNode[] {
+  const ids = new Set(nodes.map(n => n.id));
+  return nodes.filter(n => ![...ancestors(n)].some(a => ids.has(a.id)));
 }
+export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
 // THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both. A new term goes IN here,
 // never beside it.
 //
@@ -90,9 +97,6 @@ export function subtreeHasLocked(id: string): boolean {
   if (n?.locked) return true;
   return childrenOf(id).some(ch => subtreeHasLocked(ch.id));
 }
-// The set of titles already in use (lowercased + trimmed), optionally excluding one node.
-// Filenames collide case-insensitively on macOS/Windows, so collision checks compare lowercased.
-// Shared by the rename validator (inline-edit) and the unique-name minter (crud).
 // The name to SHOW for a node ANYWHERE the card itself isn't — the outline, search results, a status
 // line, the move picker. A card may be untitled (no `# ` heading, see utils/frontmatter.ts splitHeading),
 // and on the canvas that's the point: it shows its text and no title row. But a LIST row can't be blank,

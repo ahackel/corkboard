@@ -9,27 +9,21 @@
 // too (features/tag-drag.ts). Tags written in the
 // note's text show here too, but can't be unticked: they're the text's (edit the note instead).
 // Recently used tags lead an empty field (localStorage — a convenience, not map data).
-import { state, setStatus, type MindNode } from '../core/state.js';
-import { isLockedEffective } from '../utils/model.js';
+import { state, setStatus } from '../core/state.js';
+import { isLockedEffective, nodesOf } from '../utils/model.js';
 import { esc } from '../utils/markdown.js';
 import { placeInViewport } from '../utils/dom.js';
 import { allTags, noteTags, cleanTag, tagKey, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { taggableSelection } from '../main.js';
 import { setTagOnNodes, tagText } from './tags.js';
+import { readStrings, writeJSON } from '../utils/local-json.js';
 
 const MRU_KEY = 'corkboard.tagMru';
-export function loadMru(): string[] {
-  try { const raw = JSON.parse(localStorage.getItem(MRU_KEY) ?? '[]'); return Array.isArray(raw) ? raw.filter(t => typeof t === 'string') : []; }
-  catch { return []; }
-}
-export function dropMru(tag: string): void {
-  try { localStorage.setItem(MRU_KEY, JSON.stringify(loadMru().filter(t => tagKey(t) !== tagKey(tag)))); }
-  catch { /* nothing to forget */ }
-}
+export const loadMru = (): string[] => readStrings(MRU_KEY);
+export function dropMru(tag: string): void { writeJSON(MRU_KEY, loadMru().filter(t => tagKey(t) !== tagKey(tag))); }
 export function pushMru(tag: string): void {
-  try { localStorage.setItem(MRU_KEY, JSON.stringify([tag, ...loadMru().filter(t => tagKey(t) !== tagKey(tag))].slice(0, 16))); }
-  catch { /* private window: no recents, nothing lost */ }
+  writeJSON(MRU_KEY, [tag, ...loadMru().filter(t => tagKey(t) !== tagKey(tag))].slice(0, 16));   // private window: no recents
 }
 
 // Every tag on the board, most used first.
@@ -68,7 +62,7 @@ function sections(): Section[] {
   const q = input.value.trim().replace(/^#+/, '');
   const qk = q.toLowerCase();
   const board = boardTags();
-  const nodes = targets.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
+  const nodes = nodesOf(targets);
   // the selection's own tags: frontmatter ones can be unticked, the text's can't
   const mine = new Map<string, Row>();
   for (const n of nodes) for (const t of noteTags(n)) {

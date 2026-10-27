@@ -10,7 +10,7 @@
 // follow loop the card bar uses.
 // ============================================================
 import { state, type EdgeCap } from '../core/state.js';
-import { selectedEdges, leadEdge, deleteSelectedEdge, clearEdgeSelection } from './edge-tools.js';
+import { selectedEdges, leadEdge, deleteSelectedEdge } from './edge-tools.js';
 import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { touchEdges, commitStep } from './history.js';
@@ -130,10 +130,10 @@ function wire(): void {
     if (dashPop.classList.contains('open') && !dashPop.contains(t) && !dashBtn.contains(t)) closeDashPop();
   }, true);
 }
-function commit(repaintBar = true): void {
+function commit(): void {
   scheduleSaveBoard();
   paintFreeEdges();
-  if (repaintBar) syncControls();
+  syncControls();
 }
 
 function openColorPop(): void {
@@ -296,7 +296,3 @@ labelEdit.addEventListener('keydown', (ev) => {
   else if (ev.key === 'Escape') { ev.preventDefault(); endLabelEdit(false); }
 });
 labelEdit.addEventListener('blur', () => endLabelEdit(true));
-export function labelEditActive(): boolean { return editingId != null; }
-
-// Esc from the label field shouldn't also clear the selection; everything else does.
-export function closeEdgeBar(): void { hide(); clearEdgeSelection(); }

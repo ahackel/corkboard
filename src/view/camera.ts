@@ -78,7 +78,8 @@ export function applyView(): void {
 // (cancelViewAnim) so the animation never fights the user's own input.
 let viewAnim: number | null = null;
 export function cancelViewAnim(): void { if (viewAnim){ cancelAnimationFrame(viewAnim); viewAnim = null; } }
-export function animateViewTo(tx: number, ty: number, tk: number = state.view.k, dur = 420): void {
+const GLIDE_MS = 420;
+export function animateViewTo(tx: number, ty: number, tk: number = state.view.k): void {
   cancelViewAnim();
   const sx = state.view.x, sy = state.view.y, sk = state.view.k;
   if (Math.abs(tx-sx) < 1 && Math.abs(ty-sy) < 1 && Math.abs(tk-sk) < .001){
@@ -87,7 +88,7 @@ export function animateViewTo(tx: number, ty: number, tk: number = state.view.k,
   const t0 = performance.now();
   const ease = (t: number) => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;   // easeInOutCubic
   function step(now: number){
-    const p = Math.min(1, (now - t0)/dur), e = ease(p);
+    const p = Math.min(1, (now - t0)/GLIDE_MS), e = ease(p);
     state.view.x = sx + (tx-sx)*e;
     state.view.y = sy + (ty-sy)*e;
     // zoom is perceptually multiplicative, so interpolate k geometrically — with the eased
@@ -142,7 +143,7 @@ export function fit(): void {
 // directly over the selected card and reserves nothing (so no width term is ever needed); on a
 // narrow one styles.css docks it along the bottom edge (same 700px breakpoint NARROW_MQ mirrors)
 // and it eats height. Every camera move that has to land a node in the VISIBLE canvas subtracts
-// this — frameBox and revealInView both — so the two can't disagree about where the bottom is.
+// this — frameBox — so it lands nodes above the docked bar.
 function bottomInset(): number {
   const fb = byId('floatBar');
   return (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
@@ -168,30 +169,3 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>): void {
   animateViewTo(availW/2 - cx*k, availH/2 - cy*k, k);   // glide + zoom, never jump
 }
 
-// Pan the minimum distance that brings ONE node fully on screen — and nothing more: no zoom
-// change, no re-centring, no move at all when it's already visible. That's what arrow-key
-// navigation (main.ts) needs and what frameBox is wrong for: walking the tree card by card must
-// not re-frame or re-zoom on every step, or the map jumps under you the whole way down a branch.
-// The pad keeps the landed card clear of the viewport edge (and of the float bar on a narrow
-// screen, which docks along the bottom — hence bottomInset, the same term frameBox subtracts).
-const REVEAL_PAD = 60;
-// One axis of it: how far to shift so [lo,hi] sits inside [0,limit] with REVEAL_PAD to spare.
-// Overshoot on BOTH edges (a card longer than the viewport on this axis) → align its `lo` end, so
-// the card's own start is what you see rather than an arbitrary middle. Written once and applied to
-// both axes, so a sign slip can't hide on the one that's harder to notice.
-function revealShift(lo: number, hi: number, limit: number): number {
-  if (lo < REVEAL_PAD) return REVEAL_PAD - lo;
-  if (hi > limit - REVEAL_PAD) return Math.max(limit - REVEAL_PAD - hi, REVEAL_PAD - lo);
-  return 0;
-}
-export function revealInView(n: MindNode | undefined): void {
-  if (!n || isHidden(n)) return;
-  const k = state.view.k, r = stageSize();
-  // the node's box in screen space
-  const left = n.x*k + state.view.x, top = n.y*k + state.view.y;
-  const right = left + nodeW(n)*k, bottom = top + nodeH(n)*k;
-  const dx = revealShift(left, right, r.width);
-  const dy = revealShift(top, bottom, r.height - bottomInset());
-  if (!dx && !dy) return;
-  animateViewTo(state.view.x + dx, state.view.y + dy, k, 220);
-}

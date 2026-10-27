@@ -257,7 +257,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   invariant: the frame's own `n.w`/`n.h` are neither read there nor written, which lets it come back out at
   its authored size. `frameInterior` needs the guard too (it doesn't route through
   `containerBox`), and `frameContentTop` needs it because an open frame draws no tab to drop below — fixed
-  there and NOT by making `isFrameBox` false for it, which feeds `nodeH` and would measure a `display:none`
+  there and NOT by making `isFrame` false for it, which feeds `nodeH` and would measure a `display:none`
   element and report a 64px frame. What still READS that rect is the drop test (`frameAt` skips the open
   frame, so a card on its canvas belongs to it via `detachParentId`).
 - **That rect is a SNAPSHOT at k = 1, refreshed only on a window resize** (`scopeRect`/`refreshScopeRect`). At
@@ -615,7 +615,7 @@ card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`t
 double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘P's **Collapse all** / **Expand
 all** (`foldScope`: the selected frames and everything in them, else every frame and card in the place
 you're looking at — hidden ones included, so Expand all brings everything back). Folding drops anything
-it hid from the selection (`dropHiddenFromSelection`). It ANIMATES (`withLayoutAnimation`): positions glide
+it hid from the selection (`dropHiddenFromSelection`). It ANIMATES (`animateLayout`): positions glide
 (`animateReflow`) and every box whose size changed plays from its old size to its new one (`animateSizes`,
 Web Animations on width/height with the content clipped, a frame's content wrapper with it). Fit
 (`autoSizeSelection`) goes through the same path (`animateLayout`).
@@ -1007,11 +1007,9 @@ vault data: no frontmatter key, no map-level palette. Four things to keep right:
   showing the inherit stripes, i.e. reading as "no colour".
 
 **Below `FAR_ZOOM` (50%, `view/camera.ts`) every overlay badge is dropped** — `applyView` puts `zoom-far` on
-`<body>` and `styles.css` hides the fold chip, the lock badge, and the top edge (tags): a few
+`<body>` and `styles.css` hides the lock badge and the top edge (tags): a few
 unreadable pixels each at that scale, times every card on screen. Purely a CSS mode (no node geometry depends on
-it, so crossing the line needs no repaint), and the hides need `!important` — those controls are revealed by
-`:hover`/`.sel`/`[data-chip]` selectors no plain class can out-specify. Add any new card-corner badge to that
-rule. Page CHROME is out of scope and must not be added: `#scopeBar`'s crumbs stay legible at every zoom, since
+it, so crossing the line needs no repaint). Add any new card-corner badge to that rule. Page CHROME is out of scope and must not be added: `#scopeBar`'s crumbs stay legible at every zoom, since
 being zoomed out is when you most need to know which frame you're standing in.
 
 **Zoomed out, a frame's NAME keeps its screen size** — below 100% its label is scaled by `1/k` (`labelScale`,

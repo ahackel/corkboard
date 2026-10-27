@@ -73,7 +73,6 @@
   --r-frame: 12px; /* a frame's box — rounder, like a FigJam section */
   /* one step INSIDE a card — in-place editors. Anything sitting within a box wants an inner radius,
      not the outer one, or it bulges against the corners it's supposed to sit inside. */
-  --r-inner: calc(var(--r-card) - 1px);
   /* a sticky note at rest sits a hair off the board, on FigJam's soft shadow */
   --lift: 0 1px 2px rgba(0,0,0,.06), 0 3px 10px rgba(0,0,0,.08);
   --r-panel: 16px;  /* floating panels (editor, start card) */
@@ -132,7 +131,7 @@
 .c-none   { --card:transparent; --ink:var(--text); --scrim:rgba(255,255,255,.62); }
 
 /* A colour picked from OUTSIDE the palette (`color: "#ff8800"` in the note). Same three variables,
-   but there's no key to hang them on, so main.ts's colorVars/applyColorVars writes them inline per
+   but there's no key to hang them on, so main.ts's applyColorVars writes them inline per
    node — an inline custom property beats any selector, so the values below are only the safety net
    for an element that got the class without them. Everything else in this file reads the variables
    and never the key, which is what lets a custom colour take every path a palette one does. */
@@ -179,7 +178,6 @@ button {
   border-radius:var(--r-full); padding:5px 12px; font-size:12px; cursor:pointer;
 }
 button:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); color:#fff; border-color: var(--accent); font-weight:600; }
 button.active { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity:.45; cursor:default; }
 /* the read-only pill, top centre: the one mode that must be visible at a glance (and the way out of it) */
@@ -200,7 +198,7 @@ button:disabled { opacity:.45; cursor:default; }
   border-top:1px solid var(--node-border); background:transparent; color:var(--text); }
 #palList { max-height:min(50vh, 380px); overflow-y:auto; padding:6px; }
 .pal-item { display:flex; align-items:center; justify-content:space-between; gap:12px;
-  padding:9px 12px; border-radius:10px; cursor:pointer; color:var(--text); font-size:14px; }
+  padding:9px 12px; border-radius:var(--r-ctl); cursor:pointer; color:var(--text); font-size:14px; }
 .pal-item.active { background:color-mix(in srgb, var(--accent) 22%, transparent); }
 .pal-item kbd { font-family:inherit; font-size:12px; color:var(--muted); }
 .pal-empty { padding:12px; color:var(--muted); font-size:14px; }
@@ -377,7 +375,7 @@ input::placeholder { color:var(--muted); opacity:1; }
 body.scope-instant #stage { transition: none; }
 #stage.panning { cursor:grabbing; }
 /* the hand only appears while actually dragging a card; default everywhere else */
-body.grabbing, body.grabbing * { cursor:grabbing !important; }
+body.grabbing, body.grabbing *, body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
 /* will-change:transform keeps a pan/pinch compositor-only. It also pins the layer's raster scale,
    which would leave the cards blurry after a zoom — view/camera.ts's refreshRaster releases the
    hint for two frames once the zoom settles, so this declaration is the RESTING value it comes
@@ -742,7 +740,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.image-card.collapsed .img-zoom svg { width:12px; height:12px; }
 /* No tags on the icon: a 26px stamp on a 40px square reads as chrome with a picture behind it, rather
    than a thumbnail. They come back the moment it unfolds, where there's room for them. */
-.node.image-card.collapsed > .top-edge > .tag-row { display:none !important; }
+.node.image-card.collapsed > .top-edge > .tag-row { display:none; }
 /* explicit width/height (not just inset:0) — a percentage height on the .md-img descendant only
    resolves against a containing block whose OWN height is set via the `height` property itself,
    not one merely implied by top+bottom insets (CSS2.1 10.5).
@@ -860,9 +858,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    alone; a frame's label pins its own font-size/line-height/weight, so nothing here can move it. */
 .node .title, .node .body h1 { font-weight:750; font-size:var(--h1-size); }
 .node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
-/* inline title rename (double-click / F2 / on-create): edit the card's title in place.
-   --r-inner so it still reads as sitting INSIDE the card corners — same treatment (and radius)
-   as the card editor, which takes the same variable. */
 /* Only a FRAME's label is ever `.editing` now — its tab (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
    is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
    `none` for the one element that IS text being edited. */
@@ -900,7 +895,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .tag.lifted { opacity:.3; }
 .tag-ghost { position:fixed; left:0; top:0; z-index:60; pointer-events:none; margin:-13px 0 0 -13px; }
 .tag-ghost .tag { transform:rotate(var(--tilt, 0deg)) scale(1.15); box-shadow:0 4px 12px rgba(0,0,0,.25); }
-body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
 .node.tag-drop { box-shadow:0 0 0 3px var(--accent), var(--lift); }
 .tag-puff { position:fixed; z-index:60; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%; pointer-events:none;
   background:radial-gradient(circle, rgba(160,160,160,.55) 0 30%, transparent 62%); animation:tag-puff .45s ease-out forwards; }
@@ -1085,21 +1079,15 @@ body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
 /* a card being targeted by an image file drag, and the body editor while dragging onto it */
 .node.img-drop { outline:2px dashed #5ac978; outline-offset:3px; box-shadow:0 0 0 2px #5ac978; }
 .node .body-edit.img-drop { outline:2px dashed var(--accent); outline-offset:-2px; }
-.node .badge { display:inline-block; margin-top:6px; font-size:10px; letter-spacing:.4px;
-  text-transform:uppercase; color:var(--tint); border:1px solid var(--tint);
-  border-radius:6px; padding:1px 6px; opacity:.85; }
 .node.search-dim { opacity:.2; }         /* dimmed while a find query excludes this card */
 .node.search-active { box-shadow:0 0 0 2px #fff; }   /* the active dropdown option's card */
 /* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
 /* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
    not any one card. Every badge that hangs off a card is a few pixels wide there: the lock padlock, the tag stamps and labels. All of
    them go, which also keeps their layout + paint out of the frame budget at exactly the zoom level that
-   has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview.
-   `!important` because these controls are revealed by `:hover`/`.sel` selectors that out-specify any
-   plain class: a per-state fight this rule can't win on specificity, and the switch is a global mode
-   rather than a per-kind exception. */
+   has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview. */
 body.zoom-far .node > .lock-badge,
-body.zoom-far .node > .top-edge { display:none !important; }
+body.zoom-far .node > .top-edge { display:none; }
 /* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
    covers both branches-with-children and leaf cards whose body is folded away. */
 .node.collapsed { min-height:0; }   /* shrink to the title, like a bodyless card */
@@ -1391,8 +1379,6 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
 .layoutchip svg { width:var(--bar-icon); height:var(--bar-icon); flex:none; }
 .layoutchip:hover { color:var(--bar-ink); background:var(--bar-hover); }
 .layoutchip.active { color:#fff; background:var(--accent); }
-.layoutchip.disabled { opacity:.35; cursor:default; }
-.layoutchip.disabled:hover { color:var(--bar-muted); background:transparent; }
 
 kbd { background:var(--node); border:1px solid var(--node-border); border-radius:6px;
   padding:0 5px; font-size:11px; }

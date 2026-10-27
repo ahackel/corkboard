@@ -14,6 +14,7 @@ import { setSelectionSet, popScopeFor, nodeW, nodeH, remeasure } from '../main.j
 import { endInPlaceEdit } from './inline-edit.js';
 import { syncEdgeBar } from './edge-bar.js';
 import { isScopeRoot } from '../nav/scope.js';
+import { nodesOf } from '../utils/model.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
@@ -170,7 +171,7 @@ function applyImages(images: Images): void {
 // Glide to the affected nodes only when they're entirely off-screen; a visible change
 // shouldn't yank the camera around.
 function frameIfOffscreen(ids: string[]): void {
-  const nodes = ids.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
+  const nodes = nodesOf(ids);
   if (!nodes.length) return;
   const v = state.view, r = stage.getBoundingClientRect();
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;

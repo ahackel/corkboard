@@ -15,7 +15,7 @@ import { store, readFolder } from './persistence.js';
 import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
 import { subtreeIds, remeasure } from '../main.js';
-import { isHidden } from '../utils/model.js';
+import { isHidden, nodeByFile } from '../utils/model.js';
 import { bodyImages } from '../utils/markdown.js';
 import { historyRefs } from '../features/history.js';
 import { searchHolds } from '../features/search.js';
@@ -56,7 +56,7 @@ export function afterReading(ids: Iterable<string>, fn: () => void, deep = true)
 // until it is in memory or there is nothing left on the way to read.
 export async function revealPath(path: string): Promise<void> {
   for (let guard = 0; guard < 64; guard++) {
-    if ([...state.nodes.values()].some(n => n.file === path)) return;
+    if (nodeByFile(path)) return;
     const f = [...state.nodes.values()].find(n => n.lazy != null && n.file && path.startsWith(dirOf(n.file)));
     if (!f) return;
     await readFolder(f, false);

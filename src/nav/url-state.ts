@@ -27,7 +27,7 @@ import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
 import { searchQuery, setSearchQuery } from '../features/search.js';
-import { nodeLabel } from '../utils/model.js';
+import { nodeLabel, nodeByFile } from '../utils/model.js';
 
 function slugify(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'map';
@@ -140,7 +140,7 @@ export async function applyUrlFromHash(): Promise<void> {
     restoreScopeFromFile(open ? decodeFilePath(open) : null);
     if (pathSegs.length) {
       const file = decodeFilePath(pathSegs.join('/'));
-      const target = [...state.nodes.values()].find(n => n.file === file);
+      const target = nodeByFile(file);
       if (target) selectNode(target.id);
     }
     const x = Number(params.get('x')), y = Number(params.get('y')), k = Number(params.get('k'));

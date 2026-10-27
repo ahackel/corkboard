@@ -67,18 +67,6 @@ export function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPor
   scheduleSaveBoard();
   return e;
 }
-export function deleteEdge(id: string): void {
-  const i = state.edges.findIndex(e => e.id === id);
-  if (i < 0) return;
-  touchEdges();
-  state.edges.splice(i, 1);
-  state.selEdges.delete(id);
-  scheduleSaveBoard();
-  paintAll();
-  syncEdgeBar();
-  commitStep();
-  setStatus('Edge deleted');
-}
 
 // ⌘L / the float bar's Connect. Two or more cards selected: chain them in selection order (A→B→C,
 // which is what a flow usually wants), as ONE undo step. This is also the TOUCH path — iOS never

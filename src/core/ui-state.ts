@@ -8,8 +8,6 @@
 import type { EdgeSide, MindNode } from './state.js';
 
 export type Pt = { x: number; y: number };
-// World-space line segment (axis-aligned for the insertion indicator).
-export type Seg = { x0: number; y0: number; x1: number; y1: number };
 
 // A live node drag (moves a whole subtree, or the multi-selection). `active` is the card being
 // dragged/dropped; `targets` follow the cursor (or, after a Shift-clone, just the clones).
@@ -97,15 +95,10 @@ export const ui = {
 // pointerId -> position, for the multi-touch gesture layer (a const Map, mutated in place).
 export const gPointers = new Map<number, Pt>();
 
-// ---- edit-session predicates (shared by persistence.ts) ----
-// One source of truth for "is some editor holding uncommitted text", so the save loop and the
-// disk-reload guard can't drift as editors are added (in-card title/body + the full-screen sheet).
-export function editSessionActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
-// "Is an IN-PLACE editor open" — the two on-canvas sessions only (a card's one text field, a
-// container's label), as against editSessionActive's four. Named here rather than spelled out as
-// `ui.bodyEdit || ui.titleEdit` at each of its call sites — the render core, drag's tap/pointerdown
-// bails, the float bar's busy test, a canvas tap — because that pair is exactly what had to be found
-// and rewritten by hand when the single inlineEdit session split in two.
+// ---- edit-session predicates ----
+// "Is an editor holding uncommitted text" — a card's one text field, or a frame's label. One source of
+// truth for the save loop, the disk-reload guard, the render core, the float bar and a canvas tap,
+// rather than `ui.bodyEdit || ui.titleEdit` spelled out at each.
 export function inPlaceEditActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
 // …and the same question about ONE node: is this the card/label currently being typed into.
 export function inPlaceEditOn(id: string): boolean {
@@ -116,11 +109,7 @@ export function inPlaceEditOn(id: string): boolean {
 // it used to be excluded because a body edit couldn't touch the title, and now the title is the first
 // line of the very text it holds. null → nothing frozen. Every arm names its OWN node, so the
 // selection has nothing to say about it.
-export function frozenFileNodeId(): string | null {
-  if (ui.bodyEdit) return ui.bodyEdit.id;
-  if (ui.titleEdit) return ui.titleEdit.id;
-  return null;
-}
+export function frozenFileNodeId(): string | null { return ui.bodyEdit?.id ?? ui.titleEdit?.id ?? null; }
 
 // ---- responsive mode predicates ----
 // 700px MUST match the `@media (max-width:700px)` breakpoint in styles.css (bottom-sheet panel).
@@ -131,8 +120,6 @@ const COARSE_MQ = matchMedia('(pointer: coarse)');
 // phone all title/body editing routes to the full-screen editor sheet instead of the in-card
 // editors (see features/inline-edit.ts).
 export function phoneMode(): boolean { return COARSE_MQ.matches && NARROW_MQ.matches; }
-
-export const PORTRAIT_MQ = matchMedia('(orientation: portrait)');
 
 // True when focus is in a text field (sidebar input/textarea) or a contenteditable (the in-card
 // title rename) — i.e. the user is typing, so card/canvas shortcuts and disk-reload should stand down.

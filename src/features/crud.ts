@@ -4,7 +4,7 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf } from '../utils/model.js';
 import { stripImageRef } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading } from '../utils/frontmatter.js';
@@ -204,12 +204,12 @@ function copyNext(s: MindNode): MindNode {
 // stays connected. One card → open its rename like a fresh node; many → select the new copies.
 // `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor. `next` is the
 // smart duplicate (copyNext above); without it the copy is exact, just below its source.
-export function duplicateSelection({ edit = true, next = false }: { edit?: boolean; next?: boolean } = {}): MindNode[] | undefined {
+export function duplicateSelection({ next = false }: { next?: boolean } = {}): MindNode[] | undefined {
   if (state.readOnly) return;
   const ids = selectedIds();
   // A folded frame's notes may still be on disk: duplicating it copies them, so they're read first.
-  if (afterReading(ids, () => duplicateSelection({ edit, next }))) return;
-  const srcs = ids.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
+  if (afterReading(ids, () => duplicateSelection({ next }))) return;
+  const srcs = nodesOf(ids);
   if (!srcs.length) return;
   const copies = srcs.map(next ? copyNext : copyNode);
   // paint first so the new cards get real DOM heights, then settle and commit.
@@ -217,7 +217,7 @@ export function duplicateSelection({ edit = true, next = false }: { edit?: boole
   if (next && growFramesToHold(copies.map(c => c.id))) relayout();
   const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
     : `${next ? 'Made the next of' : 'Duplicated'} ${copies.length} cards`;
-  if (copies.length === 1 && edit){
+  if (copies.length === 1){
     selectNode(copies[0].id);
     startInlineEdit(copies[0], { isNew: false });
   } else {
@@ -269,7 +269,7 @@ export function newFrameAt(p: Pt): void {
 export function createSibling(refId: string){
   if (state.readOnly) return;
   const ref = state.nodes.get(refId); if (!ref) return;
-  const parent = ref.parent ? state.nodes.get(ref.parent) : undefined;
+  const parent = parentOf(ref);
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t add a card here'); return; }
   const w = nodeW(ref);
   let y = ref.y + nodeH(ref) + LIST_GAP;

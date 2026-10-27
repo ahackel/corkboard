@@ -34,7 +34,6 @@ export function saveSucceeded(src: Source): void {
   failing.delete(src);
   paint();
 }
-export function saveIsFailing(): boolean { return failing.size > 0; }
 
 byId('saveAlertRetry').addEventListener('click', () => {
   for (const f of failing.values()) { clearTimeout(f.timer); f.retry(); }

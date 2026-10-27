@@ -17,7 +17,7 @@
 // (features/attachments.ts).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { isAncestor } from '../utils/model.js';
+import { nodesOf, outermost } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
@@ -66,7 +66,7 @@ const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
 // Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
 export function filesFor(ids: string[]): CardFile[] {
   // dedupe: a card inside another given card's subtree is already covered
-  const roots = ids.filter(id => !ids.some(a => a !== id && isAncestor(a, id)));
+  const roots = outermost(nodesOf(ids)).map(n => n.id);
   const all = roots.flatMap(id => subtreeIds(id));   // preorder per root → parents precede kids
   const inPayload = new Set(all);
   return all.map(id => {

@@ -20,10 +20,6 @@ for (const [path, svg] of Object.entries(modules)) {
 // y 9.5…18. It fills 3.5…20.5 × 4…20 — the full width the image/query icons take, so a folder
 // doesn't read as the small one of the set.
 export const FOLDER_PATH = '<path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h3.4l2 2.5h8.6A1.5 1.5 0 0 1 20.5 8v10A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5Z"/>';
-// …and the plain folder ICON built from it: the bare path in the same 24×24 stroked frame every
-// mounted icon uses. Lives beside the path so the two can't drift, and so the callers that only want
-// "a folder glyph, no content blocks" don't each re-spell the wrapper.
-export const FOLDER_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${FOLDER_PATH}</svg>`;
 
 // The dropdown chevron EVERY toolbar button that opens a menu or popover carries after its face (styles
 // .fb-dd), for the buttons whose face is rebuilt in JS and so can't take a data-icon placeholder.

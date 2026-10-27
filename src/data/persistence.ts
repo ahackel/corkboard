@@ -23,7 +23,7 @@ import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
 import { SPACING } from '../utils/guides.js';
 import { refreshGrid } from '../view/grid.js';
-import { isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
+import { isTypingInField, inPlaceEditActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
 import { releaseFolded, readAll } from './lazy.js';
 import { byId } from '../utils/dom.js';
@@ -740,7 +740,7 @@ export async function reloadFromDisk(): Promise<void> {
   if (Date.now() - (state.lastSelfWrite || 0) < 600) return;
   const selBefore = state.selId;
   // Don't yank the rug out while the user is actively typing in a card or renaming a frame.
-  if (editSessionActive() || isTypingInField()) return;
+  if (inPlaceEditActive() || isTypingInField()) return;
   reloading = true;
   try {
     // loadFromDir REPLACES every note with what's on disk, so whatever is still queued must reach the
@@ -748,7 +748,7 @@ export async function reloadFromDisk(): Promise<void> {
     // switching away was read over. If a write fails, memory holds the only copy: keep it, don't reload.
     await settleSave();
     if (hasUnsavedChanges()) return;
-    if (editSessionActive() || isTypingInField()) return;   // began during the write
+    if (inPlaceEditActive() || isTypingInField()) return;   // began during the write
     // What was there before, by PATH (ids are minted fresh each load) — and how many unread notes each
     // folded frame held — so a note that came in from outside (the phone inbox) can be pointed out.
     const known = new Set<string>(), unread = new Map<string, number>();

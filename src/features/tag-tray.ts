@@ -9,7 +9,7 @@
 // it, after asking when any does (one undo step). Repainted from main.ts paintAll, keyed so an unchanged
 // tray isn't rebuilt.
 import { esc } from '../utils/markdown.js';
-import { cleanTag, tagKey, isEmojiTag, noteTags, wearsTags } from '../utils/tags.js';
+import { cleanTag, tagKey, isEmojiTag, noteTags, wearsTags, uniqueTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { state, type MindNode } from '../core/state.js';
 import { byId } from '../utils/dom.js';
@@ -48,9 +48,7 @@ export function refreshTray(): void {
   if (!trayOpen()) return;
   const board = boardTags();
   const counts = new Map(board.map(b => [tagKey(b.tag), b.count]));
-  const tags: string[] = [];
-  const add = (t: string): void => { if (!tags.some(x => tagKey(x) === tagKey(t))) tags.push(t); };
-  board.forEach(b => add(b.tag)); loadMru().slice(0, 8).forEach(add); made.forEach(add);
+  const tags = uniqueTags([...board.map(b => b.tag), ...loadMru().slice(0, 8), ...made]);
   const k = tags.join('\u0000') + '\u0001' + board.map(b => b.count).join(',') + '\u0001' + searchTags().join('\u0000');
   if (k === key) return;
   key = k;

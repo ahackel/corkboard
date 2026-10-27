@@ -1,6 +1,6 @@
 // ---------- recently-used custom colours ----------
 // The palette's 11 keys are fixed, but a custom colour (`color: "#ff8800"` — see main.ts's
-// colorClass/colorVars) is picked from the OS colour sheet and would otherwise be unrepeatable: no
+// colorClass/applyColorVars) is picked from the OS colour sheet and would otherwise be unrepeatable: no
 // chip to click a second time, and no way to give a sibling card the shade you chose a minute ago.
 //
 // Two sources, like the `#` field's recent and board tags (features/tag-picker.ts, the same
@@ -14,6 +14,7 @@
 // recolour the last card away from a shade and it stops being offered, without a cache to invalidate.
 import { state } from '../core/state.js';
 import { isHexColor } from '../utils/ink.js';
+import { readStrings, writeJSON } from '../utils/local-json.js';
 
 const MRU_KEY = 'corkboard.colorMru';
 const MRU_MAX = 8;    // what's remembered
@@ -29,17 +30,14 @@ export function normalizeColor(c: string): string {
   return d.length === 3 ? `#${d[0]}${d[0]}${d[1]}${d[1]}${d[2]}${d[2]}` : `#${d}`;
 }
 
-function loadMru(): string[] {
-  try { const raw = JSON.parse(localStorage.getItem(MRU_KEY) ?? '[]'); return Array.isArray(raw) ? raw.filter(c => typeof c === 'string') : []; }
-  catch { return []; }
-}
+const loadMru = (): string[] => readStrings(MRU_KEY);
 // Remember a pick. Called on the picker's COMMIT only (`change`), never per `input` event — the
 // native sheet streams a colour for every pointer move, which would bury the real picks under a
 // drag's worth of intermediates.
 export function rememberColor(color: string): void {
   const c = normalizeColor(color); if (!c) return;
   const mru = [c, ...loadMru().filter(x => x !== c)].slice(0, MRU_MAX);
-  try { localStorage.setItem(MRU_KEY, JSON.stringify(mru)); } catch {}
+  writeJSON(MRU_KEY, mru);
 }
 // Every distinct custom colour in the open map, in first-seen order.
 function mapColors(): string[] {

@@ -19,9 +19,9 @@ import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelec
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
-import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
-import { canOpen, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, animateLayout } from '../main.js';
+import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf } from '../utils/model.js';
+import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
+import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, canToggleFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 
 
@@ -120,7 +120,7 @@ export function autoSizeSelection(): void {
 export function groupSelectionIntoFrame(): void {
   if (state.readOnly) return;
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!));
-  const nodes = ids.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
+  const nodes = nodesOf(ids);
   if (!nodes.length) { setStatus('Locked — can’t group'); return; }
   const selectedSet = new Set(ids);
   let parentId: string | null = nodes[0].parent;
@@ -157,8 +157,7 @@ function markOpen(): void {
   fbFit.style.display = selectedIds().some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }) ? '' : 'none';
   // Collapse / expand: THE fold button (cards carry none of their own). It shows the state it would make:
   // expand once everything foldable in the selection is folded, collapse otherwise — what X does.
-  const foldable = selectedIds().map(id => state.nodes.get(id)).filter((k): k is MindNode =>
-    !!k && canFold(k) && !isLockedEffective(k) && !isScopeRoot(k));
+  const foldable = nodesOf(selectedIds()).filter(canToggleFold);
   fbFold.style.display = foldable.length ? '' : 'none';
   const expand = foldable.length > 0 && foldable.every(k => k.collapsed);
   fbFold.classList.toggle('expand', expand);
@@ -348,7 +347,7 @@ const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its �
 // kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
 export function canOpenSelection(): boolean {
   const n = anchorNode();
-  return !!n && canOpen(n) && !isScopeRoot(n);
+  return canEnter(n);
 }
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
 fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });

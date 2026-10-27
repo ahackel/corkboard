@@ -4,7 +4,7 @@
 // applies the answer as ONE undo step with the reflow glide, and lets frames grow to show the result.
 // Nothing here runs on its own: the float bar's tidy menu, ⌘P and the ⌥ shortcuts are the only ways in.
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
-import { isLockedEffective, ancestors } from '../utils/model.js';
+import { isLockedEffective, nodesOf, outermost } from '../utils/model.js';
 import { moveSubtreeTo, frameLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
@@ -16,9 +16,7 @@ import { nodeW, nodeH, snapPt, subtreeIds, relayout, remeasure, animateLayout } 
 // What a tidy acts on: the selected nodes that aren't inside another selected one (a frame carries its
 // own cards along) and aren't locked.
 function targets(): MindNode[] {
-  const sel = new Set(state.sel);
-  return [...sel].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n)
-    .filter(n => ![...ancestors(n)].some(a => sel.has(a.id)) && !isLockedEffective(n));
+  return outermost(nodesOf(state.sel)).filter(n => !isLockedEffective(n));
 }
 // A node's footprint: a frame's label hangs above its box, and it belongs to the frame's room.
 function boxOf(n: MindNode): Box {

@@ -8,7 +8,7 @@
 // nodeH/nodeW/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
 import { state, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective } from '../utils/model.js';
-import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
+import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
 import { subtreeIds, layoutH, nodeH, nodeW, FRAME_BORDER } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
@@ -119,10 +119,15 @@ export function holderOf(id: string | null | undefined): string | null {
 // cards, so a drop over one falls through to the frame around it. THE drop
 // rule (docs/PRODUCT.md): a card belongs to the frame its centre is in, else the top level. Shared by
 // the drag preview and the commit, so what lights up is where the card goes.
+// A frame that takes cards in: expanded, on the canvas, not the open frame itself, not locked. Asked by
+// the drop test below and by a frame settling over what it covers (features/drag.ts settleFrames).
+export function collectsCards(m: MindNode): boolean {
+  return isFrame(m) && !isHidden(m) && !isScopeRoot(m) && !isLockedEffective(m);
+}
 export function frameAt(x: number, y: number, skip: Set<string>): MindNode | null {
   let best: MindNode | null = null, bestDepth = -1;
   for (const m of state.nodes.values()) {
-    if (!isFrame(m) || isHidden(m) || skip.has(m.id) || isScopeRoot(m) || isLockedEffective(m)) continue;
+    if (skip.has(m.id) || !collectsCards(m)) continue;
     const b = containerBox(m);
     if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) continue;
     const d = ancestorDepth(m);
@@ -203,11 +208,8 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
 // the open-frame bookkeeping, and it stays here because every structural change already ends in this
 // call (main.ts relayout/remeasure) — one call covers every path instead of each remembering.
 export function applyLayouts(): void {
-  // The open frame may have just been deleted / undone away / vanished on disk.
+  // The open frame may have just been deleted / undone away / vanished on disk. (An open frame keeps
+  // its fold: its interior is the canvas either way.)
   pruneScope();
-  // …and the CARD you have OPENED is never folded — a reload or an undo can re-collapse it, which
-  // would leave the page blank. An open FRAME keeps its fold: its interior is the canvas either way.
-  const open = scopeRootNode();
-  if (open?.collapsed && open.type === 'card') { open.collapsed = false; open.dirty = true; open.dirtyLayout = true; }
 }
 

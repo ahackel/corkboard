@@ -142,7 +142,6 @@ export interface BoardEdge {
 }
 
 export interface AppState {
-  dir: unknown;
   nodes: Map<string, MindNode>;    // id -> node
   view: View;                      // pan/zoom
   selId: string | null;            // primary selection — drives the single-node editor fields
@@ -167,7 +166,6 @@ export interface AppState {
 }
 
 export const state: AppState = {
-  dir: null,
   nodes: new Map<string, MindNode>(),
   view: { x: 80, y: 40, k: 1 },
   selId: null,
@@ -201,7 +199,7 @@ export const statusEl = byId('status');
 // delete"), the result of an action with nothing to see (Copied, Exported, Nothing to undo), a
 // warning. These messages only narrate what just happened on screen, or the save loop's heartbeat;
 // they are simply dropped.
-const QUIET = /^(Saving…|Saved \d|Collapsed|Expanded|Editing enabled|Selected \d|Opened “|Moved |Reordered|Re-parented|Detached|Adding image…|Image (moved|extracted|removed)$|Edge (moved|deleted)$|\d+ edges deleted|Drop to save|Pasted “|Pasted \d|Deleted \d|Cloned|Duplicated|Created “|Grouped|Extracted|Connected \d|Merged)|(is now a root|is now a top-level card|left the frame)$/;
+const QUIET = /^(Saving…|Saved \d|Collapsed|Expanded|Editing enabled|Selected \d|Opened “|Moved |Adding image…|Image (moved|extracted|removed)$|Edge (moved|deleted)$|\d+ edges deleted|Drop to save|Pasted “|Pasted \d|Deleted \d|Cloned|Duplicated|Created “|Grouped|Extracted|Connected \d|Merged)/;
 let toastTimer = 0;
 export const setStatus = (t: string): void => {
   if (QUIET.test(t)) return;
