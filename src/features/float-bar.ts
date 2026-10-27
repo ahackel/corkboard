@@ -469,9 +469,8 @@ function followLoop(): void {
   if (activePopover){
     activePopover.pop.classList.toggle('hide-interact', interacting || !placed);
   }
-  // a selected card's own add-emoji/add-note buttons (main.ts's showAddTag/.addnote) float outside
-  // its border and don't reposition themselves — they'd lag behind mid-pan/zoom the same way the
-  // bar itself would, so hide them right along with it via one body-level class (styles.css).
+  // …and tell the rest of the page, via one body-level class: a hover peek (features/peek.ts) holds
+  // off while the canvas moves under it.
   document.body.classList.toggle('canvas-interacting', interacting);
   raf = bar.classList.contains('open') ? requestAnimationFrame(followLoop) : null;
 }

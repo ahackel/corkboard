@@ -226,7 +226,6 @@ export function bindNodeDrag(n: MindNode): void {
     // click selects, a double-click renames, a drag moves the frame — so both frame-specific
     // intercepts further down exempt it. `.node` scoping keeps it to this frame's OWN tab.
     const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
-    if (tgt.classList.contains('addnote')) return;
     if (tgt.closest('input.taskbox') && isLockedEffective(n)) { e.stopPropagation(); e.preventDefault(); return; }  // locked: no task toggling
     if (tgt.closest('a.lk, input.taskbox, .img-zoom')) { e.stopPropagation(); return; }  // let links/checkboxes/zoom click, not drag
     // Alt-press over an inline body image (on a plain card) rips THAT image out — extraction rides

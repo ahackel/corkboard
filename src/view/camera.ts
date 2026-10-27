@@ -12,7 +12,7 @@ import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
 
 // Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
-// chip, the lock badge, the emoji tag row, the "add note" pill — is a handful of unreadable pixels
+// chip, the lock badge, the tags on its top edge — is a handful of unreadable pixels
 // there, and there are as many of them as there are cards. So `body.zoom-far` drops the lot
 // (styles.css), which also takes their layout and paint work out of every frame of a pinch/pan at the
 // zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's

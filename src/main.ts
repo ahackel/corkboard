@@ -70,8 +70,6 @@ setupCanvasColor();
 // small closed-padlock badge shown at a locked card's upper-left corner; exported for the
 // float bar's lock toggle (features/float-bar.ts), which shares this one glyph.
 export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
-// writing-pen glyph for the "add a note" button, a small icon button on the card's right edge.
-const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4a2.4 2.4 0 1 1 3.4 3.4L7.8 19 4 20l1-3.8Z"/><path d="M4 21.5h14"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
@@ -82,15 +80,11 @@ function nodeEl(n: MindNode): HTMLElement {
   el.innerHTML = `<div class="title-row"><div class="title"></div></div><div class="body"></div>
     <div class="fold-more"></div>
     <div class="top-edge"><div class="tag-row"></div><div class="task-meter"></div></div>
-    <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>
-    <button type="button" class="addnote" title="Add note" aria-label="Add note">${NOTE_ADD_SVG}</button>`;
+    <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>`;
   world.appendChild(el);
   n.el = el;
   bindNodeDrag(n);
   bindCardFileDrag(n);   // ⌥-drag out of the window = save as .md file(s)
-  const addnote = el.querySelector('.addnote')!;
-  addnote.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
-  addnote.addEventListener('click', (e)=>{ e.stopPropagation(); startBodyEdit(n); });
   // The badge on a folded card shows the whole note (features/peek.ts) — the tap for touch,
   // which has no hover to peek with.
   const foldMore = el.querySelector(':scope > .fold-more')!;
@@ -174,7 +168,7 @@ function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
 }
 // A node's own controls — each already acts on a single click, so a double one must not also be read
 // as "open this card". `.fh` is a resize handle; the rest are the card's buttons, links and inputs.
-const NODE_CONTROLS = '.fold-more, .taskbox, .addnote, .lock-badge, .tag-row, .img-zoom, a.lk, .fh';
+const NODE_CONTROLS = '.fold-more, .taskbox, .lock-badge, .tag-row, .md-tag, .img-zoom, a.lk, .fh';
 // What a gesture at these viewport coords actually hits. Deliberately NOT the event's own `target`:
 // bindNodeDrag takes a POINTER CAPTURE on the node's element, and a capture retargets the click (and
 // so the dblclick) that follows to the capturing element — so by the time a double-click arrives its
@@ -651,7 +645,7 @@ export function nodeH(n: MindNode): number {
 // (box / folded frame / folded image), so it defers to it rather than restating the ladder — a new kind
 // added to nodeH must not have to be remembered here too. The two differ only for a MEASURED card:
 // nodeH treats a zero-height element as unrendered and falls back to 64, while layout wants the real
-// 0 (the selection affordances — + and the "add note" bubble — are absolutely positioned and
+// 0 (the tags and the task meter on the top edge are absolutely positioned and
 // overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
   if (isBoxNode(n) || isImageFold(n) || isFrameFold(n)) return nodeH(n);

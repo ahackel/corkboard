@@ -748,7 +748,7 @@ that frame (`detachParentId`). Four things hold it together:
   On touch it's worse, since each ancestor keeps its OWN tap counter. A container's children are exempt by
   construction — they live in its sibling `.frame-content` wrapper, not inside its element.
 - **`NODE_CONTROLS`** (`main.ts`) is the one list of things that act on a SINGLE click — chip, checkboxes,
-  links, `.addnote`, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
+  links and `#tags`, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
   counter bail on it, or the second click would fire the button AND open the card.
 - **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on it
   renames — otherwise a double-click would open an editor inside a hidden `.body`.
@@ -1062,7 +1062,7 @@ vault data: no frontmatter key, no map-level palette. Four things to keep right:
   showing the inherit stripes, i.e. reading as "no colour".
 
 **Below `FAR_ZOOM` (50%, `view/camera.ts`) every overlay badge is dropped** — `applyView` puts `zoom-far` on
-`<body>` and `styles.css` hides the fold chip, the lock badge, the top edge (tags + task meter) and the `.addnote` pen: a few
+`<body>` and `styles.css` hides the fold chip, the lock badge, and the top edge (tags + task meter): a few
 unreadable pixels each at that scale, times every card on screen. Purely a CSS mode (no node geometry depends on
 it, so crossing the line needs no repaint), and the hides need `!important` — those controls are revealed by
 `:hover`/`.sel`/`[data-chip]` selectors no plain class can out-specify. Add any new card-corner badge to that

@@ -600,10 +600,8 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* the box's radius less its 2px border, so the clip follows the INSIDE of the border */
 .frame-content { position:absolute; overflow:hidden; border-radius:calc(var(--r-frame) - 2px); pointer-events:none; }
 .frame-content > .node { pointer-events:auto; }
-/* a frame's note is drawn on its LABEL (name + description line), never in the box, which holds cards;
-   and it never shows the "add note" pill (the !important beats the .solo.no-body show rule). */
+/* a frame's note is drawn on its LABEL (name + description line), never in the box, which holds cards. */
 .node.frame > .body { display:none; }
-.node.frame .addnote, .node.frame-folded > .addnote { display:none !important; }   /* folded, too */
 /* drop-into-a-frame preview: the box rings in the selection blue, so it reads as "the card lands in
    here" (see drag.ts updateDropTarget). */
 .node.frame.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }
@@ -674,7 +672,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node:not(.frame):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
 .node:not(.frame):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
 /* Nothing to grab while the card is being typed into (the zones would sit over the text caret's own
-   edges) or while it's read-only/locked — mirrors the .addnote rules further down. */
+   edges) or while it's read-only/locked. */
 .node:has(.title.editing) > .fh, .node:has(.body.editing) > .fh,
 body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
@@ -689,7 +687,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    the frame's own element so clicks land on the image, not the frame beneath (which would tie at 1
    and win the hit-test, making the image unselectable — regular cards avoid this by being 2). */
 /* overflow:hidden lives on .body (below), NOT on the node itself — the tag row and the add-note
-   button float outside the card's own border (see .node .tag-row / .addnote) and
+   float outside the card's own border (see .node .tag-row) and
    would otherwise get clipped along with the image. The image is rounded by its own .body wrapper
    instead (border-radius:inherit + overflow:hidden, below), so nothing relies on the node clipping. */
 .node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
@@ -718,7 +716,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* No tags on the icon: a 26px stamp on a 40px square reads as chrome with a picture behind it, rather
    than a thumbnail. They come back the moment it unfolds, where there's room for them. */
 .node.image-card.collapsed > .top-edge > .tag-row { display:none !important; }
-.node.image-card .addnote { display:none !important; }
 /* explicit width/height (not just inset:0) — a percentage height on the .md-img descendant only
    resolves against a containing block whose OWN height is set via the `height` property itself,
    not one merely implied by top+bottom insets (CSS2.1 10.5).
@@ -1029,37 +1026,17 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
   border-radius:6px; padding:1px 6px; opacity:.85; }
 .node.search-dim { opacity:.2; }         /* dimmed while a find query excludes this card */
 .node.search-active { box-shadow:0 0 0 2px #fff; }   /* the active dropdown option's card */
-/* "add note": a small circular button floating outside the card's RIGHT edge, vertically centred. Only shown on a lone-selected, body-less card, to open the in-place note editor;
-   direct child of .node so a nested CHILD CARD's own addnote (they're real DOM descendants — see
-   nodeEl/paintNode in main.ts) never also matches. */
-/* z-index:3, like .tag-row and for the same reason: it sits dead centre of the card's own east
-   resize band (.fh-e, z-index:2, appended AFTER it in the DOM — so at an equal z-index the band
-   would win the hit-test and swallow the whole button). */
-.node .addnote { position:absolute; right:-11px; top:50%; transform:translateY(-50%); z-index:3;
-  width:22px; height:22px; padding:0; border:none; border-radius:50%;
-  background:var(--accent); color:#fff; cursor:pointer; display:none;
-  align-items:center; justify-content:center; }
-.node .addnote svg { width:14px; height:14px; display:block; }
-.node .addnote:hover { transform:translateY(-50%) scale(1.08); }
-.node.solo.no-body > .addnote { display:flex; }
-body.readonly .node .addnote,
-body.grabbing .node .addnote,
-.node.collapsed .addnote { display:none !important; }
-/* while a card's text is being edited in place, its add-note button stands down. */
-.node:has(.title.editing) .addnote,
-.node:has(.body.editing)  .addnote { display:none !important; }
 /* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
 /* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
    not any one card. Every badge that hangs off a card is a few pixels wide there: the task meter,
-   the lock padlock, the tag stamps and labels, the "add note" pen. All of
+   the lock padlock, the tag stamps and labels. All of
    them go, which also keeps their layout + paint out of the frame budget at exactly the zoom level that
    has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview.
    `!important` because these controls are revealed by `:hover`/`.sel` selectors that out-specify any
    plain class: a per-state fight this rule can't win on specificity, and the switch is a global mode
    rather than a per-kind exception. */
 body.zoom-far .node > .lock-badge,
-body.zoom-far .node > .top-edge,
-body.zoom-far .node > .addnote { display:none !important; }
+body.zoom-far .node > .top-edge { display:none !important; }
 /* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
    covers both branches-with-children and leaf cards whose body is folded away. */
 .node.collapsed { min-height:0; }   /* shrink to the title, like a bodyless card */
@@ -1240,11 +1217,6 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
    viewport margin; an un-placed bar keeps its static position) with no card under it at all. The follow
    loop re-checks every frame, so it fades back in as soon as its card is measurable again. */
 #floatBar.unanchored { opacity:0; pointer-events:none; transition:none; }
-/* a selected card's add-note BUTTON floats outside its border and doesn't reposition itself like the
-   bar does — same follow loop (float-bar.ts) toggles this body class instead, hiding it right along
-   with the bar for the duration of any pan/zoom/drag. The tags are left alone — they're card
-   content, not a selection affordance. */
-body.canvas-interacting .addnote { display:none !important; }
 /* shared sizing only — background/colour live on .fb-icon so they never fight .swatch's own
    background on the colour trigger (an ID+type rule here would otherwise beat a plain class).
    Both bars, one rule: a button in the card bar and the edge bar is the same object, so it is sized
@@ -1450,8 +1422,6 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
    every bar (#floatBar, .floating-btn, .layoutchip) picks that up for free. */
 @media (pointer: coarse) {
   #searchBox { height:calc(var(--bar-btn) + 10px); }
-  .node .addnote { width:28px; height:28px; right:-14px; }
-  .node .addnote svg { width:16px; height:16px; }
   .node .tag-row { gap:6px; }
   /* explicit flex:none so flex-basis doesn't override width and stretch them tall */
   .swatch { flex:none; width:22px; height:22px; }
@@ -1461,8 +1431,7 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   #ctxMenu .cm-item { height:40px; font-size:14px; }
   /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
      border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
-     touch, so the zone being generous is the only affordance there is. The .addnote pill above grows
-     to right:-14px on coarse pointers, but it's z-index:3 and still wins the overlap. */
+     touch, so the zone being generous is the only affordance there is. */
   .node:not(.frame):not(.image-card) > .fh-e { right:-16px; width:16px; }
   .node:not(.frame):not(.image-card) > .fh-w { left:-16px;  width:16px; }
 }
