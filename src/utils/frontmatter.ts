@@ -133,12 +133,15 @@ function fmValue(entries: FmEntry[], key: string): string {
   const e = fmEntry(entries, key); if (!e) return '';
   return e.lines[0].slice(e.lines[0].indexOf(':')+1).trim();
 }
+// A tag is written bare (`tags: [idea, 🔥]`), but Obsidian also takes a quoted `"#idea"` — the `#` is
+// not part of the tag (utils/tags.ts).
 function fmTags(entries: FmEntry[]): string[] {
   const e = fmEntry(entries, 'tags'); if (!e) return [];
   const inline = e.lines[0].slice(e.lines[0].indexOf(':')+1).trim();
-  if (inline) return inline.replace(/^\[|\]$/g,'').split(',').map(s=>s.trim()).filter(Boolean);
+  const bare = (s: string): string => s.trim().replace(/^["']|["']$/g,'').replace(/^#/,'').trim();
+  if (inline) return inline.replace(/^\[|\]$/g,'').split(',').map(bare).filter(Boolean);
   return e.lines.slice(1).map(l=>l.trim()).filter(l=>l.startsWith('-'))   // YAML list form
-    .map(l=>l.replace(/^-\s*/,'').replace(/^["']|["']$/g,'').trim()).filter(Boolean);
+    .map(l=>bare(l.replace(/^-\s*/,''))).filter(Boolean);
 }
 function fmSet(entries: FmEntry[], key: string, line: string): void {
   const e = fmEntry(entries, key);

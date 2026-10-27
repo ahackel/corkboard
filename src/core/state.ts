@@ -160,6 +160,10 @@ export interface AppState {
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
+  // The TAG FILTER (features/tag-filter.ts): the tags a card must all carry to stay lit — ephemeral, like
+  // the search. tagMatch is derived from it on every paint: the matching cards and the frames holding them.
+  tagFilter: string[];
+  tagMatch: Set<string> | null;
   readOnly: boolean;               // read-only mode: no saves, no edits; collapse/expand only
   idSeq: number;
   toDelete: string[];
@@ -179,6 +183,8 @@ export const state: AppState = {
   edges: [],
   searchMatch: null,
   searchActiveId: null,
+  tagFilter: [],
+  tagMatch: null,
   readOnly: false,
   idSeq: 1,
   toDelete: [],

@@ -33,7 +33,10 @@ import { openSearch } from './features/search.js';
 import { syncFloatBar, autoSizeSelection, growFramesToHold, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
-import { bindCardTagPills, tagPillHTML } from './features/tags.js';
+import { bindCardTags, tagChipHTML } from './features/tags.js';
+import { refreshTagMatch, tagHits, clearTagFilter, toggleTagFilter } from './features/tag-filter.js';
+import { openTagPicker, openTagFilterPicker, boardHasTags } from './features/tag-picker.js';
+import { noteTags } from './utils/tags.js';
 import { commitStep, record, touch, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
@@ -67,12 +70,7 @@ setupCanvasColor();
 // small closed-padlock badge shown at a locked card's upper-left corner; exported for the
 // float bar's lock toggle (features/float-bar.ts), which shares this one glyph.
 export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
-// line-smiley glyph for the card's own "add emoji tag" button (bottom-left, next to .addnote) —
-// same hand-drawn-icon style (stroke=currentColor) as LOCK_BADGE_SVG above.
-const TAG_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="9" y1="10" x2="9.01" y2="10"/><line x1="15" y1="10" x2="15.01" y2="10"/><path d="M8 14.5a4.5 4.5 0 0 0 8 0"/></svg>`;
-// writing-pen glyph for the "add a note" button — bottom-left corner (mirrors the tag row's own
-// add-emoji button living at the bottom-RIGHT, see the tag-row comment further down), now that
-// .addnote is a small icon button rather than a wide "Add note…" text pill.
+// writing-pen glyph for the "add a note" button, a small icon button on the card's right edge.
 const NOTE_ADD_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4a2.4 2.4 0 1 1 3.4 3.4L7.8 19 4 20l1-3.8Z"/><path d="M4 21.5h14"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
@@ -83,8 +81,7 @@ function nodeEl(n: MindNode): HTMLElement {
   // menus, and a double-click on anything folded unfolds it (activateNode).
   el.innerHTML = `<div class="title-row"><div class="title"></div></div><div class="body"></div>
     <div class="fold-more"></div>
-    <div class="task-meter"></div>
-    <div class="tag-row"></div>
+    <div class="top-edge"><div class="tag-row"></div><div class="task-meter"></div></div>
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>
     <button type="button" class="addnote" title="Add note" aria-label="Add note">${NOTE_ADD_SVG}</button>`;
   world.appendChild(el);
@@ -110,6 +107,9 @@ function nodeEl(n: MindNode): HTMLElement {
       openImageAt(n, img);
       return;
     }
+    // a `#tag` written in the note filters by it, like the chip on the card's edge
+    const tag = (e.target as HTMLElement).closest('.md-tag') as HTMLElement | null;
+    if (tag){ e.stopPropagation(); toggleTagFilter(tag.dataset.tag!); return; }
     const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null; if (!a) return;
     e.stopPropagation();
     if (a.classList.contains('wikilink')){
@@ -281,13 +281,8 @@ export function paintNode(n: MindNode): void {
   const editingBody = ui.bodyEdit && ui.bodyEdit.id === n.id;    // body editor open on this card
   const hasBody = editingBody || !!(n.body && n.body.trim());  // keep the body slot while editing
   const collapsed = n.collapsed && n.type !== 'frame' && canFold(n);   // a card folded to its one-line chip
-  // selected card gets an inline "+" at the end of its tag row (features/tags.ts's openEmojiPicker) —
-  // frames have no natural place for a tag row at all (see the tag-row comment below). Only the
-  // selection ANCHOR (state.selId — the same card the floating toolbar anchors to, float-bar.ts's
-  // anchorEl) shows the button during a multi-selection, so there's exactly one "+" on screen no
-  // matter how many cards are selected; the emoji it adds still applies to every selected card
-  // (features/tags.ts's bindCardTagPills reads the full selection, not just this card's id).
-  const showAddTag = n.id === state.selId && n.type !== 'frame' && !state.readOnly && !isLockedEffective(n);
+  // The tags it wears on its top edge (features/tags.ts) — a frame wears none.
+  const tags = n.type === 'frame' ? [] : noteTags(n);
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
@@ -306,10 +301,10 @@ export function paintNode(n: MindNode): void {
     // editor calls paintAll() itself right after opening.
     + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
-    + (n.type === 'frame' || (!n.tags.length && !showAddTag) ? ' no-tags' : '')
+    + (tags.length ? '' : ' no-tags')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
     + (ui.drag && n.hostFrameId != null && ui.drag.targets.has(n.hostFrameId) ? ' carried' : '')   // riding a dragged frame
-    + (state.searchMatch && !state.searchMatch.has(n.id) ? ' search-dim' : '')
+    + ((state.searchMatch && !state.searchMatch.has(n.id)) || (state.tagMatch && !state.tagMatch.has(n.id)) ? ' search-dim' : '')
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   // Which frame (if any) hosts this card's element — settled outside gestures (see settledHost).
   settledHost(n);
@@ -431,6 +426,8 @@ export function paintNode(n: MindNode): void {
       const md = desc || isFrameFold(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(label) : cardMarkdown(label);
       // A folded frame whose notes weren't read knows only HOW MANY there are (data/lazy.ts).
       const count = isFrameFold(n) ? n.lazy ?? descendantCount(n.id) : 0;
+      // …and, while the tag filter is on, how many of them match (features/tag-filter.ts).
+      const hits = isFrameFold(n) ? tagHits(n.id) : 0;
       const full = nodeLabel(label) + (desc ? '\n' + desc : '');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
@@ -438,12 +435,13 @@ export function paintNode(n: MindNode): void {
       // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
       // on its own, e.g. when the file is renamed) and `md` alone would never notice.
       // A frame with no text of its own renders NOTHING here.
-      const key = md + '\u0000' + desc + '\u0000' + (isFrameFold(n) ? count : '');
+      const key = md + '\u0000' + desc + '\u0000' + (isFrameFold(n) ? count + '/' + hits : '');
       if (titleEl.dataset.md !== key){
         titleEl.dataset.md = key;
         titleEl.innerHTML = (md.trim() ? renderBodyHTML(md) : '')
           + (desc ? `<div class="frame-desc">${renderBodyHTML(desc)}</div>` : '')
-          + (isFrameFold(n) ? `<span class="frame-count">${count}</span>` : '');
+          + (isFrameFold(n) ? `<span class="frame-count">${count}</span>` : '')
+          + (hits ? `<span class="frame-hits" title="${hits} matching the tag filter">${hits} match${hits === 1 ? '' : 'es'}</span>` : '');
       }
       titleEl.title = full;   // ellipsised lines, so the full text lives in the tooltip
       // A frame with nothing written on it shows NO TITLE: expanded, that means no label at all;
@@ -474,26 +472,17 @@ export function paintNode(n: MindNode): void {
       hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
     }
   }
-  // tag pills — skipped for frames (whose fixed box (n.h) holds arbitrary child cards rather than
-  // its own content, so there's no natural place for a tag row to live).
-  // Image cards ARE shown despite also being fixed-size boxes — the whole row floats outside
-  // the card's own border (styles.css), so it doesn't compete for interior space either way. The
-  // row is pinned to the card's bottom-right corner; a leading "+" (only present on the selected
-  // card, rendered FIRST so it ends up leftmost) is where the NEXT tag will land. Newly added tags
-  // are prepended in DOM order — most-recently-added right after the button — so each addition only
-  // ever fills the button's current slot and nudges the button one slot further left; every
-  // previously-placed tag keeps the exact screen position it already had (n.tags itself still
-  // stores oldest-first, insertion order — only the on-screen order is reversed). Keyed: only rebuild when the tag list or the button's presence actually changed, so
-  // an unrelated repaint mid-drag can't destroy a pointer-captured pill (features/tags.ts's
-  // bindCardTagPills).
+  // Its TAGS, stuck along the top edge at the right — emoji as stamps, words as labels (styles.css
+  // .tag-row), outside the text so they never move a line, and clear of the resize corner and the
+  // ports. First tag rightmost, so adding one never moves the others. Keyed: rebuilt only when the
+  // tags (or which of them the filter lights) change, so a repaint mid-drag can't destroy a chip
+  // under the pointer.
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
-  const noTagRow = n.type === 'frame';
-  const tagsKey = noTagRow ? '' : n.tags.join(' ') + (showAddTag ? ' +' : '');
+  const tagsKey = tags.map(t => (t.inText ? '~' : '') + t.tag).join(' ') + (tags.length && state.tagFilter.length ? '\u0000' + state.tagFilter.join(' ') : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
-    tagRowEl.innerHTML = (showAddTag ? `<button type="button" class="tag-add-btn" title="Add emoji" aria-label="Add emoji">${TAG_ADD_SVG}</button>` : '') +
-      (noTagRow ? '' : [...n.tags].reverse().map(t => tagPillHTML(t)).join(''));
-    bindCardTagPills(tagRowEl, n);
+    tagRowEl.innerHTML = tags.map(tagChipHTML).join('');
+    bindCardTags(tagRowEl);
   }
   // …and at the end of a folded card's chip, how much it's hiding: a checklist's progress ("3/5"), or
   // else how many more lines ("+4"). Tapping it peeks (features/peek.ts).
@@ -507,7 +496,7 @@ export function paintNode(n: MindNode): void {
   }
   // A checklist's progress, "3/5", on the card's top edge — open only: folded, the chip says it (above).
   // The pill fills left to right with the share done (--done); all ticked, it says so.
-  const meter = el.querySelector(':scope > .task-meter') as HTMLElement;
+  const meter = el.querySelector(':scope > .top-edge > .task-meter') as HTMLElement;
   const tp = n.type === 'frame' || collapsed ? { done: 0, total: 0 } : taskProgress(n.body);
   const meterText = tp.total ? `${tp.done}/${tp.total}` : '';
   if (meter.textContent !== meterText){
@@ -990,6 +979,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
 }
 export function paintAll(): void {
   readOpenUnread();   // an open frame whose notes are still on disk reads them (data/lazy.ts)
+  refreshTagMatch();  // what the tag filter lights, off the tags as they are now
   for (const n of state.nodes.values()) paintNode(n);
   paintFreeEdges();
   updateEmptyHints();
@@ -1849,6 +1839,7 @@ export function selectNode(id: string | null): void {
 //  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
 //  · ← → ↑ ↓        → ↑/↓ open/leave a frame, →/← unfold/fold
 //  · E              → edit the selected node's note/body in place (also: double-click the body)
+//  · #              → tag the selected cards (features/tag-picker.ts); Esc clears a tag filter first
 //  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
 // A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
 // so these card shortcuts stay out of the way while you're naming something.
@@ -1879,6 +1870,7 @@ window.addEventListener('keydown', (e) => {
     // in here for the two cases below to clear, so this can't shadow anything.
     else if (readingActive()) exitScope();
     else if (state.selEdges.size) clearEdgeSelection();
+    else if (state.tagFilter.length) clearTagFilter();   // the filter first: its bar says "esc clears"
     else if (state.sel.size) selectNode(null);
     return;
   }
@@ -1891,6 +1883,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
+  if (key === '#' && !mod){ e.preventDefault(); openTagPicker(); return; }   // tag the selection (features/tag-picker.ts)
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
   // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).
@@ -2034,6 +2027,9 @@ function paletteCommands(): Command[] {
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
+    { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && selectedIds().some(id => state.nodes.get(id)?.type !== 'frame'), run: openTagPicker },
+    { label: 'Filter by tag…', keywords: 'tags emoji show only highlight', when: boardHasTags, run: openTagFilterPicker },
+    { label: 'Clear the tag filter', shortcut: 'Esc', keywords: 'tags show all', when: () => state.tagFilter.length > 0, run: clearTagFilter },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),

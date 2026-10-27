@@ -110,11 +110,10 @@ test('a dragged frame is what lifts: it casts the shadow, its cards keep their r
   await page.mouse.up();
 });
 
-test('a selected folded frame offers no card buttons (add note, emoji)', async ({ page }) => {
+test('a selected folded frame offers no card buttons (add note)', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, BOARD);
   const old = page.locator('#world .node.frame-folded', { hasText: 'Old' });
   await old.click();
   await expect(old.locator('.addnote')).toBeHidden();
-  await expect(old.locator('.tag-add-btn')).toHaveCount(0);
 });

@@ -1,11 +1,13 @@
 // ---------- find a card (search box + dropdown) ----------
-// Filters on title OR body. Every match is highlighted by dimming the non-matching cards
+// Filters on title OR body; a `#word` in the query is a TAG the card must carry (utils/tags.ts — the
+// same test as the tag filter), so `#people offsite` finds the offsite card tagged #people. Every match is highlighted by dimming the non-matching cards
 // (state.searchMatch, applied in paintAll); a match outside the open frame highlights
 // the first visible parent containing it instead. The active dropdown option's card gets an
 // extra white outline (state.searchActiveId). searchBox is exported so the global "/"
 // shortcut can focus it.
 import { state, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
+import { allTags, hasTag } from '../utils/tags.js';
 import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible } from '../utils/model.js';
 import { outOfScope } from '../nav/scope.js';
 import { paintAll, focusNode } from '../main.js';
@@ -40,12 +42,16 @@ export function runSearch(): void {
   // Each node's label is derived ONCE here and carried through the filter, the sort and the ranking —
   // a label off an untitled card means scanning its first line, and asking for it again per sort
   // COMPARISON put that on an n·log n path that reruns on every keystroke.
+  const words = q.split(/\s+/);
+  const want = words.filter(w => w.length > 1 && w.startsWith('#')).map(w => w.slice(1));
+  const text = words.filter(w => !(w.length > 1 && w.startsWith('#'))).join(' ');
   const matches: { n: MindNode; label: string; onLabel: boolean }[] = [];
   for (const n of state.nodes.values()){
     if (outOfScope(n)) continue;
+    if (want.length && (n.type === 'frame' || !want.every(w => hasTag(allTags(n), w)))) continue;
     const label = nodeLabel(n);
-    const onLabel = label.toLowerCase().includes(q);
-    if (onLabel || (n.body && n.body.toLowerCase().includes(q))) matches.push({ n, label, onLabel });
+    const onLabel = !!text && label.toLowerCase().includes(text);
+    if (!text || onLabel || (n.body && n.body.toLowerCase().includes(text))) matches.push({ n, label, onLabel });
   }
   // highlight every match — surfacing a hidden match through its first visible parent
   state.searchMatch = new Set(matches.map(m => firstVisible(m.n).id));

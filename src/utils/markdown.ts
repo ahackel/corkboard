@@ -5,14 +5,28 @@
 // a clipped preview rendered from this.
 // ============================================================
 
+import { INLINE_TAG } from './tags.js';
+
 // escape text for safe insertion into SVG/HTML markup
 const ESC_MAP: Record<string, string> = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
 export function esc(s: unknown): string {
   return String(s).replace(/[&<>"']/g, c => ESC_MAP[c]);
 }
 
-// Inline emphasis on a PLAIN text run (escaped first so user text can't inject markup).
+// A PLAIN text run: its `#tags` (utils/tags.ts — Obsidian's, so a tag here is one there) set apart, and
+// emphasis on the text between them. Tags first, so a `#snake_case_tag` isn't read as emphasis.
 function mdEmphasis(s: string): string {
+  let out = '', last = 0;
+  for (const m of s.matchAll(INLINE_TAG)){
+    if (/^[\d/]+$/.test(m[2])) continue;   // `#12` is a number, not a tag
+    const at = m.index + m[1].length;
+    out += mdStyle(s.slice(last, at)) + `<span class="md-tag" data-tag="${esc(m[2])}">#${esc(m[2])}</span>`;
+    last = at + 1 + m[2].length;
+  }
+  return out + mdStyle(s.slice(last));
+}
+// Inline emphasis (escaped first so user text can't inject markup).
+function mdStyle(s: string): string {
   return esc(s)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/__([^_]+)__/g,     '<strong>$1</strong>')

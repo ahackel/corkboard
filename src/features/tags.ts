@@ -1,77 +1,57 @@
-// ---------- emoji tags: assign / toggle / remove on cards ----------
-// Tags aren't a first-class entity — there's no registry, just MindNode.tags: string[] round-tripped
-// through frontmatter (utils/frontmatter.ts). Each tag is a single emoji (no name, no colour — the
-// emoji itself is the visual identity), assigned via the "+" button at the end of a selected card's
-// own tag row (main.ts's paintNode) or the outline properties sheet's tag row (properties.ts), both
-// opening the shared MRU popover (features/emoji-picker.ts). This module owns the mutation
-// (setTagOnNodes), the shared pill markup, and the card-rendered row's own click-to-remove / add
-// wiring.
-import { state, setStatus, type MindNode } from '../core/state.js';
+// ---------- tags on cards: add / remove, and the chips a card wears ----------
+// A tag is an Obsidian tag (utils/tags.ts). There's no registry: a card's own tags are MindNode.tags,
+// round-tripped through its frontmatter `tags:` list, and the `#tags` written in its text are read off
+// the text itself. The `#` field (features/tag-picker.ts) adds and removes the frontmatter ones; a
+// chip on a card is a FILTER switch (features/tag-filter.ts), never a delete button.
+import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { selectedIds, remeasure } from '../main.js';
+import { remeasure } from '../main.js';
 import { esc } from '../utils/markdown.js';
-// two-way cycle w/ emoji-picker.ts (which imports setTagOnNodes/tagPillHTML from here), evaluated
-// only inside bindCardTagPills's own click handler below, never at module-eval time — same style as
-// the main↔features cycles CLAUDE.md documents.
-import { openEmojiPicker } from './emoji-picker.js';
+import { isEmojiTag, tagKey, tagTilt, type ShownTag } from '../utils/tags.js';
+import { toggleTagFilter } from './tag-filter.js';
 
-// Shared pill markup for both the card-rendered row (main.ts) and the emoji picker's own MRU
-// grid — one place owns "how does a tag pill look".
-export function tagPillHTML(tag: string, extraAttrs = ''): string {
-  return `<span class="tag-pill" data-tag="${esc(tag)}"${extraAttrs}>${esc(tag)}</span>`;
+// How a tag is written for a person: an emoji as itself, a word with its `#`.
+export const tagText = (t: string): string => isEmojiTag(t) ? t : '#' + t;
+
+// One chip on a card, stuck to its top edge: an emoji is a round STAMP, a word a paper LABEL — at a
+// small tilt that is the tag's own (tagTilt), so nothing about it is stored. A tag written in the
+// note's text has a dashed edge: it's the text's, not something `#` put there. Lit when it is in the
+// filter.
+export function tagChipHTML(t: ShownTag): string {
+  const lit = state.tagFilter.some(f => tagKey(f) === tagKey(t.tag));
+  return `<button type="button" class="tag ${isEmojiTag(t.tag) ? 'stamp' : 'label'}${t.inText ? ' in-text' : ''}${lit ? ' lit' : ''}"` +
+    ` data-tag="${esc(t.tag)}" style="--tilt:${tagTilt(t.tag)}deg" title="${esc(tagText(t.tag))} · click to filter by it">${esc(tagText(t.tag))}</button>`;
 }
 
-// ---- shared "add/remove tag on a set of node ids" mutation — the one path both the emoji picker
-// and the card's own pill click funnel through, so the two always produce identical results. Skips
-// locked nodes (like every other per-card mutation, e.g. properties.ts's colour swatch). ----
+// ---- the one path that adds or removes a tag on a set of cards. Skips locked cards and frames (a
+// frame wears no tags), like every other per-card mutation. Case is ignored: `Idea` is `idea`. ----
 export function setTagOnNodes(ids: string[], tag: string, on: boolean): void {
   if (state.readOnly) return;
+  const k = tagKey(tag);
   const targets = ids.filter(id => {
     const n = state.nodes.get(id);
-    return !!n && !isLockedEffective(n);
+    return !!n && n.type !== 'frame' && !isLockedEffective(n) && n.tags.some(t => tagKey(t) === k) !== on;
   });
   if (!targets.length) return;
   record(targets, () => {
     for (const id of targets) {
       const n = state.nodes.get(id); if (!n) continue;
-      const has = n.tags.includes(tag);
-      if (on && !has) n.tags = [...n.tags, tag];
-      else if (!on && has) n.tags = n.tags.filter(t => t !== tag);
+      n.tags = on ? [...n.tags, tag] : n.tags.filter(t => tagKey(t) !== k);
       n.dirty = true;
     }
   });
-  // paint first so each card's height is current, then reflow (a tag row can change height), then
-  // paint again.
+  // paint first so each card's height is current, then reflow, then paint again.
   remeasure(); scheduleSave();
 }
 
-// ---- card-rendered tag row: click a pill to remove it — from every selected card if this one is
-// part of a multi-selection (mirrors the add button's own "whole selection" reach below), or just
-// this card otherwise — click the trailing "+" (only present on the selection anchor, see main.ts's
-// showAddTag) to open the picker for the WHOLE selection — main.ts's paintNode calls this after
-// rebuilding a card's .tag-row. ----
-export function bindCardTagPills(rowEl: HTMLElement, n: MindNode): void {
-  rowEl.querySelectorAll<HTMLElement>('.tag-pill').forEach(pill => {
-    pill.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't let it start a card drag/select
-    pill.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (state.readOnly) return;
-      if (isLockedEffective(n)) { setStatus('Locked — can’t edit tags'); return; }
-      const ids = state.sel.size > 1 && state.sel.has(n.id) ? selectedIds() : [n.id];
-      setTagOnNodes(ids, pill.dataset.tag!, false);
-    });
+// ---- a card's chips (main.ts paintNode calls this after rebuilding the row): a click filters by
+// that tag, or takes it back out of the filter. Allowed in read-only and on a locked card — the filter
+// changes nothing on disk. ----
+export function bindCardTags(rowEl: HTMLElement): void {
+  rowEl.querySelectorAll<HTMLElement>('.tag').forEach(chip => {
+    chip.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a card drag/select
+    chip.addEventListener('click', (e) => { e.stopPropagation(); toggleTagFilter(chip.dataset.tag!); });
   });
-  const addBtn = rowEl.querySelector<HTMLButtonElement>('.tag-add-btn');
-  if (addBtn) {
-    addBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
-    addBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (state.readOnly || isLockedEffective(n)) return;
-      // this button only ever renders on the selection anchor (main.ts's showAddTag), but the
-      // emoji it picks applies to every selected card, not just this one.
-      openEmojiPicker(addBtn, selectedIds());
-    });
-  }
 }

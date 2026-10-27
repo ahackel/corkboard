@@ -503,8 +503,8 @@ other follows and the picture never distorts or crops. Four things follow:
   and why the chip carries a `z-index` at all — the body is absolutely positioned and later in the DOM, so
   the picture would otherwise cover the very control that folds it. The magnifier stays (a thumbnail is
   exactly when "show me this properly" is worth offering) but shrinks to 18px in the TOP-LEFT, the corner
-  the chip and the add-child + leave free. The tag row goes entirely: it hangs off the bottom edge with a
-  22px add-emoji button, which on a 40px square reads as chrome with a picture behind it.
+  the chip and the add-child + leave free. The tag row goes entirely: a 26px stamp on a 40px square reads
+  as chrome with a picture behind it.
   And the chip itself only shows when it's earning its place: the card is SELECTED, or the `+N` is really
   counting hidden descendants (`.wide`, set by `paintNode` for exactly that). A bare `+` on an unselected
   icon is neither, and an icon at rest should be a picture. This is the ONE per-kind exception to "no rule
@@ -814,6 +814,22 @@ the next slot of its ROW — to the right, at the gap the row already keeps from
 anything already there — with its frame grown to hold it. Plain D stays an EXACT copy, just below: the two
 are different jobs, so neither guesses which one you meant.
 
+**A TAG is an OBSIDIAN tag, and its job is FINDING cards** (`utils/tags.ts`, tested). Any word, nested with `/`;
+an emoji is just the shortest one. A note carries tags two ways, both Obsidian's own: its frontmatter `tags:`
+(MindNode.tags — what the app adds and removes) and `#word` in its text (read, shown and filtered on, never
+moved or rewritten: the note's, not ours). Matching ignores case and a parent matches its nested tags.
+- **Worn on the TOP edge** (`.top-edge`, shared with the checklist meter so the two can't collide): an emoji is
+  a round stamp, a word a paper label, at a tilt derived from the tag (`tagTilt`, nothing stored); the text's
+  tags have a dashed edge. The bottom-right corner is the resize grip's and the old row fought it.
+- **Added with `#`** (`features/tag-picker.ts`), not a button on every selection: board tags with their
+  counts, emoji BY NAME (`utils/emoji-names.ts`, a short hand list), else a new tag (`cleanTag`). The
+  selection's own tags are listed ticked; UNTICKING is the only way one comes off.
+- **A click on a tag FILTERS** (`features/tag-filter.ts`): the rest fade with search's dimming, more clicks
+  narrow (AND), a dark bar names them, Esc clears. `state.tagMatch` is DERIVED every paint (`paintAll` →
+  `refreshTagMatch`) — the matches plus every frame holding one, so a folded frame can say "2 matches". A
+  folded frame never read (`data/lazy.ts`) knows no tags and just fades. Search takes `#word` too, same test.
+- Frames wear no tags: a frame is a place, and the filter lights it by what it holds.
+
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;
 adding one is a decision, not a gap. Neither writes a new frontmatter key — a merge is a body edit plus a
@@ -1023,8 +1039,8 @@ the commit rewinds to the pre-drag colours before calling `record` — `record` 
 by then is too late. The float bar exempts this chip from its close-on-swatch-click, or the row would vanish
 mid-pick.
 
-**Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, like the emoji tag picker's
-recents: the MRU in `localStorage` (`corkboard.colorMru`, cap 8) *plus* every distinct custom colour in the open
+**Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, like the `#` field's recent
+and board tags: the MRU in `localStorage` (`corkboard.colorMru`, cap 8) *plus* every distinct custom colour in the open
 map, derived fresh from `state.nodes`. The second saves the first from being useless on a device that has never
 picked one (a fresh browser, the same map on the iPad, a `.zip` import), and it self-prunes — recolour the last
 card away from a shade and it stops being offered, with no cache to invalidate. They're a UI convenience, NOT
@@ -1046,7 +1062,7 @@ vault data: no frontmatter key, no map-level palette. Four things to keep right:
   showing the inherit stripes, i.e. reading as "no colour".
 
 **Below `FAR_ZOOM` (50%, `view/camera.ts`) every overlay badge is dropped** — `applyView` puts `zoom-far` on
-`<body>` and `styles.css` hides the fold chip, the lock badge, the emoji tag row and the `.addnote` pen: a few
+`<body>` and `styles.css` hides the fold chip, the lock badge, the top edge (tags + task meter) and the `.addnote` pen: a few
 unreadable pixels each at that scale, times every card on screen. Purely a CSS mode (no node geometry depends on
 it, so crossing the line needs no repaint), and the hides need `!important` — those controls are revealed by
 `:hover`/`.sel`/`[data-chip]` selectors no plain class can out-specify. Add any new card-corner badge to that

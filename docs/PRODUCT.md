@@ -66,8 +66,12 @@ one searchable list.
   resize or draw the frame over it. A frame grows to hold what you drop into it, so nothing is hidden
   past its edge.
 
+**Tags are for finding.** A tag is an Obsidian tag — a word, or an emoji as its shortest form — worn on
+the card's top edge as a stamp or a label. `#` tags the selection; a click on any tag lights every card
+carrying it and fades the rest.
+
 **To build, in order:** frame titles that grow readable when
-zoomed out · emoji tags presented as stamps · export a selection or board as PNG · phone inbox.
+zoomed out · export a selection or board as PNG · phone inbox.
 
 **Cut — and why:**
 - *Sketch / pen layer* — drawing is not sorting.

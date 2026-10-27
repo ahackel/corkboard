@@ -3,7 +3,7 @@
 // colorClass/colorVars) is picked from the OS colour sheet and would otherwise be unrepeatable: no
 // chip to click a second time, and no way to give a sibling card the shade you chose a minute ago.
 //
-// Two sources, exactly like the emoji tag picker's recents (features/emoji-picker.ts, the same
+// Two sources, like the `#` field's recent and board tags (features/tag-picker.ts, the same
 // problem one axis over):
 //   the MRU — what you last picked, in localStorage. A UI convenience, NOT vault data: no
 //     frontmatter key, no map-level palette to invent, nothing written to a note.

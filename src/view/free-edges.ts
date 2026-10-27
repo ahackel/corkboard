@@ -307,8 +307,9 @@ function linkEdges(n: MindNode): string {
 }
 
 export function paintFreeEdges(): void {
-  // Filtering hides every line: dimmed cards are translucent, so lines behind them read as clutter.
-  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
+  // Filtering (a search, or the tag filter) hides every line: dimmed cards are translucent, so lines
+  // behind them read as clutter.
+  if (state.searchMatch || state.tagMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
   let svg = '', hits = '', tools = '';
   // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
   // fill (inkFor).
