@@ -51,7 +51,7 @@ What it has been used for, and what it must stay good at:
 **Core — keep, and make each feel great:** cards with Markdown, free placement, frames to group
 cards, colour and tags, simple lines between cards, tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
 becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
-card or frame to work inside it, and the ⌘K command palette — every action, with its shortcut, in
+frame to work inside it, and the ⌘K command palette — every action, with its shortcut, in
 one searchable list.
 
 **Two things, one rule.** There are cards and frames, nothing else:
