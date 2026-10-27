@@ -15,7 +15,6 @@
 import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, firstVisible, resolveWikilink } from '../utils/model.js';
-import { isReadingRoot } from '../nav/scope.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
 import { nodeW, nodeH, colorFill, canvasSurface } from '../main.js';
@@ -266,11 +265,9 @@ function endCap(cap: EdgeCap, at: Pt, dir: Pt, ink: string): string {
   return cap === 'arrow' ? arrowHead(at, dir, ink) : cap === 'dot' ? capDot(at, ink) : '';
 }
 
-// Whether a card can be a line's end at all. Not the card you are standing INSIDE: everything outside
-// it is out of scope and off the canvas, so there is nothing left to draw a line to.
+// Whether a card can be a line's end at all: one that exists.
 export function connectable(id: string): boolean {
-  const n = state.nodes.get(id);
-  return !!n && !isReadingRoot(n);
+  return state.nodes.has(id);
 }
 // An edge is drawn when both ENDS are on the canvas — a card itself, or the folded frame standing in for
 // it (edgeEnd) — and they aren't the same pill: a line between two cards of one folded frame goes with them.

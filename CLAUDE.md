@@ -86,7 +86,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 
 - Frames — "A frame COLLECTS what it covers" · "A frame's BOUNDS are its box" · "A container's content wrapper is
   LIFECYCLE-managed" · "A frame can be OPENED, and
-  then the canvas IS its interior" · "An OPENED CARD is its note" (scope, crumbs, canvas colour, `detachParentId`).
+  then the canvas IS its interior" · "A CARD is never opened" (scope, crumbs, canvas colour, `detachParentId`).
 - The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".

@@ -3,7 +3,7 @@
 // walk that live structure in state.nodes.
 import { state, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
-import { scope, isReadingRoot } from '../nav/scope.js';
+import { scope } from '../nav/scope.js';
 
 export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
@@ -56,9 +56,8 @@ export function isHidden(n: MindNode): boolean {
     if (p.id === scopeId) return false;
     if (p.collapsed) return true;
   }
-  // Nothing above n is the open frame, so n is outside it — EXCEPT when n is an open CARD, whose note
-  // is what the scope exists to show (isReadingRoot).
-  return scopeId !== null && !isReadingRoot(n);
+  // Nothing above n is the open frame, so n is outside it.
+  return scopeId !== null;
 }
 // The visible card standing in for n: n itself when it's shown, otherwise its nearest
 // ancestor that is still visible: the folded frame a card is tucked inside. Search highlights it for a

@@ -195,7 +195,7 @@ pill filled with the frame's full colour, so its text takes that colour's own `-
 **A frame's BOUNDS are its box; the label hangs OUTSIDE them.** `n.x/n.y/w/h` are the box, and the pill sits
 7px above its top-left corner (`.node.frame > .title-row`, `bottom:calc(100% + 7px)`), growing upward. So
 naming, renaming, describing or un-naming a frame never moves the box or anything in it, and nothing in
-the geometry (interior, drops, lines, the reading view) has to know about the label. What does: anything
+the geometry (interior, drops, lines) has to know about the label. What does: anything
 that FITS a box around frames — `subtreeBox` counts `frameLabelH` (the pill's measured height + its gap)
 above an expanded labelled frame, so Auto-size, grow-to-hold, Group and the load migration's column leave
 a nested frame's name room instead of clipping it. **A frame FOLDS to its label pill** (`isFrameFold`,
@@ -350,103 +350,15 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   half of that recovery lives in `syncScopeChrome`. A reload re-mints every id, so `resolveScopeAfterLoad`
   re-points the stack by FILE before the first layout — deliberately not cleared like the undo history, since a
   background refocus reload must not kick you out of the frame you're working in.
-- **The mechanism is kind-agnostic:** `canOpen` is the one kind test — widen it there, never at a call site.
-  Frames and CARDS are in (see below).
+- **Only a FRAME opens** (`canOpen`, the one kind test — never widen it at a call site). A card has no inside:
+  it is read where it sits (or peeked, or in Obsidian). `↑`, the float bar's Open and `⋯ → Open` refuse a
+  card, and `⌥`-double-click on one is a plain double-click, i.e. it edits.
 
-**An OPENED CARD is its note** (`features/reading.ts`, `.node.reading-root`, `isReadingRoot` in
-`nav/scope.ts`) — the other half of "you can open things". A frame's interior is the CANVAS; a card's
-interior is its TEXT, drawn as one 680px full-height strip whose body scrolls. That is the whole reason it
-exists: a card's height is measured (`nodeH` → `offsetHeight`, uncapped), so a long note is a 4000px-tall
-card you can only PAN, and panning is not scrolling — no wheel semantics, no paging, and past `FAR_ZOOM` no
-text at all.
-
-- **It is THE CARD, not a rendering of it.** The same element `paintNode` already paints: its fill, its
-  derived ink, its markdown, its links, its task boxes and its own `startBodyEdit` all arrive for free, and a
-  note read on the page cannot look or behave differently from the same note on the board. `features/
-  reading.ts` is ~45 lines because all it does is name the state; the strip is CSS.
-- **So the scope root has ONE exception to being off the canvas** — `isReadingRoot`, spelled once in
-  `nav/scope.ts` and read by both scope terms (`outOfScope` there, `isHidden` in `utils/model.ts`, a new term
-  IN it rather than a predicate beside it). A FRAME's root isn't drawn because its box BECAME the viewport —
-  a border round the whole window is not a frame. A CARD's root is the opposite: it is what you came to see.
-- **The GEOMETRY is derived, not screen-fixed.** `nodeW` returns `readingWidth()` (`nav/scope.ts`, 680
-  clamped to the window) for the reading root, ahead of every other arm. Nothing reaches `n.w`, so a card opened, read and left comes back out as authored. CSS adds
-  only `min-height:100dvh` (full screen even for a two-line note) and reading type sizes, set as the same
-  `--h1-size`/`--h1-lh` variables `.node .body h1` already reads. Keyed on `.reading-root` alone rather than
-  `body.reading .node…`, since paintNode hangs the class on in the same pass a two-selector rule would miss.
-  Reading MARGINS are the `--pad-x`/`--pad-y` VARIABLES, never `padding`.
-- **Deliberately NOT `position:fixed`, and this is the load-bearing decision.** The card stays in WORLD
-  space, so screen and world coordinates still line up and every hit-test keeps working exactly as on the
-  board. A screen-fixed strip over a world-space canvas would put the pointer maths permanently out by the
-  pan. The first pass got
-  this wrong (it rendered the note into its own `#page` element, then into a `position:fixed` card).
-- **All of it is measured ONCE per paint, into a band** (`refreshReadingBand`/`readingBand` in
-  `view/camera.ts`, refreshed from `syncScopeChrome` and on a resize). The window's size, the strip's width
-  and the card's own measured height are invariant for a whole pass, while `applyView` runs per pan frame
-  and `paintPos` two to four times per node — reading them there put an `offsetHeight` per frame
-  *inside* the paint loop's own style writes, which is a forced reflow each time. The band also carries
-  `worldLeft` (the window's left edge in world coordinates).
-- **"Fixed position and zoom" is the CAMERA, clamped in one place.** `clampReadingView` in `view/camera.ts`
-  pins `k` to 1 and `x` so the strip stays centred; `y` is left free, and vertical panning IS the scroll.
-  It sits at the top of `applyView` because that is the single place every pan/zoom path ends up — wheel,
-  drag-pan, pinch, `⌘±`, `F`/fit, a glide — so one clamp constrains all of them instead of a guard per
-  gesture, and `⌘±`/`F` become inert rather than needing to be caught. It writes `state.view` ITSELF and not
-  just the transform: `screenToWorld` reads the model, and painting at k=1 while hit-testing at some other k
-  is how a click lands on the wrong card. Opening sets only `y` (`READING_TOP - t.y`), clear of
-  the crumb bar.
-- **A scope LEVEL, deliberately not a panel beside the canvas.** One entry on the same stack, one crumb, `↓` /
-  a crumb / `Esc` to leave, the file path in the same `open=` hash term — so back/forward, reload and
-  bookmarks work with no navigation state of its own. Reading is somewhere you GO. The rejected alternative
-  was a docked side panel: a panel and a card would show one note at once, which is what reads as two apps.
-  (Scrintal takes cards "full screen to focus"; Obsidian Canvas's split-view-beside-canvas is a community
-  plugin, not the design.)
-- **`↑` / the float bar's Open (`→]`) / `⋯ → Open` open it — NEVER double-click.** Double-click on a card's text edits
-  it, because that is what a double-click means on text nearly everywhere and it is the commonest action in
-  the app; gesture cost follows frequency. So `activateNode` tests the raw `type === 'frame'` rather than
-  `canOpen` — the one call site where those two questions genuinely differ, and the line that stops widening
-  `canOpen` from silently stealing the edit gesture. Open lives on the float bar because that is the only
-  action surface identical on desktop and touch (it docks to the bottom on coarse pointers); its test
-  (`canOpenSelection`) also drops it on the card you are already inside, which `openFrame` would refuse.
-- **`containerBox`/`frameInterior` and friends must NOT see it as a viewport.** The geometry helpers ask
-  `boxIsViewport` (`nav/scope.ts`) — "the open node whose BOX became the window" — never `isScopeRoot`: a
-  read card is an ordinary box on the canvas.
-- **Vertically CENTRED while it fits, bounded scroll when it doesn't.** `clampReadingView` pins `y` outright
-  while the whole card is on screen — so it cannot be scrolled at all, because a page that drifts under a
-  gesture it doesn't need reads as broken — and clamps it between the two ends once the card outgrows the
-  window, leaving `READ_PAD_TOP` clear of the crumb bar and the toolbar. The height itself is the content's,
-  exactly as on the board: a two-line note is a two-line card, not an empty full-height slab.
-- **A resize re-runs the LAYOUT, not just the camera.** `readingWidth()` follows the window, so the box and
-  the centring both change with it — the resize handler calls `relayout()` + `applyView()`
-  immediately for a read card rather than debouncing `refreshScopeRect` the way an open frame does.
-- **A read card has NO HOST, and this one is a trap.** `hostFrame` returns null for it. Every frame above it
-  is out of scope, hidden, and has already had its content wrapper dropped by `paintNode` — and a node whose
-  host wrapper is gone rides along DETACHED with it. Without the guard, opening a card that lives inside a
-  frame removes it from the DOM. A root-level card has no host anyway, which is why this only shows up once
-  the card is in a frame.
-- **The canvas behind it wears its PARENT's resolved colour** (`canvasOwner` returns `parentOf(open)` for a
-  read card). Not its own — the backdrop would then be the very colour the card is painting and the card
-  would vanish into it — and not the map's either, because what is behind a card is where it SITS: opening
-  one inside a blue frame should still look like being inside that frame. Resolved, since `canvasFill` goes
-  through `effectiveColor`, so an uncoloured parent keeps walking up. A root-level card has no parent, so the
-  map's own colour shows — exactly what was behind the card before it was opened. And when the parent has no
-  authored colour ANYWHERE up its chain, `canvasFill` falls through to the map's own canvas colour rather
-  than to nothing: what's behind an uncoloured container is whatever is behind IT. Without that, going into a card on a teal board turned the board
-  grey and coming out turned it teal again — and the identical discard applied to an uncoloured open FRAME.
-- **The chrome it drops is dropped in JS, not shouted down in CSS.** `chipFace` returns `''` for it (no
-  fold chip — folding the card you are standing inside would leave you looking at nothing) and the resize
-  handles are cleared once AFTER the whole sizing chain, since a frame and a plain card each hand out their
-  own: a DERIVED size isn't resizable. Both
-  were `display:none !important` first, which meant out-shouting the hover/`:has` rules that reveal a chip,
-  and left drag.ts refusing the gesture while CSS hid the handle — two guards for one fact.
-- **It offers no line RINGS while it's open** (`connectable` in `view/free-edges.ts`). Everything outside it
-  is out of scope and off the canvas, so there is nothing left to draw a line to — four rings offering a
-  connection the canvas can't complete are worse than no rings. Added to `connectable` rather than beside it
-  because that is the shared gate: the rings and the DROP refuse together, so nothing can be dragged onto the
-  open card either. An edge to the open card is already hidden by its far end (`edgeVisible`).
-- **Three consequences of the root being a real, visible card.** It must not be DRAGGABLE — the strip can't
-  move on screen, but a drag would still write x/y to the file, so `dragPointerMove` refuses it exactly as it
-  refuses a locked card. It is not the CANVAS's colour owner (`canvasOwner` returns null for it), or the
-  background would be tinted with the very colour the strip is painting and the card would vanish into it.
-  And `applyScope` skips the camera fit in favour of the reading camera above.
+**A CARD is never opened.** There used to be a reading view — a card opened as a 680px page, its own
+camera clamp and scope-root exception (`isReadingRoot`) — and it was cut: a long note belongs in Obsidian,
+which is the reading view (docs/PRODUCT.md), and a second way to be "inside" something cost every geometry
+helper an exception. The open scope root is therefore always a frame whose box became the viewport, which
+is all `isScopeRoot` means in the layout code.
 
 ## Sizing
 
@@ -726,7 +638,7 @@ Web Animations on width/height with the content clipped, a frame's content wrapp
 double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the
 gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
 the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
-is why it can mean the same thing on a card and a frame. Its touch spelling is a TWO-FINGER
+and only a frame opens: on a card ⌥-double-click is a plain double-click. Its touch spelling is a TWO-FINGER
 double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `↑`, the float bar's
 Open and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
 the exemption `openFrame` itself takes: looking inside something isn't changing it.

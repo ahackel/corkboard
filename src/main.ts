@@ -19,7 +19,7 @@ import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, 
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, applyView, refreshReadingBand } from './view/camera.js';
+import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim } from './view/camera.js';
 import { applyLayouts, hostFrame, frameInterior, containerBox, isFrame, frameLabelled, frameDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
@@ -44,7 +44,7 @@ import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/p
 import { afterReading, readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, boxIsViewport, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
@@ -203,13 +203,11 @@ export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
 // otherwise a double-click would open an editor inside a hidden .body.
 // Shared by nodeEl's dblclick and the touch double-tap in features/drag.ts.
 export function activateNode(n: MindNode, cx: number, cy: number, { open = false }: { open?: boolean } = {}): void {
-  // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch: go IN. The one navigating gesture on a node,
-  // and it is held apart from all the editing ones by the modifier rather than by which PART of the
-  // card was hit — so it means the same thing on a card and a frame, which no plain
-  // double-click ever could. Ahead of the read-only bail on purpose, the same exemption openFrame
-  // itself takes: looking inside something isn't changing it. openFrame reports its own refusal for
-  // the kinds with no interior.
-  if (open) { openFrame(n); return; }
+  // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch, on a FRAME: go IN. The one navigating gesture
+  // on a node, held apart from the editing ones by the modifier rather than by which PART of the frame
+  // was hit. Ahead of the read-only bail on purpose, the same exemption openFrame itself takes: looking
+  // inside something isn't changing it. A card has no inside, so on one it's a plain double-click.
+  if (open && canOpen(n)) { openFrame(n); return; }
   // Read-only (a map the user has locked down): there is nothing to edit, so the
   // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
   // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
@@ -280,7 +278,6 @@ export function paintNode(n: MindNode): void {
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
-    + (isReadingRoot(n) ? ' reading-root' : '')   // opened as a page: one screen-fixed strip (styles.css)
     + (isFrameBox(n) ? ' frame' : '')
     + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare label pill (styles.css)
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
@@ -333,7 +330,7 @@ export function paintNode(n: MindNode): void {
     const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
     // (The OPEN frame is the canvas even while folded: its children are top-level, never nested in its pill.)
-    if (p && !isFrameBox(p) && !boxIsViewport(p) && !isFrameBox(n)) {
+    if (p && !isFrameBox(p) && !isScopeRoot(p) && !isFrameBox(n)) {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
@@ -355,7 +352,7 @@ export function paintNode(n: MindNode): void {
   // is a different height from the rendered note, and the card must not jump as editing starts.
   if (!isBoxNode(n) && !isImageFold(n) && !isFrameFold(n)) {
     const hold = ui.bodyEdit?.id === n.id ? ui.bodyEdit.holdH ?? 0 : 0;
-    const min = Math.max(n.h != null && !isReadingRoot(n) ? n.h : 0, hold);
+    const min = Math.max(n.h != null ? n.h : 0, hold);
     el.style.minHeight = min ? min + 'px' : '';
   }
   else if (el.style.minHeight) el.style.minHeight = '';
@@ -380,7 +377,7 @@ export function paintNode(n: MindNode): void {
     // A plain card: an authored width if it has one (else back to the CSS-fixed card width), never an
     // inline height — its authored height is the min-height set above.
     // FOLDED it's a chip that shrink-wraps its one line (styles.css .collapsed), up to the width it has open.
-    const authored = (n.w != null || isReadingRoot(n)) && !collapsed;
+    const authored = n.w != null && !collapsed;
     el.style.width = authored ? nodeW(n) + 'px' : '';
     const cap = collapsed ? (n.w ?? NODE_W) + 'px' : '';
     if (el.style.maxWidth !== cap) el.style.maxWidth = cap;
@@ -389,12 +386,6 @@ export function paintNode(n: MindNode): void {
     // squares on it when selected). Unfolding hands them back on the next paint.
     if (collapsed) clearResizeHandles(el); else ensureResizeHandles(n, FRAME_DIRS);
   }
-  // After the whole chain, because a frame and a plain card each hand out their own handles: a DERIVED
-  // size isn't resizable. The card
-  // being read takes the window's width and the window's height, so there is nothing to drag — and
-  // this is also the authority drag.ts's own refusal defers to, instead of CSS hiding the handles
-  // while the gesture was refused somewhere else.
-  if (isReadingRoot(n)) clearResizeHandles(el);
   // Don't clobber a FRAME's label while it's being renamed on itself (ui.titleEdit — the user is
   // typing into this very element). A card needs no such guard: its name is the leading `# ` line of its
   // one text field, and while that's open the whole row is hidden (`.card-editing`).
@@ -506,7 +497,7 @@ export function paintNode(n: MindNode): void {
   } else if (bodyEl.style.maxHeight) bodyEl.style.maxHeight = '';
 }
 function clipHeight(n: MindNode, editing: boolean): number | null {
-  return n.clip && n.h != null && !n.collapsed && !editing && !isBoxNode(n) && !isImageFold(n) && !isReadingRoot(n) ? n.h : null;
+  return n.clip && n.h != null && !n.collapsed && !editing && !isBoxNode(n) && !isImageFold(n) ? n.h : null;
 }
 // The markdown a node RENDERS — its whole note, title included.
 //
@@ -622,9 +613,6 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRA
 // authors only this axis (its height comes from its content). A folded frame's tab shrink-wraps its
 // title instead.
 export function nodeW(n: MindNode): number {
-  // Opened as a page: a DERIVED reading width, ahead of every other arm — without writing a pixel of
-  // it to n.w, so the card comes back out as authored.
-  if (isReadingRoot(n)) return readingWidth();
   if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
   if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
   if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the pill shrink-wraps its label
@@ -1108,7 +1096,7 @@ function animateReflow(before: Map<string, Pt>): void {
   //    along with it. Only a card that moved WITHIN its frame (a tidy-up) glides.
   const stays = (m: MindNode): boolean => {
     const p = parentOf(m);
-    if (!p || boxIsViewport(p)) return false;
+    if (!p || isScopeRoot(p)) return false;
     const bm = before.get(m.id), bp = before.get(p.id);
     if (!bm) return true;
     return !!bp && Math.abs((bm.x - bp.x) - (m.x - p.x)) < 0.5 && Math.abs((bm.y - bp.y) - (m.y - p.y)) < 0.5;
@@ -1240,7 +1228,7 @@ function navArrow(key: string): void {
   const n = state.selId ? state.nodes.get(state.selId) : null;
   if (key === 'ArrowUp') {
     // ↑ stays single: you can only stand in one place, so it acts on the anchor.
-    if (!n) { setStatus('Select a card or frame to open it'); return; }
+    if (!n) { setStatus('Select a frame to open it'); return; }
     openFrame(n);          // reports its own refusal for the kinds that can't be opened
     return;
   }
@@ -1435,9 +1423,7 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
     // Now that the stack is settled, containerBox reports the frame we just left at its real size
     // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
     // step: ⌘Z undoes the resize without teleporting you between scopes.
-    // `type === 'frame'` and not a reading predicate: this is a BOX repair, so the question is which
-    // kinds have a box — and it must not be asked of the scope, which setScopeStack has already moved
-    // above this line (isReadingRoot would answer about the level we just arrived at, not the one left).
+    // `type === 'frame'` and not a scope predicate: the scope stack has already moved above this line.
     if (left && left.type === 'frame' && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
   });
   if (opts.exiting) {
@@ -1460,22 +1446,14 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
 // Open a frame. Allowed in read-only and on a LOCKED frame: looking inside the box isn't changing it.
 export function openFrame(target: MindNode | undefined): void {
   const t = target;
-  if (!t || !canOpen(t)) { setStatus('This can’t be opened'); return; }
+  if (!t || !canOpen(t)) { setStatus('Only a frame can be opened'); return; }
   if (afterReading([t.id], () => openFrame(t), false)) return;   // its notes are the canvas you open onto
   const back = currentBack();
   // Opening is pure navigation, in the same class as revealInView: it writes no node field. A FOLDED
   // frame stays folded — while you stand in it its interior is the canvas whatever its fold says
   // (isHidden asks about the open frame before the fold), and you come back out to the same pill.
   if (isScopeRoot(t)) return;                  // already standing in it
-  // A CARD open is a page, not a canvas: the strip is placed in SCREEN space (position:fixed), so its
-  // world box says nothing about what you are looking at and framing it would just leave a random zoom
-  // to come back out to. The camera is left exactly where it was, which is also what makes leaving
-  // feel like stepping back out rather than arriving somewhere new.
-  applyScope(t, { back, camera: t.type !== 'card' });
-  // A card needs no fit and no glide of its own: clampReadingView (view/camera.ts) is the ONE author
-  // of the reading camera — it pins x and k and places y on every applyView from here on — so naming
-  // a target here would only be a second copy of its arithmetic for it to overwrite.
-  if (t.type === 'card') { refreshReadingBand(); applyView(); }
+  applyScope(t, { back });
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.
@@ -1564,13 +1542,6 @@ function hasAuthoredColor(n: MindNode): boolean {
 export function canvasOwner(): MindNode | null {
   const open = scopeRootNode();
   if (!open) return null;
-  // An open CARD is drawn ON the canvas rather than replaced by it, so it is not its own backdrop —
-  // tinting the background with the very colour the card is painting would hide it in it. What is
-  // behind it is where it SITS: its parent, resolved (canvasFill goes through effectiveColor, so an
-  // uncoloured parent keeps walking up), which is what makes opening a card inside a blue frame still
-  // look like being inside that frame. A root-level card has no parent, so the map's own colour shows
-  // — exactly what was behind the card before it was opened.
-  if (isReadingRoot(open)) return parentOf(open);
   return open;
 }
 // The fill actually behind the cards right now — the one input both the background and the grid ink
@@ -1610,11 +1581,6 @@ export function syncCanvasBackground(): void {
 }
 function syncScopeChrome(): void {
   renderCrumbs();
-  // The `reading` body class sits here, beside the `scoped` one renderCrumbs keeps, because it is the
-  // same fact about the same state — and the BAND the camera clamp reads is
-  // measured in the same breath, since this is the one place per paint that knows the scope settled.
-  document.body.classList.toggle('reading', readingActive());
-  refreshReadingBand();
   syncCanvasBackground();
   if (!scope.pruned) return;
   scope.pruned = false;
@@ -1627,20 +1593,8 @@ function syncScopeChrome(): void {
 // where they were put; what still reads the rect is the drop test (frameAt / containerBox), which a
 // stale rect would confine to the old window. Debounced, and a no-op when the size didn't really change.
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
-let readingResizeRaf: number | null = null;
 window.addEventListener('resize', () => {
   if (!scopeActive()) return;
-  // An open CARD's width IS the window's (readingWidth), and so is its centring — so a resize has to
-  // re-run the layout, not just re-snapshot the rect: the box and the camera clamp both read the new
-  // width. Not debounced, because a strip lagging 200ms behind the window edge while
-  // you drag it is the one thing you're looking at — but coalesced into one frame, since a live drag
-  // emits resize at input rate and each pass measures every card.
-  if (readingActive()) {
-    if (readingResizeRaf === null) readingResizeRaf = requestAnimationFrame(() => {
-      readingResizeRaf = null; refreshReadingBand(); relayout(); applyView();
-    });
-    return;
-  }
   clearTimeout(scopeResizeTimer);
   scopeResizeTimer = setTimeout(refreshScopeRect, 200);
 });
@@ -1862,9 +1816,6 @@ window.addEventListener('keydown', (e) => {
   if (key === 'Escape'){
     e.preventDefault();
     if (typing) { active?.blur?.(); }
-    // Inside an open card Esc leaves it, the way it leaves search — there is no selection
-    // in here for the two cases below to clear, so this can't shadow anything.
-    else if (readingActive()) exitScope();
     else if (state.selEdges.size) clearEdgeSelection();
     else if (searchActive()) closeSearch();   // a search left standing over the board, before the selection
     else if (state.sel.size) selectNode(null);
@@ -2021,7 +1972,7 @@ function paletteCommands(): Command[] {
     { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
     { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
-    { label: 'Open', shortcut: '↑', keywords: 'enter frame read', when: () => { const n = oneSel(); return !!n && canOpen(n) && !isScopeRoot(n); }, run: () => openFrame(oneSel()) },
+    { label: 'Open', shortcut: '↑', keywords: 'enter frame', when: () => { const n = oneSel(); return !!n && canOpen(n) && !isScopeRoot(n); }, run: () => openFrame(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },

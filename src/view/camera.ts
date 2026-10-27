@@ -3,7 +3,6 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
-import { readingRootNode, readingWidth, readingLeft } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
@@ -54,55 +53,7 @@ function refreshRaster(): void {
 // drift and screenToWorld keeps its arithmetic — and a disagreement of under half a device pixel between
 // hit-testing and paint is invisible by definition. The SCALE is never snapped (that would quantise zoom).
 const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; return Math.round(v * d) / d; };
-// While a CARD is open, the canvas is not free: the strip is pinned centred at 1:1 and the only
-// movement left is VERTICAL, which is the scroll. Done here, on `state.view` itself, because this is
-// the single place every pan/zoom path ends up — wheel, drag-pan, pinch, ⌘±, F/fit, a glide — so one
-// clamp constrains all of them instead of a guard per gesture. It must write the MODEL and not just
-// the transform: `screenToWorld` reads `state.view`, and a paint at k=1 over hit-tests at some other
-// k is how a click lands on the wrong card.
-// Room left for the floating chrome: the crumb bar and the toolbar at the top, a little air at the
-// bottom. Only consulted for a card TALLER than the window — one that fits is simply centred.
-// Deliberately NOT bottomInset(): that one tracks the SELECTION (the docked float bar opening and
-// closing), so folding it in here would slide the page up and down as you click.
-export const READ_PAD_TOP = 56;
-const READ_PAD_BOTTOM = 24;
-
-// Everything the reading clamp needs, measured ONCE per paint instead of per
-// frame and per node. Every input is invariant for a whole pass — the window's size, the strip's
-// width, the card's own measured height — while `applyView` runs on every pan frame and `paintPos`
-// two to four times per node. Reading them there meant an offsetHeight per frame,
-// i.e. a forced reflow interleaved with the paint loop's own style writes.
-// A plain object rebuilt on demand rather than a closure: it holds five numbers, and nothing else
-// should be able to keep the node it was measured from alive.
-// `worldLeft` is the window's left edge in WORLD coordinates.
-export interface ReadingBand { left: number; worldLeft: number; width: number; vw: number; vh: number; top: number; h: number }
-let band: ReadingBand | null = null;
-// Called from the paint (syncScopeChrome) and on a resize — the two moments any of it can change.
-export function refreshReadingBand(): void {
-  const root = readingRootNode();
-  if (!root) { band = null; return; }
-  const left = readingLeft();
-  band = { left, worldLeft: root.x - left, width: readingWidth(), vw: window.innerWidth,
-           vh: window.innerHeight, top: root.y, h: nodeH(root) };
-}
-export function readingBand(): ReadingBand | null { return band; }
-
-function clampReadingView(): void {
-  const root = readingRootNode();
-  if (!root) return;
-  const b = band ?? (refreshReadingBand(), band);
-  if (!b) return;
-  state.view.k = 1;                        // no zoom: reading size is reading size
-  state.view.x = b.left - root.x;          // centred in the safe box, horizontally immovable
-  // …and vertically: CENTRED while the whole card is on screen, which also means it cannot be
-  // scrolled at all (there is nothing off-screen to scroll to, and a page that drifts under a
-  // scroll gesture it doesn't need reads as broken). Once it outgrows the window, y is the one free
-  // axis — that IS the scroll — but bounded, so neither end can be panned off into empty canvas.
-  if (b.h + READ_PAD_TOP + READ_PAD_BOTTOM <= b.vh) { state.view.y = (b.vh - b.h) / 2 - b.top; return; }
-  state.view.y = clamp(state.view.y, (b.vh - READ_PAD_BOTTOM) - (b.top + b.h), READ_PAD_TOP - b.top);
-}
 export function applyView(): void {
-  clampReadingView();
   world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
   refreshRaster();

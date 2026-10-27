@@ -18,7 +18,6 @@
 // the reverse.
 // ============================================================
 import { state, type MindNode, type View } from '../core/state.js';
-import { safeInsets } from '../utils/dom.js';
 
 export interface ScopeBack { view: View; sel: string[]; selId: string | null; }
 export interface ScopeLevel {
@@ -41,62 +40,13 @@ export function scopeRootNode(): MindNode | null {
   return scope.rootId ? state.nodes.get(scope.rootId) ?? null : null;
 }
 export function isScopeRoot(n: MindNode): boolean { return n.id === scope.rootId; }
-// …and the ONE exception to "the scope root is off the canvas". A FRAME's root is not drawn because
-// its box BECAME the viewport — a border round the whole window is not a frame. A CARD's root is the
-// opposite: its note is the thing you came to look at, so it stays on the canvas and is drawn as one
-// full-height strip (features/reading.ts + `.node.reading-root` in styles.css). Spelled once here and
-// read by both scope terms — outOfScope below and isHidden in utils/model.ts — so the two can't drift.
-export function isReadingRoot(n: MindNode): boolean {
-  return n.id === scope.rootId && n.type === 'card';
-}
-// …and the same question asked of the SCOPE rather than of a node: the card being read, or null.
-// Every "is a card open" test in the app goes through one of these two — the camera clamp,
-// the canvas-colour owner, the body class, openFrame's own two consequences — so
-// widening what reads as a page (an image card, say) stays the one edit isReadingRoot promises.
-export function readingRootNode(): MindNode | null {
-  const n = scopeRootNode();
-  return n && isReadingRoot(n) ? n : null;
-}
-export function readingActive(): boolean { return readingRootNode() !== null; }
-// The strip's width, and the ONE place it is decided. Read by `nodeW` and by the camera clamp that
-// keeps it centred. A DERIVED width: `n.w` on disk is never touched, so a card opened,
-// read and left comes back out at exactly the width it was authored at.
-// "Is this the open node whose BOX became the viewport" — the question every branch in the layout
-// pass was really asking when it tested isScopeRoot. True for a frame, whose interior IS the window,
-// and false for a read CARD, which is an ordinary box on the canvas that merely happens to be the
-// thing you are standing in. Its children are hosted, clipped, laid out and ripped out of it exactly
-// as they are on the board, so every one of those branches has to see it as a normal container.
-export function boxIsViewport(n: MindNode): boolean {
-  return isScopeRoot(n) && !isReadingRoot(n);
-}
-const READING_W = 680;
-// The gutter the strip keeps on a window too narrow for its full width — the SAME 10px a side the
-// centred #toolbar keeps (`max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r))` in styles.css),
-// so the two pieces of chrome stop at the same line instead of one going edge to edge. Plus the safe
-// areas, which on a notched phone in landscape are the whole reason a gutter isn't decoration.
-const READING_MARGIN = 10;
-export function readingWidth(): number {
-  const sa = safeInsets();
-  return Math.min(READING_W, window.innerWidth - 2 * READING_MARGIN - sa.left - sa.right);
-}
-// …and where that width starts, so the strip is centred in the SAFE box rather than in the window: on
-// a phone in landscape the two insets differ, and centring on the window would push it under a notch.
-export function readingLeft(): number {
-  const sa = safeInsets();
-  return sa.left + (window.innerWidth - sa.left - sa.right - readingWidth()) / 2;
-}
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }
 
-// The ONE kind test for "can this be opened", kept kind-agnostic on purpose: widen it HERE, never
-// at a call site. Raw `type` rather than isFrame, deliberately — a COLLAPSED frame is openable, and
-// stays folded while you stand in it.
-//
-// A CARD is openable too, and means something different on the far side: a frame's interior is the
-// canvas, a card's interior is its NOTE, read at full width (features/reading.ts). Same navigation
-// either way — one level on the stack, one crumb, ↓ to leave — which is the whole reason reading a
-// long note is a place you GO rather than a second panel you look at.
+// The ONE kind test for "can this be opened": a FRAME, and only a frame — a card has no inside to stand
+// in (its note is read where it sits, or in Obsidian). Raw `type` rather than isFrame, deliberately — a
+// COLLAPSED frame is openable, and stays folded while you stand in it.
 export function canOpen(n: MindNode | null | undefined): boolean {
-  return n?.type === 'frame' || n?.type === 'card';
+  return n?.type === 'frame';
 }
 
 // The scope term of isHidden, on its own — for the few callers that must tell "folded away" from
@@ -107,7 +57,7 @@ export function outOfScope(n: MindNode): boolean {
   if (id === null) return false;
   for (let p = n.parent ? state.nodes.get(n.parent) : undefined; p; p = p.parent ? state.nodes.get(p.parent) : undefined)
     if (p.id === id) return false;
-  return !isReadingRoot(n);   // never reached the open frame — and n IS it only for a read card
+  return true;   // never reached the open frame
 }
 
 // The open frame's bounds: a SNAPSHOT of the viewport, taken when the level was pushed (and

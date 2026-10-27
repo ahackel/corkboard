@@ -9,7 +9,7 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf } from '../utils/model.js';
-import { detachParentId, isReadingRoot, boxIsViewport } from '../nav/scope.js';
+import { detachParentId, isScopeRoot } from '../nav/scope.js';
 import { isFrame, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -336,10 +336,7 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   if (state.readOnly) return;        // no moving/reparenting in read-only (click & dbl-click still work)
   // Pressing directly on a locked card: never treat it as a drag (click/double-click select/rename
   // still resolve normally on release since drag.moved stays false) — no move, no reparent.
-  // The card you are standing INSIDE takes the same treatment: its geometry is the window's while it
-  // is open (styles.css `.node.reading-root`), so a drag could not move it on screen but would still
-  // write x/y to its file — a move you can't see and didn't ask for. Hiding the handles isn't enough.
-  if (isLockedEffective(drag.n) || isReadingRoot(drag.n)) return;
+  if (isLockedEffective(drag.n)) return;
   drag.alt = e.altKey; drag.shift = e.shiftKey;   // Shift = clone (live — release to cancel), Alt = detach
   drag.cx = e.clientX; drag.cy = e.clientY;   // remembered for edge auto-pan and RAF flush
   const dx = (e.clientX - drag.sx)/state.view.k, dy = (e.clientY - drag.sy)/state.view.k;
@@ -617,7 +614,7 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
   const moved: string[] = [];
   for (const id of frameIds) {
     const f = state.nodes.get(id);
-    if (!f || !isFrame(f) || isHidden(f) || boxIsViewport(f) || isLockedEffective(f)) continue;
+    if (!f || !isFrame(f) || isHidden(f) || isScopeRoot(f) || isLockedEffective(f)) continue;
     const b = containerBox(f);
     const inside = (m: MindNode): boolean => m.x >= b.x && m.y >= b.y && m.x + nodeW(m) <= b.x + b.w && m.y + nodeH(m) <= b.y + b.h;
     // let go of its own cards that left it…

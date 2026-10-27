@@ -483,7 +483,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
   background: var(--card, var(--node)); border:none;
   /* text colour = the ink this card's own fill demands (see the .c-* block up top). The literal
      fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
-  /* Padding as a PAIR OF VARIABLES, not literals: the reading view widens them (.reading-root), and
+  /* Padding as a PAIR OF VARIABLES, not literals: a folded card and a checklist's bar change them, and
      everything that lines up with the content reads the same two. Kinds that own their whole interior
      (.frame, image cards) set `padding` outright. */
   border-radius:var(--r-card); padding:var(--pad-y) var(--pad-x); cursor:default; color:var(--ink, #ffffff);
@@ -1491,35 +1491,3 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 }
 
 
-/* ---- reading view: an OPENED card is its note, at reading width ----
-   The element here is THE CARD — the same one paintNode paints on the canvas, so its fill, its
-   derived ink, its markdown, its links and its own editor all arrive for free. Only its LOOK is CSS:
-   the width is DERIVED in `nodeW` (nav/scope.ts readingWidth),
-   and the camera is pinned by clampReadingView (view/camera.ts) so the card sits centred at 1:1 —
-   with no vertical movement at all while it fits on screen, and bounded vertical panning (which IS
-   the scroll) once it doesn't. Its HEIGHT is its content's, exactly as on the board: a note two lines
-   long is a card two lines tall, centred, rather than an empty full-height slab.
-
-   Deliberately NOT position:fixed. The card stays in world space, so screen and world coordinates
-   still line up and every hit-test — dragging a row, dropping one, the marquee — keeps working
-   exactly as it does on the board. A screen-fixed strip over a world-space canvas would put its
-   children's pointer maths permanently out by the pan. */
-/* Keyed on the class alone, not `body.reading .node…`: paintNode hangs `.reading-root` on the element
-   in the same pass, so a two-selector rule would miss the first paint of an open and apply on the
-   second. The class is only ever on the open card, so the body class adds nothing here. */
-.node.reading-root { --h1-size:24px; --h1-lh:28.8px; }   /* reading size, via `.node .body h1`'s own variable */
-/* Reading MARGINS — the VARIABLES, never `padding` outright: `--pad-x/--pad-y` are what everything that
-   lines up with the content reads. */
-.node.reading-root { --pad-y:14px; --pad-x:22px; }
-.node.reading-root > .body { font-size:15px; line-height:1.65; }
-.node.reading-root > .body p { margin:.4em 0 1em; }
-.node.reading-root > .body h2 { font-size:19px; margin:1.6em 0 .4em; }
-.node.reading-root > .body h3 { font-size:16px; margin:1.4em 0 .3em; }
-.node.reading-root > .body h4,
-.node.reading-root > .body h5,
-.node.reading-root > .body h6 { font-size:15px; margin:1.2em 0 .3em; }
-.node.reading-root > .body code { font-size:13px; }
-/* Canvas tools with nothing to act on in here. Zoom and fit are already INERT (clampReadingView
-   overrides whatever they set), so this is only about not offering a button that does nothing. */
-body.reading #gridBtn, body.reading #canvasColorBtn,
-body.reading #fitBtn { display:none !important; }

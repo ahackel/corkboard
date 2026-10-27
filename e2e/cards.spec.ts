@@ -79,3 +79,13 @@ test('a selected card in hand keeps its ring and casts FigJam’s lift; nothing 
   await expect(page.locator('#floatBar')).toHaveClass(/hide-interact/);
   await page.mouse.up();
 });
+
+test('a card is never opened: only a frame has an inside', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Note\nsome text');
+  await select(page, c);
+  await expect(page.locator('#fbOpen')).toBeHidden();
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('body')).not.toHaveClass(/scoped/);
+  await expect(c).toBeVisible();
+});

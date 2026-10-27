@@ -8,7 +8,7 @@
 // nodeH/nodeW/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
 import { state, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective } from '../utils/model.js';
-import { boxIsViewport, isReadingRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
+import { isScopeRoot, pruneScope, scopeRect, scopeRootNode } from '../nav/scope.js';
 import { subtreeIds, layoutH, nodeH, nodeW, FRAME_BORDER } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
@@ -61,7 +61,7 @@ export function containerBox(f: MindNode): { x: number; y: number; w: number; h:
   // …or, for the OPEN one (nav/scope.ts), the VIEWPORT — that's what gives its contents the whole
   // window instead of a rectangle on the canvas. A DERIVED override: f.w/f.h are neither read nor
   // written here, which is what lets the frame come back out at its authored size.
-  if (boxIsViewport(f)) return scopeRect();
+  if (isScopeRoot(f)) return scopeRect();
   return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
 }
 // Does this node live inside a frame (any frame ancestor)? Such nodes track their frame even while
@@ -76,13 +76,10 @@ function insideFrame(node: MindNode): boolean {
 // (isFrame): a collapsed frame has no box/wrapper, so it can't host anything. Shared with the edge
 // painter so an edge between two cards inside the same frame clips to it too.
 export function hostFrame(node: MindNode): MindNode | null {
-  // A READ CARD is the top of what's on screen, so it has no host: every frame above it is out of
-  // scope, hidden, and has already had its content wrapper dropped by paintNode.
-  if (isReadingRoot(node)) return null;
   const h = containerHost(node);
   // The OPEN frame hosts NOTHING: its children are the top level now, so they go straight under
   // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode.
-  return h && boxIsViewport(h) ? null : h;
+  return h && isScopeRoot(h) ? null : h;
 }
 // …and the same walk WITHOUT that exception: the nearest expanded frame ancestor by TREE, wherever the
 // node's element actually ended up.
@@ -90,7 +87,7 @@ export function hostFrame(node: MindNode): MindNode | null {
 // further up.
 function containerHost(node: MindNode): MindNode | null {
   for (let p = parentOf(node); p; p = parentOf(p))
-    if (isFrame(p) || boxIsViewport(p)) return p;
+    if (isFrame(p) || isScopeRoot(p)) return p;
   return null;
 }
 // How many ancestors `node` has (0 for a root). Picks the INNERMOST of several nested, overlapping
@@ -116,7 +113,7 @@ export function holderOf(id: string | null | undefined): string | null {
 export function frameAt(x: number, y: number, skip: Set<string>): MindNode | null {
   let best: MindNode | null = null, bestDepth = -1;
   for (const m of state.nodes.values()) {
-    if (!isFrame(m) || isHidden(m) || skip.has(m.id) || boxIsViewport(m) || isLockedEffective(m)) continue;
+    if (!isFrame(m) || isHidden(m) || skip.has(m.id) || isScopeRoot(m) || isLockedEffective(m)) continue;
     const b = containerBox(m);
     if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) continue;
     const d = ancestorDepth(m);
@@ -129,7 +126,7 @@ export function frameAt(x: number, y: number, skip: Set<string>): MindNode | nul
 // two containment mechanisms stay pixel-identical by construction.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
   // The OPEN frame's interior IS the viewport, with no border and no tab to inset from.
-  if (boxIsViewport(f)) return scopeRect();
+  if (isScopeRoot(f)) return scopeRect();
   return {
     x: f.x + FRAME_BORDER, y: f.y + FRAME_BORDER,
     w: Math.max(0, nodeW(f) - FRAME_BORDER * 2),
@@ -155,7 +152,7 @@ export function frameDescription(f: MindNode): string { return f.title.trim() ? 
 // the same centre frameAt is asked about on drop.
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {
   // The OPEN frame's interior is the whole canvas, so its children can never leave it.
-  if (boxIsViewport(frame)) return true;
+  if (isScopeRoot(frame)) return true;
   const cx = child.x + nodeW(child)/2, cy = child.y + nodeH(child)/2;
   const b = containerBox(frame);
   return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
