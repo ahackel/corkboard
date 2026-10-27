@@ -807,8 +807,7 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   starts at its first number, code fences are ``` or ~~~, `<https://…>` is a link, and `==text==` is Obsidian's
   highlight. A highlight is the card's derived `--scrim` and a checkbox a fill of its ink, so both hold on any fill.
 
-**A SMART duplicate makes the NEXT card of a series** (⌘⌥D, also ⇧D, since macOS keeps ⌥⌘D for the Dock;
-`crud.ts copyNext`). A daily log, sprints, versions: the copy's title steps to its next value
+**A SMART duplicate makes the NEXT card of a series** (⇧D; `crud.ts copyNext`). A daily log, sprints, versions: the copy's title steps to its next value
 (`utils/advance.ts advanceTitle`, tested — a `YYYY-MM-DD` date by one day with any weekday name beside it,
 else the last number up, keeping its padding; a card with no heading advances its first line), and it lands in
 the next slot of its ROW — to the right, at the gap the row already keeps from its left neighbour, past

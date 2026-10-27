@@ -119,3 +119,15 @@ test('opening a folded frame and leaving it again keeps it folded, where it was'
   await expect(again).toBeVisible();                                 // still folded on disk
   expect(errors).toEqual([]);
 });
+
+test('unfolding a frame does not glide its cards: they appear where they sit', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, FOLDERS);
+  await page.locator('#world .node.frame-folded', { hasText: 'Box' }).dblclick();
+  const one = card(page, 'First inside');
+  await expect(one).toBeVisible();
+  const early = (await one.boundingBox())!;                          // mid-animation
+  await page.waitForTimeout(700);
+  const late = (await one.boundingBox())!;
+  expect([Math.round(early.x), Math.round(early.y)]).toEqual([Math.round(late.x), Math.round(late.y)]);
+});

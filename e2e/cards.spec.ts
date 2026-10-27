@@ -41,7 +41,7 @@ test('opening a card for editing does not change its size', async ({ page }) => 
   }
 });
 
-test('⌘⌥D duplicates a card as the next of its series: next day, next slot of the row', async ({ page }) => {
+test('⇧D duplicates a card as the next of its series: next day, next slot of the row', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, {
@@ -52,7 +52,7 @@ test('⌘⌥D duplicates a card as the next of its series: next day, next slot o
   });
   const tue = card(page, 'Tuesday');
   await tue.click();
-  await page.keyboard.press('ControlOrMeta+Alt+d');
+  await page.keyboard.press('Shift+D');
   await page.keyboard.press('Escape');
   const wed = card(page, '2026-10-28 Wednesday');
   await expect(wed).toBeVisible();

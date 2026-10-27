@@ -1113,17 +1113,27 @@ function animateReflow(before: Map<string, Pt>): void {
   // stale spots and sizes: they stand down until the glide ends (styles.css body.layout-anim).
   document.body.classList.add('layout-anim');
   // 1) park every visible card at its STARTING spot with no transition; just-revealed cards
-  //    also start invisible so they fade in (covers free layouts where nothing reflows)
+  //    also start invisible so they fade in (covers free layouts where nothing reflows).
+  //    A card INSIDE a frame doesn't glide when it's the frame that changed (a fold, an unfold, a Fit):
+  //    a revealed one fades in where it lands, and one whose place in its frame is unchanged just rides
+  //    along with it. Only a card that moved WITHIN its frame (a tidy-up) glides.
+  const stays = (m: MindNode): boolean => {
+    const p = parentOf(m);
+    if (!p || boxIsViewport(p)) return false;
+    const bm = before.get(m.id), bp = before.get(p.id);
+    if (!bm) return true;
+    return !!bp && Math.abs((bm.x - bp.x) - (m.x - p.x)) < 0.5 && Math.abs((bm.y - bp.y) - (m.y - p.y)) < 0.5;
+  };
   for (const m of visible){
     m.el!.classList.remove('lt-anim');
-    const s = before.get(m.id) || ancestorStart(m, before);
+    const s = stays(m) ? { x: m.x, y: m.y } : before.get(m.id) || ancestorStart(m, before);
     setNodeElXY(m, s.x, s.y);
     if (!before.has(m.id)) m.el!.style.opacity = '0';
   }
   void document.body.offsetWidth;                    // commit the start positions before transitioning
   // 2) turn on the transition and move every card to its FINAL spot → the browser animates left/top
   const DUR = LAYOUT_ANIM_MS;
-  for (const m of visible){ m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
+  for (const m of visible){ if (!stays(m)) m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);
   setTimeout(() => {
@@ -1853,10 +1863,6 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (typing) return;
-  // ⌘⌥D: the SMART duplicate — the next card of a series (crud.ts copyNext). By `code`, since ⌥ turns
-  // the key itself into `∂` on a Mac. macOS takes ⌥⌘D for the Dock unless that's switched off, so ⇧D
-  // (below) does the same and is the one that always arrives.
-  if (e.code === 'KeyD' && mod && e.altKey && state.sel.size){ e.preventDefault(); duplicateSelection({ next: true }); return; }
   if (tidyShortcut(e)) return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
   // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
@@ -1873,7 +1879,7 @@ window.addEventListener('keydown', (e) => {
   // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
-  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: smart
+  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: the SMART duplicate (crud.ts copyNext)
   if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected frames and cards to their contents
   if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
@@ -2007,7 +2013,7 @@ function paletteCommands(): Command[] {
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
-    { label: 'Duplicate as the next one', shortcut: '⌘⌥D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
+    { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),

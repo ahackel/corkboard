@@ -170,7 +170,7 @@ function copyNode(s: MindNode): MindNode {
   const at = snapPt({ x: s.x, y: s.y + nodeH(s) + 24 });
   return cloneNodeAt(s, at.x, at.y);
 }
-// The SMART duplicate (⌘⌥D): the next card of a series — a daily log, sprints, versions. The copy's
+// The SMART duplicate (⇧D): the next card of a series — a daily log, sprints, versions. The copy's
 // title steps to its next value (utils/advance.ts: a date by a day with its weekday, else the last
 // number up) and it lands in the NEXT SLOT of its row: to the right, at the same gap the row already
 // keeps (from its left neighbour), past anything already there. Its frame grows to hold it, the way a

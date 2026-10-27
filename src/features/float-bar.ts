@@ -307,7 +307,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push({ label: isFrame && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
       run: () => { void pasteFromClipboard(sx, sy, isFrame && !multi ? n.id : null); }, disabled: isFrame && locked });
     entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
-    entries.push({ label:'Duplicate as the next one', shortcut:'⌘⌥D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
+    entries.push({ label:'Duplicate as the next one', shortcut:'⇧D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
     entries.push('sep');
     entries.push({ label:'Delete', shortcut:'⌫', run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
     if (anyFrame)
