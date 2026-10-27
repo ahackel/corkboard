@@ -1,10 +1,10 @@
 // Smart guides while dragging: the pull (utils/guides.ts snapBox) and the pink lines that show it.
-// drag.ts asks `guidePull` for the correction on every move and calls `hideGuides` when the gesture
-// ends. The lines live in #world, so they pan and zoom with the cards; their thickness is divided by
+// drag.ts asks `guidePull` for the correction on every move, a resize (main.ts) asks `guideResize`,
+// and both call `hideGuides` when the gesture ends. The lines live in #world, so they pan and zoom with the cards; their thickness is divided by
 // the zoom so they stay one screen pixel.
 import { state, world, type MindNode } from '../core/state.js';
 import { isHidden, parentOf } from '../utils/model.js';
-import { snapBox, type Box, type Snap } from '../utils/guides.js';
+import { snapBox, snapEdges, type Box, type Snap, type Side } from '../utils/guides.js';
 import { screenToWorld } from '../view/camera.js';
 import { nodeW, nodeH } from '../main.js';
 
@@ -53,6 +53,16 @@ export function guidePull(act: MindNode, roots: Array<{ n: MindNode; s: { x: num
   draw(snap);
   // an axis is the guides' when something lines up on it — even with no pull, so an exact alignment
   // isn't then knocked off by the grid
+  const has = (a: 'x' | 'y'): boolean => snap.guides.some(g => g.axis === a) || snap.gaps.some(g => g.axis === a);
+  return { x: has('x') ? snap.dx : null, y: has('y') ? snap.dy : null };
+}
+
+// The pull for a box being RESIZED (main.ts startNodeResize): `box` is its live, unsnapped footprint
+// and `edges` the edge dragged on each axis. Returns how far each dragged edge moves, or null on an axis
+// nothing pulls (the grid has it then) — the same contract as guidePull.
+export function guideResize(act: MindNode, box: Box, edges: { x?: Side; y?: Side }): { x: number | null; y: number | null } {
+  const snap = snapEdges(box, edges, neighbours(act, new Set([act.id])), TOL / state.view.k);
+  draw(snap);
   const has = (a: 'x' | 'y'): boolean => snap.guides.some(g => g.axis === a) || snap.gaps.some(g => g.axis === a);
   return { x: has('x') ? snap.dx : null, y: has('y') ? snap.dy : null };
 }

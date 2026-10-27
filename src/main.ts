@@ -29,6 +29,7 @@ import './features/context-menu.js';   // registers the custom right-click menu 
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag, settleFrames } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
+import { guideResize, hideGuides } from './features/guides.js';
 import { openSearch, closeSearch, refreshSearch, searchActive, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
 import { syncFloatBar, autoSizeSelection, growFramesToHold, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -920,10 +921,19 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       left = west ? right0 - w : left0;  right = left + w;
       top  = north ? bottom0 - h : top0; bottom = top + h;
     } else {
-      if (east)  { const w = Math.max(minW, round(right0 + lastDx - left0));  right = left0 + w; }
-      if (west)  { const w = Math.max(minW, round(right0 - (left0 + lastDx))); left = right0 - w; }
-      if (south) { const h = Math.max(minH, round(bottom0 + lastDy - top0));   bottom = top0 + h; }
-      if (north) { const h = Math.max(minH, round(bottom0 - (top0 + lastDy))); top = bottom0 - h; }
+      // Smart guides pull the DRAGGED edge (features/guides.ts), read off the RAW pointer like a move's,
+      // and win over the grid on an axis where they line something up; the grid has the other axis.
+      const pull = guideResize(n, {
+        x: west ? left0 + lastDx : left0, y: north ? top0 + lastDy : top0,
+        w: (east ? right0 + lastDx : right0) - (west ? left0 + lastDx : left0),
+        h: (south ? bottom0 + lastDy : bottom0) - (north ? top0 + lastDy : top0),
+      }, { x: west ? 'lo' : east ? 'hi' : undefined, y: north ? 'lo' : south ? 'hi' : undefined });
+      const px = pull.x ?? 0, py = pull.y ?? 0;
+      const rx = pull.x != null ? (v: number): number => v : round, ry = pull.y != null ? (v: number): number => v : round;
+      if (east)  { const w = Math.max(minW, rx(right0 + lastDx + px - left0));  right = left0 + w; }
+      if (west)  { const w = Math.max(minW, rx(right0 - (left0 + lastDx + px))); left = right0 - w; }
+      if (south) { const h = Math.max(minH, ry(bottom0 + lastDy + py - top0));   bottom = top0 + h; }
+      if (north) { const h = Math.max(minH, ry(bottom0 - (top0 + lastDy + py))); top = bottom0 - h; }
     }
     // An image card FOLDS by being scaled down and unfolds by being scaled up — the third fold
     // control beside the chip and `X`, and the only one that is also a size. The threshold is the icon
@@ -968,6 +978,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     resizingId = null; n.el?.classList.remove('resizing');
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // the final delta; the size was already on the grid throughout
+    hideGuides();
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
     // a redundant mm_w on every card the user so much as nudges.
     if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;

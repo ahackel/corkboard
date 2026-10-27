@@ -5,6 +5,8 @@
 //  - ALIGNMENT: one of its edges onto a neighbour's edge, or its centre onto a neighbour's centre;
 //  - SPACING: exactly SPACING (20px) from a neighbour it faces, the same gap as the pair it continues (a column of cards keeps its rhythm), or the
 //    middle between the two neighbours it sits between.
+// A RESIZE pulls only the edge being dragged (`snapEdges`): onto a neighbour's edge, SPACING from a
+// neighbour it faces, or the gap of the pair it continues.
 // Nothing moves on its own: this only runs while the user drags, and only ever by a few pixels.
 export interface Box { x: number; y: number; w: number; h: number; }
 // axis 'x' = a VERTICAL line at x=`at` from y=`from` to y=`to`; axis 'y' = a horizontal one.
@@ -103,6 +105,60 @@ export function snapBox(box: Box, others: Box[], tol: number): Snap {
   return {
     dx, dy,
     guides: [...alignGuides(fin, others, 'x'), ...alignGuides(fin, others, 'y')],
+    gaps: [...(px?.gaps(fin) ?? []), ...(py?.gaps(fin) ?? [])],
+  };
+}
+
+// Which edge of the box a resize drags on an axis: its low (left/top) or high (right/bottom) one.
+export type Side = 'lo' | 'hi';
+
+// The pull for ONE dragged edge: the opposite edge stays where it is, so only alignments and gaps that
+// this edge can make count — never a centre, which would move as the edge does.
+function edgePull(box: Box, others: Box[], a: Axis, side: Side, tol: number): Pull | null {
+  let best: Pull | null = null;
+  const offer = (d: number, gaps: Pull['gaps'] = () => []): void => {
+    if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, gaps };
+  };
+  const at = side === 'lo' ? lo(box, a) : hi(box, a);
+  for (const o of others) for (const e of [lo(o, a), hi(o, a)]) offer(e - at);
+  const o = other(a);
+  const gap = (p: Box, q: Box): Gap => ({ axis: a, from: hi(p, a), to: lo(q, a),
+    at: (Math.max(lo(p, o), lo(q, o)) + Math.min(hi(p, o), hi(q, o))) / 2 });
+  for (const n of others) if (facing(n, box, a)) {
+    if (side === 'lo') offer(hi(n, a) + SPACING - at, bx => [gap(n, bx)]);
+    else offer(lo(n, a) - SPACING - at, bx => [gap(bx, n)]);
+  }
+  if (side === 'lo') {
+    const A = before(box, others, a), A2 = A && before(A, others, a);
+    if (A && A2) { const g = lo(A, a) - hi(A2, a); offer(hi(A, a) + g - at, bx => [gap(A2, A), gap(A, bx)]); }
+  } else {
+    const B = after(box, others, a), B2 = B && after(B, others, a);
+    if (B && B2) { const g = lo(B2, a) - hi(B, a); offer(lo(B, a) - g - at, bx => [gap(bx, B), gap(B, B2)]); }
+  }
+  return best;
+}
+
+// Snap a box being RESIZED: per axis, the dragged edge (`edges.x`/`edges.y`, absent = that axis isn't
+// dragged) is pulled; `dx`/`dy` is how far THAT EDGE moves. The lines shown are only the ones running
+// through a dragged edge — an edge that stays put isn't news.
+export function snapEdges(box: Box, edges: { x?: Side; y?: Side }, others: Box[], tol: number): Snap {
+  const px = edges.x ? edgePull(box, others, 'x', edges.x, tol) : null;
+  const py = edges.y ? edgePull(box, others, 'y', edges.y, tol) : null;
+  const dx = px?.d ?? 0, dy = py?.d ?? 0;
+  const grow = (b: Box, a: Axis, side: Side | undefined, d: number): Box => {
+    if (!side || !d) return b;
+    const moved = side === 'lo' ? shift(b, a, d) : b;
+    return a === 'x' ? { ...moved, w: b.w + (side === 'lo' ? -d : d) } : { ...moved, h: b.h + (side === 'lo' ? -d : d) };
+  };
+  const fin = grow(grow(box, 'x', edges.x, dx), 'y', edges.y, dy);
+  const through = (a: Axis, side: Side | undefined): Guide[] => {
+    if (!side) return [];
+    const at = Math.round((side === 'lo' ? lo(fin, a) : hi(fin, a)) * 2) / 2;
+    return alignGuides(fin, others, a).filter(g => g.at === at);
+  };
+  return {
+    dx, dy,
+    guides: [...through('x', edges.x), ...through('y', edges.y)],
     gaps: [...(px?.gaps(fin) ?? []), ...(py?.gaps(fin) ?? [])],
   };
 }
