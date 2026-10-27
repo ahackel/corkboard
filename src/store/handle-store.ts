@@ -4,15 +4,16 @@
 import type { NoteFile, TreeListing } from './types.js';
 import { planTree, type FoldTest } from './tree.js';
 
-// Every file's path under `under` ('' = the whole map), by NAME only — nothing is read. Dot-folders
-// (`.obsidian`, `.trash`) are another app's business and are never walked.
-async function listPaths(root: FileSystemDirectoryHandle, under: string): Promise<string[]> {
-  const out: string[] = [];
+// Every file under `under` ('' = the whole map), by NAME, with its handle — nothing is read yet, and the
+// handles spare a second walk from the root per note when the notes are. Dot-folders (`.obsidian`,
+// `.trash`) are another app's business and are never walked.
+async function listPaths(root: FileSystemDirectoryHandle, under: string): Promise<Map<string, FileSystemFileHandle>> {
+  const out = new Map<string, FileSystemFileHandle>();
   const walk = async (handle: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
     for await (const [name, h] of handle.entries()){
       if (name.startsWith('.')) continue;
       if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, prefix + name + '/');
-      else out.push(prefix + name);
+      else out.set(prefix + name, h as FileSystemFileHandle);
     }
   };
   let start = root;
@@ -22,13 +23,21 @@ async function listPaths(root: FileSystemDirectoryHandle, under: string): Promis
   return out;
 }
 // The notes under `under`, minus the contents of every folder `fold` leaves unread (store/tree.ts).
+// Read READS_AT_ONCE at a time rather than one by one: a map is hundreds of small files, and on a synced
+// folder each read is a round trip. Bounded, so a huge map doesn't open every file at once.
+const READS_AT_ONCE = 16;
 export async function listTree(root: FileSystemDirectoryHandle, under: string, fold: FoldTest): Promise<TreeListing> {
-  const plan = planTree(await listPaths(root, under), under, fold);
-  const files: NoteFile[] = [];
-  for (const path of plan.read) {
-    const [d, name] = await resolvePath(root, path);
-    files.push({ path, text: await (await (await d.getFileHandle(name)).getFile()).text() });
-  }
+  const handles = await listPaths(root, under);
+  const plan = planTree([...handles.keys()], under, fold);
+  const files: NoteFile[] = new Array(plan.read.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < plan.read.length; i = next++) {
+      const path = plan.read[i];
+      files[i] = { path, text: await (await handles.get(path)!.getFile()).text() };
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(READS_AT_ONCE, plan.read.length) }, worker));
   return { files, lazy: plan.lazy, foreign: plan.foreign };
 }
 // Remove a folder if it is EMPTY — a frame's old folder after its notes moved out. Never recursive:
