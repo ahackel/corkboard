@@ -77,7 +77,7 @@ export async function drawLine(page: Page, from: Locator, side: Side, to: Locato
 }
 
 export async function palette(page: Page, command: string): Promise<void> {
-  await page.keyboard.press('Control+k');
+  await page.keyboard.press('Control+p');
   await page.locator('#palInput').fill(command);
   await page.waitForTimeout(100);
   await page.keyboard.press('Enter');

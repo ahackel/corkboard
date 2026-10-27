@@ -21,7 +21,7 @@ What it has been used for, and what it must stay good at:
 ## Principles — the test for every change
 
 1. **The canvas is the interface.** No permanent toolbars. Actions come from the keyboard,
-   double-click, the bar that appears on a selection, and the ⌘K command palette.
+   double-click, the bar that appears on a selection, and the ⌘P command palette.
 2. **You arrange; the app assists.** Nothing moves, resizes or reroutes on its own. Guides and
    tidy-up help only while you drag or when you ask.
 3. **Every interaction should feel good.** Smooth motion, soft snapping, cheerful colours. A feature
@@ -51,7 +51,7 @@ What it has been used for, and what it must stay good at:
 **Core — keep, and make each feel great:** cards with Markdown, free placement, frames to group
 cards, colour and tags, simple lines between cards, tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
 becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
-frame to work inside it, and the ⌘K command palette — every action, with its shortcut, in
+frame to work inside it, and the ⌘P command palette — every action, with its shortcut, in
 one searchable list.
 
 **Two things, one rule.** There are cards and frames, nothing else:
@@ -80,7 +80,7 @@ screen size when zoomed out.)
 - *Annotations* — a sticky on a sticky; a coloured card does the job.
 - *Routed lines with ports and junction points* — a line only has to say "these belong together".
   Lines that reroute themselves broke principle 2.
-- *The permanent toolbar* — replaced by ⌘K and the selection bar.
+- *The permanent toolbar* — replaced by ⌘P and the selection bar.
 - *The help map* — the palette lists every action with its shortcut; that is the reference.
 - *Outline view (and its phone editor)* — built for working on a phone; the phone is an inbox now,
   search finds things, and Obsidian is the reading view.

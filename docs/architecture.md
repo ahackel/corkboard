@@ -504,10 +504,13 @@ frontmatter kept verbatim, CRLF/BOM notes, and the pure naming rules in `utils/f
 
 ## Interaction
 
-**There is no toolbar; the ⌘K PALETTE is the one list of every action** (`features/palette.ts`, button
+**There is no toolbar; the ⌘P PALETTE is the one list of every action** (`features/palette.ts`, button
 `#paletteBtn` for touch). The palette only displays; `paletteCommands` in `main.ts` builds the list, where
 every action function is in scope. A command's `when` HIDES it while it can't apply rather than listing it
-disabled. Each entry shows its shortcut, which is how shortcuts are learned now that the help map is gone —
+disabled. It is FigJam's QUICK ACTIONS — ⌘P, and the dock's Actions button, above which it opens at the
+bottom centre, pinned by its bottom with the input LAST, so the input stays put next to the dock while the
+list above it grows and shrinks. ⌘P is taken from
+the browser even while typing, so it never prints. Each entry shows its shortcut, which is how shortcuts are learned now that the help map is gone —
 so a new action gets a palette entry, or it is undiscoverable. Read-only shows a pill (`#roBadge`) that is
 also the way out of it.
 
@@ -595,7 +598,7 @@ folds a group to its header), and what FigJam's "hide contents" doesn't: a hidde
 `canFold` (main.ts) is the one rule: every frame, a card with something below its first line, or an image
 card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`toggleCollapseSelection`/
 `setCollapsedSelection`: the float bar's fold button (`fbFold`), `X`, the ⋯ menu, `←`/`→` (directional, not toggles), a
-double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘K's **Collapse all** / **Expand
+double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘P's **Collapse all** / **Expand
 all** (`foldScope`: the selected frames and everything in them, else every frame and card in the place
 you're looking at — hidden ones included, so Expand all brings everything back). Folding drops anything
 it hid from the selection (`dropHiddenFromSelection`). It ANIMATES (`withLayoutAnimation`): positions glide
@@ -692,7 +695,7 @@ empty item ends the list; ⇧Enter is always a bare newline. Tab nests the touch
 lifts them — a level being the item above's MARKER WIDTH (`- ` 2, `1. ` 3), so the indent is the one
 CommonMark and Obsidian read as nesting — and Tab never moves focus, which used to blur the card shut.
 ⌘B / ⌘I / ⌘⇧X wrap or unwrap `**` / `*` / `~~`, reading a run of stars whole so italic and bold compose. No
-⌘K for links: the palette owns it, and pasting a URL over a selection already links. The textarea itself
+⌘K for links: pasting a URL over a selection already links. The textarea itself
 stays plain text (monospace, since it shows SOURCE); styling the text while editing was weighed and parked.
 - **Every helper is pure text → `{text, start, end}`** (`linkPaste`'s shape) and goes through ONE writer,
   `applyTextEdit`, which replaces only the changed span with `execCommand('insertText')`: assigning
@@ -900,7 +903,7 @@ face then a grey chevron (`chevron()` in view/icons.ts for faces rebuilt in JS) 
 the edge bar's line style (a Solid/Dashed popover, `ebDashPop`) and ends, the dock's canvas colour and grid.
 
 **Tidy-up runs only when asked** (docs/PRODUCT.md, principle 2): the float bar's ▦ dropdown (shown for two
-or more selected), ⌘K, and FigJam's shortcuts (`⌃⌥T` tidy, `⌥A/H/D/W/V/S` align, `⌃⌥H/V` space evenly —
+or more selected), ⌘P, and FigJam's shortcuts (`⌃⌥T` tidy, `⌥A/H/D/W/V/S` align, `⌃⌥H/V` space evenly —
 matched by `e.code`, since ⌥ rewrites letters on a Mac and Alt+D still reads `d` elsewhere). The geometry is
 pure (`utils/tidy.ts`, pinned by tests/tidy.test.ts); `features/tidy.ts` applies it to the top-level
 selected nodes (a frame carries its cards) as one undo step with the reflow glide. **Tidy up** reads the rows
@@ -911,7 +914,7 @@ order kept. A frame's box counts its label. With several selected, the float bar
 selection, not over one card of it.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
-board's canvas colour and grid, and ⌘K, in groups split by hairlines. Its buttons are ordinary
+board's canvas colour and grid, and the Actions button (⌘P), in groups split by hairlines. Its buttons are ordinary
 `.floating-btn`s that drop their own chrome inside it, and every popover/menu they open is placed from the
 button's rect, so none of them knows where the dock is.
 

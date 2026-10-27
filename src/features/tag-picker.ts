@@ -1,5 +1,5 @@
 // ---------- the `#` field: tag the selection, or pick tags to filter by ----------
-// `#` (or ⌘K "Tag…") with cards selected opens a small field beside the selection. One list answers
+// `#` (or ⌘P "Tag…") with cards selected opens a small field beside the selection. One list answers
 // what you type, from two places:
 //   · tags already on the board, with how many cards carry each;
 //   · emoji BY NAME (utils/emoji-names.ts) — `fi` offers 🔥 fire.

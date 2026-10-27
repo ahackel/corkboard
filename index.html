@@ -40,7 +40,7 @@
     <nav id="scopeBar" aria-label="Open frame"></nav>
   </div>
 
-  <!-- No toolbar: every action is in the ⌘K palette (features/palette.ts), with its shortcut beside
+  <!-- No toolbar: every action is in the ⌘P palette (features/palette.ts), with its shortcut beside
        it. #status is the toast setStatus writes (core/state.ts): a pill at the bottom that fades. -->
   <div id="status" role="status" aria-live="polite"></div>
   <!-- the ONE mode that needs to be visible at a glance, since nothing can be edited in it -->
@@ -177,8 +177,10 @@
          menu holding the styles AND the spacings (view/grid.ts). -->
     <button id="gridBtn" class="floating-btn fb-dd" title="Background grid" aria-label="Background grid"></button>
     <span class="dock-sep"></span>
-    <!-- the command palette's own button: the way in for touch, and the hint that ⌘K exists -->
-    <button id="paletteBtn" class="floating-btn" title="All commands (⌘K)" aria-label="All commands">⌘K</button>
+    <!-- Actions: the command palette's own button (FigJam's quick actions), the way in for touch and the
+         hint that ⌘P exists. The palette opens just above it. -->
+    <button id="paletteBtn" class="floating-btn" title="Actions (⌘P)" aria-label="Actions">
+      <span class="ic" data-icon="actions"></span></button>
   </div>
 
   <!-- first-run hints: shown only while the canvas is empty (body.empty-canvas) -->

@@ -2,7 +2,7 @@
 // Tidy up (FigJam's grid), the six aligns, the two distributes and "same width", applied to the
 // selected cards and frames. The geometry is utils/tidy.ts; this module turns the selection into boxes,
 // applies the answer as ONE undo step with the reflow glide, and lets frames grow to show the result.
-// Nothing here runs on its own: the float bar's tidy menu, ⌘K and the ⌥ shortcuts are the only ways in.
+// Nothing here runs on its own: the float bar's tidy menu, ⌘P and the ⌥ shortcuts are the only ways in.
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { isLockedEffective, ancestors } from '../utils/model.js';
 import { moveSubtreeTo, frameLabelH } from '../view/layout.js';
@@ -71,7 +71,7 @@ export function sameWidth(): void {
   setStatus('Same width');
 }
 
-// The float bar's tidy menu (and ⌘K's entries): FigJam's shortcuts, ⌥ for the aligns, ⌃⌥ for the rest.
+// The float bar's tidy menu (and ⌘P's entries): FigJam's shortcuts, ⌥ for the aligns, ⌃⌥ for the rest.
 export const TIDY_ACTIONS: { label: string; shortcut: string; run: () => void; min?: number }[] = [
   { label: 'Tidy up', shortcut: '⌃⌥T', run: tidyUp },
   { label: 'Align left', shortcut: '⌥A', run: () => alignSelection('left') },

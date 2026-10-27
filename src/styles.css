@@ -186,15 +186,19 @@ button:disabled { opacity:.45; cursor:default; }
 #roBadge { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
   border:none; background:var(--panel); color:#e0564f; font-weight:600; touch-action:pan-x pan-y; }
 #roBadge[hidden] { display:none; }
-/* The ⌘K palette: a Spotlight-style box near the top over a faint scrim. */
-#palette { position:fixed; inset:0; z-index:45; background:rgba(0,0,0,.18);
-  padding:calc(12vh + var(--sa-t)) calc(16px + var(--sa-r)) 16px calc(16px + var(--sa-l)); }
+/* The ⌘P palette, FigJam's quick actions: a popover rising from the dock's Actions button, bottom centre.
+   #palette itself is a clear full-page layer only so a press outside the box closes it (no scrim: the
+   board stays in view). The box is pinned by its BOTTOM with the input last, so the input sits still next
+   to the dock and the list grows and shrinks ABOVE it while typing filters it. */
+#palette { position:fixed; inset:0; z-index:45; }
 #palette[hidden] { display:none; }
-.pal-box { margin:0 auto; max-width:520px; background:var(--panel); border-radius:var(--r-panel);
-  box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden; }
+.pal-box { position:absolute; left:50%; transform:translateX(-50%); bottom:calc(68px + var(--sa-b));
+  width:min(520px, calc(100% - 32px - var(--sa-l) - var(--sa-r))); background:var(--panel);
+  border-radius:var(--r-panel); box-shadow:0 12px 40px rgba(0,0,0,.25); overflow:hidden;
+  display:flex; flex-direction:column-reverse; }
 #palInput { width:100%; box-sizing:border-box; padding:16px 18px; font-size:16px; border:none;
-  border-bottom:1px solid var(--node-border); background:transparent; color:var(--text); }
-#palList { max-height:min(60vh, 420px); overflow-y:auto; padding:6px; }
+  border-top:1px solid var(--node-border); background:transparent; color:var(--text); }
+#palList { max-height:min(50vh, 380px); overflow-y:auto; padding:6px; }
 .pal-item { display:flex; align-items:center; justify-content:space-between; gap:12px;
   padding:9px 12px; border-radius:10px; cursor:pointer; color:var(--text); font-size:14px; }
 .pal-item.active { background:color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -1138,7 +1142,7 @@ body.zoom-far .node > .top-edge { display:none !important; }
 
 /* ---------- the dock: FigJam's main toolbar, bottom centre ----------
    One white island on the soft shadow holding the new-card sticky, the board's own settings (canvas
-   colour, grid) and the ⌘K button, in groups split by hairlines. The buttons inside drop their own
+   colour, grid) and the ⌘P button, in groups split by hairlines. The buttons inside drop their own
    floating-button chrome (shadow, fixed position) and become items in the bar. */
 #dock { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + var(--sa-b)); z-index:20;
   display:flex; align-items:center; gap:4px; height:48px; padding:0 8px;
@@ -1174,7 +1178,6 @@ body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
 /* above the dock, pointing down at the sticky you drag */
 #ghostHint { left:50%; transform:translateX(-50%); bottom:calc(70px + var(--sa-b)); }
 #ghostHint .hint-arrow { display:none; }
-#paletteBtn { width:auto; padding:0 8px; font-size:12px; font-weight:500; color:var(--muted); letter-spacing:.04em; }
 #canvasColorBtn .swatch { width:18px; height:18px; cursor:inherit; pointer-events:none; box-shadow:inset 0 0 0 1px rgba(0,0,0,.18); }
 /* Nothing to pick in read-only — setColor refuses there, so the button would be a dead control. */
 body.readonly #canvasColorBtn { display:none; }

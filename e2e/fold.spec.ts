@@ -40,7 +40,7 @@ test('resting the mouse on a folded card peeks at the whole note', async ({ page
   await expect(g).toHaveClass(/collapsed/);   // reading changed nothing
 });
 
-test('⌘K collapses and expands every card and frame', async ({ page }) => {
+test('⌘P collapses and expands every card and frame', async ({ page }) => {
   await openBoard(page);
   await makeCard(page, 300, 200, '# A\none\ntwo');
   await makeCard(page, 300, 420, '# B\none\ntwo');

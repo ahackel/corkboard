@@ -1,5 +1,5 @@
 // ============================================================
-// The ⌘K command palette: the ONE place every action is listed, with its shortcut beside it, so the
+// The ⌘P command palette: the ONE place every action is listed, with its shortcut beside it, so the
 // canvas can carry no permanent toolbar (docs/PRODUCT.md, principle 1) without anything becoming
 // unreachable — and so a shortcut is learned by seeing it, every time the action is run from here.
 //

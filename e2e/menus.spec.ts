@@ -26,3 +26,25 @@ test('the canvas menu offers paste, a new card, an image, select all and zoom', 
   await page.mouse.click(700, 500, { button: 'right' });
   expect(await menuItems(page)).toEqual(['Paste here', '---', 'New card', 'Insert image…', '---', 'Select all', 'Zoom to fit']);
 });
+
+test('the dock Actions button and ⌘P open the palette just above the dock, bottom centre', async ({ page }) => {
+  await openBoard(page);
+  await page.locator('#paletteBtn').click();
+  const box = page.locator('.pal-box');
+  await expect(box).toBeVisible();
+  await expect(page.locator('#palInput')).toBeFocused();
+  const b = (await box.boundingBox())!, d = (await page.locator('#dock').boundingBox())!;
+  expect(b.y + b.height).toBeLessThanOrEqual(d.y);
+  expect(d.y - (b.y + b.height)).toBeLessThan(20);
+  expect(Math.abs((b.x + b.width / 2) - (d.x + d.width / 2))).toBeLessThan(2);
+  // typing filters the list above the input; the input itself stays put next to the dock
+  const i0 = (await page.locator('#palInput').boundingBox())!;
+  await page.locator('#palInput').fill('undo');
+  expect((await page.locator('#palInput').boundingBox())!.y).toBe(i0.y);
+  expect((await box.boundingBox())!.height).toBeLessThan(b.height);
+  // a press outside closes it; ⌘P brings it back
+  await page.mouse.click(100, 200);
+  await expect(box).toBeHidden();
+  await page.keyboard.press('Control+p');
+  await expect(box).toBeVisible();
+});

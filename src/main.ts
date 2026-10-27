@@ -566,7 +566,7 @@ function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.co
 export const FRAME_TAB_H = 40;
 // What CAN fold: every FRAME (to its label pill), a card with something below its first line to tuck
 // away (to a one-line chip), or an image card (to a 40px icon of itself). The one rule the arrow, X,
-// ←/→, the menus and ⌘K's Collapse all ask.
+// ←/→, the menus and ⌘P's Collapse all ask.
 export function canFold(n: MindNode): boolean {
   return n.type === 'frame' || isImageCard(n) || hiddenLineCount(n) > 0;
 }
@@ -1190,7 +1190,7 @@ export function toggleCollapseSelection(ids: Iterable<string>): void {
   if (!cards.length) return;
   applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
 }
-// What "Collapse/Expand all" (⌘K) act on: the selected frames and everything inside them when frames
+// What "Collapse/Expand all" (⌘P) act on: the selected frames and everything inside them when frames
 // are selected, else every frame and card in the place you're looking at (the open frame's interior, or
 // the map) — cards tucked inside a folded frame included, so Expand all brings back the whole lot. Never
 // the open node itself: it's the canvas.
@@ -1958,7 +1958,7 @@ byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
 // (rename/duplicate/export/delete on-screen actions now live in the floating bar's kebab menu —
 // features/float-bar.ts)
 
-// ---------- the ⌘K command palette's list ----------
+// ---------- the ⌘P command palette's list ----------
 // Every action the app has, with the shortcut that does the same — built here because every action
 // function is in scope here. `when` hides what can't apply right now (features/palette.ts).
 const MOD = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl ';
@@ -2001,7 +2001,7 @@ function paletteCommands(): Command[] {
   ];
 }
 setPaletteSource(paletteCommands);
-byId('paletteBtn').textContent = MOD.trim() === '⌘' ? '⌘K' : 'Ctrl K';
+byId('paletteBtn').title = `Actions (${MOD.trim() === '⌘' ? '⌘P' : 'Ctrl+P'})`;
 byId('paletteBtn').onclick = (e) => { e.stopPropagation(); if (paletteOpen()) closePalette(); else openPalette(); };
 
 // keyboard shortcuts: ⌘S force-save, ⌘A select-all, ⌘Z/⇧⌘Z/⌘Y undo-redo  (duplicate = D, new node = Space)
@@ -2010,7 +2010,8 @@ window.addEventListener('keydown', (e) => {
   if (!mod) return;
   const k = e.key.toLowerCase();
   if (k === 's') { e.preventDefault(); flushSave(); return; }
-  if (k === 'k' && !isTypingInField()) { e.preventDefault(); openPalette(); return; }
+  // ⌘P is FigJam's quick actions. Never the browser's print dialog, even while typing in a card.
+  if (k === 'p') { e.preventDefault(); if (!isTypingInField()) openPalette(); return; }
   // While typing, ⌘A belongs to the field.
   if (k === 'a' && !isTypingInField()) { e.preventDefault(); selectAll(); return; }
   // While typing in a field, leave ⌘Z to the browser's native undo inside that editor.
