@@ -997,6 +997,13 @@ it, so crossing the line needs no repaint), and the hides need `!important` — 
 rule. Page CHROME is out of scope and must not be added: `#scopeBar`'s crumbs stay legible at every zoom, since
 being zoomed out is when you most need to know which frame you're standing in.
 
+**Zoomed out, a frame's NAME keeps its screen size** — below 100% its label is scaled by `1/k` (`labelScale`,
+`view/camera.ts`), the way FigJam's section titles are, so an overview of weeks of frames reads as a list of
+names. The factor is `--ls` on each FRAME element, never on `#world`: a custom property there would restyle
+every card on every zoom frame. The label scales from its bottom-left corner by a `transform` (no re-layout),
+with its 7px gap and its box-width cap divided back out. A folded frame's pill is NOT scaled: it is a node with
+world geometry that guides, drops and lines measure, and a visual scale would cover its neighbours.
+
 ## State and naming
 
 **The mutable `state` (`core/state.ts`) is the MAP:** `nodes` (id → node), `view` (`{x,y,k}`), selection (`selId`

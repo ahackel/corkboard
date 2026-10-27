@@ -571,10 +571,14 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    Direct-child combinators throughout: a frame's own label only, never some descendant card's title.
    An absolutely positioned child's containing block is the PADDING box, inside the 2px border, so the
    left offset adds it back to sit flush with the box's outer edge. */
+/* Zoomed out it is scaled up by --ls (1/zoom below 100%, view/camera.ts applyLabelScale) from its bottom-left
+   corner, so the name keeps its screen size; the gap and the width cap are divided out so it still sits 7
+   screen px above the box and never runs past the box's right edge. A transform, so nothing re-lays out. */
 .node.frame > .title-row {
-  position:absolute; left:-2px; bottom:calc(100% + 7px);
+  position:absolute; left:-2px; bottom:calc(100% + 7px * var(--ls, 1));
   z-index:4;                    /* over the box and over cards; see the ladder */
-  max-width:calc(100% + 4px); align-items:center;
+  transform:scale(var(--ls, 1)); transform-origin:0 100%;
+  max-width:calc((100% + 4px) / var(--ls, 1)); align-items:center;
   padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .node.frame > .title-row > .title {

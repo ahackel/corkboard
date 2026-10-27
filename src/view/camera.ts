@@ -53,9 +53,23 @@ function refreshRaster(): void {
 // drift and screenToWorld keeps its arithmetic — and a disagreement of under half a device pixel between
 // hit-testing and paint is invisible by definition. The SCALE is never snapped (that would quantise zoom).
 const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; return Math.round(v * d) / d; };
+// Zoomed out, a frame's NAME keeps its screen size: below 100% its label is scaled up by 1/k (FigJam's
+// section titles do the same), so an overview of a month of frames still reads as a list of names. The
+// factor goes on each frame's own element as `--ls` (styles.css scales its .title-row by it) rather than
+// on #world: a custom property set on the world would restyle every card under it on every zoom frame,
+// and there are far fewer frames than cards. paintNode stamps it on a frame painted later.
+export const labelScale = (): number => Math.max(1, 1 / state.view.k);
+let paintedLs = 1;
+function applyLabelScale(): void {
+  const ls = labelScale();
+  if (ls === paintedLs) return;
+  paintedLs = ls;
+  for (const n of state.nodes.values()) if (n.type === 'frame') n.el?.style.setProperty('--ls', String(ls));
+}
 export function applyView(): void {
   world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
+  applyLabelScale();
   refreshRaster();
   paintGrid();
   scheduleUrlSync();

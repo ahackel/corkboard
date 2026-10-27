@@ -19,7 +19,7 @@ import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, 
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim } from './view/camera.js';
+import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, labelScale } from './view/camera.js';
 import { applyLayouts, hostFrame, frameInterior, containerBox, isFrame, frameLabelled, frameDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
@@ -440,6 +440,7 @@ export function paintNode(n: MindNode): void {
       // nameless frame with no way to open again. The rim is what you write on (onFrameRim).
       // Not while its own label editor is open, though: the row can't be invisible and be typed into.
       el.classList.toggle('no-title', !frameLabelled(n) && ui.titleEdit?.id !== n.id);
+      el.style.setProperty('--ls', String(labelScale()));   // a readable name at any zoom (camera.ts)
     } else {
       titleEl.textContent = '';
       titleEl.removeAttribute('title');

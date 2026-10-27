@@ -117,3 +117,19 @@ test('nothing floats beside a selected card or folded frame: a double-click edit
   await old.click();
   await expect(page.locator('#world .addnote')).toHaveCount(0);
 });
+
+test('zoomed out, a frame name keeps its screen size while the box shrinks', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const label = frame(page, 'Todo').locator(':scope > .title-row');
+  const lb0 = (await label.boundingBox())!, fb0 = (await frame(page, 'Todo').boundingBox())!;
+  await page.mouse.move(fb0.x + 20, fb0.y + 20);
+  for (let i = 0; i < 6; i++) { await page.keyboard.down('Control'); await page.mouse.wheel(0, 200); await page.keyboard.up('Control'); }
+  await expect.poll(async () => (await frame(page, 'Todo').boundingBox())!.height).toBeLessThan(fb0.height * 0.6);
+  const lb = (await label.boundingBox())!, fb = (await frame(page, 'Todo').boundingBox())!;
+  expect(Math.abs(lb.height - lb0.height)).toBeLessThan(2);
+  // still just above the box, flush with its left edge, and no wider than it
+  expect(Math.abs(lb.y + lb.height + 7 - fb.y)).toBeLessThan(2);
+  expect(Math.abs(lb.x - fb.x)).toBeLessThan(2);
+  expect(lb.width).toBeLessThanOrEqual(fb.width + 1);
+});

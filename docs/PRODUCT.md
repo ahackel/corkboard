@@ -71,8 +71,8 @@ the card's top edge as a stamp or a label. `#` tags the selection, or drag a sti
 a card; drag a tag to another card to move it, off onto the board to remove it. One search (⌘F) finds by
 text and tags together, and a click on any tag puts it in the search.
 
-**To build, in order:** frame titles that grow readable when
-zoomed out · export a selection or board as PNG · phone inbox.
+**To build, in order:** export a selection or board as PNG · phone inbox. (Done: frame names keep their
+screen size when zoomed out.)
 
 **Cut — and why:**
 - *Sketch / pen layer* — drawing is not sorting.
