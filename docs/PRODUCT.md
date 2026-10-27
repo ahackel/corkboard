@@ -43,8 +43,10 @@ What it has been used for, and what it must stay good at:
 - **Desk first.** Sorting happens with a mouse and keyboard.
 - **Its own home.** Corkboard keeps its own notes; the Markdown format keeps them safe and readable
   by Obsidian, which doubles as the reading/wiki view. Corkboard does not grow a document view.
-- **The phone is an inbox, not a second app.** Notes dropped into the synced folder from a phone
-  show up in an Inbox pile to sort at the desk. No mobile canvas work is a priority.
+- **The phone is an inbox, not a second app.** Notes saved into the map's `Inbox/` folder from a phone
+  show up in the Inbox frame to sort at the desk ([inbox.md](inbox.md): a map folder in iCloud Drive plus
+  an iOS Shortcut). It needs a FOLDER map; one in the browser's own storage can't be reached from a phone.
+  No mobile canvas work is a priority.
 
 ## Features
 
@@ -71,8 +73,8 @@ the card's top edge as a stamp or a label. `#` tags the selection, or drag a sti
 a card; drag a tag to another card to move it, off onto the board to remove it. One search (⌘F) finds by
 text and tags together, and a click on any tag puts it in the search.
 
-**To build, in order:** export a selection or board as PNG · phone inbox. (Done: frame names keep their
-screen size when zoomed out.)
+**To build, in order:** export a selection or board as PNG. (Done: frame names keep their screen size when
+zoomed out · the phone inbox.)
 
 **Cut — and why:**
 - *Sketch / pen layer* — drawing is not sorting.

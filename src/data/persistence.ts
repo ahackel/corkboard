@@ -18,7 +18,7 @@ import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import type { TreeListing } from '../store/types.js';
 import type { FoldTest } from '../store/tree.js';
-import { paintAll, paintNode, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
+import { paintAll, paintNode, flashArrived, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
 import { SPACING } from '../utils/guides.js';
@@ -354,7 +354,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   const flattened = boardIsLegacy() ? flattenLegacyBranches(seeds.wasStack) : 0;
   // …and cards no longer hold cards: any card that still has children becomes a frame holding them.
   const folded = foldCardsIntoFrames();
-  arrangeFrames(unplacedFrames(added, seeds));
+  arrangeFrames(unplacedFrames(added, seeds), seeds.unplaced);
   // Re-point the open-frame scope at the freshly minted ids BEFORE the first layout/paint, so a
   // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).
@@ -405,15 +405,14 @@ async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
   // Paint what was read, so the arrangement below can measure it (it is hidden under its folded frame
   // anyway until the caller unfolds that).
   for (const n of added) paintNode(n);
-  arrangeFrames(unplacedFrames([f, ...added], seeds));
+  arrangeFrames(unplacedFrames([f, ...added], seeds), seeds.unplaced);
 }
-// Frames whose notes ALL arrived with no saved position — a folder made outside the app, or a map
-// imported without its board.json: they get laid out once, rather than dropped on a grid at the origin.
+// Frames holding notes that arrived with no saved position — a folder made outside the app, a map
+// imported without its board.json, or a note saved into a frame's folder from somewhere else (the
+// phone INBOX, docs/inbox.md): they get laid out, rather than dropped on a grid at the origin.
 function unplacedFrames(nodes: MindNode[], seeds: Seeds): MindNode[] {
-  return nodes.filter(f => f.type === 'frame' && f.lazy == null).filter(f => {
-    const kids = childrenOf(f.id);
-    return kids.length > 0 && kids.every(k => seeds.unplaced.has(k.id));
-  });
+  return nodes.filter(f => f.type === 'frame' && f.lazy == null)
+    .filter(f => childrenOf(f.id).some(k => seeds.unplaced.has(k.id)));
 }
 // ---------- cards that hold cards become frames (runs on every load; a no-op once done) ----------
 // A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
@@ -444,24 +443,34 @@ function foldCardsIntoFrames(): number {
 // stacks it. That needs MEASURED heights, so every affected node is unfolded and painted for the
 // duration (scope set aside too: on a reload its ids are still the previous load's, and it would hide
 // everything), then folded back exactly as it was.
-function arrangeFrames(frames: MindNode[]): void {
+// With `fresh` (the notes that arrived with no position), a frame that ALSO holds placed cards keeps
+// them where they are — nothing moves on its own — and its new arrivals stack in a column of their own
+// just right of them (or from its top-left corner when it holds nothing yet), the frame growing to hold it. That is how a note saved into the Inbox folder from
+// the phone shows up (docs/inbox.md).
+function arrangeFrames(frames: MindNode[], fresh?: Set<string>): void {
   if (!frames.length) return;
   const unfolded = new Set<MindNode>();
   for (const f of frames) for (const a of [f, ...ancestors(f)]) if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
   const keepScope = scope.rootId; scope.rootId = null;
   for (const n of state.nodes.values()) paintNode(n);
   for (const f of frames.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
-    const x = f.x + FRAME_BORDER + SPACING;
-    let y = f.y + FRAME_BORDER + SPACING, w = 0;
-    for (const k of orderedKids(f, childrenOf(f.id))) {
+    const kids = orderedKids(f, childrenOf(f.id));
+    const settled = fresh ? kids.filter(k => !fresh.has(k.id)) : [];
+    const right = settled.reduce((r, k) => Math.max(r, k.x + nodeW(k)), -Infinity);
+    const x = settled.length ? right + SPACING : f.x + FRAME_BORDER + SPACING;
+    let y = settled.length ? Math.min(...settled.map(k => k.y - frameLabelH(k))) : f.y + FRAME_BORDER + SPACING, w = 0;
+    for (const k of settled.length ? kids.filter(k => fresh!.has(k.id)) : kids) {
       y += frameLabelH(k);   // a frame's label hangs above its box — leave it room
       moveSubtreeTo(k, x, y);
       y += nodeH(k) + SPACING;
       w = Math.max(w, nodeW(k));
     }
     const end = snapPt({ x: x + w + SPACING + FRAME_BORDER, y: y + FRAME_BORDER });
-    f.w = Math.max(MIN_FRAME_W, end.x - f.x);
-    f.h = end.y - f.y;
+    // A frame that was already placed (an Inbox you made) only GROWS to hold them; one that arrived
+    // with its notes is sized around them.
+    const keep = !!fresh && !fresh.has(f.id);
+    f.w = Math.max(keep ? f.w ?? 0 : MIN_FRAME_W, end.x - f.x);
+    f.h = keep ? Math.max(f.h ?? 0, end.y - f.y) : end.y - f.y;
     f.dirtyLayout = true;
     paintNode(f);
   }
@@ -744,9 +753,16 @@ export async function reloadFromDisk(): Promise<void> {
     await settleSave();
     if (hasUnsavedChanges()) return;
     if (editSessionActive() || isTypingInField()) return;   // began during the write
+    // What was there before, by PATH (ids are minted fresh each load) — and how many unread notes each
+    // folded frame held — so a note that came in from outside (the phone inbox) can be pointed out.
+    const known = new Set<string>(), unread = new Map<string, number>();
+    for (const n of state.nodes.values()) if (n.file) { known.add(n.file); if (n.lazy != null) unread.set(n.file, n.lazy); }
     await loadFromDir({ keepView:true });
     if (selBefore && state.nodes.has(selBefore)) selectNode(selBefore);
     else selectNode(null);
+    flashArrived([...state.nodes.values()]
+      .filter(n => n.file && (!known.has(n.file) || (n.lazy ?? 0) > (unread.get(n.file) ?? n.lazy ?? 0)))
+      .map(n => n.id));
   } finally {
     reloading = false;
   }

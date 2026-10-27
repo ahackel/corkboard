@@ -41,6 +41,7 @@ import { commitStep, record, touch, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/persistence.js';
+import { FRAME_NOTE } from './utils/filenames.js';
 import { afterReading, readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
@@ -157,6 +158,31 @@ function newFrameAtPointer(): void {
   const m = ui.lastMouse ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   newFrameAt(screenToWorld(m.x, m.y));
 }
+// The phone INBOX (docs/inbox.md) is the top-level frame whose folder is `Inbox/`: a note saved into
+// that folder from elsewhere shows up on the next reload (data/persistence.ts reloadFromDisk). The
+// palette's "Inbox" goes to it, unfolded, and makes it first — to the left of the board's top-level
+// content, so it never lands on anything — when there is none.
+const INBOX_NOTE = 'inbox/' + FRAME_NOTE;
+const inboxFrame = (): MindNode | undefined =>
+  [...state.nodes.values()].find(n => n.type === 'frame' && n.file?.toLowerCase() === INBOX_NOTE);
+function goToInbox(): void {
+  const f = inboxFrame();
+  if (f) {
+    if (f.collapsed && !isLockedEffective(f) && afterReading([f.id], goToInbox, false)) return;
+    popScopeFor(f);
+    focusNode(f, true);
+    return;
+  }
+  if (state.readOnly || !store.isOpen) { setStatus('This map has no Inbox frame'); return; }
+  while (scopeActive()) exitScope();
+  const tops = [...state.nodes.values()].filter(n => !n.parent);
+  const left = tops.reduce((x, n) => Math.min(x, n.x), Infinity), top = tops.reduce((y, n) => Math.min(y, n.y), Infinity);
+  const at = tops.length ? snapPt({ x: left - FRAME_W - 80, y: top }) : centredAt(screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
+  const n = createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, title: 'Inbox', parent: null, edit: false });
+  if (!n) return;
+  focusNode(n);
+  setStatus('Made the Inbox — notes saved into its folder show up here (docs/inbox.md)');
+}
 // Open one of a card's images full-screen. The RESOLVED src comes off the rendered <img> (hydrateImages
 // has already put it there), and `n` + the image's own path give the viewer its run: every image in the
 // cards that share this card's parent, paged with ‹ / › (features/image-viewer.ts). Shared by the
@@ -259,6 +285,23 @@ export function effectiveColor(n: MindNode): string {
 // The card whose edge is being dragged right now (startNodeResize). Declared ahead of paintNode, which
 // reads it, so no paint can reach it before it exists.
 let resizingId: string | null = null;
+// Notes that just ARRIVED from outside (a reload found them — the phone inbox, docs/inbox.md), each
+// shown as the node you can see: itself, or the folded pill it's tucked in. They pulse once (styles.css
+// .arrived). A class paintNode owns, since it rewrites className on every paint.
+const arrivedIds = new Set<string>();
+export function flashArrived(ids: Iterable<string>): void {
+  const shown = new Set<string>();
+  for (const id of ids) {
+    const n = state.nodes.get(id); if (!n) continue;
+    let at: MindNode = n;
+    for (const a of ancestors(n)) if (a.collapsed) at = a;   // the OUTERMOST fold is what's on screen
+    if (!isHidden(at)) shown.add(at.id);
+  }
+  for (const id of shown) { arrivedIds.add(id); const n = state.nodes.get(id); if (n) paintNode(n); }
+  if (shown.size) setTimeout(() => {
+    for (const id of shown) { arrivedIds.delete(id); const n = state.nodes.get(id); if (n) paintNode(n); }
+  }, 2400);
+}
 export function paintNode(n: MindNode): void {
   const el = nodeEl(n);
   // Drop the content wrapper the moment it isn't holding anything — `hostsContent` is exactly the set
@@ -281,7 +324,8 @@ export function paintNode(n: MindNode): void {
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
-    + (n.id === resizingId ? ' resizing' : '')   // its tags step aside while it's resized (styles.css)
+    + (n.id === resizingId ? ' resizing' : '')
+    + (arrivedIds.has(n.id) ? ' arrived' : '')   // just came in from outside (flashArrived)   // its tags step aside while it's resized (styles.css)
     + (isFrameBox(n) ? ' frame' : '')
     + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare label pill (styles.css)
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
@@ -1979,6 +2023,7 @@ function paletteCommands(): Command[] {
     { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
     { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
     { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
+    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || (editable() && store.isOpen), run: goToInbox },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
     { label: 'Open', shortcut: '↑', keywords: 'enter frame', when: () => { const n = oneSel(); return !!n && canOpen(n) && !isScopeRoot(n); }, run: () => openFrame(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },

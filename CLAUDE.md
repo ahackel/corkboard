@@ -95,6 +95,6 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
-  fallback, FSA) · "Boot order" · "External-change reload".
+  fallback, FSA) · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
 - Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "The dock" · "A card's text colour is DERIVED from its
   fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".

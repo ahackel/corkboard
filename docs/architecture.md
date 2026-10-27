@@ -471,6 +471,20 @@ own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`set
 reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
 it used to read over an edit made just before switching away (it cancelled the queued save instead).
 
+**The phone INBOX is a folder** — `Inbox/` at the top of a FOLDER map, i.e. an ordinary frame (the user
+guide is [inbox.md](inbox.md): iCloud Drive plus an iOS Shortcut that saves a dated `.md` there). Nothing
+about it is special-cased in the model; three small pieces make it work. (1) A note that arrives with no
+position in a frame that already holds placed cards is stacked in a column of its own just RIGHT of them,
+top-aligned, and the frame only grows (`arrangeFrames` with `fresh`, `data/persistence.ts`) — the old rule
+arranged a frame only when ALL its notes were new, so one new note fell to the top-level grid fallback and
+landed on whatever was there. Placed cards never move (principle 2). (2) `reloadFromDisk` diffs PATHS (ids
+are minted per load) and each folded frame's unread count before and after, and `flashArrived` (`main.ts`)
+pulses what is new — itself, or the outermost folded pill it hides in (`.arrived`, a class paintNode owns).
+(3) The palette's **Inbox** (`goToInbox`) goes to the top-level frame whose file is `Inbox/_index.md`
+(any case), reading and unfolding it; with none it makes one, left of the top-level content, at the top
+level (it leaves any open frame first: an inbox inside a frame would be a different folder). A map in the
+browser's own storage has no inbox: nothing outside the browser can write to it.
+
 **A pasted LIST is many cards; capture never throws typing away.** `splitPastedList`
 (`utils/paste-list.ts`, pinned by `tests/paste-list.test.ts`) decides whether a ⌘V of plain text is
 a list: Markdown items (`-`/`*`/`1.`…, indented lines riding along as the item's body), or two or
