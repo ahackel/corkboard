@@ -925,9 +925,9 @@ board's canvas colour and grid, and ⌘K, in groups split by hairlines. Its butt
 button's rect, so none of them knows where the dock is.
 
 **The look: a FigJam board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
-(bundled latin subset, `src/assets/fonts`, OFL). A sticky is near-square-cornered (`--r-card`, 3px) and sits on
-FigJam's soft lift (`--lift`); a card in hand casts a deeper one (`.dragging`); frames, folded pills and
-pictures stay flat. Motion uses the `scale` property, never `transform` (the drag and
+(bundled latin subset, `src/assets/fonts`, OFL). A sticky is near-square-cornered (`--r-card`, 3px) and lies FLAT
+at rest: only a SELECTED node (card, frame, pill or picture) wears FigJam's soft lift (`--lift`), so the
+shadow itself says "picked up"; a card in hand casts a deeper one (`.dragging`). Motion uses the `scale` property, never `transform` (the drag and
 the relayout animation own that): a new card pops in via a `data-pop` attribute (a class would be wiped by
 paintNode's wholesale `className` rewrite), and a card in hand lifts by a SHADOW only (never a scale, so
 the smart guides line up with the edges you see). The pop stands down under reduced motion.

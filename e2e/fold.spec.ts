@@ -101,3 +101,28 @@ test('folding and Fit animate the size instead of jumping', async ({ page }) => 
   await page.locator('#fbFit').click();
   expect(await running()).toBeGreaterThan(0);
 });
+
+test('a folded card has no resize handles; ports and handles stand down while a fold animates', async ({ page }) => {
+  await openBoard(page);
+  const g = await makeCard(page, 400, 300, '# Groceries\nmilk\neggs');
+  await select(page, g);
+  await expect(g.locator(':scope > .fh')).not.toHaveCount(0);
+  await page.locator('#fbFold').click();
+  await expect(page.locator('body')).toHaveClass(/layout-anim/);   // mid-glide…
+  await expect(page.locator('svg#toggles')).toBeHidden();             // …the ports stand down
+  await expect(page.locator('body')).not.toHaveClass(/layout-anim/);
+  await expect(g).toHaveClass(/collapsed/);
+  await expect(g.locator(':scope > .fh')).toHaveCount(0);
+  await page.locator('#fbFold').click();
+  await expect(g.locator(':scope > .fh')).not.toHaveCount(0);       // unfolded, resizable again
+});
+
+test('only a selected card is lifted by a shadow', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, 'Lift me');
+  await clickAway(page);
+  const shadow = () => c.evaluate(el => getComputedStyle(el).boxShadow);
+  expect(await shadow()).toBe('none');
+  await select(page, c);
+  expect(await shadow()).toContain('rgba(0, 0, 0');
+});

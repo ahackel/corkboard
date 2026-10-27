@@ -481,6 +481,9 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
      fading in behind an already-ringed tab. `scale` is the lift a card in hand gets (.dragging). */
   transition: opacity .2s ease, scale .12s ease;
 }
+/* …and meanwhile the ports and resize handles stand down (main.ts animateReflow): they'd sit at the
+   cards' stale spots and sizes until the glide ends */
+body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease,
   left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts) */
@@ -753,11 +756,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
-/* A STICKY at rest wears FigJam's soft lift (--lift); frames, folded pills and pictures stay flat. A card
-   in hand casts a deeper one (.dragging). The selection ring is laid over whatever lift the card has. */
-.node:not(.frame):not(.frame-folded):not(.image-card) { box-shadow:var(--lift); }
-.node.sel { box-shadow:0 0 0 2px var(--node-sel); }
-.node.sel:not(.frame):not(.image-card) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
+/* Everything at rest lies FLAT on the board; only what's SELECTED is lifted — card, frame, pill or picture
+   wears the selection ring plus FigJam's soft lift (--lift). A card in hand casts a deeper one (.dragging). */
+.node.sel { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 /* While a frame's label is being renamed, drop the frame's ring so only the label's own outline shows.
    While a CARD is being edited, the card itself is the field (FigJam): no box inside it, the ring goes
    to a DIMMED blue round the card's border, and the corner handles stand down. */
@@ -780,9 +781,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node.dragging:not(.frame),
 .node.frame.dragging {
   box-shadow:0 2px 4px rgba(0,0,0,.12), 0 14px 32px rgba(0,0,0,.22); }
-/* A dragged FRAME is what's lifted: the cards it carries ride on it at their resting lift (main.ts paints
+/* A dragged FRAME is what's lifted: the cards it carries ride on it as they rest (flat, or lifted if selected) (main.ts paints
    them `.carried`), rather than each casting the deep shadow of a card in hand. */
-.node.dragging.carried:not(.frame) { box-shadow:var(--lift); }
+.node.dragging.carried:not(.frame) { box-shadow:none; }
 .node.sel.dragging.carried:not(.frame) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
 @media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling

@@ -395,7 +395,9 @@ export function paintNode(n: MindNode): void {
     const cap = collapsed ? (n.w ?? NODE_W) + 'px' : '';
     if (el.style.maxWidth !== cap) el.style.maxWidth = cap;
     if (el.style.height) el.style.height = '';
-    ensureResizeHandles(n, FRAME_DIRS);
+    // A FOLDED card is a chip sized by its one line: nothing to drag, so no handles (and no corner
+    // squares on it when selected). Unfolding hands them back on the next paint.
+    if (collapsed) clearResizeHandles(el); else ensureResizeHandles(n, FRAME_DIRS);
   }
   // After the whole chain, because a frame and a plain card each hand out their own handles: a DERIVED
   // size isn't resizable. The card
@@ -1103,7 +1105,10 @@ function animateSizes(before: Map<HTMLElement, Size>): void {
 function animateReflow(before: Map<string, Pt>): void {
   const visible = [...state.nodes.values()].filter(m => m.el && !isHidden(m));
   const tok = ++ui.animToken;                           // supersede any in-flight animation
-  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeNodeEl(m); } paintFreeEdges(); return; }
+  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeNodeEl(m); } document.body.classList.remove('layout-anim'); paintFreeEdges(); return; }
+  // While cards glide and change size (this and animateSizes), the ports and resize handles would sit at
+  // stale spots and sizes: they stand down until the glide ends (styles.css body.layout-anim).
+  document.body.classList.add('layout-anim');
   // 1) park every visible card at its STARTING spot with no transition; just-revealed cards
   //    also start invisible so they fade in (covers free layouts where nothing reflows)
   for (const m of visible){
@@ -1118,7 +1123,12 @@ function animateReflow(before: Map<string, Pt>): void {
   for (const m of visible){ m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);
-  setTimeout(() => { if (tok !== ui.animToken) return; for (const m of visible) m.el && m.el.classList.remove('lt-anim'); paintFreeEdges(); }, DUR + 60);
+  setTimeout(() => {
+    if (tok !== ui.animToken) return;
+    for (const m of visible) m.el && m.el.classList.remove('lt-anim');
+    document.body.classList.remove('layout-anim');
+    paintFreeEdges();
+  }, DUR + 60);
 }
 
 
