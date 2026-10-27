@@ -8,7 +8,7 @@ import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, i
 import { stripImageRef } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading } from '../utils/frontmatter.js';
-import { applyLayouts, frameInterior, holderOf, frameAt } from '../view/layout.js';
+import { frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -464,7 +464,7 @@ export function deleteNode(id: string): void {
   if (afterReading([id], () => deleteNode(id))) return;
   record([], () => {                 // ids are touched inside deleteNodes
     deleteNodes(subtreeIds(id));
-    applyLayouts(); selectNode(null); paintAll();
+    selectNode(null); relayout();
     scheduleSave();
   });
 }
@@ -490,7 +490,7 @@ export function deleteSelection(): void {
   record([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
     deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
-    applyLayouts(); applySelection(); scheduleSave();
+    relayout(); applySelection(); scheduleSave();
   });
   setStatus(`Deleted ${ids.length} card${ids.length===1?'':'s'}`);
 }

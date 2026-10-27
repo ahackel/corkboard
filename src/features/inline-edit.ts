@@ -19,7 +19,8 @@ import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
 import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, relayout, remeasure } from '../main.js';
+import { selectNode, relayout, remeasure, paintNode } from '../main.js';
+import { paintFreeEdges } from '../view/free-edges.js';
 import { extractToCard, discardNewCard } from './crud.js';
 import { growFramesToHold, syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
@@ -319,11 +320,13 @@ export function dropBodyEdit(): void {
   ui.bodyEdit = null;
   be.el.classList.remove('editing');
 }
-// Live: reflow as the user types. n.body isn't touched here (layout uses the live DOM height),
-// so an in-progress edit can't corrupt anything — the textarea content is preserved by paintNode.
+// Live, as the user types: only this card's height and the lines meeting it can change (nothing flows),
+// so only they repaint — not the whole map per keystroke. n.body isn't touched here, so an in-progress
+// edit can't corrupt anything — the textarea content is preserved by paintNode.
 function onBodyInput(n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) return;
-  relayout();
+  paintNode(n);
+  paintFreeEdges();
 }
 function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) return;

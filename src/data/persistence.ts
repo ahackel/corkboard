@@ -18,7 +18,7 @@ import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import type { TreeListing } from '../store/types.js';
 import type { FoldTest } from '../store/tree.js';
-import { paintAll, paintNode, remeasure, flashArrived, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
+import { paintNode, remeasure, flashArrived, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
 import { SPACING } from '../utils/guides.js';
@@ -657,7 +657,6 @@ export async function saveAll(): Promise<void> {
   if (pathsMoved) await flushBoard();
   for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write carries these
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
-  paintAll();
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
   releaseFolded();   // a folded frame whose notes are all safely on disk can let go of them (data/lazy.ts)
 }

@@ -1039,12 +1039,20 @@ function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
 }
 // Cards glide to new spots via a CSS transition; SVG edges can't transition, so for the duration
 // we redraw them each frame from the cards' live (animating) on-screen positions.
+// Only a line's END cards (and the frames around them, which a hidden end is drawn to) are read: the
+// computed-style read is the cost, and there are far fewer of those than cards. No lines, no loop.
 function followEdges(tok: number, ms: number): void {
+  if (!state.edges.length) return;
+  const ends = new Set<MindNode>();
+  for (const e of state.edges) for (const id of [e.from, e.to]) {
+    const n = state.nodes.get(id); if (!n) continue;
+    ends.add(n); for (const a of ancestors(n)) ends.add(a);
+  }
   const t0 = performance.now();
   const tick = (now: number): void => {
     if (tok !== ui.animToken) return;                  // superseded by a newer animation
     const saved: [MindNode, number, number][] = [];
-    for (const n of state.nodes.values()){
+    for (const n of ends){
       if (!n.el || isHidden(n)) continue;
       const c = getComputedStyle(n.el);             // interpolated left/top while transitioning
       saved.push([n, n.x, n.y]);
@@ -1740,9 +1748,15 @@ export const taggableSelection = (): string[] => selectedIds().filter(id => wear
 // reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
 // Selecting a CARD ends any edge selection — the two never coexist (core/state.ts selEdges). Enforced
 // here, at the one funnel every card-selection path runs through, rather than at each of them.
+// Only the cards whose ring changes repaint — the ones wearing it now (`.sel` in the DOM, so it can't go
+// stale) and the new selection. A click used to repaint the whole map. A mutation that also selects
+// still ends in its own relayout()/remeasure().
 export function applySelection(): void {
   if (state.sel.size && state.selEdges.size) clearEdgeSelection();
-  paintAll(); syncFloatBar(); syncUrl(); updateDocumentTitle();
+  const ids = new Set(state.sel);
+  world.querySelectorAll<HTMLElement>('.node.sel').forEach(el => { if (el.dataset.id) ids.add(el.dataset.id); });
+  for (const id of ids) { const n = state.nodes.get(id); if (n) paintNode(n); }
+  paintFreeEdges(); syncFloatBar(); syncUrl(); updateDocumentTitle();
 }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
 // (see utils/model.ts hasLockedAncestor). Nor can anything outside the frame you're standing in:
