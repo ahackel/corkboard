@@ -709,7 +709,7 @@ Web Animations on width/height with the content clipped, a frame's content wrapp
 - **A folded card is a CHIP**: one row — its first line (`collapsedMarkdown`, greyed when the card is
   untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: "+N"
   (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
-  more lines"). It shrink-wraps (`width:max-content`, `--pad-y` 7px) up to the width it has open (an inline
+  more lines"). It shrink-wraps (`width:max-content`, 40px tall like a folded frame's pill, `FRAME_TAB_H`) up to the width it has open (an inline
   `max-width`), so `nodeW` measures a folded card.
 - **A checklist wears its progress**: `.task-bar`, a rounded green bar across the top of the card, inside it
   and inset to the text's margins (paintNode, from `taskProgress` in utils/markdown.ts — the bullet tasks the

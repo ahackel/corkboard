@@ -1120,7 +1120,8 @@ body.zoom-far .node > .top-edge { display:none !important; }
 #peek.node.open { display:block; }
 /* A FOLDED card is a CHIP: one line in a row with its count, shrink-wrapped to its text (up to the width
    it has open — paintNode's inline max-width) with tighter padding, so a board of folded cards packs. */
-.node.collapsed:not(.image-card) { --pad-y:7px; display:flex; align-items:center; gap:8px; width:max-content; }
+.node.collapsed:not(.image-card) { --pad-y:0px; display:flex; align-items:center; gap:8px; width:max-content;
+  height:40px; }   /* the height of a folded frame's pill (FRAME_TAB_H): one row, whichever kind folded */
 .node.collapsed:not(.image-card) > .title-row { flex:none; }
 .node.collapsed:not(.image-card) > .body { flex:0 1 auto; min-width:0; }
 .node.collapsed:not(.image-card) > .body > :first-child { margin-top:0; }
