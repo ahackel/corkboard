@@ -79,7 +79,7 @@ function nodeEl(n: MindNode): HTMLElement {
   // menus, and a double-click on anything folded unfolds it (activateNode).
   el.innerHTML = `<div class="title-row"><div class="title"></div></div><div class="body"></div>
     <div class="fold-more"></div>
-    <div class="top-edge"><div class="tag-row"></div><div class="task-meter"></div></div>
+    <div class="top-edge"><div class="tag-row"></div></div><div class="task-bar"></div>
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>`;
   world.appendChild(el);
   n.el = el;
@@ -478,26 +478,23 @@ export function paintNode(n: MindNode): void {
     tagRowEl.innerHTML = tags.map(tagChipHTML).join('');
     bindCardTags(tagRowEl, n.id);
   }
-  // …and at the end of a folded card's chip, how much it's hiding: a checklist's progress ("3/5"), or
-  // else how many more lines ("+4"). Tapping it peeks (features/peek.ts).
+  // …and at the end of a folded card's chip, how much it's hiding: how many more lines ("+4"). Tapping it
+  // peeks (features/peek.ts).
   const more = el.querySelector(':scope > .fold-more') as HTMLElement;
   const hidden = collapsed && !imageLook(n) ? hiddenLineCount(n) : 0;
-  const tasks = collapsed && !imageLook(n) ? taskProgress(n.body) : { done: 0, total: 0 };
-  const moreText = tasks.total ? `${tasks.done}/${tasks.total}` : hidden ? `+${hidden}` : '';
+  const moreText = hidden ? `+${hidden}` : '';
   if (more.textContent !== moreText){
     more.textContent = moreText;
-    more.title = tasks.total ? `${tasks.done} of ${tasks.total} tasks done` : hidden ? `${hidden} more line${hidden === 1 ? '' : 's'}` : '';
+    more.title = hidden ? `${hidden} more line${hidden === 1 ? '' : 's'}` : '';
   }
-  // A checklist's progress, "3/5", on the card's top edge — open only: folded, the chip says it (above).
-  // The pill fills left to right with the share done (--done); all ticked, it says so.
-  const meter = el.querySelector(':scope > .top-edge > .task-meter') as HTMLElement;
+  // A checklist's progress: a green bar across the top of the card, inside it — open cards only. It fills left to right with the share done (--done); hovered, it says "3/5".
+  const bar = el.querySelector(':scope > .task-bar') as HTMLElement;
   const tp = n.type === 'frame' || collapsed ? { done: 0, total: 0 } : taskProgress(n.body);
-  const meterText = tp.total ? `${tp.done}/${tp.total}` : '';
-  if (meter.textContent !== meterText){
-    meter.textContent = meterText;
-    meter.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
-    meter.classList.toggle('all-done', tp.total > 0 && tp.done === tp.total);
-    meter.title = tp.total ? `${tp.done} of ${tp.total} task${tp.total === 1 ? '' : 's'} done (${Math.round(tp.done / tp.total * 100)}%)` : '';
+  const barTitle = tp.total ? `${tp.done}/${tp.total}` : '';
+  el.classList.toggle('has-tasks', tp.total > 0);
+  if (bar.title !== barTitle){
+    bar.title = barTitle;
+    bar.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
   }
   // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
   // what's left under the padding and the rest is simply cut. Not while folded, opened as a page, or
@@ -645,7 +642,7 @@ export function nodeH(n: MindNode): number {
 // (box / folded frame / folded image), so it defers to it rather than restating the ladder — a new kind
 // added to nodeH must not have to be remembered here too. The two differ only for a MEASURED card:
 // nodeH treats a zero-height element as unrendered and falls back to 64, while layout wants the real
-// 0 (the tags and the task meter on the top edge are absolutely positioned and
+// 0 (the tags on the top edge are absolutely positioned and
 // overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
   if (isBoxNode(n) || isImageFold(n) || isFrameFold(n)) return nodeH(n);

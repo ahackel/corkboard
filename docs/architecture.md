@@ -707,13 +707,15 @@ Web Animations on width/height with the content clipped, a frame's content wrapp
   a click would DO — chevrons closing, or opening once everything is folded — the same toggle as `X`
   (`toggleCollapseSelection`). `toggleCollapse`/`applyCollapsed` call `syncFloatBar` so a key keeps it right.
 - **A folded card is a CHIP**: one row — its first line (`collapsedMarkdown`, greyed when the card is
-  untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: a
-  checklist's "3/5", else "+N" (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
+  untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: "+N"
+  (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
   more lines"). It shrink-wraps (`width:max-content`, `--pad-y` 7px) up to the width it has open (an inline
   `max-width`), so `nodeW` measures a folded card.
-- **A checklist wears its progress**: `.task-meter`, a "3/5" pill straddling the card's top edge at the
-  right (paintNode, from `taskProgress` in utils/markdown.ts — the bullet tasks the renderer draws, fenced
-  code skipped), filled to the share done, a ✓ when all are. Open cards only: folded, the chip's badge says it.
+- **A checklist wears its progress**: `.task-bar`, a rounded green bar across the top of the card, inside it
+  and inset to the text's margins (paintNode, from `taskProgress` in utils/markdown.ts — the bullet tasks the
+  renderer draws, fenced code skipped), filled to the share done; hovered, its tooltip says "3/5". `.has-tasks`
+  gives the card 12px more top padding for it. Always green, whatever the card's colour — and it stays below
+  `FAR_ZOOM`: a bar is as readable in the overview as up close. Open cards only: a folded card shows no progress.
 - **Peek** (`features/peek.ts`): resting the mouse on a folded card for `PEEK_DELAY` floats its whole note
   beside it, in its colour. Nothing changes — no fold state, layout or save. Mouse only; any press, key or
   wheel puts it away. The panel is a `.node > .body` outside `#world`, so card text styles apply and nothing
@@ -1073,7 +1075,7 @@ vault data: no frontmatter key, no map-level palette. Four things to keep right:
   showing the inherit stripes, i.e. reading as "no colour".
 
 **Below `FAR_ZOOM` (50%, `view/camera.ts`) every overlay badge is dropped** — `applyView` puts `zoom-far` on
-`<body>` and `styles.css` hides the fold chip, the lock badge, and the top edge (tags + task meter): a few
+`<body>` and `styles.css` hides the fold chip, the lock badge, and the top edge (tags): a few
 unreadable pixels each at that scale, times every card on screen. Purely a CSS mode (no node geometry depends on
 it, so crossing the line needs no repaint), and the hides need `!important` — those controls are revealed by
 `:hover`/`.sel`/`[data-chip]` selectors no plain class can out-specify. Add any new card-corner badge to that

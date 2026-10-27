@@ -540,15 +540,14 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node > .top-edge { position:absolute; right:10px; top:-13px; height:26px; z-index:3;
   display:flex; align-items:center; gap:4px; pointer-events:none; }
 .node > .top-edge > * { pointer-events:auto; }
-/* a checklist's progress (paintNode): "3/5" on a pill. Filled to --done in the card's own ink (a tint of
-   it, so the count stays readable over both halves); all done, a ✓ leads. */
-.node > .top-edge > .task-meter { display:none;
-  height:18px; padding:0 6px; box-sizing:border-box; border-radius:var(--r-full);
-  font-size:11px; font-weight:700; line-height:18px; font-variant-numeric:tabular-nums; white-space:nowrap;
-  color:inherit; --pill:color-mix(in srgb, var(--card, var(--node)) 72%, white 28%);
-  background:linear-gradient(to right, color-mix(in srgb, currentColor 24%, var(--pill)) var(--done, 0%), var(--pill) 0); }
-.node > .top-edge > .task-meter:not(:empty) { display:block; }
-.node > .top-edge > .task-meter.all-done::before { content:'✓ '; }
+/* a checklist's progress (paintNode): a rounded green bar across the top of the card, inset to the text's
+   margins, filled to --done over a faint track of the card's own ink. The card makes room for it above
+   the title. The element is a taller strip than the bar it draws, so its "3/5" tooltip is easy to find. */
+.node > .task-bar { display:none; position:absolute; top:9px; left:var(--pad-x); right:var(--pad-x); height:14px; }
+.node.has-tasks > .task-bar { display:block; }
+.node.has-tasks { padding-top:calc(var(--pad-y) + 12px); }
+.node > .task-bar::after { content:''; position:absolute; left:0; right:0; top:5px; height:4px; border-radius:2px;
+  background:linear-gradient(#2f9e5b, #2f9e5b) 0 0 / var(--done, 0%) 100% no-repeat, color-mix(in srgb, currentColor 13%, transparent); }
 /* ---------- frame: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
 /* The element is the box and nothing else: n.x/n.y/w/h are the box (main.ts), and the label hangs
    outside it, above the top-left corner, the way a FigJam section's name does. So naming, renaming or
@@ -1078,8 +1077,7 @@ body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
 .node.search-active { box-shadow:0 0 0 2px #fff; }   /* the active dropdown option's card */
 /* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
 /* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
-   not any one card. Every badge that hangs off a card is a few pixels wide there: the task meter,
-   the lock padlock, the tag stamps and labels. All of
+   not any one card. Every badge that hangs off a card is a few pixels wide there: the lock padlock, the tag stamps and labels. All of
    them go, which also keeps their layout + paint out of the frame budget at exactly the zoom level that
    has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview.
    `!important` because these controls are revealed by `:hover`/`.sel` selectors that out-specify any

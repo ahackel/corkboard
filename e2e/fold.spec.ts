@@ -67,21 +67,22 @@ test.describe('on a touch screen', () => {
   });
 });
 
-test('a checklist card wears its progress, and folded its chip says it', async ({ page }) => {
+test('a checklist card wears its progress bar, open only', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 300, 250, '# Trip\n- [x] tickets\n- [ ] hotel\n- [ ] bags');
-  const meter = c.locator('.task-meter');
-  await expect(meter).toHaveText('1/3');
-  await expect(meter).toHaveAttribute('title', '1 of 3 tasks done (33%)');
+  const bar = c.locator('.task-bar');
+  await expect(bar).toBeVisible();
+  await expect(bar).toHaveAttribute('title', '1/3');
+  expect(await bar.evaluate(el => el.style.getPropertyValue('--done'))).toBe('33%');
   await c.locator('.taskbox').nth(1).click();
-  await expect(meter).toHaveText('2/3');
+  await expect(bar).toHaveAttribute('title', '2/3');
   await select(page, c);
   await page.locator('#fbFold').click();
   await expect(c).toHaveClass(/collapsed/);
-  await expect(meter).toBeHidden();
-  await expect(c.locator('.fold-more')).toHaveText('2/3');
+  await expect(bar).toBeHidden();
+  await expect(c.locator('.fold-more')).toHaveText('+3');
   const plain = await makeCard(page, 650, 250, 'No tasks here');
-  await expect(plain.locator('.task-meter')).toBeHidden();
+  await expect(plain.locator('.task-bar')).toBeHidden();
 });
 
 test('folding and Fit animate the size instead of jumping', async ({ page }) => {
