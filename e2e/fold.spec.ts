@@ -127,3 +127,33 @@ test('only a selected card is lifted by a shadow', async ({ page }) => {
   await select(page, c);
   expect(await shadow()).toContain('rgba(0, 0, 0');
 });
+
+test('a card resized taller than its text still folds to a 40px chip, and unfolds to its size', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Note\nline');
+  await select(page, c);
+  const b = (await c.boundingBox())!;
+  await page.mouse.move(b.x + b.width - 2, b.y + b.height - 2); await page.mouse.down();
+  await page.mouse.move(b.x + b.width + 60, b.y + b.height + 150, { steps: 5 }); await page.mouse.up();
+  const tall = (await c.boundingBox())!.height;
+  expect(tall).toBeGreaterThan(b.height + 100);
+  await page.locator('#fbFold').click();
+  await expect(c).toHaveClass(/collapsed/);
+  await expect.poll(async () => (await c.boundingBox())!.height).toBe(40);
+  await page.locator('#fbFold').click();
+  await expect.poll(async () => (await c.boundingBox())!.height).toBe(tall);
+});
+
+test('a card’s tags step aside while it is resized', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Tagged\nsome text #idea');
+  await select(page, c);
+  const tag = c.locator('.top-edge .tag').first();
+  await expect(tag).toBeVisible();
+  const b = (await c.boundingBox())!;
+  await page.mouse.move(b.x + b.width - 2, b.y + b.height - 2); await page.mouse.down();
+  await page.mouse.move(b.x + b.width + 40, b.y + b.height + 40, { steps: 5 });
+  await expect(tag).toBeHidden();
+  await page.mouse.up();
+  await expect(tag).toBeVisible();
+});

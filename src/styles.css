@@ -540,6 +540,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node > .top-edge { position:absolute; right:10px; top:-13px; height:26px; z-index:3;
   display:flex; align-items:center; gap:4px; pointer-events:none; }
 .node > .top-edge > * { pointer-events:auto; }
+.node.resizing > .top-edge { visibility:hidden; }   /* tags step aside while the card's edge is dragged */
 /* a checklist's progress (paintNode): a rounded green bar across the top of the card, inset to the text's
    margins, filled to --done over a faint track of the card's own ink. The card makes room for it above
    the title. The element is a taller strip than the bar it draws, so its "3/5" tooltip is easy to find. */

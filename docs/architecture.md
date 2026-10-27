@@ -622,7 +622,10 @@ Web Animations on width/height with the content clipped, a frame's content wrapp
   untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: "+N"
   (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
   more lines"). It shrink-wraps (`width:max-content`, 40px tall like a folded frame's pill, `FRAME_TAB_H`) up to the width it has open (an inline
-  `max-width`), so `nodeW` measures a folded card.
+  `max-width`), so `nodeW` measures a folded card. Its authored `n.h` is NOT applied while folded (no `min-height`), so a card
+  dragged taller still folds to the 40px chip and unfolds back to that height.
+- **While a card is resized its tags step aside** (`.resizing`, set from `resizingId` in paintNode's class
+  list, since paintNode rewrites `className` on every paint and would drop a class added from outside).
 - **A checklist wears its progress**: `.task-bar`, a rounded green bar across the top of the card, inside it
   and inset to the text's margins (paintNode, from `taskProgress` in utils/markdown.ts — the bullet tasks the
   renderer draws, fenced code skipped), filled to the share done; hovered, its tooltip says "3/5". `.has-tasks`

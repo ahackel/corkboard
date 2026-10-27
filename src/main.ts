@@ -256,6 +256,9 @@ export function effectiveColor(n: MindNode): string {
   if (n.type === 'card') return 'amber';
   return 'white';
 }
+// The card whose edge is being dragged right now (startNodeResize). Declared ahead of paintNode, which
+// reads it, so no paint can reach it before it exists.
+let resizingId: string | null = null;
 export function paintNode(n: MindNode): void {
   const el = nodeEl(n);
   // Drop the content wrapper the moment it isn't holding anything — `hostsContent` is exactly the set
@@ -278,6 +281,7 @@ export function paintNode(n: MindNode): void {
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
+    + (n.id === resizingId ? ' resizing' : '')   // its tags step aside while it's resized (styles.css)
     + (isFrameBox(n) ? ' frame' : '')
     + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare label pill (styles.css)
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
@@ -350,7 +354,8 @@ export function paintNode(n: MindNode): void {
   // than its text (n.clip), when the same n.h is exact and the body is capped (end of paintNode).
   // While its editor is open a card also holds the height it had (BodyEdit.holdH): the raw markdown
   // is a different height from the rendered note, and the card must not jump as editing starts.
-  if (!isBoxNode(n) && !isImageFold(n) && !isFrameFold(n)) {
+  // FOLDED it's a 40px chip whatever height it was dragged to: n.h waits for the unfold.
+  if (!isBoxNode(n) && !isImageFold(n) && !isFrameFold(n) && !collapsed) {
     const hold = ui.bodyEdit?.id === n.id ? ui.bodyEdit.holdH ?? 0 : 0;
     const min = Math.max(n.h != null ? n.h : 0, hold);
     el.style.minHeight = min ? min + 'px' : '';
@@ -842,6 +847,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
   const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
   const sx = e.clientX, sy = e.clientY;
+  resizingId = n.id; n.el?.classList.add('resizing');   // its tags step aside while its edge moves (paintNode keeps it)
   const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
   touch(n.id);
   let lastDx = 0, lastDy = 0;
@@ -925,6 +931,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   const up = (): void => {
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', up);
+    resizingId = null; n.el?.classList.remove('resizing');
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // the final delta; the size was already on the grid throughout
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
