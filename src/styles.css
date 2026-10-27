@@ -900,13 +900,16 @@ body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
 #tagTray.open { display:flex; }
 #tagTray .tray-tags { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; max-height:96px; overflow:auto; padding:3px; }
 #tagTray .tag { cursor:grab; touch-action:none; }
+/* a size up from a card's edge: the tray is where they're picked up, so they're made to be grabbed */
+#tagTray .tag.stamp { width:32px; height:32px; font-size:18px; }
+#tagTray .tag.label { height:23px; padding:0 8px; font-size:13px; max-width:180px; }
 #tagTray .tray-none { font-size:12px; color:var(--muted); }
 #tagTray .tray-make { position:relative; flex:none; }
 /* what the slot would make — the word, or emoji found by name — in a list that opens ABOVE it */
 #tagTray .tray-suggest { position:absolute; bottom:calc(100% + 8px); right:0; width:220px; display:none; flex-direction:column;
   padding:6px; box-sizing:border-box; background:var(--panel); border-radius:var(--r-menu); box-shadow:var(--shadow-ui), 0 8px 24px rgba(0,0,0,.12); }
 #tagTray .tray-suggest.open { display:flex; }
-#tagTray .tray-new { flex:none; width:110px; height:26px; padding:0 8px; box-sizing:border-box; font:inherit; font-size:12px;
+#tagTray .tray-new { flex:none; width:120px; height:30px; padding:0 8px; box-sizing:border-box; font:inherit; font-size:12px;
   border:1px dashed var(--node-border); border-radius:var(--r-full); background:transparent; color:var(--text); }
 #tagTray .tray-new:focus { outline:none; border:1px solid var(--accent); }
 #dock #trayBtn[aria-pressed="true"] { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
