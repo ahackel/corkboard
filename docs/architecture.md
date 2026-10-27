@@ -4,6 +4,7 @@ The long form of [CLAUDE.md](../CLAUDE.md): why each invariant holds and what br
 CLAUDE.md is the index and stays under 100 lines; detail belongs here. Topics are findable by their
 **bolded lead sentence** — CLAUDE.md's pointers quote them. Build commands and module layout live in
 CLAUDE.md and are not repeated. Symbol names are the contract; grep for them.
+Known room for improvement (speed, structure) is listed in [possible-improvements.md](possible-improvements.md).
 
 ## Identity, titles, frontmatter
 
