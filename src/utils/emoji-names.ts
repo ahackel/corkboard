@@ -2,7 +2,7 @@
 // hand-picked list of the emoji people tag with — status, priority, kind of thing, mood — not the whole
 // Unicode set; anything else still goes in through the OS emoji picker or a paste. Pure, pinned by
 // tests/tags.test.ts. Each entry is the emoji, its name, then a few words it is also found by.
-const EMOJI: [string, string][] = [
+const EMOJI: Array<[string, string]> = [
   ['🔥', 'fire hot urgent'], ['⭐', 'star favourite favorite'], ['🌟', 'glowing star|shine'],
   ['📌', 'pin pinned keep'], ['✅', 'check done complete yes'], ['☑️', 'ballot box|checked tick'],
   ['❌', 'cross no cancel wrong'], ['⚠️', 'warning caution risk'], ['❗', 'exclamation important'],
@@ -38,10 +38,10 @@ const EMOJI: [string, string][] = [
 
 // The emoji whose name or words START with what was typed, best first: the name itself before its
 // other words. At most `max` of them.
-export function emojiByName(q: string, max = 6): { emoji: string; name: string }[] {
+export function emojiByName(q: string, max = 6): Array<{ emoji: string; name: string }> {
   const s = q.trim().toLowerCase();
   if (!s) return [];
-  const hits: { emoji: string; name: string; rank: number }[] = [];
+  const hits: Array<{ emoji: string; name: string; rank: number }> = [];
   for (const [emoji, spec] of EMOJI) {
     const [head, rest = ''] = spec.split('|');
     const name = spec.includes('|') ? head : head.split(' ')[0];

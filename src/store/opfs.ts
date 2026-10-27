@@ -53,12 +53,12 @@ export const opfsStore = {
     if (id === this._mapId) this._mapName = name;
   },
   // Enumerate the maps that exist on disk (for the registry's one-time migration/rebuild).
-  async listMaps(): Promise<{ id: string; name: string }[]> {
+  async listMaps(): Promise<Array<{ id: string; name: string }>> {
     const nameOf = async (d: FileSystemDirectoryHandle, fallback: string): Promise<string> => {
       const blob = await readFileBlob(d, MAP_META_FILE);
       return (blob && parseMapMetaName(await blob.text())) || fallback;
     };
-    const dirs: { id: string; handle: FileSystemDirectoryHandle; fallback: string }[] = [];
+    const dirs: Array<{ id: string; handle: FileSystemDirectoryHandle; fallback: string }> = [];
     const root = await navigator.storage.getDirectory();
     try { dirs.push({ id: 'vault', handle: await root.getDirectoryHandle('vault'), fallback: 'My map' }); } catch {}
     try {

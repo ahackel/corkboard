@@ -27,7 +27,7 @@ export function pushMru(tag: string): void {
 }
 
 // Every tag on the board, most used first.
-export function boardTags(): { tag: string; count: number }[] {
+export function boardTags(): Array<{ tag: string; count: number }> {
   const by = new Map<string, { tag: string; count: number }>();
   for (const n of state.nodes.values()) {
     if (!wearsTags(n)) continue;

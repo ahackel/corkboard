@@ -34,7 +34,7 @@ const SOCKET_OUT = 18;
 // the rim the user reads as the card's edge). A frame's label hangs outside its bounds, so a line meets
 // the box it points at, not the label above it.
 const RING_MID = 1;
-type Rect = { x: number; y: number; w: number; h: number };
+interface Rect { x: number; y: number; w: number; h: number }
 function rimRect(n: MindNode): Rect {
   return { x: n.x - RING_MID, y: n.y - RING_MID, w: nodeW(n) + 2*RING_MID, h: nodeH(n) + 2*RING_MID };
 }
@@ -56,7 +56,7 @@ function rimPoint(n: MindNode | Rect, p: Pt): Pt {
 // The four dots on a selected card — only where a NEW line starts from, floating a little OUTSIDE each
 // side the way FigJam's do, clear of the resize handles. The finished line doesn't remember which one:
 // it is routed from where the two cards are, like every other (`route`).
-export function socketPoints(n: MindNode): { side: EdgeSide; p: Pt }[] {
+export function socketPoints(n: MindNode): Array<{ side: EdgeSide; p: Pt }> {
   const r = rimRect(n), o = SOCKET_OUT;
   return [
     { side: 'up',    p: { x: r.x + r.w/2,   y: r.y - o } },
@@ -81,7 +81,7 @@ function unit(p: Pt, q: Pt): Pt {
 // the caps and the label need. Two points is a straight segment; more is an elbow, its corners rounded
 // (CORNER_R, shrunk to fit a short leg) the way FigJam's are.
 // `box` bounds the whole route, its UNTRIMMED ends included — what the edge bar keeps clear of.
-type Geometry = { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt; box: { x0: number; y0: number; x1: number; y1: number } };
+interface Geometry { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt; box: { x0: number; y0: number; x1: number; y1: number } }
 const CORNER_R = 24;
 // A corner never eats the END legs down to nothing: the cap needs a straight stretch to sit on, or an
 // arrowhead lands on the bend and reads as a hook.

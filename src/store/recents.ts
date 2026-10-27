@@ -10,7 +10,7 @@ import { readMaps, upsertMap, removeMapRef } from './maps.js';
 export async function rememberFolder(key: string, name: string, handle: FileSystemDirectoryHandle): Promise<void> {
   for (const m of readMaps()) {
     if (m.kind !== 'folder' || m.id === key) continue;
-    const prior = await idbGet(m.id).catch(() => undefined) as FileSystemDirectoryHandle | undefined;
+    const prior = await idbGet<FileSystemDirectoryHandle>(m.id).catch(() => undefined);
     if (!prior || !(await handle.isSameEntry(prior))) continue;
     removeMapRef(m.id);
     await idbDel(m.id).catch(() => {});

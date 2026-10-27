@@ -70,7 +70,7 @@ export function sameWidth(): void {
 }
 
 // The float bar's tidy menu (and ⌘P's entries): FigJam's shortcuts, ⌥ for the aligns, ⌃⌥ for the rest.
-export const TIDY_ACTIONS: { label: string; shortcut: string; run: () => void; min?: number }[] = [
+export const TIDY_ACTIONS: Array<{ label: string; shortcut: string; run: () => void; min?: number }> = [
   { label: 'Tidy up', shortcut: '⌃⌥T', run: tidyUp },
   { label: 'Align left', shortcut: '⌥A', run: () => alignSelection('left') },
   { label: 'Align centres', shortcut: '⌥H', run: () => alignSelection('center') },
@@ -83,7 +83,7 @@ export const TIDY_ACTIONS: { label: string; shortcut: string; run: () => void; m
   { label: 'Same width', shortcut: '', run: sameWidth },
 ];
 // The menu, grouped: tidy · align across · align down · space · size.
-export function tidyMenuEntries(): ('sep' | { label: string; shortcut?: string; run: () => void; disabled?: boolean })[] {
+export function tidyMenuEntries(): Array<'sep' | { label: string; shortcut?: string; run: () => void; disabled?: boolean }> {
   const n = targets().length;
   const e = (i: number) => ({ ...TIDY_ACTIONS[i], disabled: n < (TIDY_ACTIONS[i].min ?? 2) });
   return [e(0), 'sep', e(1), e(2), e(3), 'sep', e(4), e(5), e(6), 'sep', e(7), e(8), 'sep', e(9)];

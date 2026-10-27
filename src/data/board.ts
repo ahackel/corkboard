@@ -53,7 +53,7 @@ export function boardJSON(): string {
 // An edge's ENDPOINTS go to disk as paths, never as ids — see BoardEdge in core/state.ts. An edge
 // whose endpoint has no file yet (a card created this session and not yet saved) is dropped rather
 // than written half-resolved; the next save, once the note has a name, writes it whole.
-type StoredEdge = { id: string; from: string; to: string;
+interface StoredEdge { id: string; from: string; to: string;
                     fromJ?: string; toJ?: string;      // legacy: a JUNCTION end (read, flattened, never written)
                     color?: string; dashed?: boolean; fromCap?: EdgeCap; toCap?: EdgeCap;
                     // The pinned faces. NOT the `fromSide`/`toSide` an older build wrote on EVERY edge
@@ -61,7 +61,7 @@ type StoredEdge = { id: string; from: string; to: string;
                     // face nobody chose, so they stay ignored and these are new keys.
                     fromPort?: EdgeSide; toPort?: EdgeSide;
                     arrows?: 'none' | 'to' | 'both';   // legacy: ONE direction axis, read never written
-                    label?: string };
+                    label?: string }
 function serializeEdge(e: BoardEdge): StoredEdge | null {
   // An end held by a PATH is a note inside a folded frame nobody has read (resolveEdges): the frame
   // stands in for it on the canvas, but the path is still where the line goes.
@@ -196,7 +196,7 @@ function applyGeom(v: unknown): void {
 let legacyJunctions = new Set<string>();
 function applyJunctions(v: unknown): void {
   if (!Array.isArray(v)) return;
-  for (const raw of v as { id?: unknown }[]) if (raw && typeof raw.id === 'string' && raw.id) legacyJunctions.add(raw.id);
+  for (const raw of v as Array<{ id?: unknown }>) if (raw && typeof raw.id === 'string' && raw.id) legacyJunctions.add(raw.id);
 }
 function applyEdges(v: unknown): void {
   if (!Array.isArray(v)) return;

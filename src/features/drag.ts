@@ -63,7 +63,7 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   // RAW pointer position — read before the grid rounds it, or a 20px step would jump right past a
   // 6px pull. Off while ⌥ is held: the card is going INTO another card's note then.
   if (drag.alt || drag.cardMerge) { hideGuides(); return grid; }
-  const roots: { n: MindNode; s: Pt }[] = [];
+  const roots: Array<{ n: MindNode; s: Pt }> = [];
   for (const [id, st] of drag.targets) {
     const m = state.nodes.get(id);
     if (m && !(m.parent && drag.targets.has(m.parent))) roots.push({ n: m, s: st });
@@ -127,7 +127,7 @@ function autoPanStep(): void {
   // obstruction, so you can drag onto / past it — and so it doesn't start abruptly only once
   // the cursor slips BEHIND the outline drawer to the true window edge.
   const r = stage.getBoundingClientRect();
-  let right = r.right;
+  const right = r.right;
   const M = 56, MAX = 16;   // edge band (px) and max pan speed (px/frame)
   let vx = 0, vy = 0;
   const x = drag.cx, y = drag.cy;

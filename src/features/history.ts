@@ -41,7 +41,7 @@ interface Step {
   canvas?: { before: string; after: string };
   edges?: { before: EdgeGraph; after: EdgeGraph };
 }
-type EdgeGraph = { edges: BoardEdge[] };
+interface EdgeGraph { edges: BoardEdge[] }
 
 const MAX_STEPS = 100;
 const undoStack: Step[] = [];
@@ -89,7 +89,7 @@ export function historyRefs(): Set<string> {
 // Remember a node's pre-mutation image in the pending step (opening one if needed). Call
 // BEFORE mutating — and for creations, before state.nodes.set(), so the image is null.
 // Idempotent per id; a no-op in read-only mode (nothing records there).
-export function touch(...ids: (string | null | undefined)[]): void {
+export function touch(...ids: Array<string | null | undefined>): void {
   if (state.readOnly) return;
   for (const id of ids) {
     if (!id) continue;

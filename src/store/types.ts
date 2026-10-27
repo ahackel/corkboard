@@ -34,5 +34,5 @@ export interface DeviceStore extends Store {
   createMap(id: string, name: string): Promise<void>;
   deleteMap(id: string): Promise<void>;
   renameMap(id: string, name: string): Promise<void>;
-  listMaps(): Promise<{ id: string; name: string }[]>;
+  listMaps(): Promise<Array<{ id: string; name: string }>>;
 }

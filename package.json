@@ -16,12 +16,21 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.63.0",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import-x": "^4.17.1",
     "happy-dom": "^21.0.4",
+    "prettier": "^3.9.10",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^6.0.0",
     "vite-plugin-singlefile": "^2.1.0",
     "vitest": "^5.0.5"

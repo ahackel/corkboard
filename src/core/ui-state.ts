@@ -7,7 +7,7 @@
 // ============================================================
 import type { EdgeSide, MindNode } from './state.js';
 
-export type Pt = { x: number; y: number };
+export interface Pt { x: number; y: number }
 
 // A live node drag (moves a whole subtree, or the multi-selection). `active` is the card being
 // dragged/dropped; `targets` follow the cursor (or, after a Shift-clone, just the clones).

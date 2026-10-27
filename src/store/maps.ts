@@ -94,7 +94,7 @@ export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
   if (readMaps().length) return;
   const refs: MapRef[] = [];
   // legacy FSA recents → folder refs (handle keys unchanged, so resume keeps working)
-  for (const r of readJSON<{ key: string; name: string; when: number }[]>(LEGACY_RECENTS_KEY, []))
+  for (const r of readJSON<Array<{ key: string; name: string; when: number }>>(LEGACY_RECENTS_KEY, []))
     refs.push({ id: r.key, kind: 'folder', name: r.name, when: r.when });
   // on-device maps found on disk (legacy vault/ included)
   for (const m of await s.listMaps())

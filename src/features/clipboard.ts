@@ -116,7 +116,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   if (!STARTS_MARK.test(text)) return false;
   if (state.readOnly){ setStatus('Read-only — can’t paste'); return true; }
   // split on the marker lines; each chunk is one card's .md content named by its marker
-  const cards: { name: string; p: ParsedNote }[] = [];
+  const cards: Array<{ name: string; p: ParsedNote }> = [];
   const marks = [...text.matchAll(MARK_RE)];
   for (let i = 0; i < marks.length; i++){
     const start = marks[i].index + marks[i][0].length;

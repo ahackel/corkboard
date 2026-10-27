@@ -74,7 +74,7 @@ function endsIcon(from: EdgeCap, to: EdgeCap): string {
 }
 // Each end offers the same three, and they are chosen INDEPENDENTLY: one axis of three values could
 // never say "a dot here, an arrow there", which is an ordinary thing a diagram wants to say.
-const CAP_CHOICES: { key: EdgeCap; label: string }[] = [
+const CAP_CHOICES: Array<{ key: EdgeCap; label: string }> = [
   { key: 'none',  label: 'Bare' },
   { key: 'dot',   label: 'Dot — attaches here, no direction' },
   { key: 'arrow', label: 'Arrow' },
