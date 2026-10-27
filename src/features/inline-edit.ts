@@ -21,7 +21,7 @@ import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { selectNode, relayout, remeasure } from '../main.js';
 import { extractToCard, discardNewCard } from './crud.js';
-import { growFramesToHold } from './float-bar.js';
+import { growFramesToHold, syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 
 // The text the editor holds: the note with its title back on the front as a heading — exactly the
@@ -392,6 +392,8 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   remeasure();               // re-render and reflow the height change
   // A note that grew past its frame's edge would be clipped out of sight — grow the frame instead.
   if (changed && growFramesToHold([n.id])) relayout();
-  if (changed) scheduleSave();
+  // The text decides what the bar offers (a card with lines to tuck away can fold): the bar was synced for
+  // the text the edit STARTED with, and the card often stays selected after it ends.
+  if (changed) { scheduleSave(); syncFloatBar(); }
   commitStep();                                         // no-op sessions (cancel/unchanged) are discarded
 }
