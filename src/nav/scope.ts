@@ -88,8 +88,8 @@ export function readingLeft(): number {
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }
 
 // The ONE kind test for "can this be opened", kept kind-agnostic on purpose: widen it HERE, never
-// at a call site. Raw `type` rather than isFrame, deliberately — a COLLAPSED frame is openable
-// (openFrame unfolds it on the way in).
+// at a call site. Raw `type` rather than isFrame, deliberately — a COLLAPSED frame is openable, and
+// stays folded while you stand in it.
 //
 // A CARD is openable too, and means something different on the far side: a frame's interior is the
 // canvas, a card's interior is its NOTE, read at full width (features/reading.ts). Same navigation

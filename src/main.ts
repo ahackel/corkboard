@@ -41,7 +41,7 @@ import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/p
 import { afterReading, readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
+import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, boxIsViewport, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
 import { renderCrumbs } from './features/breadcrumbs.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
@@ -343,7 +343,8 @@ export function paintNode(n: MindNode): void {
     // frame's overflow:hidden wrapper (place()). isFrameBox covers frames (image cards are leaves).
     const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
-    if (p && !isFrameBox(p) && !isFrameBox(n)) {
+    // (The OPEN frame is the canvas even while folded: its children are top-level, never nested in its pill.)
+    if (p && !isFrameBox(p) && !boxIsViewport(p) && !isFrameBox(n)) {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
@@ -1394,9 +1395,14 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
 // clip it clean away. So grow the box to hold what's in it as you leave (growFramesToHold), and only
 // when something really does stick out, so a visit that moved nothing still writes nothing.
 // A locked frame is out: it refuses to be resized at all.
+// A FOLDED frame is measured as the box it unfolds to, not its pill: unfolded for the measurement
+// only, and folded straight back, so leaving it moves nothing unless a card really sticks out.
 function growToFitContents(f: MindNode): void {
   if (state.readOnly || f.type !== 'frame') return;
-  growFramesToHold(childrenOf(f.id).map(k => k.id));
+  const folded = f.collapsed;
+  f.collapsed = false;
+  try { growFramesToHold(childrenOf(f.id).map(k => k.id)); }
+  finally { f.collapsed = folded; }
 }
 
 interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiting?: boolean; camera?: boolean; }
@@ -1445,11 +1451,9 @@ export function openFrame(target: MindNode | undefined): void {
   if (!t || !canOpen(t)) { setStatus('This can’t be opened'); return; }
   if (afterReading([t.id], () => openFrame(t), false)) return;   // its notes are the canvas you open onto
   const back = currentBack();
-  // Unfolding on the way in is the ONE node mutation opening performs, so it alone is recorded:
-  // ⌘Z re-folds the frame instead of teleporting you between scopes. Opening itself is navigation,
-  // in the same class as revealInView, and writes no node field to undo.
-  const t0 = t;
-  if (t0.collapsed) record([t0.id], () => { t0.collapsed = false; t0.dirtyLayout = true; });
+  // Opening is pure navigation, in the same class as revealInView: it writes no node field. A FOLDED
+  // frame stays folded — while you stand in it its interior is the canvas whatever its fold says
+  // (isHidden asks about the open frame before the fold), and you come back out to the same pill.
   if (isScopeRoot(t)) return;                  // already standing in it
   // A CARD open is a page, not a canvas: the strip is placed in SCREEN space (position:fixed), so its
   // world box says nothing about what you are looking at and framing it would just leave a random zoom
@@ -1499,7 +1503,6 @@ export function restoreScopeFromFile(file: string | null): void {
   if (!want) { if (scopeActive()) { withoutScopeFade(); applyScope(null, { exiting: true, camera: false }); } return; }
   if (isScopeRoot(want)) return;
   withoutScopeFade();
-  if (want.collapsed) { want.collapsed = false; want.dirtyLayout = true; }
   applyScope(want, { camera: false });
 }
 // The canvas colour must LAND, not fade in, whenever the scope comes from the URL rather than from

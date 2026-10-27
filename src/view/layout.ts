@@ -86,9 +86,11 @@ export function hostFrame(node: MindNode): MindNode | null {
 }
 // …and the same walk WITHOUT that exception: the nearest expanded frame ancestor by TREE, wherever the
 // node's element actually ended up.
+// The OPEN frame counts even FOLDED: it is the canvas, and its fold must not hand its cards to a frame
+// further up.
 function containerHost(node: MindNode): MindNode | null {
   for (let p = parentOf(node); p; p = parentOf(p))
-    if (isFrame(p)) return p;
+    if (isFrame(p) || boxIsViewport(p)) return p;
   return null;
 }
 // How many ancestors `node` has (0 for a root). Picks the INNERMOST of several nested, overlapping
@@ -197,9 +199,9 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
 export function applyLayouts(): void {
   // The open frame may have just been deleted / undone away / vanished on disk.
   pruneScope();
-  // …and the card you have OPENED is never folded — a reload or an undo can re-collapse it, which
-  // would leave the page blank.
+  // …and the CARD you have OPENED is never folded — a reload or an undo can re-collapse it, which
+  // would leave the page blank. An open FRAME keeps its fold: its interior is the canvas either way.
   const open = scopeRootNode();
-  if (open?.collapsed) { open.collapsed = false; open.dirty = true; open.dirtyLayout = true; }
+  if (open?.collapsed && open.type === 'card') { open.collapsed = false; open.dirty = true; open.dirtyLayout = true; }
 }
 

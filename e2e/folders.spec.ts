@@ -97,3 +97,25 @@ test('renaming a frame renames its folder and moves its notes, read or not', asy
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
+
+test('opening a folded frame and leaving it again keeps it folded, where it was', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, FOLDERS);
+  const pill = page.locator('#world .node.frame-folded', { hasText: 'Box' });
+  const before = (await pill.boundingBox())!;
+  const atRest = async () => { const b = (await pill.boundingBox())!; return [Math.round(b.x), Math.round(b.y)]; };
+  await pill.click();
+  await page.keyboard.press('ArrowUp');                              // go in
+  await expect(card(page, 'First inside')).toBeVisible();
+  await page.keyboard.press('ArrowDown');                            // and out
+  await page.waitForTimeout(700);
+  await expect(pill).toBeVisible();
+  await expect(card(page, 'First inside')).toBeHidden();
+  // the camera glides back to where it was, so the pill is exactly where it was on screen
+  expect(await atRest()).toEqual([Math.round(before.x), Math.round(before.y)]);
+  await reload(page);
+  const again = page.locator('#world .node.frame-folded', { hasText: 'Box' });
+  await expect(again).toBeVisible();                                 // still folded on disk
+  expect(errors).toEqual([]);
+});

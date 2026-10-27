@@ -328,8 +328,11 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   selection, so leaving one glides back to it; levels rebuilt from a URL don't (their ids are gone) and re-fit
   instead. The stack is session-only; the hash carries only the innermost level.
 - **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no node field.
-  The two things around it that DO are recorded separately: unfolding a collapsed frame on the way in, and the
-  grow-to-fit on the way out, so ⌘Z re-folds or un-grows without teleporting you between scopes. Allowed in
+  A FOLDED frame stays folded: while you stand in it its interior is the canvas whatever its fold says
+  (`isHidden` asks about the open frame before the fold; `containerHost` and paintNode's nesting treat it as
+  the canvas too), and leaving lands you back at the same pill. The one thing that IS recorded is the
+  grow-to-fit on the way out — measured against the BOX a folded frame unfolds to, never its pill, so a
+  visit that moved nothing moves nothing — and ⌘Z un-grows it without teleporting you between scopes. Allowed in
   read-only and on a LOCKED frame (`activateTab`'s exemption: looking inside the box isn't changing it) —
   though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
   `↑` and the ⋯ menu as the ways in.

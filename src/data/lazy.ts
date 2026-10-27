@@ -69,7 +69,8 @@ let readingOpen = false;
 export function readOpenUnread(): void {
   if (readingOpen) return;
   let open: MindNode[] | null = null;
-  for (const n of state.nodes.values()) if (n.lazy != null && !n.collapsed && !isHidden(n)) (open ??= []).push(n);
+  for (const n of state.nodes.values())
+    if (n.lazy != null && (n.id === scope.rootId || (!n.collapsed && !isHidden(n)))) (open ??= []).push(n);
   if (!open) return;
   readingOpen = true;
   void (async () => {
