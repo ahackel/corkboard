@@ -48,3 +48,19 @@ test('the dock Actions button and ⌘P open the palette just above the dock, bot
   await page.keyboard.press('Control+p');
   await expect(box).toBeVisible();
 });
+
+test('the browser theme colour follows the canvas colour', async ({ page }) => {
+  await openBoard(page);
+  const theme = () => page.locator('meta[name="theme-color"]').getAttribute('content');
+  expect(await theme()).toBe('rgb(245, 245, 245)');   // the board's own grey
+  await page.locator('#canvasColorBtn').click();
+  const chip = page.locator('#canvasColors .swatch[data-color]:not([data-color=""])').first();
+  const want = await chip.evaluate(el => getComputedStyle(el).getPropertyValue('--sw').trim());
+  await chip.click();
+  await expect.poll(theme).not.toBe('rgb(245, 245, 245)');
+  const got = await theme();
+  expect(await page.evaluate(([w]) => { const i = document.createElement('i'); i.style.color = w; document.body.append(i); const c = getComputedStyle(i).color; i.remove(); return c; }, [want])).toBe(got);
+  if (!(await page.locator('#canvasColors').isVisible())) await page.locator('#canvasColorBtn').click();
+  await page.locator('#canvasColors .swatch[data-color=""]').click();
+  await expect.poll(theme).toBe('rgb(245, 245, 245)');
+});

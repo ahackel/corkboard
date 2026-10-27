@@ -1630,6 +1630,20 @@ export function syncCanvasBackground(): void {
     stage.style.removeProperty('--grid-pat');
   }
   markCanvasColorBtn();   // the button's own chip mirrors whatever it would edit
+  syncThemeColor(fill);
+}
+// The browser's theme colour (Safari's bars, an installed app's title bar) is the canvas you're standing
+// on, so the chrome around the board reads as part of it; the board's own grey when it has no colour. A
+// fill can be a palette VARIABLE, which a meta tag can't read, so it is resolved to rgb on a hidden probe
+// — not off #stage, whose background is mid-transition right after a change.
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+let themeProbe: HTMLElement | null = null;
+function syncThemeColor(fill: string | null | undefined): void {
+  if (!themeMeta) return;
+  if (!themeProbe) { themeProbe = document.createElement('i'); themeProbe.hidden = true; document.body.append(themeProbe); }
+  themeProbe.style.color = fill || 'var(--bg)';
+  const rgb = getComputedStyle(themeProbe).color;
+  if (themeMeta.getAttribute('content') !== rgb) themeMeta.setAttribute('content', rgb);
 }
 function syncScopeChrome(): void {
   renderCrumbs();
