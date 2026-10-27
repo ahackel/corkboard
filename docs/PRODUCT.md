@@ -67,8 +67,9 @@ one searchable list.
   past its edge.
 
 **Tags are for finding.** A tag is an Obsidian tag — a word, or an emoji as its shortest form — worn on
-the card's top edge as a stamp or a label. `#` tags the selection; a click on any tag lights every card
-carrying it and fades the rest.
+the card's top edge as a stamp or a label. `#` tags the selection, or drag a sticker from the tag tray onto
+a card; drag a tag to another card to move it, off onto the board to remove it. One search (⌘F) finds by
+text and tags together, and a click on any tag puts it in the search.
 
 **To build, in order:** frame titles that grow readable when
 zoomed out · export a selection or board as PNG · phone inbox.

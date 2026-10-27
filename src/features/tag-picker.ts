@@ -5,9 +5,9 @@
 //   · emoji BY NAME (utils/emoji-names.ts) — `fi` offers 🔥 fire.
 // Anything else typed is a NEW tag (utils/tags.ts cleanTag makes it one). Below the list, the
 // selection's own tags, ticked: untick one to remove it. That is the ONLY way a tag comes off — a chip
-// on a card filters (features/tag-filter.ts), so a stray click can't delete one. Tags written in the
+// on a card filters (features/search.ts), so a stray click can't delete one; dragging one off removes it
+// too (features/tag-drag.ts). Tags written in the
 // note's text show here too, but can't be unticked: they're the text's (edit the note instead).
-// ⌘K "Filter by tag…" opens the same field over the board's tags, ticking ones the filter holds.
 // Recently used tags lead an empty field (localStorage — a convenience, not map data).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
@@ -17,20 +17,19 @@ import { allTags, noteTags, cleanTag, tagKey } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { selectedIds } from '../main.js';
 import { setTagOnNodes, tagText } from './tags.js';
-import { toggleTagFilter } from './tag-filter.js';
 
 const MRU_KEY = 'corkboard.tagMru';
-function loadMru(): string[] {
+export function loadMru(): string[] {
   try { const raw = JSON.parse(localStorage.getItem(MRU_KEY) ?? '[]'); return Array.isArray(raw) ? raw.filter(t => typeof t === 'string') : []; }
   catch { return []; }
 }
-function pushMru(tag: string): void {
+export function pushMru(tag: string): void {
   try { localStorage.setItem(MRU_KEY, JSON.stringify([tag, ...loadMru().filter(t => tagKey(t) !== tagKey(tag))].slice(0, 16))); }
   catch { /* private window: no recents, nothing lost */ }
 }
 
 // Every tag on the board, most used first.
-function boardTags(): { tag: string; count: number }[] {
+export function boardTags(): { tag: string; count: number }[] {
   const by = new Map<string, { tag: string; count: number }>();
   for (const n of state.nodes.values()) {
     if (n.type === 'frame') continue;
@@ -39,7 +38,7 @@ function boardTags(): { tag: string; count: number }[] {
   return [...by.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
-type Act = 'add' | 'remove' | 'filter';
+type Act = 'add' | 'remove';
 interface Row { act: Act | null; tag: string; name: string; meta: string; ticked: boolean; }
 interface Section { title: string; rows: Row[]; }
 
@@ -52,7 +51,6 @@ const input = pop.querySelector('input')!;
 const list = pop.querySelector<HTMLElement>('.tp-list')!;
 const hint = pop.querySelector<HTMLElement>('.tp-hint')!;
 
-let mode: 'tag' | 'filter' = 'tag';
 let targets: string[] = [];
 let rows: Row[] = [];       // the actionable rows, in screen order — what ↑↓ walk
 let active = 0;
@@ -66,11 +64,6 @@ function sections(): Section[] {
   const q = input.value.trim().replace(/^#+/, '');
   const qk = q.toLowerCase();
   const board = boardTags();
-  if (mode === 'filter') {
-    const on = new Set(state.tagFilter.map(tagKey));
-    const hit = board.filter(b => !qk || tagKey(b.tag).includes(qk));
-    return [{ title: qk ? 'Matches' : 'Tags on the board', rows: hit.map(b => row('filter', b.tag, plural(b.count), on.has(tagKey(b.tag)))) }];
-  }
   const nodes = targets.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
   // the selection's own tags: frontmatter ones can be unticked, the text's can't
   const mine = new Map<string, Row>();
@@ -118,10 +111,10 @@ function render(): void {
         `<span class="tp-tick" aria-hidden="true"></span><span class="tp-name">${esc(r.name)}</span><span class="tp-meta">${esc(r.meta)}</span></button>`;
     }
   }
-  list.innerHTML = html || `<div class="tp-none">${mode === 'filter' ? 'No tags on the board yet' : 'Type a tag, or an emoji’s name'}</div>`;
+  list.innerHTML = html || `<div class="tp-none">Type a tag, or an emoji’s name</div>`;
   active = Math.min(active, Math.max(0, rows.length - 1));
   markActive();
-  hint.textContent = mode === 'filter' ? '↵ filter · esc close' : '↵ add · untick to remove · esc close';
+  hint.textContent = '↵ add · untick to remove · esc close';
 }
 function markActive(): void {
   list.querySelectorAll<HTMLElement>('.tp-row[data-i]').forEach(el => el.classList.toggle('active', +el.dataset.i! === active));
@@ -130,12 +123,9 @@ function markActive(): void {
 
 function run(r: Row | undefined): void {
   if (!r?.act) return;
-  if (r.act === 'filter') toggleTagFilter(r.tag);
-  else {
-    setTagOnNodes(targets, r.tag, r.act === 'add');
-    if (r.act === 'add') pushMru(r.tag);
-    input.value = '';
-  }
+  setTagOnNodes(targets, r.tag, r.act === 'add');
+  if (r.act === 'add') pushMru(r.tag);
+  input.value = '';
   render();
   input.focus();
 }
@@ -162,9 +152,9 @@ export function closeTagPicker(): void {
   document.removeEventListener('pointerdown', onOutside, true);
   input.blur();
 }
-function open(m: typeof mode, place: () => void): void {
-  mode = m; active = 0; input.value = '';
-  input.placeholder = m === 'filter' ? 'Filter by tag' : 'Tag, or an emoji’s name';
+function open(place: () => void): void {
+  active = 0; input.value = '';
+  input.placeholder = 'Tag, or an emoji’s name';
   pop.classList.add('open');
   render();
   place();
@@ -181,16 +171,10 @@ export function openTagPicker(): void {
   if (!editable.length) { setStatus('Locked — can’t change its tags'); return; }
   targets = editable;
   const anchor = state.nodes.get(state.selId && editable.includes(state.selId) ? state.selId : editable[0])!.el;
-  open('tag', () => {
+  open(() => {
     const r = anchor?.getBoundingClientRect();
     if (!r) { placeInViewport(pop, (window.innerWidth - pop.offsetWidth) / 2, 80); return; }
     const right = r.right + 14 + pop.offsetWidth <= window.innerWidth;
     placeInViewport(pop, right ? r.right + 14 : r.left - 14 - pop.offsetWidth, r.top - 8);
   });
 }
-// ⌘K "Filter by tag…": the board's tags, top centre under the filter bar.
-export function openTagFilterPicker(): void {
-  targets = [];
-  open('filter', () => placeInViewport(pop, (window.innerWidth - pop.offsetWidth) / 2, 64));
-}
-export const boardHasTags = (): boolean => [...state.nodes.values()].some(n => n.type !== 'frame' && allTags(n).length > 0);

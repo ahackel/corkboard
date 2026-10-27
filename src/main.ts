@@ -29,13 +29,13 @@ import './features/context-menu.js';   // registers the custom right-click menu 
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag, settleFrames } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
-import { openSearch } from './features/search.js';
+import { openSearch, closeSearch, refreshSearch, searchActive, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
 import { syncFloatBar, autoSizeSelection, growFramesToHold, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTags, tagChipHTML } from './features/tags.js';
-import { refreshTagMatch, tagHits, clearTagFilter, toggleTagFilter } from './features/tag-filter.js';
-import { openTagPicker, openTagFilterPicker, boardHasTags } from './features/tag-picker.js';
+import { openTagPicker } from './features/tag-picker.js';
+import { refreshTray, toggleTray, trayOpen } from './features/tag-tray.js';
 import { noteTags } from './utils/tags.js';
 import { commitStep, record, touch, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
@@ -103,7 +103,7 @@ function nodeEl(n: MindNode): HTMLElement {
     }
     // a `#tag` written in the note filters by it, like the chip on the card's edge
     const tag = (e.target as HTMLElement).closest('.md-tag') as HTMLElement | null;
-    if (tag){ e.stopPropagation(); toggleTagFilter(tag.dataset.tag!); return; }
+    if (tag){ e.stopPropagation(); toggleSearchTag(tag.dataset.tag!); return; }
     const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null; if (!a) return;
     e.stopPropagation();
     if (a.classList.contains('wikilink')){
@@ -298,7 +298,7 @@ export function paintNode(n: MindNode): void {
     + (tags.length ? '' : ' no-tags')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
     + (ui.drag && n.hostFrameId != null && ui.drag.targets.has(n.hostFrameId) ? ' carried' : '')   // riding a dragged frame
-    + ((state.searchMatch && !state.searchMatch.has(n.id)) || (state.tagMatch && !state.tagMatch.has(n.id)) ? ' search-dim' : '')
+    + (state.searchMatch && !state.searchMatch.has(n.id) ? ' search-dim' : '')
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   // Which frame (if any) hosts this card's element — settled outside gestures (see settledHost).
   settledHost(n);
@@ -420,8 +420,8 @@ export function paintNode(n: MindNode): void {
       const md = desc || isFrameFold(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(label) : cardMarkdown(label);
       // A folded frame whose notes weren't read knows only HOW MANY there are (data/lazy.ts).
       const count = isFrameFold(n) ? n.lazy ?? descendantCount(n.id) : 0;
-      // …and, while the tag filter is on, how many of them match (features/tag-filter.ts).
-      const hits = isFrameFold(n) ? tagHits(n.id) : 0;
+      // …and, while a search is on, how many of them match it (features/search.ts).
+      const hits = isFrameFold(n) ? searchHitsIn(n.id) : 0;
       const full = nodeLabel(label) + (desc ? '\n' + desc : '');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
@@ -435,7 +435,7 @@ export function paintNode(n: MindNode): void {
         titleEl.innerHTML = (md.trim() ? renderBodyHTML(md) : '')
           + (desc ? `<div class="frame-desc">${renderBodyHTML(desc)}</div>` : '')
           + (isFrameFold(n) ? `<span class="frame-count">${count}</span>` : '')
-          + (hits ? `<span class="frame-hits" title="${hits} matching the tag filter">${hits} match${hits === 1 ? '' : 'es'}</span>` : '');
+          + (hits ? `<span class="frame-hits" title="${hits} matching the search">${hits} match${hits === 1 ? '' : 'es'}</span>` : '');
       }
       titleEl.title = full;   // ellipsised lines, so the full text lives in the tooltip
       // A frame with nothing written on it shows NO TITLE: expanded, that means no label at all;
@@ -472,11 +472,11 @@ export function paintNode(n: MindNode): void {
   // tags (or which of them the filter lights) change, so a repaint mid-drag can't destroy a chip
   // under the pointer.
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
-  const tagsKey = tags.map(t => (t.inText ? '~' : '') + t.tag).join(' ') + (tags.length && state.tagFilter.length ? '\u0000' + state.tagFilter.join(' ') : '');
+  const tagsKey = tags.map(t => (t.inText ? '~' : '') + t.tag).join(' ') + (tags.length && searchTags().length ? '\u0000' + searchTags().join(' ') : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
     tagRowEl.innerHTML = tags.map(tagChipHTML).join('');
-    bindCardTags(tagRowEl);
+    bindCardTags(tagRowEl, n.id);
   }
   // …and at the end of a folded card's chip, how much it's hiding: a checklist's progress ("3/5"), or
   // else how many more lines ("+4"). Tapping it peeks (features/peek.ts).
@@ -973,8 +973,9 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
 }
 export function paintAll(): void {
   readOpenUnread();   // an open frame whose notes are still on disk reads them (data/lazy.ts)
-  refreshTagMatch();  // what the tag filter lights, off the tags as they are now
+  refreshSearch();    // what the search lights, off the tags and text as they are now
   for (const n of state.nodes.values()) paintNode(n);
+  refreshTray();      // the tag tray's stickers, when it's out
   paintFreeEdges();
   updateEmptyHints();
   syncScopeChrome();   // crumbs + reading class + the recovery when the frame you were inside has gone
@@ -1833,7 +1834,9 @@ export function selectNode(id: string | null): void {
 //  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
 //  · ← → ↑ ↓        → ↑/↓ open/leave a frame, →/← unfold/fold
 //  · E              → edit the selected node's note/body in place (also: double-click the body)
-//  · #              → tag the selected cards (features/tag-picker.ts); Esc clears a tag filter first
+//  · #              → tag the selected cards (features/tag-picker.ts), or with none find by tag
+//  · ⌘F or /        → find, by text and #tags (features/search.ts); Esc ends a standing search first
+//  · T              → the tag tray (features/tag-tray.ts)
 //  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
 // A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
 // so these card shortcuts stay out of the way while you're naming something.
@@ -1852,6 +1855,8 @@ window.addEventListener('keydown', (e) => {
     if (key === '=' || key === '+') { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2); return; }
     if (key === '-')                { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2); return; }
     if (key === '0')                { e.preventDefault(); focusOrFit(); return; }
+    // ⌘F is FIND here, the way it is on every canvas app — not the browser's find-in-page
+    if (key === 'f' && !e.shiftKey && !e.altKey) { e.preventDefault(); openSearch(); return; }
   }
 
   const active = document.activeElement as HTMLElement | null;
@@ -1864,7 +1869,7 @@ window.addEventListener('keydown', (e) => {
     // in here for the two cases below to clear, so this can't shadow anything.
     else if (readingActive()) exitScope();
     else if (state.selEdges.size) clearEdgeSelection();
-    else if (state.tagFilter.length) clearTagFilter();   // the filter first: its bar says "esc clears"
+    else if (searchActive()) closeSearch();   // a search left standing over the board, before the selection
     else if (state.sel.size) selectNode(null);
     return;
   }
@@ -1877,7 +1882,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
-  if (key === '#' && !mod){ e.preventDefault(); openTagPicker(); return; }   // tag the selection (features/tag-picker.ts)
+  // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
+  if (key === '#' && !mod){ e.preventDefault(); if (selectedIds().some(id => state.nodes.get(id)?.type !== 'frame')) openTagPicker(); else openSearch('#'); return; }
+  if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
   // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).
@@ -2005,7 +2012,8 @@ const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ?
 function paletteCommands(): Command[] {
   return [
     { label: 'New card', shortcut: 'N', keywords: 'add create note', when: editable, run: newCardAtPointer },
-    { label: 'Find a card', shortcut: '/', keywords: 'search', run: openSearch },
+    { label: 'Find…', shortcut: MOD + 'F', keywords: 'search filter tags card', run: () => openSearch() },
+    { label: trayOpen() ? 'Hide the tag tray' : 'Show the tag tray', shortcut: 'T', keywords: 'tags stickers emoji', run: () => toggleTray() },
     { label: 'Undo', shortcut: MOD + 'Z', when: editable, run: undo },
     { label: 'Redo', shortcut: '⇧' + MOD + 'Z', when: editable, run: redo },
     { label: state.selId ? 'Focus the selection' : 'Fit the map to the screen', shortcut: 'F', keywords: 'zoom view', run: focusOrFit },
@@ -2022,8 +2030,6 @@ function paletteCommands(): Command[] {
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && selectedIds().some(id => state.nodes.get(id)?.type !== 'frame'), run: openTagPicker },
-    { label: 'Filter by tag…', keywords: 'tags emoji show only highlight', when: boardHasTags, run: openTagFilterPicker },
-    { label: 'Clear the tag filter', shortcut: 'Esc', keywords: 'tags show all', when: () => state.tagFilter.length > 0, run: clearTagFilter },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),

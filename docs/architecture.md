@@ -816,19 +816,28 @@ are different jobs, so neither guesses which one you meant.
 
 **A TAG is an OBSIDIAN tag, and its job is FINDING cards** (`utils/tags.ts`, tested). Any word, nested with `/`;
 an emoji is just the shortest one. A note carries tags two ways, both Obsidian's own: its frontmatter `tags:`
-(MindNode.tags — what the app adds and removes) and `#word` in its text (read, shown and filtered on, never
+(MindNode.tags — what the app adds and removes) and `#word` in its text (read, shown and searched on, never
 moved or rewritten: the note's, not ours). Matching ignores case and a parent matches its nested tags.
 - **Worn on the TOP edge** (`.top-edge`, shared with the checklist meter so the two can't collide): an emoji is
   a round stamp, a word a paper label, at a tilt derived from the tag (`tagTilt`, nothing stored); the text's
   tags have a dashed edge. The bottom-right corner is the resize grip's and the old row fought it.
-- **Added with `#`** (`features/tag-picker.ts`), not a button on every selection: board tags with their
-  counts, emoji BY NAME (`utils/emoji-names.ts`, a short hand list), else a new tag (`cleanTag`). The
-  selection's own tags are listed ticked; UNTICKING is the only way one comes off.
-- **A click on a tag FILTERS** (`features/tag-filter.ts`): the rest fade with search's dimming, more clicks
-  narrow (AND), a dark bar names them, Esc clears. `state.tagMatch` is DERIVED every paint (`paintAll` →
-  `refreshTagMatch`) — the matches plus every frame holding one, so a folded frame can say "2 matches". A
-  folded frame never read (`data/lazy.ts`) knows no tags and just fades. Search takes `#word` too, same test.
-- Frames wear no tags: a frame is a place, and the filter lights it by what it holds.
+- **Two ways to put one on, neither a button on every selection.** The keyboard: `#` with cards selected
+  (`features/tag-picker.ts`) — board tags with their counts, emoji BY NAME (`utils/emoji-names.ts`, a short
+  hand list), else a new tag (`cleanTag`); the selection's own tags are listed ticked, untick to remove. The
+  hands: the TAG TRAY (`features/tag-tray.ts`, the dock's tag button or T) is a sheet of the board's tags as
+  stickers, plus any typed into its last slot; DRAG one onto a card (`features/tag-drag.ts`). A card's own tag
+  dragged onto another card MOVES there (⌥ copies), dragged off onto the bare canvas it goes, in a puff — the
+  Dock's gesture. Dropped on a selected card, it lands on the whole selection. Every change is ONE undo step
+  (`retag`). A text tag drags out as a copy only.
+- **A click on a tag SEARCHES by it** — there's ONE search (`features/search.ts`, ⌘F like every canvas app,
+  `/` kept): its query is tag CHIPS plus text. A tag clicked anywhere toggles its chip; typing `#` suggests
+  the board's tags (and its emoji by name) and Enter or a space makes the chip; Backspace on an empty field
+  takes the last one back. Non-matches fade; the match set is DERIVED every paint (`paintAll` →
+  `refreshSearch`), so tagging under a search shows at once, and it lights the frames around a match, a FOLDED
+  one saying "2 matches". A folded frame never read (`data/lazy.ts`) knows no tags and just fades. A field with
+  a query in it STAYS when you click away — a filter to work under — and Esc or × ends it. So a click is never
+  a delete, and there is no second filter mode to keep in step.
+- Frames wear no tags: a frame is a place, and a search lights it by what it holds.
 
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;

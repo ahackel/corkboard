@@ -284,11 +284,11 @@ body.scoped #scopeBar { display:flex; }
   #scopeBar > .sc-sep:first-child { display:none; }
   .sc-crumb { max-width:130px; }
 }
-/* find / jump-to-card — opened with / or from the palette, top centre. #searchClear stays visible
+/* find — by text and #tags (features/search.ts), opened with ⌘F or /, top centre. #searchClear stays visible
    unconditionally: empty, it closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
    field IS the bar (see #searchBox), not an inset box floating in one. */
 #searchWrap { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
-  display:none; align-items:center; width:260px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
+  display:none; align-items:center; width:300px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
   background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
 body:has(#searchWrap.open) #roBadge { display:none; }
@@ -315,8 +315,21 @@ input::placeholder { color:var(--muted); opacity:1; }
 #searchResults .sr-item { display:block; width:100%; text-align:left; padding:6px 9px; border-radius:var(--r-ctl);
   font-size:13px; color:var(--text); background:transparent; border:none; cursor:pointer;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-#searchResults .sr-item:hover, #searchResults .sr-item.active { background:var(--node); }
+#searchResults .sr-item:hover, #searchResults .sr-item.active { background:color-mix(in srgb, var(--accent) 12%, transparent); }
 #searchResults .sr-none { padding:6px 9px; font-size:12px; color:var(--muted); }
+#searchResults .sr-count { padding:4px 9px 2px; font-size:11px; font-weight:700; color:var(--muted); }
+#searchResults .sr-tag { display:flex; align-items:center; gap:8px; padding:6px 9px; }
+#searchResults .sr-meta { margin-left:auto; font-size:12px; color:var(--muted); }
+/* the query's tag CHIPS, inside the field before the text; a click takes one out */
+#searchChips { display:flex; flex:none; gap:4px; margin-left:32px; max-width:60%; overflow:hidden; }
+#searchChips:empty { display:none; }
+#searchWrap.has-chips { width:auto; min-width:300px; max-width:min(560px, calc(100% - 20px - var(--sa-l) - var(--sa-r))); }
+#searchWrap.has-chips #searchBox { padding-left:8px; }
+.sc-tag { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 6px 0 9px; border:none; border-radius:var(--r-full);
+  background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--text); font:inherit; font-size:13px; font-weight:700;
+  white-space:nowrap; cursor:pointer; }
+.sc-tag .sc-x { font-size:9px; color:var(--muted); }
+.sc-tag:hover .sc-x { color:var(--text); }
 
 /* custom right-click context menu — same surface language as the search dropdown.
    max-height + overflow-y:auto is the standard fix for "more entries than fit on screen" (same
@@ -844,25 +857,50 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    an EMOJI is a round white STAMP, a WORD a small paper LABEL, each at its own slight tilt (--tilt, from
    the tag itself). The first tag sits rightmost (row-reverse), so adding one never moves the others. A
    tag written in the note's TEXT has a dashed edge instead of a shadow: it's the text's. `.lit`: in the
-   tag filter. The chips are buttons — a click filters (features/tag-filter.ts). */
+   search. On a card the chips are buttons — a click searches by the tag (features/search.ts), a drag moves
+   or removes it (features/tag-drag.ts). The same faces fill the tag tray and the search's suggestions. */
 .node .tag-row { display:flex; flex-direction:row-reverse; align-items:center; gap:4px; }
-.node .tag {
+.tag {
   flex:none; box-sizing:border-box; margin:0; cursor:pointer; color:#1e1e1e;
   transform:rotate(var(--tilt, 0deg)); transition:transform .12s ease;
   font:inherit; line-height:1; display:inline-flex; align-items:center; justify-content:center;
 }
-.node .tag:hover { transform:rotate(var(--tilt, 0deg)) scale(1.1); }
-.node .tag.stamp { width:26px; height:26px; padding:0; border-radius:50%; font-size:15px;
+.tag:hover { transform:rotate(var(--tilt, 0deg)) scale(1.1); }
+.tag.stamp { width:26px; height:26px; padding:0; border-radius:50%; font-size:15px;
   background:#fff; border:2px solid #fff; box-shadow:0 1px 2px rgba(0,0,0,.18); }
-.node .tag.label { height:18px; padding:0 6px; border-radius:2px; border:none; font-size:11px; font-weight:700;
+.tag.label { height:18px; padding:0 6px; border-radius:2px; border:none; font-size:11px; font-weight:700;
   white-space:nowrap; max-width:140px; overflow:hidden; text-overflow:ellipsis;
   color:#4a4a4a; background:#fffdf6; box-shadow:0 1px 1.5px rgba(0,0,0,.16); }
-.node .tag.in-text { box-shadow:none; border:1px dashed rgba(0,0,0,.35); }
-.node .tag.stamp.in-text { border:2px dashed rgba(0,0,0,.3); }
-.node .tag.lit { box-shadow:0 0 0 2px var(--accent), 0 1px 2px rgba(0,0,0,.18); }
-/* …and a `#tag` written in the note's text (utils/markdown.ts): set apart, and a click filters by it */
+.tag.in-text { box-shadow:none; border:1px dashed rgba(0,0,0,.35); }
+.tag.stamp.in-text { border:2px dashed rgba(0,0,0,.3); }
+.tag.lit { box-shadow:0 0 0 2px var(--accent), 0 1px 2px rgba(0,0,0,.18); }
+/* …and a `#tag` written in the note's text (utils/markdown.ts): set apart, and a click searches by it */
 .node .body .md-tag { font-weight:700; opacity:.75; cursor:pointer; }
 .node .body .md-tag:hover { opacity:1; text-decoration:underline; text-underline-offset:2px; }
+/* a dragged tag (features/tag-drag.ts): the chip it left stays as a faint outline of itself, a copy rides
+   the pointer, the card under it rings, and one dropped off onto the canvas goes in a puff */
+.tag.lifted { opacity:.3; }
+.tag-ghost { position:fixed; left:0; top:0; z-index:60; pointer-events:none; margin:-13px 0 0 -13px; }
+.tag-ghost .tag { transform:rotate(var(--tilt, 0deg)) scale(1.15); box-shadow:0 4px 12px rgba(0,0,0,.25); }
+body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
+.node.tag-drop { box-shadow:0 0 0 3px var(--accent), var(--lift); }
+.tag-puff { position:fixed; z-index:60; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle, rgba(160,160,160,.55) 0 30%, transparent 62%); animation:tag-puff .45s ease-out forwards; }
+@keyframes tag-puff { from { transform:scale(.4); opacity:1; } to { transform:scale(2.2); opacity:0; } }
+/* the TAG TRAY (features/tag-tray.ts): a sheet of stickers just above the dock, toggled from its tag button
+   or T. Room above each sticker for its tilt; the last slot makes a new one. */
+#tagTray { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + 48px + 10px + var(--sa-b)); z-index:20;
+  display:none; align-items:center; gap:10px; max-width:min(720px, calc(100% - 32px - var(--sa-l) - var(--sa-r)));
+  padding:10px 12px; box-sizing:border-box; touch-action:none;
+  background:var(--panel); border-radius:var(--r-bar); box-shadow:var(--shadow-ui); }
+#tagTray.open { display:flex; }
+#tagTray .tray-tags { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; max-height:96px; overflow:auto; padding:3px; }
+#tagTray .tag { cursor:grab; touch-action:none; }
+#tagTray .tray-none { font-size:12px; color:var(--muted); }
+#tagTray .tray-new { flex:none; width:92px; height:26px; padding:0 8px; box-sizing:border-box; font:inherit; font-size:12px;
+  border:1px dashed var(--node-border); border-radius:var(--r-full); background:transparent; color:var(--text); }
+#tagTray .tray-new:focus { outline:none; border:1px solid var(--accent); }
+#dock #trayBtn[aria-pressed="true"] { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
 /* No `opacity` here. It used to sit at .9, which de-emphasised the note against its title — but `--ink`
    is already the MINIMUM contrast this fill can carry (utils/ink.ts measures it against a 2.5 floor, and
    a card inside a frame then steps its fill 93% toward that same ink), so trimming another 10% off
@@ -1151,20 +1189,6 @@ body.readonly #canvasColorBtn { display:none; }
 .tp-meta { flex:none; font-size:12px; color:var(--muted); }
 .tp-none { padding:10px 8px 4px; font-size:13px; color:var(--muted); }
 .tp-hint { margin:8px 4px 0; font-size:11px; color:var(--muted); flex:none; }
-/* the TAG FILTER's bar (features/tag-filter.ts): top centre, the dark of the float bar, naming what is lit.
-   Under the search bar when that is open too. */
-#tagFilterBar { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
-  display:none; align-items:center; gap:6px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
-  padding:5px 12px 5px 12px; border-radius:var(--r-full); white-space:nowrap; overflow:hidden;
-  background:var(--bar-bg); color:var(--bar-ink); font-size:13px; font-weight:700; box-shadow:var(--shadow-ui); }
-#tagFilterBar.open { display:flex; }
-body:has(#searchWrap.open) #tagFilterBar { top:calc(60px + var(--sa-t)); }
-body:has(#tagFilterBar.open) #roBadge { display:none; }
-.tf-muted { color:var(--bar-muted); font-weight:600; }
-.tf-chip { display:inline-flex; align-items:center; gap:6px; padding:3px 4px 3px 10px; border-radius:var(--r-full); background:var(--bar-hover); }
-.tf-x { width:18px; height:18px; padding:0; border:none; border-radius:50%; background:#5a5a5a; color:#ddd;
-  font-size:10px; line-height:1; cursor:pointer; }
-.tf-x:hover { background:#6a6a6a; color:#fff; }
 /* rubber-band marquee drawn over the canvas while drag-selecting */
 #marquee { position:absolute; display:none; z-index:8; pointer-events:none;   /* the ghost band: a pending selection, over the lines */
   border:1px dotted var(--accent); background:color-mix(in srgb, var(--accent) 15%, transparent); }

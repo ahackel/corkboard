@@ -52,10 +52,10 @@
     </div>
   </div>
 
-  <!-- floating search bar, top centre: opened with / or from the palette — see features/search.ts -->
+  <!-- floating search bar, top centre: opened with ⌘F or /, a #tag, or a click on a tag — see features/search.ts -->
   <div id="searchWrap">
     <span class="ic" data-icon="search"></span>
-    <input id="searchBox" type="text" placeholder="Find a card…" title="Find card (/)" aria-label="Find a card" autocomplete="off" spellcheck="false" />
+    <input id="searchBox" type="text" placeholder="Find a card, or #tag…" title="Find (⌘F)" aria-label="Find a card by text or tag" autocomplete="off" spellcheck="false" />
     <button id="searchClear" title="Clear search · close (Esc)" aria-label="Clear search or close">
       <span class="ic" data-icon="close"></span></button>
     <div id="searchResults"></div>
@@ -165,6 +165,9 @@
   <div id="dock">
     <!-- ghost card — drag it onto the canvas to create a new card -->
     <div id="ghostCard" title="Drag to create a new card">+</div>
+    <!-- the tag tray's toggle (features/tag-tray.ts): a sheet of tag stickers to drag onto cards -->
+    <button id="trayBtn" class="floating-btn" title="Tag tray (T)" aria-label="Tag tray" aria-pressed="false">
+      <span class="ic" data-icon="tag"></span></button>
     <span class="dock-sep"></span>
     <!-- canvas colour: edits the colour of the canvas you're standing on — the MAP at the top level,
          the OPEN FRAME once you're inside one (features/canvas-color.ts). Its face is a .swatch, so it

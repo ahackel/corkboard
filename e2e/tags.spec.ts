@@ -1,7 +1,7 @@
 // Tags are Obsidian's: frontmatter `tags:` plus `#tags` in the text. `#` adds and removes them, a click on
 // one filters the board by it (features/tags.ts, tag-picker.ts, tag-filter.ts).
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors, palette } from './helpers';
+import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors } from './helpers';
 
 const BOARD = {
   'Login.md': note('# Fix login\nSessions drop. Try #idea', { tags: '[🔥, backend]' }),
@@ -58,34 +58,100 @@ test('# tags the selection — by an emoji’s name or a new word — and untick
   expect(errors).toEqual([]);
 });
 
-test('a click on a tag filters the board by it; more narrow it; Esc clears', async ({ page }) => {
+test('a click on a tag searches by it; more narrow it; Esc ends the search', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, BOARD);
   await clickAway(page);
   await card(page, 'Fix login').locator('.tag.stamp').click();
-  const bar = page.locator('#tagFilterBar');
-  await expect(bar).toContainText('2 cards');
+  const chips = page.locator('#searchChips .sc-tag');
+  await expect(chips).toHaveText(['🔥✕']);
   await expect(card(page, 'Logo ideas')).toHaveClass(/search-dim/);
   await expect(card(page, 'Plan offsite')).not.toHaveClass(/search-dim/);
   await card(page, 'Plan offsite').locator('.tag', { hasText: '#people' }).click();
-  await expect(bar).toContainText('1 card');
+  await expect(chips).toHaveCount(2);
   await expect(card(page, 'Fix login')).toHaveClass(/search-dim/);
   // nothing was changed by it
   expect(Object.values(await diskFiles(page)).find(t => t.includes('Fix login'))).toContain('tags: [🔥, backend]');
   await page.keyboard.press('Escape');
-  await expect(bar).toBeHidden();
+  await expect(page.locator('#searchWrap')).toBeHidden();
   await expect(page.locator('#world .node.search-dim')).toHaveCount(0);
-  // the palette's way in, over the board's tags — including one only written in a note's text
-  await palette(page, 'Filter by tag');
-  await page.keyboard.type('idea');
-  await page.keyboard.press('Enter');
-  await expect(bar).toContainText('1 card');
-  await expect(card(page, 'Plan offsite')).toHaveClass(/search-dim/);
   expect(errors).toEqual([]);
 });
 
-test('a folded frame says how many of its cards match the filter', async ({ page }) => {
+test('one field finds by text and #tags: # suggests the board’s tags, Backspace takes a chip back', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await clickAway(page);
+  await page.keyboard.press('Control+f');
+  await expect(page.locator('#searchBox')).toBeFocused();
+  await page.keyboard.type('#ide');   // a tag only written in a note's text is on the board too
+  await expect(page.locator('#searchResults .sr-tag.active')).toContainText('#idea');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#searchChips .sc-tag')).toHaveCount(1);
+  await expect(page.locator('#searchResults .sr-count')).toHaveText('1 card');
+  await expect(card(page, 'Plan offsite')).toHaveClass(/search-dim/);
+  await page.keyboard.press('Backspace');
+  await expect(page.locator('#searchChips .sc-tag')).toHaveCount(0);
+  await page.keyboard.type('#🔥 offsite');   // a space after a #word makes the chip
+  await expect(page.locator('#searchChips .sc-tag')).toHaveCount(1);
+  await expect(page.locator('#searchResults .sr-count')).toHaveText('1 card');
+  await expect(card(page, 'Fix login')).toHaveClass(/search-dim/);
+  // a search with something in it stays while you work under it
+  await card(page, 'Plan offsite').click();
+  await expect(page.locator('#searchWrap')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('the tag tray: T shows it, a sticker dragged onto a card tags it', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await clickAway(page);
+  await page.keyboard.press('t');
+  const tray = page.locator('#tagTray');
+  await expect(tray).toBeVisible();
+  await expect(page.locator('#trayBtn')).toHaveAttribute('aria-pressed', 'true');
+  // a new sticker, made in the tray
+  await tray.locator('.tray-new').fill('urgent');
+  await tray.locator('.tray-new').press('Enter');
+  const sticker = tray.locator('.tag', { hasText: '#urgent' });
+  await expect(sticker).toBeVisible();
+  await drag(page, sticker, card(page, 'Logo ideas'));
+  await expect(card(page, 'Logo ideas').locator('.tag')).toHaveText(['#urgent']);
+  expect(Object.values(await diskFiles(page)).find(t => t.includes('Logo ideas'))).toContain('tags: [urgent]');
+  // the dock button puts it away
+  await page.locator('#trayBtn').click();
+  await expect(tray).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('a tag dragged to another card moves there; dragged off onto the canvas it goes', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await clickAway(page);
+  await drag(page, card(page, 'Fix login').locator('.tag', { hasText: '#backend' }), card(page, 'Logo ideas'));
+  await expect(card(page, 'Logo ideas').locator('.tag')).toHaveText(['#backend']);
+  await expect(card(page, 'Fix login').locator('.tag:not(.in-text)')).toHaveText(['🔥']);
+  // ⌘Z puts it back in one step
+  await page.keyboard.press('Control+z');
+  await expect(card(page, 'Logo ideas').locator('.tag')).toHaveCount(0);
+  await expect(card(page, 'Fix login').locator('.tag', { hasText: '#backend' })).toBeVisible();
+  // off onto the bare canvas: gone
+  const stamp = card(page, 'Plan offsite').locator('.tag.stamp');
+  const b = (await stamp.boundingBox())!;
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 40, b.y + 300, { steps: 8 });
+  await page.mouse.up();
+  await expect(card(page, 'Plan offsite').locator('.tag')).toHaveText(['#people']);
+  expect(Object.values(await diskFiles(page)).find(t => t.includes('Plan offsite'))).toContain('tags: [people]');
+  expect(errors).toEqual([]);
+});
+
+test('a folded frame says how many of its cards match the search', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, {
     'Loose.md': note('# Loose', { tags: '[🔥]' }),
@@ -100,6 +166,16 @@ test('a folded frame says how many of its cards match the filter', async ({ page
   await page.locator('#world .node.frame', { hasText: 'Box' }).locator(':scope > .title-row').click();
   await page.keyboard.press('x');
   await card(page, 'Loose').locator('.tag').click();
-  await expect(page.locator('#tagFilterBar')).toContainText('2 cards');
   await expect(page.locator('#world .node.frame-folded .frame-hits')).toHaveText('1 match');
+  await expect(page.locator('#world .node.frame-folded')).not.toHaveClass(/search-dim/);
 });
+
+// Press on `from`, carry it over `to`, let go — the way a person drags a sticker.
+async function drag(page: import('@playwright/test').Page, from: import('@playwright/test').Locator, to: import('@playwright/test').Locator): Promise<void> {
+  const a = (await from.boundingBox())!, b = (await to.boundingBox())!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+}

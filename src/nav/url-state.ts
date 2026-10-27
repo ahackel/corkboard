@@ -26,7 +26,7 @@ import { readMaps, type MapKind } from '../store/index.js';
 import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
-import { searchBox, openSearch, runSearch } from '../features/search.js';
+import { searchQuery, setSearchQuery } from '../features/search.js';
 import { nodeLabel } from '../utils/model.js';
 
 function slugify(s: string): string {
@@ -61,7 +61,7 @@ function buildHash(): string {
   params.set('x', Math.round(state.view.x).toString());
   params.set('y', Math.round(state.view.y).toString());
   params.set('k', state.view.k.toFixed(2));
-  const q = searchBox.value.trim();
+  const q = searchQuery();
   if (q) params.set('q', q);
   if (state.readOnly) params.set('ro', '1');
   return '#/' + parts.join('/') + '?' + params.toString();
@@ -149,7 +149,7 @@ export async function applyUrlFromHash(): Promise<void> {
       applyView();
     }
     const q = params.get('q');
-    if (q) { openSearch(); searchBox.value = q; runSearch(); }
+    if (q) setSearchQuery(q);
     // read-only is only ever forced ON from a link, never OFF — disabling it has real
     // side effects (reloads from disk, discards in-memory-only collapses) that shouldn't
     // happen silently just because a URL lacks `ro=1`.
