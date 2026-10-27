@@ -30,13 +30,17 @@ const CUSTOM_FALLBACK = '#3f8cff';
 //
 // `first` is the one difference in the markup: 'default' (the map's canvas) adds a reset chip.
 export type FirstChip = 'inherit' | 'default';
-export function swatchRowHTML(first: FirstChip): string {
-  // FigJam's picker: two rows of eleven (PICKER_ROWS), the second ending in the custom chip. A row
-  // break is a full-width element in ONE flex container rather than separate containers, so every
-  // chip stays a sibling — a single delegated click handler, markSwatchRow's one querySelectorAll and
-  // the float bar's `.swatch.active` lookup all keep working over the whole picker.
+// FigJam's picker: two rows of eleven (PICKER_ROWS). A row break is a full-width element in ONE flex
+// container rather than separate containers, so every chip stays a sibling — a single delegated click
+// handler, markSwatchRow's one querySelectorAll and the float bar's `.swatch.active` lookup all keep
+// working over the whole picker. The line toolbar's colour popover (features/edge-bar.ts) is these alone.
+export function paletteChipsHTML(): string {
   const chip = (c: string): string => `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`;
-  let html = PICKER_ROWS[0].map(chip).join('') + `<span class="swatch-break"></span>` + PICKER_ROWS[1].map(chip).join('');
+  return PICKER_ROWS.map(row => row.map(chip).join('')).join(`<span class="swatch-break"></span>`);
+}
+export function swatchRowHTML(first: FirstChip): string {
+  // …the second row ending in the custom chip.
+  let html = paletteChipsHTML();
   // Any colour at all — the card's ink follows automatically (utils/ink.ts), which is what makes an
   // off-palette colour safe to offer. A <label> WRAPPING the input, rather than a div that forwards
   // a click: that's the one form every platform opens natively from a single tap, including iOS,

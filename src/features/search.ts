@@ -14,7 +14,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
 import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible, ancestors } from '../utils/model.js';
-import { allTags, hasTag, tagKey, cleanTag } from '../utils/tags.js';
+import { allTags, hasTag, tagKey, cleanTag, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { outOfScope } from '../nav/scope.js';
 import { paintAll, focusNode } from '../main.js';
@@ -116,7 +116,7 @@ export function refreshSearch(): void {
 }
 function matches(n: MindNode, text: string): boolean {
   if (outOfScope(n)) return false;
-  if (chips.length && (n.type === 'frame' || !chips.every(c => hasTag(allTags(n), c)))) return false;
+  if (chips.length && (!wearsTags(n) || !chips.every(c => hasTag(allTags(n), c)))) return false;
   return !text || nodeLabel(n).toLowerCase().includes(text) || (!!n.body && n.body.toLowerCase().includes(text));
 }
 

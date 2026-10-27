@@ -10,6 +10,8 @@
 import { state } from '../core/state.js';
 import { selectNode } from '../main.js';
 import { imageUrl } from './images.js';
+import { childrenOf } from '../utils/model.js';
+import { bodyImages } from '../utils/markdown.js';
 
 let overlay: HTMLElement | null = null;
 let imgEl: HTMLImageElement | null = null;
@@ -20,7 +22,6 @@ let run: Shot[] = [];
 let at = -1;
 let token = 0;      // guards the async resolve below: only the newest step may paint
 
-const IMG_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
 // Every image in every note that shares `nodeId`'s parent, the card itself included, in the order
 // they read on the canvas: top-to-bottom, then left-to-right, then the order they appear in each
 // note. Deliberately off `body` and not off the DOM — a folded card renders only its first line, and
@@ -28,14 +29,10 @@ const IMG_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
 function siblingRun(nodeId: string): Shot[] {
   const n = state.nodes.get(nodeId);
   if (!n) return [];
-  const sibs = [...state.nodes.values()].filter(m => m.parent === n.parent);
+  const sibs = childrenOf(n.parent);
   sibs.sort((a, b) => (a.y - b.y) || (a.x - b.x));
   const out: Shot[] = [];
-  for (const s of sibs) {
-    IMG_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = IMG_RE.exec(s.body || ''))) out.push({ nodeId: s.id, path: m[2], alt: m[1].trim() });
-  }
+  for (const s of sibs) for (const { src, alt } of bodyImages(s.body)) out.push({ nodeId: s.id, path: src, alt });
   return out;
 }
 function build(): void {

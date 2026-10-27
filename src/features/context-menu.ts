@@ -11,7 +11,7 @@ import { createNode, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
 import { record } from './history.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
-import { esc } from '../utils/markdown.js';
+import { esc, stripImageRef } from '../utils/markdown.js';
 import { scheduleSave } from '../data/persistence.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
 import { exitScope, goToScopeDepth, selectAll, relayout } from '../main.js';
@@ -70,15 +70,13 @@ export function copyFilePath(n: MindNode): void {
 // and is shared verbatim with the kebab menu so the two never drift apart.
 
 // ---------- image entries (right-click on an <img> inside a card body) ----------
-const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Remove the image's markdown reference from the card body; if that was the last reference to a
 // vault-local attachment anywhere in the map, queue the file itself for deletion on the next save
 // (same mechanism deleting a whole card uses for its file).
 function removeImage(n: MindNode, path: string): void {
   if (state.readOnly || !path) return;
-  const re = new RegExp(`[ \\t]*!\\[[^\\]]*\\]\\(\\s*${escRe(path)}\\s*\\)[ \\t]*\\n?`);
   record([n.id], () => {
-    n.body = n.body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+    n.body = stripImageRef(n.body, path);
     n.dirty = true;
   });
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor

@@ -16,6 +16,7 @@ import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
 import { subtreeIds, remeasure } from '../main.js';
 import { isHidden } from '../utils/model.js';
+import { bodyImages } from '../utils/markdown.js';
 import { historyRefs } from '../features/history.js';
 import { searchHolds } from '../features/search.js';
 import { forgetImages } from '../features/images.js';
@@ -101,10 +102,10 @@ export function releaseFolded(): void {
     rememberGeom([f, ...kids]);
     parkEdges(new Map(kids.map(n => [n.id, n.file!])), f.id);
     const pics = new Set<string>();
-    for (const n of kids) for (const m of n.body.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) pics.add(m[1]);
+    for (const n of kids) for (const { src } of bodyImages(n.body)) pics.add(src);
     for (const n of kids) { n.el?.remove(); n.frameContentEl?.remove(); state.nodes.delete(n.id); }
     // …keeping any picture a note still in memory shows too.
-    for (const n of state.nodes.values()) for (const m of n.body.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) pics.delete(m[1]);
+    for (const n of state.nodes.values()) for (const { src } of bodyImages(n.body)) pics.delete(src);
     forgetImages(pics);
     f.lazy = kids.reduce((c, n) => c + 1 + (n.lazy ?? 0), 0);   // a folded frame inside counts its own
     f.kidOrder = undefined;

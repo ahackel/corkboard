@@ -50,6 +50,15 @@ export function subtreeBox(node: MindNode){
   walk(node);
   return { x0, y0, x1, y1 };
 }
+// …and the box around SEVERAL subtrees (infinite when none of them shows).
+export function subtreesBox(nodes: Iterable<MindNode>): { x0: number; y0: number; x1: number; y1: number } {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const n of nodes) {
+    const b = subtreeBox(n);
+    x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
+  }
+  return { x0, y0, x1, y1 };
+}
 // An EXPANDED frame: a box that holds the cards dropped inside it. A COLLAPSED frame folds to its bare
 // title tab (children hidden), so it isn't a box while folded — its footprint is the tab.
 export function isFrame(node: MindNode): boolean {

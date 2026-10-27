@@ -11,7 +11,7 @@ import { record } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
 import { remeasure } from '../main.js';
 import { esc } from '../utils/markdown.js';
-import { isEmojiTag, tagKey, tagTilt, type ShownTag } from '../utils/tags.js';
+import { isEmojiTag, tagKey, tagTilt, wearsTags, type ShownTag } from '../utils/tags.js';
 import { searchTags, toggleSearchTag } from './search.js';
 import { beginTagDrag } from './tag-drag.js';
 
@@ -44,7 +44,7 @@ export function retag(changes: TagChange[]): boolean {
   if (state.readOnly) return false;
   const todo = changes.filter(c => {
     const n = state.nodes.get(c.id);
-    return !!n && n.type !== 'frame' && !isLockedEffective(n) && n.tags.some(t => tagKey(t) === tagKey(c.tag)) !== c.on;
+    return !!n && wearsTags(n) && !isLockedEffective(n) && n.tags.some(t => tagKey(t) === tagKey(c.tag)) !== c.on;
   });
   if (!todo.length) return false;
   record([...new Set(todo.map(c => c.id))], () => {

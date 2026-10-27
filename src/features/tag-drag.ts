@@ -9,7 +9,8 @@
 // A tag written in a note's TEXT can be dragged out as a copy, never moved or removed: it's the text's.
 // Under 4px of movement it was a click, and the chip's own click handler searches by the tag instead.
 import { state } from '../core/state.js';
-import { selectedIds } from '../main.js';
+import { taggableSelection } from '../main.js';
+import { wearsTags } from '../utils/tags.js';
 import { retag, tagFaceHTML, type TagChange } from './tags.js';
 import { pushMru } from './tag-picker.js';
 
@@ -18,7 +19,7 @@ const SLOP = 4;
 function cardAt(x: number, y: number): string | null {
   const el = document.elementFromPoint(x, y)?.closest<HTMLElement>('.node');
   const n = el?.dataset.id ? state.nodes.get(el.dataset.id) : undefined;
-  return n && n.type !== 'frame' ? n.id : null;
+  return wearsTags(n) ? n!.id : null;
 }
 // The bare board — not a card, not a bar or panel over it — where a tag dropped off its card goes away.
 function onCanvas(x: number, y: number): boolean {
@@ -67,7 +68,7 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
   const drop = (ev: PointerEvent): void => {
     const to = cardAt(ev.clientX, ev.clientY);
     if (to && to !== fromCard) {
-      const ids = state.sel.has(to) ? selectedIds().filter(id => state.nodes.get(id)?.type !== 'frame') : [to];
+      const ids = state.sel.has(to) ? taggableSelection() : [to];
       const changes: TagChange[] = ids.map(id => ({ id, tag, on: true }));
       if (fromCard && !ev.shiftKey && !ids.includes(fromCard)) changes.push({ id: fromCard, tag, on: false });
       if (retag(changes)) pushMru(tag);

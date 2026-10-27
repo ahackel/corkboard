@@ -7,18 +7,18 @@
 import { state, world, setStatus, isBoxType, type MindNode } from '../core/state.js';
 import { parseMd, serializeMd, fileStem } from '../utils/frontmatter.js';
 import { safeName, slugStem, desiredFileFor, retargetLinks, FRAME_NOTE, isFrameNote, parentFileOf, dirOf, folderOf } from '../utils/filenames.js';
-import { soleImage } from '../utils/markdown.js';
+import { soleImage, bodyImages } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf, parentOf, ancestors } from '../utils/model.js';
-import { applyLayouts, commitRel, orderedKids, moveSubtreeTo, ancestorDepth, frameLabelH } from '../view/layout.js';
+import { commitRel, orderedKids, moveSubtreeTo, ancestorDepth, frameLabelH } from '../view/layout.js';
 import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import type { TreeListing } from '../store/types.js';
 import type { FoldTest } from '../store/tree.js';
-import { paintAll, paintNode, flashArrived, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
+import { paintAll, paintNode, remeasure, flashArrived, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
 import { SPACING } from '../utils/guides.js';
@@ -147,8 +147,7 @@ export async function exportZip(): Promise<void> {
   });
   // collect every vault-relative image referenced in a body, and pack the files alongside the notes
   const refs = new Set<string>();
-  const re = /!\[[^\]]*\]\(([^)\s]+)\)/g;
-  for (const n of nodes){ let m: RegExpExecArray | null; const b = n.body || ''; while ((m = re.exec(b))){ const p = m[1]; if (!/^(https?:|data:)/i.test(p)) refs.add(p); } }
+  for (const n of nodes) for (const { src } of bodyImages(n.body)) if (!/^(https?:|data:)/i.test(src)) refs.add(src);
   // read every referenced image concurrently, then pack the ones that resolved
   const images = await Promise.all([...refs].map(async path => {
     const blob = store.readBlob ? await store.readBlob(path) : null;
@@ -359,10 +358,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).
   resolveScopeAfterLoad();
-  // Paint once so every card has a real measured height, settle, and paint again.
-  paintAll();
-  applyLayouts();
-  paintAll();
+  remeasure();   // paint so every card has a real measured height, settle, and paint again
   if (!keepView) fit();
   // A migration is persisted BOARD FIRST, and awaited: the new edges and the model stamp have to be
   // on disk before any note moves into its frame's folder, or a failed write between the two would drop the

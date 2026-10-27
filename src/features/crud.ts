@@ -5,6 +5,7 @@
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden } from '../utils/model.js';
+import { stripImageRef } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { applyLayouts, frameInterior, holderOf, frameAt } from '../view/layout.js';
@@ -532,7 +533,6 @@ export function deleteSelectionKeepChildren(): void {
   scheduleSave();
   setStatus(`Ungrouped ${ids.length} frame${ids.length===1?'':'s'}`);
 }
-const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
 // source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it
 // as a fresh image-only card at a world position (`target.x/y/w/h`). One undo step — touches +
@@ -541,9 +541,8 @@ export function extractImage(sourceId: string, path: string, alt: string,
     target: { toCardId: string } | { x: number; y: number; w: number; h: number }): void {
   if (state.readOnly || !path) return;
   const source = state.nodes.get(sourceId); if (!source) return;
-  const re = new RegExp(`[ \\t]*!\\[[^\\]]*\\]\\(\\s*${escRe(path)}\\s*\\)[ \\t]*\\n?`);
   touch(sourceId);
-  source.body = source.body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+  source.body = stripImageRef(source.body, path);
   source.dirty = true;
   if (ui.bodyEdit && ui.bodyEdit.id === sourceId) ui.bodyEdit.ta.value = source.body;
   const md = `![${alt}](${path})`;

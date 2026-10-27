@@ -36,7 +36,7 @@ import { copySelection, cutSelection, bindCardFileDrag } from './features/clipbo
 import { bindCardTags, tagChipHTML } from './features/tags.js';
 import { openTagPicker } from './features/tag-picker.js';
 import { refreshTray, toggleTray, trayOpen } from './features/tag-tray.js';
-import { noteTags } from './utils/tags.js';
+import { noteTags, wearsTags } from './utils/tags.js';
 import { commitStep, record, touch, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
@@ -320,7 +320,7 @@ export function paintNode(n: MindNode): void {
   const hasBody = editingBody || !!(n.body && n.body.trim());  // keep the body slot while editing
   const collapsed = n.collapsed && n.type !== 'frame' && canFold(n);   // a card folded to its one-line chip
   // The tags it wears on its top edge (features/tags.ts) — a frame wears none.
-  const tags = n.type === 'frame' ? [] : noteTags(n);
+  const tags = wearsTags(n) ? noteTags(n) : [];
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
@@ -1756,6 +1756,8 @@ export function selectAll(): void {
 }
 // the ids currently being edited (one or many) — colour and lock apply to all of them
 export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
+// …the ones of them that can wear tags (no frames).
+export const taggableSelection = (): string[] => selectedIds().filter(id => wearsTags(state.nodes.get(id)));
 // reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
 // Selecting a CARD ends any edge selection — the two never coexist (core/state.ts selEdges). Enforced
 // here, at the one funnel every card-selection path runs through, rather than at each of them.
@@ -1897,7 +1899,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
-  if (key === '#' && !mod){ e.preventDefault(); if (selectedIds().some(id => state.nodes.get(id)?.type !== 'frame')) openTagPicker(); else openSearch('#'); return; }
+  if (key === '#' && !mod){ e.preventDefault(); if (taggableSelection().length) openTagPicker(); else openSearch('#'); return; }
   if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
@@ -2044,7 +2046,7 @@ function paletteCommands(): Command[] {
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
-    { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && selectedIds().some(id => state.nodes.get(id)?.type !== 'frame'), run: openTagPicker },
+    { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),

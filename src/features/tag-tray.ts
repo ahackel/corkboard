@@ -9,7 +9,7 @@
 // it, after asking when any does (one undo step). Repainted from main.ts paintAll, keyed so an unchanged
 // tray isn't rebuilt.
 import { esc } from '../utils/markdown.js';
-import { cleanTag, tagKey, isEmojiTag, noteTags } from '../utils/tags.js';
+import { cleanTag, tagKey, isEmojiTag, noteTags, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { state, type MindNode } from '../core/state.js';
 import { byId } from '../utils/dom.js';
@@ -115,7 +115,7 @@ function deleteTag(tag: string, x: number, y: number): void {
   const k = tagKey(tag);
   const own: MindNode[] = [], inText: MindNode[] = [];
   for (const n of state.nodes.values()) {
-    if (n.type === 'frame') continue;
+    if (!wearsTags(n)) continue;
     const t = noteTags(n).find(s => tagKey(s.tag) === k);
     if (t) (t.inText ? inText : own).push(n);
   }

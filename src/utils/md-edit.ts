@@ -6,7 +6,7 @@
 // Tables get the same treatment (tableTab / tableEnter, further down), and win over the list keys on a
 // table line. The editor applies the result through ONE path (features/inline-edit.ts applyTextEdit), which writes
 // only the changed span via the browser's own insert, so the textarea's ⌘Z keeps working.
-import { tableAt, tableRow } from './markdown.js';
+import { tableAt, tableRow, escRe } from './markdown.js';
 
 export interface TextEdit { text: string; start: number; end: number }
 
@@ -437,7 +437,7 @@ export function sourceOffset(source: string, from: number, texts: string[], hit:
   for (let i = 0; i <= hit; i++) {
     const t = texts[i], s = t.trim();
     if (!s) { if (i === hit) return cur; continue; }
-    const re = new RegExp(s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'g');
+    const re = new RegExp(escRe(s).replace(/\s+/g, '\\s+'), 'g');
     re.lastIndex = cur;
     const m = re.exec(source);
     if (!m) { if (i === hit) return null; continue; }

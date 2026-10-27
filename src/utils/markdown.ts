@@ -68,6 +68,16 @@ export function soleImage(body: string | null | undefined): SoleImage | null {
   const m = (body ?? '').trim().match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
   return m ? { alt: m[1].trim(), src: m[2] } : null;
 }
+// Every `![alt](src)` in a note, in reading order — the one spelling of "the pictures in a body".
+export function* bodyImages(body: string | null | undefined): Generator<SoleImage> {
+  for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) yield { alt: m[1].trim(), src: m[2] };
+}
+export const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A note with one picture's reference taken out (its line too, if that was all the line held).
+export function stripImageRef(body: string, src: string): string {
+  const re = new RegExp(`[ \\t]*!\\[[^\\]]*\\]\\(\\s*${escRe(src)}\\s*\\)[ \\t]*\\n?`);
+  return body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 // ---------- how far a checklist has got ----------
 // The tasks in a note and how many are ticked — the "3/5" a card wears (paintNode). The same lines

@@ -13,9 +13,9 @@ import { state, setStatus, type MindNode } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { esc } from '../utils/markdown.js';
 import { placeInViewport } from '../utils/dom.js';
-import { allTags, noteTags, cleanTag, tagKey } from '../utils/tags.js';
+import { allTags, noteTags, cleanTag, tagKey, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
-import { selectedIds } from '../main.js';
+import { taggableSelection } from '../main.js';
 import { setTagOnNodes, tagText } from './tags.js';
 
 const MRU_KEY = 'corkboard.tagMru';
@@ -36,7 +36,7 @@ export function pushMru(tag: string): void {
 export function boardTags(): { tag: string; count: number }[] {
   const by = new Map<string, { tag: string; count: number }>();
   for (const n of state.nodes.values()) {
-    if (n.type === 'frame') continue;
+    if (!wearsTags(n)) continue;
     for (const t of allTags(n)) { const e = by.get(tagKey(t)); if (e) e.count++; else by.set(tagKey(t), { tag: t, count: 1 }); }
   }
   return [...by.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
@@ -169,7 +169,7 @@ function open(place: () => void): void {
 // `#`: tag the selected cards. Beside the selection's anchor card, else the first selected one.
 export function openTagPicker(): void {
   if (state.readOnly) return;
-  const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && n.type !== 'frame'; });
+  const ids = taggableSelection();
   if (!ids.length) { setStatus(state.sel.size ? 'Tags go on cards, not frames' : 'Select a card to tag'); return; }
   const editable = ids.filter(id => !isLockedEffective(state.nodes.get(id)!));
   if (!editable.length) { setStatus('Locked — can’t change its tags'); return; }

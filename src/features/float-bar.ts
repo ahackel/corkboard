@@ -10,7 +10,7 @@ import { state, stage, setStatus, isImageCard, type MindNode } from '../core/sta
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
-import { subtreeBox } from '../view/layout.js';
+import { subtreesBox } from '../view/layout.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
 import { settleFrames } from './drag.js';
@@ -19,7 +19,7 @@ import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelec
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
-import { childrenOf, isHidden, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
+import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
 import { canOpen, isScopeRoot } from '../nav/scope.js';
 import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
@@ -55,14 +55,9 @@ function props(): PropertyControls {
 // The frame's label hangs outside the box (above it), so the margin is the same on all four sides.
 const FRAME_FIT_PAD = 16;
 export function fitFrameToContent(n: MindNode, orDefault = false): void {
-  const kids = childrenOf(n.id).filter(k => !isHidden(k));
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const k of kids) {
-    const b = subtreeBox(k); if (!isFinite(b.x0)) continue;
-    x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
-  }
+  const { x0, y0, x1, y1 } = subtreesBox(childrenOf(n.id));
   if (!isFinite(x0)) { if (orDefault) { n.w = FRAME_W; n.h = FRAME_H; } return; }
   n.x = snap(x0 - FRAME_FIT_PAD);
   n.y = snap(y0 - FRAME_FIT_PAD);
@@ -84,12 +79,7 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
   const up = (v: number): number => Math.ceil(v / snapStep) * snapStep;
   const down = (v: number): number => Math.floor(v / snapStep) * snapStep;
   for (const f of frames) {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const k of childrenOf(f.id)) {
-      if (isHidden(k)) continue;
-      const b = subtreeBox(k); if (!isFinite(b.x0)) continue;
-      x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
-    }
+    const { x0, y0, x1, y1 } = subtreesBox(childrenOf(f.id));
     if (!isFinite(x0)) continue;
     const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - FRAME_FIT_PAD));
     const R = Math.max(f.x + (f.w ?? FRAME_W), up(x1 + FRAME_FIT_PAD)), B = Math.max(f.y + (f.h ?? FRAME_H), up(y1 + FRAME_FIT_PAD));
@@ -140,13 +130,9 @@ export function groupSelectionIntoFrame(): void {
 
   let frameId = '';
   record([], () => {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const n of nodes) {
-      const b = subtreeBox(n); if (!isFinite(b.x0)) continue;
-      x0 = Math.min(x0, b.x0); y0 = Math.min(y0, b.y0); x1 = Math.max(x1, b.x1); y1 = Math.max(y1, b.y1);
-    }
+    const { x0, y0, x1, y1 } = subtreesBox(nodes);
     const snapStep = gridSnap();
-  const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
+    const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
     const fx = isFinite(x0) ? snap(x0 - FRAME_FIT_PAD) : 0;
     const fy = isFinite(y0) ? snap(y0 - FRAME_FIT_PAD) : 0;
     const fw = isFinite(x1) ? Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - fx)) : FRAME_W;

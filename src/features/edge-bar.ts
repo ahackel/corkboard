@@ -17,7 +17,8 @@ import { touchEdges, commitStep } from './history.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { byId } from '../utils/dom.js';
 import { isInteracting } from './float-bar.js';
-import { PICKER_ROWS, SWATCH_BG, colorFill } from '../main.js';
+import { colorFill } from '../main.js';
+import { paletteChipsHTML } from './properties.js';
 import { safeInsets } from '../utils/dom.js';
 import { chevron } from '../view/icons.js';
 
@@ -138,10 +139,7 @@ function commit(repaintBar = true): void {
 function openColorPop(): void {
   // No separate "default" chip: the default ink IS the palette's `stone`, so that chip puts a coloured
   // line back to how it looked.
-  let html = PICKER_ROWS.map(row => row.map(c =>
-    `<div class="swatch" data-color="${c}" title="${c}" style="--sw:${SWATCH_BG[c]}"></div>`).join('')).join(`<span class="swatch-break"></span>`);
-
-  colorRow.innerHTML = html;
+  colorRow.innerHTML = paletteChipsHTML();
   colorPop.classList.add('open');
   placeColorPop();
 }
