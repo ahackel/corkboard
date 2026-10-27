@@ -131,3 +131,21 @@ test('unfolding a frame does not glide its cards: they appear where they sit', a
   const late = (await one.boundingBox())!;
   expect([Math.round(early.x), Math.round(early.y)]).toEqual([Math.round(late.x), Math.round(late.y)]);
 });
+
+test('a frame clips its cards all the way through an unfold', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, FOLDERS);
+  await page.locator('#world .node.frame-folded', { hasText: 'Box' }).dblclick();
+  await expect(card(page, 'First inside')).toBeVisible();
+  await page.waitForTimeout(120);                                    // mid-animation
+  const [box, clip] = await page.evaluate(() => {
+    const f = [...document.querySelectorAll<HTMLElement>('#world .node.frame')].find(e => e.textContent?.includes('Box'))!;
+    const r = (e: Element) => { const b = e.getBoundingClientRect(); return [b.left, b.top, b.right, b.bottom]; };
+    return [r(f), r(document.querySelector('#world .frame-content')!)];
+  });
+  expect(box[2] - box[0]).toBeLessThan(290);                         // still growing (it opens to 300)
+  expect(clip[0]).toBeGreaterThanOrEqual(box[0] - 1);
+  expect(clip[1]).toBeGreaterThanOrEqual(box[1] - 1);
+  expect(clip[2]).toBeLessThanOrEqual(box[2] + 1);
+  expect(clip[3]).toBeLessThanOrEqual(box[3] + 1);
+});

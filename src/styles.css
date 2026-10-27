@@ -485,6 +485,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    cards' stale spots and sizes until the glide ends */
 body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
+.frame-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease,
   left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts) */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),

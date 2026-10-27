@@ -1095,6 +1095,13 @@ const SIZE_EASE = 'cubic-bezier(.45,0,.25,1)';
 const LAYOUT_ANIM_MS = 500;
 function animateSizes(before: Map<HTMLElement, Size>): void {
   if (prefersReducedMotion()) return;
+  // A frame that has just UNFOLDED had no content wrapper to snapshot: it starts as small as the box
+  // it grows out of (the pill, less the box's own border), so its cards stay clipped all the way open.
+  for (const m of state.nodes.values()) {
+    const w = m.frameContentEl, a = m.el ? before.get(m.el) : undefined;
+    if (!w || !a || before.has(w) || !m.el) continue;
+    before.set(w, { w: Math.max(0, a.w - (m.el.offsetWidth - w.offsetWidth)), h: Math.max(0, a.h - (m.el.offsetHeight - w.offsetHeight)) });
+  }
   for (const [el, a] of before) {
     if (!el.isConnected || el.style.display === 'none') continue;
     const b = { w: el.offsetWidth, h: el.offsetHeight };
@@ -1124,21 +1131,34 @@ function animateReflow(before: Map<string, Pt>): void {
     if (!bm) return true;
     return !!bp && Math.abs((bm.x - bp.x) - (m.x - p.x)) < 0.5 && Math.abs((bm.y - bp.y) - (m.y - p.y)) < 0.5;
   };
+  // A frame's content wrapper (its CLIP) is a sibling of its box, not inside it, so it glides alongside:
+  // parked at the same offset from its final spot as the box, then sent home with the same transition.
+  // Otherwise the box would glide while the clip jumped, and the cards would hang outside it meanwhile.
+  const clips: [HTMLElement, string, string][] = [];
   for (const m of visible){
     m.el!.classList.remove('lt-anim');
     const s = stays(m) ? { x: m.x, y: m.y } : before.get(m.id) || ancestorStart(m, before);
     setNodeElXY(m, s.x, s.y);
     if (!before.has(m.id)) m.el!.style.opacity = '0';
+    const w = m.frameContentEl;
+    if (w?.isConnected && (s.x !== m.x || s.y !== m.y)) {
+      w.classList.remove('lt-anim');
+      clips.push([w, w.style.left, w.style.top]);
+      w.style.left = (parseFloat(w.style.left) + s.x - m.x) + 'px';
+      w.style.top  = (parseFloat(w.style.top)  + s.y - m.y) + 'px';
+    }
   }
   void document.body.offsetWidth;                    // commit the start positions before transitioning
   // 2) turn on the transition and move every card to its FINAL spot → the browser animates left/top
   const DUR = LAYOUT_ANIM_MS;
   for (const m of visible){ if (!stays(m)) m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
+  for (const [w, left, top] of clips){ w.classList.add('lt-anim'); w.style.left = left; w.style.top = top; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);
   setTimeout(() => {
     if (tok !== ui.animToken) return;
     for (const m of visible) m.el && m.el.classList.remove('lt-anim');
+    for (const [w] of clips) w.classList.remove('lt-anim');
     document.body.classList.remove('layout-anim');
     paintFreeEdges();
   }, DUR + 60);
