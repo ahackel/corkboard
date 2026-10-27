@@ -4,7 +4,8 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden } from '../utils/model.js';
+import { advanceTitle } from '../utils/advance.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { applyLayouts, frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
@@ -169,20 +170,52 @@ function copyNode(s: MindNode): MindNode {
   const at = snapPt({ x: s.x, y: s.y + nodeH(s) + 24 });
   return cloneNodeAt(s, at.x, at.y);
 }
+// The SMART duplicate (⌘⌥D): the next card of a series — a daily log, sprints, versions. The copy's
+// title steps to its next value (utils/advance.ts: a date by a day with its weekday, else the last
+// number up) and it lands in the NEXT SLOT of its row: to the right, at the same gap the row already
+// keeps (from its left neighbour), past anything already there. Its frame grows to hold it, the way a
+// drop does. A card with no heading advances its first line instead.
+function copyNext(s: MindNode): MindNode {
+  const w = nodeW(s), h = nodeH(s);
+  const sibs = childrenOf(s.parent).filter(o => o !== s && !isHidden(o));
+  const inRow = (o: MindNode, y: number): boolean => o.y < y + h && o.y + nodeH(o) > y;
+  const left = sibs.filter(o => inRow(o, s.y) && o.x + nodeW(o) <= s.x)
+    .sort((a, b) => (b.x + nodeW(b)) - (a.x + nodeW(a)))[0];
+  const gap = left ? s.x - (left.x + nodeW(left)) : LIST_GAP;
+  let x = s.x + w + gap;
+  for (let moved = true; moved;) {
+    moved = false;
+    for (const o of sibs) {
+      if (!inRow(o, s.y) || o.x >= x + w || o.x + nodeW(o) <= x) continue;
+      x = o.x + nodeW(o) + gap; moved = true;
+    }
+  }
+  const at = snapPt({ x, y: s.y });
+  const c = cloneNodeAt(s, at.x, at.y);
+  if (c.title.trim()) c.title = advanceTitle(c.title);
+  else {
+    const nl = c.body.indexOf('\n');
+    c.body = advanceTitle(nl < 0 ? c.body : c.body.slice(0, nl)) + (nl < 0 ? '' : c.body.slice(nl));
+  }
+  return c;
+}
 // Duplicate every selected card (or just the one). Each copy keeps its source's parent, so it
 // stays connected. One card → open its rename like a fresh node; many → select the new copies.
-// `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor.
-export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): MindNode[] | undefined {
+// `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor. `next` is the
+// smart duplicate (copyNext above); without it the copy is exact, just below its source.
+export function duplicateSelection({ edit = true, next = false }: { edit?: boolean; next?: boolean } = {}): MindNode[] | undefined {
   if (state.readOnly) return;
   const ids = selectedIds();
   // A folded frame's notes may still be on disk: duplicating it copies them, so they're read first.
-  if (afterReading(ids, () => duplicateSelection({ edit }))) return;
+  if (afterReading(ids, () => duplicateSelection({ edit, next }))) return;
   const srcs = ids.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
   if (!srcs.length) return;
-  const copies = srcs.map(copyNode);
+  const copies = srcs.map(next ? copyNext : copyNode);
   // paint first so the new cards get real DOM heights, then settle and commit.
   remeasure();
-  const msg = copies.length === 1 ? `Duplicated → “${nodeLabel(copies[0])}”` : `Duplicated ${copies.length} cards`;
+  if (next && growFramesToHold(copies.map(c => c.id))) relayout();
+  const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
+    : `${next ? 'Made the next of' : 'Duplicated'} ${copies.length} cards`;
   if (copies.length === 1 && edit){
     selectNode(copies[0].id);
     startInlineEdit(copies[0], { isNew: false });

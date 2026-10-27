@@ -1853,6 +1853,10 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (typing) return;
+  // ⌘⌥D: the SMART duplicate — the next card of a series (crud.ts copyNext). By `code`, since ⌥ turns
+  // the key itself into `∂` on a Mac. macOS takes ⌥⌘D for the Dock unless that's switched off, so ⇧D
+  // (below) does the same and is the one that always arrives.
+  if (e.code === 'KeyD' && mod && e.altKey && state.sel.size){ e.preventDefault(); duplicateSelection({ next: true }); return; }
   if (tidyShortcut(e)) return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
   // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
@@ -1869,7 +1873,7 @@ window.addEventListener('keydown', (e) => {
   // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
-  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection(); return; }
+  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: smart
   if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected frames and cards to their contents
   if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
@@ -2003,6 +2007,7 @@ function paletteCommands(): Command[] {
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
+    { label: 'Duplicate as the next one', shortcut: '⌘⌥D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),

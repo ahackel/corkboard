@@ -807,6 +807,14 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   starts at its first number, code fences are ``` or ~~~, `<https://…>` is a link, and `==text==` is Obsidian's
   highlight. A highlight is the card's derived `--scrim` and a checkbox a fill of its ink, so both hold on any fill.
 
+**A SMART duplicate makes the NEXT card of a series** (⌘⌥D, also ⇧D, since macOS keeps ⌥⌘D for the Dock;
+`crud.ts copyNext`). A daily log, sprints, versions: the copy's title steps to its next value
+(`utils/advance.ts advanceTitle`, tested — a `YYYY-MM-DD` date by one day with any weekday name beside it,
+else the last number up, keeping its padding; a card with no heading advances its first line), and it lands in
+the next slot of its ROW — to the right, at the gap the row already keeps from its left neighbour, past
+anything already there — with its frame grown to hold it. Plain D stays an EXACT copy, just below: the two
+are different jobs, so neither guesses which one you meant.
+
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;
 adding one is a decision, not a gap. Neither writes a new frontmatter key — a merge is a body edit plus a

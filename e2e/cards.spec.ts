@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, makeCard, select, clickAway, reload, card, watchErrors } from './helpers';
+import { openBoard, makeCard, select, clickAway, reload, card, watchErrors, seedBoard, note } from './helpers';
 
 test('a card is made, edited and kept across a reload', async ({ page }) => {
   const errors = watchErrors(page);
@@ -39,4 +39,27 @@ test('opening a card for editing does not change its size', async ({ page }) => 
     await page.keyboard.press('Escape');
     await clickAway(page);
   }
+});
+
+test('⌘⌥D duplicates a card as the next of its series: next day, next slot of the row', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, {
+    'Mon.md': note('# 2026-10-26 Monday\n\n- GPU memory optimization', { color: 'blue' }),
+    'Tue.md': note('# 2026-10-27 Tuesday\n\n- GPU memory optimization', { color: 'blue' }),
+    'board.json': JSON.stringify({ version: 1, model: 2, settings: {}, nodes: {
+      'Mon.md': { x: 0, y: 0, w: 240, h: 300 }, 'Tue.md': { x: 280, y: 0, w: 240, h: 300 } } }),
+  });
+  const tue = card(page, 'Tuesday');
+  await tue.click();
+  await page.keyboard.press('ControlOrMeta+Alt+d');
+  await page.keyboard.press('Escape');
+  const wed = card(page, '2026-10-28 Wednesday');
+  await expect(wed).toBeVisible();
+  await expect(wed).toContainText('GPU memory optimization');
+  const [m, t, w] = [await card(page, 'Monday').boundingBox(), await tue.boundingBox(), await wed.boundingBox()];
+  expect(Math.round(w!.y)).toBe(Math.round(t!.y));                                   // same row
+  expect(Math.round(w!.width)).toBe(Math.round(t!.width));                           // same size
+  expect(Math.round(w!.x - (t!.x + t!.width))).toBe(Math.round(t!.x - (m!.x + m!.width)));   // same gap
+  expect(errors).toEqual([]);
 });
