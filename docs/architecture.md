@@ -825,7 +825,9 @@ moved or rewritten: the note's, not ours). Matching ignores case and a parent ma
   (`features/tag-picker.ts`) — board tags with their counts, emoji BY NAME (`utils/emoji-names.ts`, a short
   hand list), else a new tag (`cleanTag`); the selection's own tags are listed ticked, untick to remove. The
   hands: the TAG TRAY (`features/tag-tray.ts`, the dock's tag button or T) is a sheet of the board's tags as
-  stickers, plus any typed into its last slot; DRAG one onto a card (`features/tag-drag.ts`). A card's own tag
+  stickers, plus any made in its last slot (a word, or an emoji by NAME — `fire` offers 🔥); DRAG one onto a
+  card (`features/tag-drag.ts`). A sticker dragged off the tray onto the bare board DELETES the tag: off every
+  card whose frontmatter has it, after a `confirm` when any does (one undo step); text tags stay. A card's own tag
   dragged onto another card MOVES there (⇧ copies, as ⇧-drag clones a card), dragged off onto the bare canvas it goes, in a puff — the
   Dock's gesture. Dropped on a selected card, it lands on the whole selection. Every change is ONE undo step
   (`retag`). A text tag drags out as a copy only.

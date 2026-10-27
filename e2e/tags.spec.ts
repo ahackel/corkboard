@@ -162,6 +162,35 @@ test('⇧-dragging a tag to another card copies it, as ⇧-drag clones a card', 
   await expect(card(page, 'Fix login').locator('.tag', { hasText: '#backend' })).toBeVisible();
 });
 
+test('the tray makes an emoji sticker from its name; a sticker dragged off deletes the tag everywhere, after asking', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await clickAway(page);
+  await page.keyboard.press('t');
+  const tray = page.locator('#tagTray');
+  await tray.locator('.tray-new').fill('rocket');
+  await expect(tray.locator('.tray-suggest .tp-row.active')).toContainText('🚀');
+  await tray.locator('.tray-new').press('Enter');
+  const rocket = tray.locator('.tag', { hasText: '🚀' });
+  await expect(rocket).toBeVisible();
+  // unused: it just goes
+  await dragOff(page, rocket);
+  await expect(tray.locator('.tag', { hasText: '🚀' })).toHaveCount(0);
+  // used by two cards: asked, then gone from both
+  let asked = '';
+  page.once('dialog', d => { asked = d.message(); void d.accept(); });
+  await dragOff(page, tray.locator('.tag', { hasText: '🔥' }));
+  expect(asked).toContain('from 2 cards');
+  await expect(page.locator('#world .node .tag', { hasText: '🔥' })).toHaveCount(0);
+  await expect(tray.locator('.tag', { hasText: '🔥' })).toHaveCount(0);
+  // declined: nothing happens
+  page.once('dialog', d => void d.dismiss());
+  await dragOff(page, tray.locator('.tag', { hasText: '#people' }));
+  await expect(card(page, 'Plan offsite').locator('.tag', { hasText: '#people' })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
 test('a folded frame says how many of its cards match the search', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, {
@@ -180,6 +209,16 @@ test('a folded frame says how many of its cards match the search', async ({ page
   await expect(page.locator('#world .node.frame-folded .frame-hits')).toHaveText('1 match');
   await expect(page.locator('#world .node.frame-folded')).not.toHaveClass(/search-dim/);
 });
+
+// Carry a sticker up off the tray onto the bare board, and let go.
+async function dragOff(page: import('@playwright/test').Page, from: import('@playwright/test').Locator): Promise<void> {
+  const a = (await from.boundingBox())!;
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 60, 200, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+}
 
 // Press on `from`, carry it over `to`, let go — the way a person drags a sticker.
 async function drag(page: import('@playwright/test').Page, from: import('@playwright/test').Locator, to: import('@playwright/test').Locator): Promise<void> {

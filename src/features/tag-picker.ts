@@ -23,6 +23,10 @@ export function loadMru(): string[] {
   try { const raw = JSON.parse(localStorage.getItem(MRU_KEY) ?? '[]'); return Array.isArray(raw) ? raw.filter(t => typeof t === 'string') : []; }
   catch { return []; }
 }
+export function dropMru(tag: string): void {
+  try { localStorage.setItem(MRU_KEY, JSON.stringify(loadMru().filter(t => tagKey(t) !== tagKey(tag)))); }
+  catch { /* nothing to forget */ }
+}
 export function pushMru(tag: string): void {
   try { localStorage.setItem(MRU_KEY, JSON.stringify([tag, ...loadMru().filter(t => tagKey(t) !== tagKey(tag))].slice(0, 16))); }
   catch { /* private window: no recents, nothing lost */ }

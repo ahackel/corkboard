@@ -3,7 +3,8 @@
 //   · from the TAG TRAY onto a card — tags it (features/tag-tray.ts);
 //   · from one card onto another — MOVES it there; hold ⇧ to copy instead, the way ⇧-drag clones a card
 //     (the chip it came from stays put while ⇧ is held, so you see which it will be);
-//   · from a card off onto the canvas — REMOVES it, with a little puff, the way the Dock lets go of an app.
+//   · from a card off onto the canvas — REMOVES it, with a little puff, the way the Dock lets go of an app;
+//   · from the TRAY off onto the canvas — the tray decides (`offBoard`: it deletes the tag everywhere).
 // Dropped on a card that is part of the selection, it lands on every selected card, like a colour does.
 // A tag written in a note's TEXT can be dragged out as a copy, never moved or removed: it's the text's.
 // Under 4px of movement it was a click, and the chip's own click handler searches by the tag instead.
@@ -25,7 +26,8 @@ function onCanvas(x: number, y: number): boolean {
   return !!el?.closest('#stage') && !el.closest('.node:not(.frame)');
 }
 
-export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fromCard: string | null): void {
+export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fromCard: string | null,
+  offBoard?: (x: number, y: number) => void): void {
   if (e.button !== 0 || state.readOnly) return;
   const x0 = e.clientX, y0 = e.clientY;
   let ghost: HTMLElement | null = null, over: HTMLElement | null = null;
@@ -71,6 +73,8 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
       if (retag(changes)) pushMru(tag);
     } else if (!to && fromCard && onCanvas(ev.clientX, ev.clientY)) {
       if (retag([{ id: fromCard, tag, on: false }])) puff(ev.clientX, ev.clientY);
+    } else if (!to && offBoard && onCanvas(ev.clientX, ev.clientY)) {
+      offBoard(ev.clientX, ev.clientY);
     }
   };
   const up = (ev: PointerEvent): void => end(ev);
@@ -80,7 +84,7 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
   window.addEventListener('pointercancel', cancel);
 }
 
-function puff(x: number, y: number): void {
+export function puff(x: number, y: number): void {
   const p = document.createElement('div');
   p.className = 'tag-puff';
   p.style.left = `${x}px`; p.style.top = `${y}px`;
