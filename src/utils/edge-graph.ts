@@ -27,7 +27,7 @@ export function flattenJunctions<E extends GraphEdge>(edges: E[], isJunction: (i
     if (isJunction(e.from) && isJunction(e.to)) root.set(find(e.from), find(e.to));
   }
   // The cards reaching each meeting point, in board order, with the line and the cap they came in by.
-  const reach = new Map<string, { card: string; cap: EdgeCap; via: E }[]>();
+  const reach = new Map<string, Array<{ card: string; cap: EdgeCap; via: E }>>();
   const plain: E[] = [];
   for (const e of edges) {
     const fj = isJunction(e.from), tj = isJunction(e.to);

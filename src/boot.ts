@@ -24,7 +24,7 @@ import { byId } from './utils/dom.js';
 
 // Chrome/Edge offer opening a real local folder (FSA); iPad/Firefox/Safari use on-device +
 // import/export. ?nofsa hides the folder option for testing the no-FSA layout on desktop.
-const HAS_FSA = !location.search.includes('nofsa') && !!(window as any).showDirectoryPicker;
+const HAS_FSA = !location.search.includes('nofsa') && 'showDirectoryPicker' in window;
 
 // ---- opening maps (each path ends on the canvas with the panel closed) ----
 async function openDeviceMap(ref: MapRef): Promise<void> {

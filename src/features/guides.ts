@@ -41,7 +41,7 @@ function neighbours(act: MindNode, moving: Set<string>): Box[] {
 // The pull for a drag whose roots sit at `starts` (their positions when the drag began) moved by the
 // RAW pointer delta (dx,dy): the union box is snapped among the neighbours, and the lines drawn.
 // Returns the per-axis correction, or null on an axis nothing pulls (the grid has it then).
-export function guidePull(act: MindNode, roots: { n: MindNode; s: { x: number; y: number } }[], moving: Set<string>,
+export function guidePull(act: MindNode, roots: Array<{ n: MindNode; s: { x: number; y: number } }>, moving: Set<string>,
                           dx: number, dy: number): { x: number | null; y: number | null } {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const { n, s } of roots) {

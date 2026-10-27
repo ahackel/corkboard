@@ -4,7 +4,7 @@
 // card is. Every function returns a position for every box it was given, moved or not.
 
 export interface Box { id: string; x: number; y: number; w: number; h: number }
-export type Pt = { x: number; y: number };
+export interface Pt { x: number; y: number }
 export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 
 // The ROWS a loose arrangement already forms, top to bottom, each left to right. A box joins the row
@@ -12,7 +12,7 @@ export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom
 // horizontal overlap) — so a messy column (each card a little lower than the last, overlapping the one
 // above) stays a column, while a row whose cards drift up and down, or hold a taller note, stays a row.
 export function rowsOf(items: Box[]): Box[][] {
-  const rows: { top: number; bottom: number; items: Box[] }[] = [];
+  const rows: Array<{ top: number; bottom: number; items: Box[] }> = [];
   const sideBySide = (a: Box, b: Box): boolean => Math.min(a.x + a.w, b.x + b.w) <= Math.max(a.x, b.x);
   for (const it of [...items].sort((a, b) => (a.y + a.h / 2) - (b.y + b.h / 2) || a.x - b.x)) {
     const row = rows[rows.length - 1];

@@ -238,7 +238,7 @@ function renderTable(lines: string[], start: number, cols: number): { html: stri
 const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+/;
 function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: number } {
   let html = '';
-  const open: { indent: number; tag: 'ul' | 'ol' }[] = [];
+  const open: Array<{ indent: number; tag: 'ul' | 'ol' }> = [];
   // an ordered list starts at its FIRST item's number (`3.` → 3), as in CommonMark; later numbers are ignored
   const opener = (tag: 'ul' | 'ol', marker: string): string =>
     tag === 'ol' && parseInt(marker, 10) !== 1 ? `<ol start="${parseInt(marker, 10)}">` : `<${tag}>`;

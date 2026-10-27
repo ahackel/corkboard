@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       # A change that breaks the file format must not reach anyone's notes.
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm test
       # The displayed version bumps per deploy, not per local build: 0.1.<run number>.
       - run: npm run build

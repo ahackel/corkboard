@@ -162,7 +162,7 @@ function position(): void {
   if (!pop || !btn) return;
   const r = btn.getBoundingClientRect();
   const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  let left = r.left + r.width / 2 - pw / 2;
+  const left = r.left + r.width / 2 - pw / 2;
   let top = r.top - ph - POP_GAP;
   if (top < 4) top = r.bottom + POP_GAP;
   placeInViewport(pop, left, top);

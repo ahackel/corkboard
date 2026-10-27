@@ -38,9 +38,11 @@ import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom
 // Active backend. Local-first: default to on-device; "Open folder" swaps in fsaStore.
 // `ref` identifies WHICH map is now open (registry entry + what boot() reopens); omit it
 // for stores that aren't registry-backed.
+// eslint-disable-next-line import-x/no-mutable-exports -- a live binding, reassigned only by useStore (follow-up: a getter)
 export let store: Store = opfsStore;
 // Which map is on the canvas RIGHT NOW — in-memory runtime state, unlike the persisted
 // last-map key (which another tab may rewrite). null for non-registry stores.
+// eslint-disable-next-line import-x/no-mutable-exports -- a live binding, reassigned only by useStore (follow-up: a getter)
 export let currentMap: { kind: MapKind; id: string } | null = null;
 export function useStore(s: Store, ref?: { kind: MapKind; id: string }): void {
   store = s; store.watch(reloadFromDisk);
@@ -93,7 +95,7 @@ export function openImportPicker(): void { importInput.click(); }
 // a file manager is the common one).
 export const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
 const IMG_RE = IMAGE_FILE_RE;
-type ImportEntry = { name: string; text?: string; bytes?: Uint8Array };
+interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
 export async function importFiles(files: File[]): Promise<void> {
   const entries: ImportEntry[] = [];
   for (const f of files){
@@ -137,7 +139,7 @@ export async function exportZip(): Promise<void> {
   // Lowercased, because the folder this unpacks into collides case-insensitively on macOS/Windows —
   // same reason desiredFileFor tests that way.
   const used = new Set<string>();
-  const files: { name: string; data?: string; bytes?: Uint8Array }[] = nodes.map(n => {
+  const files: Array<{ name: string; data?: string; bytes?: Uint8Array }> = nodes.map(n => {
     // A node that has never been saved has no file yet; name it the way desiredFileFor would, off
     // its title or (untitled) off its first line — hence the shared slugStem.
     let name = n.file || (slugStem(n) + '.md');

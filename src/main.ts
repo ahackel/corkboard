@@ -1051,7 +1051,7 @@ function followEdges(tok: number, ms: number): void {
   const t0 = performance.now();
   const tick = (now: number): void => {
     if (tok !== ui.animToken) return;                  // superseded by a newer animation
-    const saved: [MindNode, number, number][] = [];
+    const saved: Array<[MindNode, number, number]> = [];
     for (const n of ends){
       if (!n.el || isHidden(n)) continue;
       const c = getComputedStyle(n.el);             // interpolated left/top while transitioning
@@ -1095,7 +1095,7 @@ export function animateLayout(mutate: () => void): void {
 // then hands them straight back to the inline/CSS sizing — nothing is written, nothing to clean up. The
 // content is clipped meanwhile, so a card's text doesn't spill out of the box as it closes. A frame's
 // content wrapper (its interior clip) follows the box, else its cards would pop in or out at once.
-type Size = { w: number; h: number };
+interface Size { w: number; h: number }
 function sizeSnapshot(): Map<HTMLElement, Size> {
   const out = new Map<HTMLElement, Size>();
   for (const m of state.nodes.values()) {
@@ -1152,7 +1152,7 @@ function animateReflow(before: Map<string, Pt>): void {
   // A frame's content wrapper (its CLIP) is a sibling of its box, not inside it, so it glides alongside:
   // parked at the same offset from its final spot as the box, then sent home with the same transition.
   // Otherwise the box would glide while the clip jumped, and the cards would hang outside it meanwhile.
-  const clips: [HTMLElement, string, string][] = [];
+  const clips: Array<[HTMLElement, string, string]> = [];
   for (const m of visible){
     m.el!.classList.remove('lt-anim');
     const s = stays(m) ? { x: m.x, y: m.y } : before.get(m.id) || ancestorStart(m, before);

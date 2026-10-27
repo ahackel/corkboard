@@ -90,7 +90,7 @@ export const idbStore = (() => {
     async remove(path: string): Promise<void> { try { await del(prefixOf(_mapId) + path); } catch {} },
     async readBlob(path: string): Promise<Blob | null> {
       try {
-        const v = await dbGet(await db(), 'files', prefixOf(_mapId) + path);
+        const v = await dbGet<string | Blob>(await db(), 'files', prefixOf(_mapId) + path);
         return v ? new Blob([v], { type: 'text/plain' }) : null;
       } catch { return null; }
     },

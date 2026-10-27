@@ -23,8 +23,9 @@ export function dbPut(db: IDBDatabase, store: string, key: IDBValidKey, val: unk
   tx.objectStore(store).put(val, key);
   return done(tx);
 }
-export function dbGet(db: IDBDatabase, store: string, key: IDBValidKey): Promise<any> {
-  return result(db.transaction(store, 'readonly').objectStore(store).get(key));
+// A stored value is whatever was put under that key, so the CALLER names its type.
+export function dbGet<T = unknown>(db: IDBDatabase, store: string, key: IDBValidKey): Promise<T | undefined> {
+  return result(db.transaction(store, 'readonly').objectStore(store).get(key)) as Promise<T | undefined>;
 }
 export function dbDel(db: IDBDatabase, store: string, key: IDBValidKey): Promise<void> {
   const tx = db.transaction(store, 'readwrite');
@@ -61,7 +62,7 @@ async function dbExists(name: string): Promise<boolean> {
 // Read fully, then write. A cursor over the source and puts into the target are two separate
 // transactions on two databases; interleaving them lets the write tx auto-commit mid-walk.
 async function dbCopyAll(from: IDBDatabase, to: IDBDatabase, store: string): Promise<void> {
-  const rows: { key: IDBValidKey; value: unknown }[] = [];
+  const rows: Array<{ key: IDBValidKey; value: unknown }> = [];
   const readTx = from.transaction(store, 'readonly');
   readTx.objectStore(store).openCursor().onsuccess = e => {
     const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
@@ -79,5 +80,5 @@ const IDB_DB = 'corkboard', LEGACY_IDB_DB = 'mindmap', IDB_STORE = 'handles';
 let _idb: Promise<IDBDatabase> | null = null;   // cached, so the migration check runs once per session
 const idb = (): Promise<IDBDatabase> => _idb ??= openRenamed(IDB_DB, LEGACY_IDB_DB, IDB_STORE);
 export async function idbPut(key: IDBValidKey, val: unknown): Promise<void> { return dbPut(await idb(), IDB_STORE, key, val); }
-export async function idbGet(key: IDBValidKey): Promise<any> { return dbGet(await idb(), IDB_STORE, key); }
+export async function idbGet<T = unknown>(key: IDBValidKey): Promise<T | undefined> { return dbGet<T>(await idb(), IDB_STORE, key); }
 export async function idbDel(key: IDBValidKey): Promise<void> { return dbDel(await idb(), IDB_STORE, key); }

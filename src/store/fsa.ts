@@ -9,12 +9,12 @@ import { installWatch } from './watch.js';
 import type { Store, PickResult } from './types.js';
 
 // The File System Access permission API + window.showDirectoryPicker aren't in lib.dom.
-type Permable = {
+interface Permable {
   queryPermission(d: { mode: string }): Promise<PermissionState>;
   requestPermission(d: { mode: string }): Promise<PermissionState>;
-};
-const showDirectoryPicker: ((opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle>) | undefined =
-  (window as any).showDirectoryPicker;
+}
+type DirectoryPicker = (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle>;
+const showDirectoryPicker = (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
 
 export const fsaStore = {
   _dir: null as FileSystemDirectoryHandle | null,   // FSA directory handle
@@ -58,7 +58,7 @@ export const fsaStore = {
   async openRecent(key?: string): Promise<PickResult> {
     if (!key) return 'gone';
     let handle: FileSystemDirectoryHandle | undefined;
-    try { handle = await idbGet(key); } catch {}
+    try { handle = await idbGet<FileSystemDirectoryHandle>(key); } catch {}
     if (!handle) return 'gone';
     return this._adopt(handle);
   },
@@ -66,7 +66,7 @@ export const fsaStore = {
   // Silent reopen at boot — only succeeds if permission is ALREADY granted (no prompt/gesture).
   async resume(key: string): Promise<boolean> {
     let handle: FileSystemDirectoryHandle | undefined;
-    try { handle = await idbGet(key); } catch {}
+    try { handle = await idbGet<FileSystemDirectoryHandle>(key); } catch {}
     if (!handle) return false;
     try { if ((await (handle as unknown as Permable).queryPermission({ mode:'readwrite' })) !== 'granted') return false; } catch { return false; }
     this._dir = handle; this._key = key; return true;

@@ -9,9 +9,11 @@
 // One character a tag may hold: a letter or number (any script), a combining mark, `_ - /`, or a piece of
 // an emoji — the pictograph, its variation selector and joiner, skin tones, flag letters and the keycap.
 const CH = String.raw`[\p{L}\p{N}\p{M}_\-\/\p{Extended_Pictographic}‍️⃣\u{1F3FB}-\u{1F3FF}\u{1F1E6}-\u{1F1FF}]`;
+// eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
 const NOT_CH = new RegExp(`(?!${CH}).`, 'gsu');
 // `#tag` in running text: at the start of a line or after a space or an opening bracket, so a URL's
 // `page#part`, an HTML entity's `&#39;` and a heading's `# ` are not tags.
+// eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
 export const INLINE_TAG = new RegExp(`(^|[\\s(\\[{,;])#(${CH}+)`, 'gu');
 
 const valid = (t: string): boolean => !!t && !/^[\d/]+$/.test(t);

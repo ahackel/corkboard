@@ -225,7 +225,7 @@ function positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
   // a smaller box than the bar, so anchoring to its own rect would hang the popover a few px low.
   const br = bar.getBoundingClientRect();
   const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  let left = ar.left + ar.width / 2 - pw / 2;
+  const left = ar.left + ar.width / 2 - pw / 2;
   let top = br.top - ph - POP_GAP;
   if (top < 4) top = br.bottom + POP_GAP;
   placeInViewport(pop, left, top);

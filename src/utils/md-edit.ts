@@ -164,6 +164,7 @@ function tableAround(text: string, pos: number): TableAt | null {
 // How many monospace columns a string takes: East Asian wide characters and emoji take two, combining
 // marks and joiners none — close enough that a table of names or emoji still lines up.
 const WIDE = /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
+// eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
 const ZERO = /[\p{M}\u200D\uFE0F]/u;
 function cellWidth(s: string): number {
   let w = 0;
@@ -295,7 +296,7 @@ export function moveLines(text: string, start: number, end: number, up: boolean)
   const lines = text.split('\n');
   const lineNo = (pos: number) => text.slice(0, pos).split('\n').length - 1;
   const blank = (i: number) => !lines[i].trim();
-  let a = lineNo(start);
+  const a = lineNo(start);
   let b = lineNo(end > start && text[end - 1] === '\n' ? end - 1 : end);
   const own = lines.slice(a, b + 1).filter(l => l.trim());
   const base = own.length ? Math.min(...own.map(indentOf)) : 0;

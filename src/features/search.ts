@@ -127,7 +127,7 @@ export function runSearch(showList = true): void {
   paintAll();   // → refreshSearch
   tagRows = typing != null ? tagSuggestions(typing) : [];
   if (typing == null) {
-    const found: { n: MindNode; label: string; onLabel: boolean }[] = [];
+    const found: Array<{ n: MindNode; label: string; onLabel: boolean }> = [];
     for (const n of state.nodes.values()) {
       if (!matches(n, text)) continue;
       const label = nodeLabel(n);
