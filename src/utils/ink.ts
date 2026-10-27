@@ -7,7 +7,7 @@
 // CARD it sits on, and a card keeps its colour in both themes. The dark one is the #2b3645 the
 // white card already used rather than pure black — on a light fill it reads as ink, not as a hole.
 export const INK_LIGHT = '#ffffff';
-export const INK_DARK = '#2b3645';
+export const INK_DARK = '#1e1e1e';   // FigJam's text colour
 // ONE threshold, for every colour and both themes (the --pal-* set is shared now, so a colour has
 // exactly one ink wherever the map is opened): light ink is the map's default look, so it's kept
 // unless its contrast drops below this — NOT simply whichever ink contrasts more. Max-contrast would
@@ -41,6 +41,14 @@ function parseHex(c: string): [number, number, number] | null {
   if (h.length === 3) return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
   if (h.length === 6) return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
   return null;
+}
+// A frame's PALE fill: its colour washed most of the way to white — what styles.css paints the box in
+// (`.node.frame`'s color-mix, same 32%), spelled here for the one place JS needs it: the canvas while
+// that frame is open (main.ts canvasFill). A fill it can't read comes back unchanged.
+export const FRAME_WASH = 0.32;
+export function paleFill(c: string): string {
+  const rgb = parseHex(c); if (!rgb) return c;
+  return '#' + rgb.map(v => Math.round(255 - (255 - v) * FRAME_WASH).toString(16).padStart(2, '0')).join('');
 }
 // WCAG 2.1 relative luminance: gamma-expand each channel, then weight them by the eye's
 // sensitivity. Not the same thing as "brightness" — green counts for 7× what blue does, which is

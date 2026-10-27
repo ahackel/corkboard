@@ -19,15 +19,15 @@
 // instead (scheduleUrlSync, debounced) — they tag along with wherever you last navigated
 // rather than creating their own back-stops.
 // ============================================================
+import { revealPath } from '../data/lazy.js';
 import { state, setStatus } from '../core/state.js';
 import { store, currentMap, openMapRef } from '../data/persistence.js';
 import { readMaps, type MapKind } from '../store/index.js';
 import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
-import { outlineActive, setOutline } from '../features/outline.js';
-import { searchBox, openSearch, runSearch } from '../features/search.js';
-import { nodeLabel } from '../utils/model.js';
+import { searchQuery, setSearchQuery } from '../features/search.js';
+import { nodeLabel, nodeByFile } from '../utils/model.js';
 
 function slugify(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'map';
@@ -52,17 +52,16 @@ export function updateDocumentTitle(): void {
 function buildHash(): string {
   if (!store.isOpen) return '';
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
-  // Help has no registry entry, so retain a name segment for its own in-tab navigation.
+  // A store with no registry entry keeps a name segment for its own in-tab navigation.
   const parts = currentMap ? [currentMap.kind, encodeURIComponent(currentMap.id)] : [slugify(store.name)];
   if (node?.file) parts.push(encodeFilePath(node.file));
   const params = new URLSearchParams();
-  if (outlineActive()) params.set('mode', 'outline');
   const open = scopeRootFile();
   if (open) params.set('open', encodeFilePath(open));
   params.set('x', Math.round(state.view.x).toString());
   params.set('y', Math.round(state.view.y).toString());
   params.set('k', state.view.k.toFixed(2));
-  const q = searchBox.value.trim();
+  const q = searchQuery();
   if (q) params.set('q', q);
   if (state.readOnly) params.set('ro', '1');
   return '#/' + parts.join('/') + '?' + params.toString();
@@ -134,20 +133,23 @@ export async function applyUrlFromHash(): Promise<void> {
     // scope it's in; ahead of the camera because restoring the scope would otherwise fit over the
     // pan/zoom the URL explicitly asked for (hence restoreScopeFromFile's own no-camera contract).
     const open = params.get('open');
+    // A link may point INTO a folded frame whose notes haven't been read (data/lazy.ts): read the
+    // folders on the way first, so there is a node there to stand in or select.
+    if (open) await revealPath(decodeFilePath(open));
+    if (pathSegs.length) await revealPath(decodeFilePath(pathSegs.join('/')));
     restoreScopeFromFile(open ? decodeFilePath(open) : null);
     if (pathSegs.length) {
       const file = decodeFilePath(pathSegs.join('/'));
-      const target = [...state.nodes.values()].find(n => n.file === file);
+      const target = nodeByFile(file);
       if (target) selectNode(target.id);
     }
-    if (params.get('mode') === 'outline' && !outlineActive()) setOutline(true, false);
     const x = Number(params.get('x')), y = Number(params.get('y')), k = Number(params.get('k'));
     if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(k) && k > 0) {
       state.view.x = x; state.view.y = y; state.view.k = k;
       applyView();
     }
     const q = params.get('q');
-    if (q) { openSearch(); searchBox.value = q; runSearch(); }
+    if (q) setSearchQuery(q);
     // read-only is only ever forced ON from a link, never OFF — disabling it has real
     // side effects (reloads from disk, discards in-memory-only collapses) that shouldn't
     // happen silently just because a URL lacks `ro=1`.

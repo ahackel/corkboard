@@ -3,7 +3,8 @@
 // Multi-map: each map's files share one object store, namespaced by an `<id>::` key prefix;
 // the legacy pre-multi-map notes live unprefixed and simply ARE the map with id 'vault'
 // (mirroring the OPFS adapter's legacy vault/ dir). `<id>::map.json` carries the display name.
-import type { DeviceStore, PickResult, NoteFile } from './types.js';
+import type { DeviceStore, PickResult, TreeListing } from './types.js';
+import { planTree, type FoldTest } from './tree.js';
 import { openRenamed, dbPut, dbGet, dbDel } from '../utils/idb.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 
@@ -37,7 +38,6 @@ export const idbStore = (() => {
   return {
     get isOpen(){ return _opened; },
     get name(){ return _mapName; },
-    get seenKey(){ return 'device:' + _mapId; },
 
     openMap(id: string, name?: string){ _mapId = id; if (name) _mapName = name; },
     async createMap(id: string, name: string){ await put(prefixOf(id) + MAP_META_FILE, serializeMapMeta(name)); },
@@ -74,14 +74,18 @@ export const idbStore = (() => {
 
     async pick(): Promise<PickResult> { try { await db(); _opened = true; return 'ok'; } catch { return 'error'; } },
     async openRecent(): Promise<PickResult> { return this.pick(); },
-    async list(): Promise<NoteFile[]> {
-      const p = prefixOf(_mapId), out: NoteFile[] = [];
+    async listTree(under: string, fold: FoldTest): Promise<TreeListing> {
+      // A flat key space: every file is already in hand, so the plan simply picks which texts to keep.
+      const p = prefixOf(_mapId), all = new Map<string, unknown>();
       await eachKey((k, v) => {
-        if (!ownedBy(k, _mapId) || !k.endsWith('.md')) return;
-        out.push({ path: k.slice(p.length), text: v as string });
+        if (!ownedBy(k, _mapId)) return;
+        const path = k.slice(p.length);
+        if (path.startsWith(under) && !path.split('/').some(s => s.startsWith('.'))) all.set(path, v);
       });
-      return out;
+      const plan = planTree([...all.keys()], under, fold);
+      return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign };
     },
+    async removeDir(): Promise<void> { /* a flat key space has no folders to leave behind */ },
     async write(path: string, data: string | Blob): Promise<void> { return put(prefixOf(_mapId) + path, data); },
     async remove(path: string): Promise<void> { try { await del(prefixOf(_mapId) + path); } catch {} },
     async readBlob(path: string): Promise<Blob | null> {

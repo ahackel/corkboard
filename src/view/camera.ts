@@ -3,16 +3,15 @@
 // if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
-import { scopeActive, readingRootNode, readingWidth, readingLeft } from '../nav/scope.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { nodeW, nodeH, elTop } from '../main.js';
+import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
 
 // Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
-// chip, the lock badge, the emoji tag row, the "add note" pill — is a handful of unreadable pixels
+// chip, the lock badge, the tags on its top edge — is a handful of unreadable pixels
 // there, and there are as many of them as there are cards. So `body.zoom-far` drops the lot
 // (styles.css), which also takes their layout and paint work out of every frame of a pinch/pan at the
 // zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's
@@ -54,59 +53,23 @@ function refreshRaster(): void {
 // drift and screenToWorld keeps its arithmetic — and a disagreement of under half a device pixel between
 // hit-testing and paint is invisible by definition. The SCALE is never snapped (that would quantise zoom).
 const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; return Math.round(v * d) / d; };
-// While a CARD is open, the canvas is not free: the strip is pinned centred at 1:1 and the only
-// movement left is VERTICAL, which is the scroll. Done here, on `state.view` itself, because this is
-// the single place every pan/zoom path ends up — wheel, drag-pan, pinch, ⌘±, F/fit, a glide — so one
-// clamp constrains all of them instead of a guard per gesture. It must write the MODEL and not just
-// the transform: `screenToWorld` reads `state.view`, and a paint at k=1 over hit-tests at some other
-// k is how a click lands on the wrong card.
-// Room left for the floating chrome: the crumb bar and the toolbar at the top, a little air at the
-// bottom. Only consulted for a card TALLER than the window — one that fits is simply centred.
-// Deliberately NOT bottomInset(): that one tracks the SELECTION (the docked float bar opening and
-// closing), so folding it in here would slide the page up and down as you click.
-export const READ_PAD_TOP = 56;
-const READ_PAD_BOTTOM = 24;
-
-// Everything the reading clamp and the annotation shift need, measured ONCE per paint instead of per
-// frame and per node. Every input is invariant for a whole pass — the window's size, the strip's
-// width, the card's own measured height — while `applyView` runs on every pan frame and `paintPos`
-// two to four times per node. Reading them there meant an offsetHeight per frame and an innerWidth
-// per annotation, i.e. a forced reflow interleaved with the paint loop's own style writes.
-// A plain object rebuilt on demand rather than a closure: it holds five numbers, and nothing else
-// should be able to keep the node it was measured from alive.
-// `worldLeft` is the window's left edge in WORLD coordinates — the one derivation both consumers
-// want, so neither has to reach for the root node again (and the annotation shift can't trip over a
-// scope that has just been left while the band it was measured with is still here).
-export interface ReadingBand { left: number; worldLeft: number; width: number; vw: number; vh: number; top: number; h: number }
-let band: ReadingBand | null = null;
-// Called from the paint (syncScopeChrome) and on a resize — the two moments any of it can change.
-export function refreshReadingBand(): void {
-  const root = readingRootNode();
-  if (!root) { band = null; return; }
-  const left = readingLeft();
-  band = { left, worldLeft: root.x - left, width: readingWidth(), vw: window.innerWidth,
-           vh: window.innerHeight, top: elTop(root, root.y), h: nodeH(root) };
-}
-export function readingBand(): ReadingBand | null { return band; }
-
-function clampReadingView(): void {
-  const root = readingRootNode();
-  if (!root) return;
-  const b = band ?? (refreshReadingBand(), band);
-  if (!b) return;
-  state.view.k = 1;                        // no zoom: reading size is reading size
-  state.view.x = b.left - root.x;          // centred in the safe box, horizontally immovable
-  // …and vertically: CENTRED while the whole card is on screen, which also means it cannot be
-  // scrolled at all (there is nothing off-screen to scroll to, and a page that drifts under a
-  // scroll gesture it doesn't need reads as broken). Once it outgrows the window, y is the one free
-  // axis — that IS the scroll — but bounded, so neither end can be panned off into empty canvas.
-  if (b.h + READ_PAD_TOP + READ_PAD_BOTTOM <= b.vh) { state.view.y = (b.vh - b.h) / 2 - b.top; return; }
-  state.view.y = clamp(state.view.y, (b.vh - READ_PAD_BOTTOM) - (b.top + b.h), READ_PAD_TOP - b.top);
+// Zoomed out, a frame's NAME keeps its screen size: below 100% its label is scaled up by 1/k (FigJam's
+// section titles do the same), so an overview of a month of frames still reads as a list of names. The
+// factor goes on each frame's own element as `--ls` (styles.css scales its .title-row by it) rather than
+// on #world: a custom property set on the world would restyle every card under it on every zoom frame,
+// and there are far fewer frames than cards. paintNode stamps it on a frame painted later.
+export const labelScale = (): number => Math.max(1, 1 / state.view.k);
+let paintedLs = 1;
+function applyLabelScale(): void {
+  const ls = labelScale();
+  if (ls === paintedLs) return;
+  paintedLs = ls;
+  for (const n of state.nodes.values()) if (n.type === 'frame') n.el?.style.setProperty('--ls', String(ls));
 }
 export function applyView(): void {
-  clampReadingView();
   world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
+  applyLabelScale();
   refreshRaster();
   paintGrid();
   scheduleUrlSync();
@@ -115,7 +78,8 @@ export function applyView(): void {
 // (cancelViewAnim) so the animation never fights the user's own input.
 let viewAnim: number | null = null;
 export function cancelViewAnim(): void { if (viewAnim){ cancelAnimationFrame(viewAnim); viewAnim = null; } }
-export function animateViewTo(tx: number, ty: number, tk: number = state.view.k, dur = 420): void {
+const GLIDE_MS = 420;
+export function animateViewTo(tx: number, ty: number, tk: number = state.view.k): void {
   cancelViewAnim();
   const sx = state.view.x, sy = state.view.y, sk = state.view.k;
   if (Math.abs(tx-sx) < 1 && Math.abs(ty-sy) < 1 && Math.abs(tk-sk) < .001){
@@ -124,7 +88,7 @@ export function animateViewTo(tx: number, ty: number, tk: number = state.view.k,
   const t0 = performance.now();
   const ease = (t: number) => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;   // easeInOutCubic
   function step(now: number){
-    const p = Math.min(1, (now - t0)/dur), e = ease(p);
+    const p = Math.min(1, (now - t0)/GLIDE_MS), e = ease(p);
     state.view.x = sx + (tx-sx)*e;
     state.view.y = sy + (ty-sy)*e;
     // zoom is perceptually multiplicative, so interpolate k geometrically — with the eased
@@ -152,25 +116,8 @@ export function zoomAt(mx: number, my: number, factor: number): void {
   applyView();
 }
 
-// World-space bounding box of every sketch stroke (padded by half each stroke's width), or null
-// when the ink layer is empty. Folded into fit()/frameBox so framing never crops a drawing.
-export function strokesBounds(): { minX: number; minY: number; maxX: number; maxY: number } | null {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, any = false;
-  for (const s of state.strokes) {
-    const hw = s.width / 2;
-    for (const [x, y] of s.pts) {
-      any = true;
-      minX = Math.min(minX, x - hw); minY = Math.min(minY, y - hw);
-      maxX = Math.max(maxX, x + hw); maxY = Math.max(maxY, y + hw);
-    }
-  }
-  return any ? { minX, minY, maxX, maxY } : null;
-}
-
-// Stage dimensions for camera math. While OUTLINE mode is active #stage is display:none and
-// its rect is 0×0 — a fit()/frameBox() run then (e.g. loadFromDir on a boot that restores
-// outline mode) would compute k=0 and scale every card away. The stage is position:fixed
-// inset:0, so the window size is exactly what its rect would be.
+// Stage dimensions for camera math. The stage is position:fixed inset:0, so the window size is
+// exactly what its rect would be — and is right even before the stage has laid out.
 export function stageSize(): { width: number; height: number } {
   const r = stage.getBoundingClientRect();
   return { width: r.width || window.innerWidth, height: r.height || window.innerHeight };
@@ -178,17 +125,12 @@ export function stageSize(): { width: number; height: number } {
 
 export function fit(): void {
   const ns = [...state.nodes.values()].filter(n => !isHidden(n));
-  // Ink is map-level data with no parent, so there's no per-stroke scope test to make — while a
-  // frame is OPEN it's simply left out of the framing, or fitting the frame's contents would zoom
-  // right back out to take in a stroke on the far side of the map. It stays visible; see nav/scope.ts.
-  const sb = scopeActive() ? null : strokesBounds();
-  if (!ns.length && !sb) return;
+  if (!ns.length) return;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of ns) {
     minX = Math.min(minX, n.x);          minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + nodeW(n)); maxY = Math.max(maxY, n.y + nodeH(n));
   }
-  if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const r = stageSize();
   const k = Math.min(1.4, Math.min(r.width/(maxX-minX+120), r.height/(maxY-minY+120)));
   state.view.k = k;
@@ -201,7 +143,7 @@ export function fit(): void {
 // directly over the selected card and reserves nothing (so no width term is ever needed); on a
 // narrow one styles.css docks it along the bottom edge (same 700px breakpoint NARROW_MQ mirrors)
 // and it eats height. Every camera move that has to land a node in the VISIBLE canvas subtracts
-// this — frameBox and revealInView both — so the two can't disagree about where the bottom is.
+// this — frameBox — so it lands nodes above the docked bar.
 function bottomInset(): number {
   const fb = byId('floatBar');
   return (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
@@ -210,16 +152,14 @@ function bottomInset(): number {
 // Zoom + glide so a set of nodes fits, honouring the space the editor sidebar takes from the
 // right. Zoom is clamped so we never blow things up huge. Shared by focus-selected and fit-all.
 const FOCUS_MIN_K = 0.2, FOCUS_MAX_K = 1.0, FOCUS_PAD = 80;
-export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStrokes = false): void {
+export function frameBox(nodes: ReadonlyArray<MindNode | undefined>): void {
   const group = nodes.filter((n): n is MindNode => !!n && !isHidden(n));
-  const sb = includeStrokes ? strokesBounds() : null;
-  if (!group.length && !sb) return;
+  if (!group.length) return;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of group){
     minX = Math.min(minX, n.x);            minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + nodeW(n));   maxY = Math.max(maxY, n.y + nodeH(n));
   }
-  if (sb) { minX = Math.min(minX, sb.minX); minY = Math.min(minY, sb.minY); maxX = Math.max(maxX, sb.maxX); maxY = Math.max(maxY, sb.maxY); }
   const bw = maxX - minX, bh = maxY - minY, cx = (minX+maxX)/2, cy = (minY+maxY)/2;
   const r = stageSize();   // available canvas = stage minus the docked edit bar (bottomInset)
   const availW = r.width;
@@ -229,30 +169,3 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, includeStro
   animateViewTo(availW/2 - cx*k, availH/2 - cy*k, k);   // glide + zoom, never jump
 }
 
-// Pan the minimum distance that brings ONE node fully on screen — and nothing more: no zoom
-// change, no re-centring, no move at all when it's already visible. That's what arrow-key
-// navigation (main.ts) needs and what frameBox is wrong for: walking the tree card by card must
-// not re-frame or re-zoom on every step, or the map jumps under you the whole way down a branch.
-// The pad keeps the landed card clear of the viewport edge (and of the float bar on a narrow
-// screen, which docks along the bottom — hence bottomInset, the same term frameBox subtracts).
-const REVEAL_PAD = 60;
-// One axis of it: how far to shift so [lo,hi] sits inside [0,limit] with REVEAL_PAD to spare.
-// Overshoot on BOTH edges (a card longer than the viewport on this axis) → align its `lo` end, so
-// the card's own start is what you see rather than an arbitrary middle. Written once and applied to
-// both axes, so a sign slip can't hide on the one that's harder to notice.
-function revealShift(lo: number, hi: number, limit: number): number {
-  if (lo < REVEAL_PAD) return REVEAL_PAD - lo;
-  if (hi > limit - REVEAL_PAD) return Math.max(limit - REVEAL_PAD - hi, REVEAL_PAD - lo);
-  return 0;
-}
-export function revealInView(n: MindNode | undefined): void {
-  if (!n || isHidden(n)) return;
-  const k = state.view.k, r = stageSize();
-  // the node's box in screen space
-  const left = n.x*k + state.view.x, top = n.y*k + state.view.y;
-  const right = left + nodeW(n)*k, bottom = top + nodeH(n)*k;
-  const dx = revealShift(left, right, r.width);
-  const dy = revealShift(top, bottom, r.height - bottomInset());
-  if (!dx && !dy) return;
-  animateViewTo(state.view.x + dx, state.view.y + dy, k, 220);
-}

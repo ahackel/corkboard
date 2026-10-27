@@ -8,13 +8,14 @@ import { ui, isTypingInField } from '../core/ui-state.js';
 import { store, scheduleSave, IMAGE_FILE_RE } from '../data/persistence.js';
 import { screenToWorld } from '../view/camera.js';
 import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
-import { createNode, centredAt } from './crud.js';
+import { createNode, createCards, centredAt } from './crud.js';
+import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { nodeLabel } from '../utils/model.js';
 import { autosizeBody } from './inline-edit.js';
 import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
-import { isFrame } from '../view/layout.js';
+import { isFrame, frameAt } from '../view/layout.js';
 
 const IMG_EXT: Record<string, string> = { 'image/png':'.png', 'image/jpeg':'.jpg', 'image/gif':'.gif', 'image/webp':'.webp',
                   'image/svg+xml':'.svg', 'image/avif':'.avif', 'image/bmp':'.bmp' };
@@ -165,9 +166,8 @@ export function onBodyPaste(e: ClipboardEvent): void {
 // ---------- file-picker fallback (iOS/iPadOS: no OS drag-drop, clipboard image-paste is flaky) ----------
 // A hidden <input type="file"> is the one attach mechanism every mobile browser supports — on iOS it
 // opens the Photos library / Camera / Files share sheet. Routes into the exact same storage/rendering
-// pipeline as paste and drop; menu entries in float-bar.ts / context-menu.ts trigger it.
+// pipeline as paste and drop; the canvas menu's Insert image… (context-menu.ts) triggers it.
 type PickTarget =
-  | { kind: 'node'; id: string }
   | { kind: 'new'; sx: number | null; sy: number | null; parent: string | null };
 let pickTarget: PickTarget | null = null;
 const filePicker = document.createElement('input');
@@ -179,19 +179,8 @@ filePicker.addEventListener('change', () => {
   filePicker.value = '';                              // allow re-picking the same file next time
   const req = pickTarget; pickTarget = null;
   if (!req || !files.length) return;
-  if (req.kind === 'node'){
-    // mirrors the drop-on-editor vs drop-on-card branching in the drop listener below
-    void (ui.bodyEdit && ui.bodyEdit.id === req.id ? insertImagesAtCursor(files) : appendImagesToNode(req.id, files));
-  } else {
-    void createImageCards(files, req.sx, req.sy, req.parent);
-  }
+  void createImageCards(files, req.sx, req.sy, req.parent);
 });
-// Insert into (if its body editor is open) or append to an existing card.
-export function pickImagesForNode(id: string): void {
-  if (!canAttach()) return;
-  pickTarget = { kind: 'node', id };
-  filePicker.click();                                 // must fire synchronously from the user gesture (Safari)
-}
 // Drop a new image card at a canvas point.
 export function pickImagesAt(sx: number | null, sy: number | null, parent: string | null): void {
   if (!canAttach()) return;
@@ -203,13 +192,11 @@ export function pickImagesAt(sx: number | null, sy: number | null, parent: strin
 // ⌘V outside any text field (or the context menu's Paste) makes a card from the clipboard — text
 // (first non-empty line becomes the title, the rest the body) or image files. It lands at the
 // given screen point (⌘V: the mouse position, viewport centre before the mouse ever moved); with
-// a parent it becomes that card's CHILD. Created as-is — no rename editor opens.
+// a parent frame it goes inside it. Created as-is — no rename editor opens.
 function cardOptsAt(sx: number | null, sy: number | null, parent: string | null):
     { x?: number; y?: number; parent: string | null; edit: false } {
-  if (parent){
-    const pn = state.nodes.get(parent);
-    if (pn?.collapsed){ touch(parent); pn.collapsed = false; }   // reveal so the new child is visible
-  }
+  const pn = parent ? state.nodes.get(parent) : undefined;
+  if (pn?.collapsed){ touch(pn.id); pn.collapsed = false; }   // reveal so the new card is visible
   const p = sx != null && sy != null ? screenToWorld(sx, sy) : null;
   return { ...(p ? centredAt(p) : {}), parent, edit: false };
 }
@@ -246,6 +233,15 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
     });
     return;
   }
+  // A LIST — bullets, numbers, or bare short lines — is many thoughts: one card per item, in a column
+  // whose top-left sits where a single card would have (utils/paste-list.ts says what counts).
+  const items = splitPastedList(text);
+  if (items){
+    const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
+    const made = createCards(items, at, opts.parent);
+    if (made.length) setStatus(`Pasted ${made.length} cards`);
+    return;
+  }
   // Pasted text is a card's text, so it splits the way a card's own does (splitHeading): a leading
   // `# ` line becomes the title, and without one the card is untitled and this is all body. It used to
   // hand-roll its own first-line-as-title read here, complete with a second copy of the marker strip.
@@ -261,10 +257,13 @@ document.addEventListener('paste', (e) => {
   const text = cd.getData('text/plain').trim();
   if (!imgs.length && !text) return;
   e.preventDefault();
-  // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card
-  if (text && tryPasteCards(text, { sx: ui.lastMouse?.x ?? null, sy: ui.lastMouse?.y ?? null, parent: state.selId })) return;
+  // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card. Either
+  // way it lands where the pointer is — in the frame under it, like a drop (view/layout.ts frameAt).
   const mx = ui.lastMouse?.x ?? null, my = ui.lastMouse?.y ?? null;
-  createCardFromClipboard(imgs, text, mx, my, cardOptsAt(mx, my, state.selId));
+  const w = mx != null && my != null ? screenToWorld(mx, my) : null;
+  const into = w ? frameAt(w.x, w.y, new Set())?.id ?? null : null;
+  if (text && tryPasteCards(text, { sx: mx, sy: my, parent: into })) return;
+  createCardFromClipboard(imgs, text, mx, my, cardOptsAt(mx, my, into));
 });
 // Context-menu Paste: no ClipboardEvent to read from, so ask the async clipboard API (may prompt
 // for permission; Safari requires it be called directly in the user gesture — a menu click is one).
@@ -323,8 +322,8 @@ document.addEventListener('drop', async (e) => {
   const cardIsLocked = !!cardNode && isLockedEffective(cardNode);
   setImgDropTarget(null);
   // dropped .md notes reconstruct as cards (parent links WITHIN the dropped set are kept);
-  // a dropped-on card adopts them as children, the canvas takes them at the drop point — never a
-  // locked one (createNode itself also refuses a locked parent, this just skips the attempt).
+  // dropped on a frame (or a card in one) they go in that frame, on the canvas at the drop point — never
+  // into a locked one (createNode itself also refuses a locked parent, this just skips the attempt).
   const mds = [...e.dataTransfer!.files].filter(f => /\.md$/i.test(f.name));
   if (mds.length){
     const cards = await Promise.all(mds.map(async f => ({ name: f.name, text: await f.text() })));

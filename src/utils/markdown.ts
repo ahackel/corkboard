@@ -5,28 +5,43 @@
 // a clipped preview rendered from this.
 // ============================================================
 
+import { INLINE_TAG } from './tags.js';
+
 // escape text for safe insertion into SVG/HTML markup
 const ESC_MAP: Record<string, string> = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
 export function esc(s: unknown): string {
   return String(s).replace(/[&<>"']/g, c => ESC_MAP[c]);
 }
 
-// Inline emphasis on a PLAIN text run (escaped first so user text can't inject markup).
+// A PLAIN text run: its `#tags` (utils/tags.ts — Obsidian's, so a tag here is one there) set apart, and
+// emphasis on the text between them. Tags first, so a `#snake_case_tag` isn't read as emphasis.
 function mdEmphasis(s: string): string {
+  let out = '', last = 0;
+  for (const m of s.matchAll(INLINE_TAG)){
+    if (/^[\d/]+$/.test(m[2])) continue;   // `#12` is a number, not a tag
+    const at = m.index + m[1].length;
+    out += mdStyle(s.slice(last, at)) + `<span class="md-tag" data-tag="${esc(m[2])}">#${esc(m[2])}</span>`;
+    last = at + 1 + m[2].length;
+  }
+  return out + mdStyle(s.slice(last));
+}
+// Inline emphasis (escaped first so user text can't inject markup).
+function mdStyle(s: string): string {
   return esc(s)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/__([^_]+)__/g,     '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, '$1<em>$2</em>')
     .replace(/(^|[^_\w])_([^_\s][^_]*?)_/g,  '$1<em>$2</em>')
-    .replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+    .replace(/==([^=\s][^=]*?)==/g, '<mark>$1</mark>');            // Obsidian's highlight
 }
 // Links/wikilinks within a text run; emphasis is applied to the gaps and link labels.
 //   ![alt](src)                  → image (vault-relative path, or a remote/data URL)
-//   [text](url) / bare https?:// → external link (new tab)
+//   [text](url) / <https://…> / bare https?:// → external link (new tab)
 //   [[Note]] or [[Note|alias]]   → wikilink → focuses that node in the map
 // NOTE: the image alternative comes first so ![..](..) isn't mis-read as a link with a stray "!".
 function mdLinks(text: string): string {
-  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(https?:\/\/[^\s)]+)/g;
+  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s)]+)/g;
   let out = '', last = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))){
@@ -34,7 +49,8 @@ function mdLinks(text: string): string {
     if (m[2])      out += imgTag(m[2], m[1]);                                                         // ![alt](src)
     else if (m[4]) out += `<a class="lk" href="${esc(m[4])}" target="_blank" rel="noopener">${mdEmphasis(m[3])}</a>`;
     else if (m[5]) out += `<a class="lk wikilink" data-target="${esc(m[5].trim())}">${esc((m[6]||m[5]).trim())}</a>`;
-    else           out += `<a class="lk" href="${esc(m[7])}" target="_blank" rel="noopener">${esc(m[7])}</a>`;
+    else { const u = m[7] ?? m[8];                                                                    // <url> or a bare one
+           out += `<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`; }
     last = re.lastIndex;
   }
   out += mdEmphasis(text.slice(last));
@@ -51,6 +67,31 @@ export interface SoleImage { alt: string; src: string }
 export function soleImage(body: string | null | undefined): SoleImage | null {
   const m = (body ?? '').trim().match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
   return m ? { alt: m[1].trim(), src: m[2] } : null;
+}
+// Every `![alt](src)` in a note, in reading order — the one spelling of "the pictures in a body".
+export function* bodyImages(body: string | null | undefined): Generator<SoleImage> {
+  for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) yield { alt: m[1].trim(), src: m[2] };
+}
+export const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// A note with one picture's reference taken out (its line too, if that was all the line held).
+export function stripImageRef(body: string, src: string): string {
+  const re = new RegExp(`[ \\t]*!\\[[^\\]]*\\]\\(\\s*${escRe(src)}\\s*\\)[ \\t]*\\n?`);
+  return body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+// ---------- how far a checklist has got ----------
+// The tasks in a note and how many are ticked — the "3/5" a card wears (paintNode). The same lines
+// renderList draws as checkboxes: a BULLET followed by `[ ]`/`[x]` and text; a numbered `1. [ ]` isn't one.
+// Fenced code is skipped, so a markdown sample in a code block isn't counted as the note's own list.
+export function taskProgress(md: string | null | undefined): { done: number; total: number } {
+  let done = 0, total = 0, fence = '';
+  for (const line of (md ?? '').split('\n')){
+    const f = line.match(/^(```|~~~)/);
+    if (f){ fence = fence ? (line.startsWith(fence) ? '' : fence) : f[1]; continue; }
+    const m = !fence && line.match(/^\s*[-*+]\s+\[([ xX])\]\s+\S/);
+    if (m){ total++; if (m[1] !== ' ') done++; }
+  }
+  return { done, total };
 }
 
 // ---------- writing a link, rather than rendering one ----------
@@ -130,6 +171,8 @@ function mdInline(text: string): string {
 //   - Spotting one takes TWO lines, so it can't join the one-line `BLOCK` regex; `tableAt`
 //     is asked separately by the block loop AND by the paragraph gatherer, since a table
 //     interrupts a text run.
+//   - utils/md-edit.ts (the editor's table keys) reads tables through the same `tableAt`/`tableRow`,
+//     so a table the editor tidies is exactly one the card draws.
 //   - Cells go through `mdInline` (code, links, wikilinks, images, emphasis) but NOT
 //     through the task-list branch: `data-ti` numbers checkboxes by body order for
 //     write-back, and GFM has no table tasks either.
@@ -138,7 +181,7 @@ const UNESCAPED_PIPE = /(?:^|[^\\])\|/;
 // Split a row into cells on UNESCAPED pipes (`\|` is a literal pipe in a cell). The
 // optional outer pipes are stripped from the LINE first, not dropped as empty cells —
 // `| a | |` has a genuine empty last cell.
-function tableRow(line: string): string[] {
+export function tableRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith('|')) s = s.slice(1);
   if (UNESCAPED_PIPE.test(s) && s.endsWith('|')) s = s.slice(0, -1);
@@ -153,7 +196,7 @@ function tableRow(line: string): string[] {
   return cells;
 }
 // Column count if a table starts at line i, else 0 (so it's falsy at the call sites).
-function tableAt(lines: string[], i: number): number {
+export function tableAt(lines: string[], i: number): number {
   const head = lines[i], delim = lines[i+1];
   if (head == null || delim == null) return 0;
   if (!UNESCAPED_PIPE.test(head) || !UNESCAPED_PIPE.test(delim)) return 0;
@@ -183,18 +226,64 @@ function renderTable(lines: string[], start: number, cols: number): { html: stri
   return { html: `<table><thead>${row(tableRow(lines[start]), 'th')}</thead><tbody>${body}</tbody></table>`, next: i };
 }
 
+// ---- lists, nested by indentation -------------------------------------------------
+// A run of item lines is ONE list block whatever its markers, nested by each line's indent: deeper
+// than the open level opens a list INSIDE the item above (where CommonMark and Obsidian put it), less
+// closes back out to the level it matches. Indent is compared, never counted in fixed steps, so `  -`
+// and `    -` both nest under `-`, and a `1. ` item's three-space children do too. A change of marker
+// kind at the same level starts a sibling list (`<ul>` → `<ol>`). Only bullets make TASKS — `data-ti`
+// numbers checkboxes in body order for write-back (main.ts toggleTask), which counts `- [ ]` lines only.
+// A task's text is wrapped in a span because the row is a flex box (styles.css li.task): bare, the text
+// would wrap under the checkbox, and a nested list would sit BESIDE it instead of below.
+const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+/;
+function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: number } {
+  let html = '';
+  const open: { indent: number; tag: 'ul' | 'ol' }[] = [];
+  // an ordered list starts at its FIRST item's number (`3.` → 3), as in CommonMark; later numbers are ignored
+  const opener = (tag: 'ul' | 'ol', marker: string): string =>
+    tag === 'ol' && parseInt(marker, 10) !== 1 ? `<ol start="${parseInt(marker, 10)}">` : `<${tag}>`;
+  const li = (body: string, tag: 'ul' | 'ol'): string => {
+    const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(.*)$/);
+    if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
+                 + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}><span class="task-text">${mdInline(tm[2])}</span>`;
+    return `<li>${mdInline(body)}`;
+  };
+  for (const line of lines){
+    const m = line.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/)!;
+    const indent = m[1].replace(/\t/g, '  ').length;
+    const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+    while (open.length > 1 && indent < open[open.length - 1].indent) html += `</li></${open.pop()!.tag}>`;
+    const top = open[open.length - 1];
+    if (!top || indent > top.indent){                         // a new level, inside the open item
+      html += opener(tag, m[2]); open.push({ indent, tag });
+    } else {
+      html += '</li>';
+      if (tag !== top.tag){ html += `</${top.tag}>` + opener(tag, m[2]); top.tag = tag; }
+    }
+    html += li(m[3], tag);
+  }
+  while (open.length) html += `</li></${open.pop()!.tag}>`;
+  return { html, taskIdx };
+}
+
+// A thematic break: three or more `-`, `*` or `_`, spaces allowed between. It ENDS a text run too, so a
+// `---` straight under a line of text is a rule — CommonMark would make that line a "setext" heading,
+// but nobody writes headings that way in a note, and everybody draws a line that way.
+const HR = /^\s*(?:[-*_]\s*){3,}$/;
+
 // Block-level pass: headings, lists, blockquotes, fenced code, rules, tables, paragraphs.
 export function renderBodyHTML(md: string | null | undefined): string {
   const src = (md || '').replace(/\r\n?/g, '\n').trim();
   if (!src) return '';                 // empty body → nothing (no stray blank line under the title)
   const lines = src.split('\n');
   let html = '', i = 0, taskIdx = 0;   // taskIdx: nth checkbox in the body, for write-back on toggle
-  const BLOCK = /^(#{1,6}\s|```|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
+  const BLOCK = /^(#{1,6}\s|```|~~~|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
   while (i < lines.length){
     const line = lines[i];
-    if (/^```/.test(line)){                                   // fenced code block
+    const fence = line.match(/^(```|~~~)/);
+    if (fence){                                               // fenced code block, ``` or ~~~
       i++; const code: string[] = [];
-      while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]);
+      while (i < lines.length && !lines[i].startsWith(fence[1])) code.push(lines[i++]);
       i++;                                                    // skip closing fence
       html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; continue;
     }
@@ -202,7 +291,7 @@ export function renderBodyHTML(md: string | null | undefined): string {
     if ((h = line.match(/^(#{1,6})\s+(.*)$/))){               // heading
       html += `<h${h[1].length}>${mdInline(h[2])}</h${h[1].length}>`; i++; continue;
     }
-    if (/^\s*(?:[-*_]\s*){3,}$/.test(line)){ html += '<hr>'; i++; continue; }   // horizontal rule
+    if (HR.test(line)){ html += '<hr>'; i++; continue; }      // horizontal rule
     const cols = tableAt(lines, i);                            // pipe table (header + delimiter row)
     if (cols){ const t = renderTable(lines, i, cols); html += t.html; i = t.next; continue; }
     if (/^\s*>/.test(line)){                                   // blockquote
@@ -210,20 +299,11 @@ export function renderBodyHTML(md: string | null | undefined): string {
       while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
       html += `<blockquote>${q.map(mdInline).join('<br>')}</blockquote>`; continue;
     }
-    if (/^\s*[-*+]\s+/.test(line)){                            // unordered list (incl. [ ]/[x] tasks)
+    if (LIST_ITEM.test(line)){                                 // list: bullets, numbers, [ ]/[x] tasks, nested
       const items: string[] = [];
-      while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*[-*+]\s+/, ''));
-      html += '<ul>' + items.map(it => {
-        const tm = it.match(/^\[([ xX])\]\s+(.*)$/);
-        if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
-                     + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}>${mdInline(tm[2])}</li>`;
-        return `<li>${mdInline(it)}</li>`;
-      }).join('') + '</ul>'; continue;
-    }
-    if (/^\s*\d+\.\s+/.test(line)){                            // ordered list
-      const items: string[] = [];
-      while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) items.push(lines[i++].replace(/^\s*\d+\.\s+/, ''));
-      html += `<ol>${items.map(it => `<li>${mdInline(it)}</li>`).join('')}</ol>`; continue;
+      while (i < lines.length && LIST_ITEM.test(lines[i]) && !HR.test(lines[i])) items.push(lines[i++]);
+      const r = renderList(items, taskIdx);
+      html += r.html; taskIdx = r.taskIdx; continue;
     }
     // Text run: gather until the next block, then split it into PARAGRAPHS on blank lines — one <p>
     // per group of non-blank lines, and A RUN OF BLANK LINES IS ONE BREAK however many lines it is.
@@ -235,7 +315,7 @@ export function renderBodyHTML(md: string | null | undefined): string {
     // Within a paragraph a single newline still breaks the line (<br>), which is the one place the
     // author's Return is taken literally, and the behaviour every card on every existing map has.
     const run: string[] = [];
-    while (i < lines.length && !BLOCK.test(lines[i]) && !tableAt(lines, i)) run.push(lines[i++]);
+    while (i < lines.length && !BLOCK.test(lines[i]) && !HR.test(lines[i]) && !tableAt(lines, i)) run.push(lines[i++]);
     let para: string[] = [];
     const flushPara = (): void => {
       if (para.length) html += `<p>${para.map(mdInline).join('<br>')}</p>`;

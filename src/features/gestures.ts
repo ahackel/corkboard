@@ -11,7 +11,6 @@ import { nodeW, nodeH, selectNode, setSelectionSet, exitScope } from '../main.js
 import { scopeActive } from '../nav/scope.js';
 import { createNode, centredAt } from './crud.js';
 import { endInPlaceEdit } from './inline-edit.js';
-import { sketchDown, sketchMove, sketchUp, sketchCancel } from './sketch.js';
 import { clamp } from '../utils/num.js';
 
 const marqueeEl = document.createElement('div');
@@ -35,28 +34,15 @@ stage.addEventListener('pointerdown', (e) => {
 
   if (e.pointerType !== 'mouse'){                   // touch / pen
     gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
-    if (gPointers.size === 1){                      // one finger → sketch (in sketch mode) / marquee select
-      if (ui.sketchOn){                             // draw (allowed even read-only); two fingers still pinch-zoom
-        stage.setPointerCapture(e.pointerId);
-        sketchDown(e.clientX, e.clientY);
-        return;
-      }
+    if (gPointers.size === 1){                      // one finger → marquee select
       ui.marquee = { sx:e.clientX, sy:e.clientY, add:false, base:new Set(state.sel), moved:false };
       drawMarquee(e.clientX, e.clientY);
       marqueeEl.style.display = 'block';
       stage.setPointerCapture(e.pointerId);         // keep events on stage even when finger slides onto a node
     } else if (gPointers.size === 2){               // second finger → pinch-zoom + two-finger pan
-      if (ui.sketchDraw) sketchCancel();            // abandon the one-finger stroke; this is a pinch now
       ui.marquee = null; marqueeEl.style.display = 'none';
       startPinch();
     }
-    return;
-  }
-
-  // Sketch mode (mouse): a left-drag draws / erases instead of marquee-selecting (allowed read-only too).
-  if (ui.sketchOn && e.button === 0){
-    stage.setPointerCapture(e.pointerId);
-    sketchDown(e.clientX, e.clientY);
     return;
   }
 
@@ -80,17 +66,15 @@ stage.addEventListener('pointerdown', (e) => {
 // Making a card INSIDE an open frame therefore moved to Space, Tab and the canvas right-click, all of
 // which land it in that frame (detachParentId, nav/scope.ts).
 // Mouse/trackpad only: a stray double-TAP while panning would strew cards across the map, and touch
-// already has the ⋯ canvas menu (features/context-menu.ts) for this. Sketch mode owns its own clicks.
+// already has the ⋯ canvas menu (features/context-menu.ts) for this.
 stage.addEventListener('dblclick', (e) => {
   if ((e.target as HTMLElement).closest('.node')) return;   // nodes handle their own double-click
-  if (ui.sketchOn) return;
   // Leaving isn't a mutation, so it works in read-only too — unlike the create below.
   if (scopeActive()) { exitScope(); return; }
   if (state.readOnly) return;
   createNode(centredAt(screenToWorld(e.clientX, e.clientY)));   // like the canvas menu's "New card here"
 });
 window.addEventListener('pointermove', (e) => {
-  if (ui.sketchDraw){ if (gPointers.has(e.pointerId)) gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY }); sketchMove(e.clientX, e.clientY); return; }
   if (gPointers.has(e.pointerId)){
     gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
     const pinch = ui.pinch;
@@ -132,7 +116,6 @@ function endGesturePointer(e: PointerEvent): boolean {
   return true;
 }
 window.addEventListener('pointerup', (e) => {
-  if (ui.sketchDraw){ gPointers.delete(e.pointerId); if (gPointers.size < 2) ui.pinch = null; sketchUp(); return; }
   if (endGesturePointer(e)) return;
   if (ui.pan){ ui.pan = null; stage.classList.remove('panning'); return; }
   if (ui.marquee) endMarquee();
@@ -146,7 +129,6 @@ function endMarquee(): void {
   ui.marquee = null;
 }
 window.addEventListener('pointercancel', (e) => {
-  if (ui.sketchDraw){ gPointers.delete(e.pointerId); sketchCancel(); return; }
   endGesturePointer(e);
 });
 // Start a rubber-band select from a press that landed on `nodeId`'s element (an UNSELECTED frame),

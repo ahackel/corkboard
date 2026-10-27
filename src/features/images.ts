@@ -13,6 +13,15 @@ export function resetImageCache(): void {
   for (const url of imgUrlCache.values()) if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
   imgUrlCache.clear(); imgInflight.clear();
 }
+// Let go of the pictures only notes that are no longer in memory used (data/lazy.ts releaseFolded):
+// their blob URLs are the bulk of what a folded frame's notes cost to keep around.
+export function forgetImages(paths: Iterable<string>): void {
+  for (const p of paths) {
+    const url = imgUrlCache.get(p);
+    if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+    imgUrlCache.delete(p); imgInflight.delete(p);
+  }
+}
 // Store blobs often come back untyped (OPFS getFile() has no MIME) — give them their real image
 // type from the extension, so the blob URL renders as an image when opened in its own tab too.
 const EXT_MIME: Record<string, string> = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif',
@@ -56,7 +65,7 @@ export function bodyImageAt(cardEl: HTMLElement, x: number, y: number): HTMLImag
 let imgRelayoutTimer: number | undefined;
 function scheduleImgRelayout(): void {
   clearTimeout(imgRelayoutTimer);
-  imgRelayoutTimer = setTimeout(() => { relayout(); }, 60);
+  imgRelayoutTimer = window.setTimeout(() => { relayout(); }, 60);
 }
 export function hydrateImages(el: ParentNode): void {
   el.querySelectorAll<HTMLImageElement>('img.md-img[data-img-src]').forEach(img => {

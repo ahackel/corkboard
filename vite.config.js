@@ -8,9 +8,7 @@ const appVersion = process.env.APP_VERSION || `${pkg.version}-dev`;
 
 // The build emits ONE self-contained dist/index.html (JS + CSS inlined), so the
 // deployed app stays a single file — offline via the browser HTTP cache works the
-// same as the old hand-written index.html. The help notes (public/help/*.md) are
-// embedded into the bundle at build time (see src/boot.ts) so the help map works
-// even when index.html is opened directly from a file:// path (fetch() is blocked there).
+// same as the old hand-written index.html.
 export default defineConfig({
   // GitHub Pages serves this project under a subpath. Relative base keeps asset URLs
   // resolving correctly under that subpath.
@@ -18,6 +16,9 @@ export default defineConfig({
   publicDir: 'public',
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   plugins: [viteSingleFile()],
+  // `npm test` (tests/): the modules under test import core/state.ts, which looks up the DOM shell.
+  // e2e/ is Playwright's (`npm run e2e`), not vitest's.
+  test: { environment: 'happy-dom', include: ['tests/**/*.test.ts'] },
   build: {
     target: 'es2020',
     // viteSingleFile inlines everything; no separate asset dir needed.

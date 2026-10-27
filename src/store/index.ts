@@ -14,7 +14,7 @@ import type { DeviceStore } from './types.js';
 export type { Store, DeviceStore, NoteFile, PickResult } from './types.js';
 export { opfsStore } from './opfs.js';
 export { fsaStore } from './fsa.js';
-export { forgetRecent, seenFolders, markFolderSeen, setOnRecentsChanged } from './recents.js';
+export { forgetRecent, setOnRecentsChanged } from './recents.js';
 export {
   readMaps, touchMap, getLastMap, setLastMap,
   createDeviceMap, deleteDeviceMap, renameDeviceMap, ensureMapRegistry,

@@ -15,5 +15,5 @@
     "checkJs": false,
     "types": ["vite/client"]
   },
-  "include": ["src", "vite.config.js"]
+  "include": ["src", "tests", "e2e", "vite.config.js", "playwright.config.ts"]
 }

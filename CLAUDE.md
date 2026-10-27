@@ -6,21 +6,20 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 
 ## What this is
 
-**Corkboard** — a local-first visual editor for a folder of Markdown notes. `index.html` (the style +
-HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
+**Corkboard** — a playful sticky-note wall for sorting thoughts by hand, over a folder of Markdown notes.
+**Check every feature against [docs/PRODUCT.md](docs/PRODUCT.md)** (the north star, incl. the CUT list).
+`index.html` (style + HTML shell) plus strict-typed ES modules under `src/` (entry `src/main.ts`); Vite +
 `vite-plugin-singlefile` bundles it all back into ONE self-contained `dist/index.html`. No runtime
-dependencies, no tests, no lint.
+dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — run it after touching it;
+`npm run e2e` (Playwright, `e2e/`) drives the canvas in Chromium — run it after touching interactions.
 
 ## Running / developing
 
 - `npm install` once, then `npm run dev` (localhost:5173). OPFS needs https/localhost — not `file://`.
-- `npm run build` → `dist/index.html` + `dist/help/`; `npm run preview` serves it. Push to `main`
+- `npm run build` → `dist/index.html`; `npm run preview` serves it. Push to `main`
   deploys to GitHub Pages (`.github/workflows/deploy.yml`).
-- `npm run typecheck` (`tsc --noEmit`) after touching types. Fully strict, no `@ts-nocheck` — keep it
+- `npm run typecheck` after touching types; verify in a browser by exercising the canvas. Fully strict, no `@ts-nocheck` — keep it
   that way. Keep `.js` in import specifiers (bundler resolution maps them to `.ts`).
-- Verify changes by running the app in a browser and exercising the canvas.
-- Help content is `public/help/*.md`, embedded at build time (`import.meta.glob '?raw'` in `boot.ts`)
-  rather than fetched, so it works from `file://` too.
 - Runs in any modern browser incl. iPad (OPFS default); "Open folder" needs FSA (Chrome/Edge only).
 
 ## Module layout (`src/`)
@@ -28,52 +27,52 @@ dependencies, no tests, no lint.
 - `core/state.ts` — the mutable `state` (the MAP: nodes, view, selection, flags) + types + DOM handles.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch). Mutate in place, never reassign, so every module shares one interaction state.
-- `utils/` — pure helpers: `markdown.ts`, `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
-  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
+- `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list/table Enter, Tab, ⌘B/I/L, ⌥↑↓), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
+  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
-  `idb-store.ts`, `handle-store.ts`, `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
+  `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
-  `flushSave`, `loadFromDir`, zip import/export) and `board.ts` (the ONE sidecar). Render no UI.
-- `view/` — `camera.ts`, `layout.ts` (all placement, container predicates, the outliner),
-  `edges.ts`, `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
+  `flushSave`, `loadFromDir`/`readFolder`, zip import/export) `board.ts` (the ONE sidecar), `lazy.ts` (when a folded frame is read / let go), `save-alert.ts` (the only UI here).
+- `view/` — `camera.ts`, `layout.ts` (frame geometry, the drop test `frameAt`, `holderOf`),
+  `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
-  text-drag, attachments, clipboard, search, outline, float-bar, properties, breadcrumbs, history, …
-- `boot.ts` — local-first boot onto the last map, the home/storage screen, the help store.
+  text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
+  `palette.ts` is ⌘P, the ONLY list of every action (no toolbar) — add a new action to `paletteCommands` (main.ts).
+- `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry: the render core (`paintNode`/`paintAll`/`effectiveColor`), selection, read-only
-  mode, global keyboard/toolbar wiring. Its `main`↔feature cycles are deliberate and runtime-only.
+  mode, global keyboard wiring and the palette's command list. Its `main`↔feature cycles are deliberate and runtime-only.
 
 ## Non-negotiable invariants
 
 Each has a longer "why" in `docs/architecture.md`; read it before changing the code it governs.
 
-- **One `.md` file per node, and the file's PATH is its identity** (`mm_parent` points at it, the hash
-  encodes it). No database; ONE `board.json` holds ARRANGEMENT, never content. Ids are ephemeral.
+- **One `.md` file per node, and the file's PATH is its identity**; ONE `board.json` holds ARRANGEMENT, never content.
+- **A frame IS a folder** (`Name/_index.md` + its cards; parent = the path, `parentFileOf`); a move moves the file
+  (`planPaths`). A FOLDED frame's folder is NOT READ until needed and lets go once saved (`data/lazy.ts`).
 - **A node's TITLE is the leading `# ` line of its body and nothing else** (`splitHeading`/
   `joinHeading`, exact inverses). Not frontmatter, not the filename; no heading = an UNTITLED card. The
   filename is a slug TRACKING that text: re-derived each save, renamed on edit-commit, suffixed `Notes 2.md`.
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
-- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card with children outlines them in
-  its own box; free edges live in `board.json`, may end at a junction POINT, and mean nothing structural.
-- **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
-  `mm_collapsed`, `mm_type`, `mm_layout`, `mm_w`/`mm_h`, `mm_locked`, `mm_done`, `mm_checklist`,
-  `mm_query`, `mm_blank`). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
+- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the frame that is its parent;
+  free edges live in `board.json`, ELBOW card to card (route derived, never stored), and mean nothing structural.
+- **Layout lives in `mm_*` frontmatter** (`mm_position_x`/`_y`,
+  `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
-- **KIND (`mm_type`) and child ARRANGEMENT (`mm_layout`) are two axes**, resolved by `foldTypeLayout`
-  (folding legacy `image`/`stack` → `card`). Kinds: card, frame, annotation, query — a card with
-  children IS the outliner.
-- **`n.w` is always AUTHORED; `n.h` only for frame/query and an IMAGE card** — a card whose note is
+- **Two kinds, card and frame (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
+  through `holderOf`; a drop lands in the innermost frame under the card's centre (`frameAt`), else the top level.
+- **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed** (dragged shorter, `n.clip`: exact, clipped). An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
-  Derived from the text (`isImageCard`), never a kind. Card/annotation measure their height.
-- **Visibility has ONE gate, `isHidden`, with two terms**: a collapsed ancestor (persisted) and the
-  open-frame scope (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
-- **Every mutation calls `scheduleSave()`**; `state.readOnly` and `store.isOpen === false` (demo mode)
-  make writes no-ops. Collapsing and opening a frame stay allowed in read-only — they mutate nothing.
+  Derived from the text (`isImageCard`), never a kind. A card measures its height.
+- **Visibility has ONE gate, `isHidden`**: a FOLDED frame ancestor (persisted) and the open-frame scope
+  (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
+- **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
+  make writes no-ops. Folding a card and opening a frame stay allowed in read-only — they mutate nothing.
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
   layout pass reads `offsetHeight`, so it needs current DOM (the paint-before-measure rule).
-- **Anything writing a node's `left`/`top` goes through `placeSelf` + `elTop`**, never bare `place()`.
+- **Anything writing a node's `left`/`top` goes through `placeSelf`**, never bare `place()`.
 - **A colour is a palette key OR an authored `#rrggbb`**, and nothing branches on which: go through
   `colorFill` / `colorClass` / `applyColorVars`, never build `c-${color}` by hand. Ink and scrim are
   DERIVED from the fill (`utils/ink.ts`), never authored, and no CSS rule may name a colour key to fix
@@ -85,16 +84,17 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 
 ## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
-- Frames — "A `frame`'s BOUNDS include its title tab" · "A container's two side wrappers are
-  LIFECYCLE-managed" · "A frame with `mm_layout: tabs` is a TAB GROUP" · "A frame can be OPENED, and
-  then the canvas IS its interior" · "An OPENED CARD is its note" (scope, crumbs, canvas colour, `detachParentId`).
-- Outlines — "A `stack` is an OUTLINER" (now: any card with children); files — "A body-less note is MIGRATED on load" · "A note that is
-  blank ON PURPOSE says so" · "A card whose whole note is one image IS that image".
-- Interaction — "Collapse has FOUR entry points" (the `.hidden-count` chip) · "A plain double-click
-  MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "MERGING notes and BREAKING them apart are
-  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "The page runs EDGE TO EDGE"
+- Frames — "A frame COLLECTS what it covers" · "A frame's BOUNDS are its box" · "A container's content wrapper is
+  LIFECYCLE-managed" · "A frame can be OPENED, and
+  then the canvas IS its interior" · "A CARD is never opened" (scope, crumbs, canvas colour, `detachParentId`).
+- The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
+  note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
+  says so" · "A card whose whole note is one image IS that image".
+- Interaction — "Collapse folds a card to a CHIP and a frame to its PILL" (arrow, peek, fold all) · "A plain double-click
+  MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are
+  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
-  fallback, FSA) · "Boot order" · "Help map" · "External-change reload".
-- Colour and zoom — "ONE card palette for both themes" · "A card's text colour is DERIVED from its
-  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`".
+  fallback, FSA) · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
+- Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "The dock" · "A card's text colour is DERIVED from its
+  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".

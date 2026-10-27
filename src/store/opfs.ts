@@ -7,7 +7,8 @@
 // pre-multi-map 'vault/' dir, which simply IS the map with id 'vault' (no migration copy).
 // openMap(id) retargets every file op; each dir carries a map.json ({name}) so the registry
 // can be rebuilt from disk if localStorage is ever cleared.
-import { listMd, writeFile, removeFile, readFileBlob } from './handle-store.js';
+import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob } from './handle-store.js';
+import type { FoldTest } from './tree.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 import type { DeviceStore, PickResult } from './types.js';
 
@@ -18,7 +19,6 @@ export const opfsStore = {
   _mapName: 'On-device storage',
   get isOpen(){ return this._opened; },
   get name(){ return this._mapName; },
-  get seenKey(){ return 'device:' + this._mapId; },
 
   // Resolve a map id to its directory handle ('vault' lives at the root, the rest under maps/).
   async _mapDir(id: string, create: boolean): Promise<FileSystemDirectoryHandle> {
@@ -71,7 +71,8 @@ export const opfsStore = {
 
   async pick(): Promise<PickResult> { try { await this._root(); this._opened = true; return 'ok'; } catch { return 'error'; } },
   async openRecent(): Promise<PickResult> { return this.pick(); },
-  async list(){ return listMd(await this._root()); },
+  async listTree(under: string, fold: FoldTest){ return listTree(await this._root(), under, fold); },
+  async removeDir(dir: string){ return removeEmptyDir(await this._root(), dir); },
   async write(path: string, data: string | Blob){ return writeFile(await this._root(), path, data); },
   async remove(path: string){ return removeFile(await this._root(), path); },
   async readBlob(path: string){ return readFileBlob(await this._root(), path); },

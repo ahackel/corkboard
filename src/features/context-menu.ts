@@ -7,11 +7,11 @@
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { screenToWorld, fit } from '../view/camera.js';
-import { createNode, createAnnotationHere, centredAt } from './crud.js';
+import { createNode, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
 import { record } from './history.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
-import { esc } from '../utils/markdown.js';
+import { esc, stripImageRef } from '../utils/markdown.js';
 import { scheduleSave } from '../data/persistence.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
 import { exitScope, goToScopeDepth, selectAll, relayout } from '../main.js';
@@ -70,15 +70,13 @@ export function copyFilePath(n: MindNode): void {
 // and is shared verbatim with the kebab menu so the two never drift apart.
 
 // ---------- image entries (right-click on an <img> inside a card body) ----------
-const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Remove the image's markdown reference from the card body; if that was the last reference to a
 // vault-local attachment anywhere in the map, queue the file itself for deletion on the next save
 // (same mechanism deleting a whole card uses for its file).
 function removeImage(n: MindNode, path: string): void {
   if (state.readOnly || !path) return;
-  const re = new RegExp(`[ \\t]*!\\[[^\\]]*\\]\\(\\s*${escRe(path)}\\s*\\)[ \\t]*\\n?`);
   record([n.id], () => {
-    n.body = n.body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+    n.body = stripImageRef(n.body, path);
     n.dirty = true;
   });
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor
@@ -159,17 +157,16 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   }
   if (!state.readOnly){
     const p = screenToWorld(sx, sy);
-    entries.push({ label:'New card here', shortcut:'Space', run: () => createNode(centredAt(p)) });
-    entries.push({ label:'Create annotation here', shortcut:'A', run: () => createAnnotationHere(p.x - 80, p.y - 16) });
-    entries.push({ label:'Paste', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, null); } });
+    entries.push({ label:'Paste here', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, null); } });
+    entries.push('sep');
+    entries.push({ label:'New card', shortcut:'N', run: () => createNode(centredAt(p)) });
     entries.push({ label:'Insert image…', run: () => pickImagesAt(sx, sy, null) });
     entries.push('sep');
   }
-  // Selecting mutates nothing, so it sits with Fit view in the read-only-safe group. Here as well as
+  // Selecting mutates nothing, so it sits with zooming in the read-only-safe group. Here as well as
   // on ⌘A because a touch user has no ⌘ — and this menu is the only place they'd find it.
-  entries.push({ label:'Select all cards', shortcut:'⌘A', run: () => selectAll(),
-    disabled: !state.nodes.size });
-  entries.push({ label:'Fit view', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
+  entries.push({ label:'Select all', shortcut:'⌘A', run: () => selectAll(), disabled: !state.nodes.size });
+  entries.push({ label:'Zoom to fit', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
   return entries;
 }
 

@@ -17,10 +17,11 @@
 // (features/attachments.ts).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { isAncestor } from '../utils/model.js';
+import { nodesOf, outermost } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
+import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
-import { mkNode, deleteSelection, contentParent } from './crud.js';
+import { mkNode, deleteSelection } from './crud.js';
 import { touch, record } from './history.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
@@ -28,6 +29,7 @@ import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { screenToWorld } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
+import { readAll, afterReading } from '../data/lazy.js';
 import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
 
 const MARK = '<!-- corkboard-card: ';
@@ -64,7 +66,7 @@ const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
 // Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
 export function filesFor(ids: string[]): CardFile[] {
   // dedupe: a card inside another given card's subtree is already covered
-  const roots = ids.filter(id => !ids.some(a => a !== id && isAncestor(a, id)));
+  const roots = outermost(nodesOf(ids)).map(n => n.id);
   const all = roots.flatMap(id => subtreeIds(id));   // preorder per root → parents precede kids
   const inPayload = new Set(all);
   return all.map(id => {
@@ -82,6 +84,7 @@ export const cardsToPayload = (files: CardFile[]): string =>
 // Copy the selected cards INCLUDING their subtrees to the system clipboard. Allowed in
 // read-only mode (copying mutates nothing). Resolves true iff the clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
+  await readAll(selectedIds());   // a folded frame's notes are part of what's copied
   const files = selectionFiles();
   if (!files.length) return false;
   try {
@@ -137,10 +140,8 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
   const rootIds: string[] = [];
   record([], () => {
-    // contentParent: pasting "into" a tab group means into the tab that's OPEN — the group itself shows
-    // no content of its own (same routing as an added child or a dropped card).
-    const at0 = at.parent ? state.nodes.get(at.parent) : undefined;
-    const parentNode = at0 ? contentParent(at0) : undefined;
+    const holder = holderOf(at.parent);
+    const parentNode = holder ? state.nodes.get(holder) : undefined;
     if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }   // reveal the drop
     const newIds = new Map<string, string>();   // payload name -> minted id
     for (const c of cards){
@@ -150,8 +151,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
         title: c.p.title,   // verbatim: a pasted card keeps its name, and duplicates are allowed now
         color: c.p.color, keepStatus: c.p.keepStatus,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
-        collapsed: c.p.mm.collapsed, done: c.p.mm.done, checklist: c.p.mm.checklist,
-        type: c.p.mm.type, layout: c.p.mm.layout,
+        collapsed: c.p.mm.collapsed, type: c.p.mm.type,
       });
       state.nodes.set(n.id, n);
       newIds.set(c.name, n.id);
@@ -229,6 +229,7 @@ export function bindCardFileDrag(n: MindNode): void {
 // as one .zip. A plain download works in every browser; for drag-to-Finder use ⌥-drag on the
 // card itself.
 export function exportSelection(): void {
+  if (afterReading(selectedIds(), exportSelection)) return;
   const files = selectionFiles();
   if (!files.length) return;
   const name = zipName(files);
@@ -261,6 +262,7 @@ export const canShareFiles = location.protocol !== 'file:' && !noOsShareSurface
 // downloaded. The receiving side just needs to accept a .md/.zip file (e.g. another Corkboard
 // tab/device via its "Open .md/.zip" import, AirDrop, Files, a chat app, …).
 export async function shareSelection(): Promise<void> {
+  await readAll(selectedIds());
   const files = selectionFiles();
   if (!files.length) return;
   const f = exportFile(files);

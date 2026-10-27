@@ -5,11 +5,9 @@
 // render core (main.ts) and the feature modules split out of it (drag / inline-edit / gestures
 // / attachments). Imported `let` bindings are read-only, hence the holder-object pattern.
 // ============================================================
-import type { MindNode, EdgeSide } from './state.js';
+import type { EdgeSide, MindNode } from './state.js';
 
 export type Pt = { x: number; y: number };
-// World-space line segment (axis-aligned for the insertion indicator).
-export type Seg = { x0: number; y0: number; x1: number; y1: number };
 
 // A live node drag (moves a whole subtree, or the multi-selection). `active` is the card being
 // dragged/dropped; `targets` follow the cursor (or, after a Shift-clone, just the clones).
@@ -18,45 +16,30 @@ export interface Drag {
   sx: number; sy: number; cx: number; cy: number;
   start: Map<string, Pt>; targets: Map<string, Pt>; origins: Map<string, Pt>;
   // Top-level roots of the drag (a single-node drag's [n.id], or a multi-selection's members
-  // whose own parent isn't ALSO selected — descendants ride along with their selected ancestor
-  // rather than getting re-parented independently). Reparented as a group on drop.
+  // whose own parent isn't ALSO selected — descendants ride along with their selected ancestor).
   selRoots: string[];
-  // dropMode 'reorder' = no card hovered but the drag is sliding along its OWN parent's
-  // line/fan sibling band — dropTarget is the parent itself, the drop just re-slots the order.
-  moved: boolean; dropTarget: string | null; dropMode: 'child' | 'sibling' | 'reorder';
-  // Side the drop resolved to (edge zone -> that edge; centre zone -> the sibling target's own
-  // side), set explicitly on every reparented root on commit — see features/drag.ts.
-  // Insertion anchor for sibling/reorder drops: slot in right after this sibling in the parent's
-  // order (`null` = at the front, `undefined` = default — after the hovered card / appended).
-  dropAfter: string | null | undefined;
-  // World-space gap segment of the insertion-line preview, when one is showing (managed governor
-  // with children on the resolved side). The line REPLACES the landing ghost and the dashed
-  // would-be-edge preview — they never show together (see features/drag.ts, view/edges.ts).
-  dropLine: Seg | null;
-  alt: boolean; shift: boolean; cloned: boolean; rip: boolean;
+  // The parent the active card would have if released now — the frame its centre is in, or null for
+  // the top level (view/layout.ts frameAt). Read by effectiveColor to preview an inherited colour.
+  moved: boolean; dropTarget: string | null;
+  alt: boolean; shift: boolean; cloned: boolean;
   meta: boolean; touch: boolean;
   clones?: MindNode[] | null;
-  // Alt-dragging CARD(s)/annotation(s) over another card: the target card's id to fold their notes
+  // Alt-dragging CARD(s) over another card: the target card's id to fold their notes
   // into on drop (crud.ts mergeCardsInto) instead of reparenting. Set by updateDropTarget, consumed
   // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
   // dropTarget stays null and every other preview stands down.
   cardMerge?: string | null;
-  // The frame whose TAB the dragged frame(s) are poised over: releasing DOCKS them there as tabs
-  // (features/drag.ts tabZoneAt → crud.ts dockFrames). Its own resolution, not a dropMode, because it
-  // isn't a reparent-with-a-landing: dropTarget stays null, so every other preview stands
-  // down — same shape as cardMerge above.
-  dock?: string | null;
-  // …and the slot it would take in that frame's strip: the tab it lands AFTER (`null` = first).
-  dockAfter?: string | null;
 }
 // A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
 // its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the
 // textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
 // cancels the CREATION rather than just the edit (it used to live on the title editor).
-export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; }
-// A CONTAINER's label being renamed in place — a frame's folder tab, a docked tab, a stack's header.
+// `holdH` is the card's height when the editor opened: held as its min-height until it closes, so a
+// card never jumps between its rendered and its raw size (main.ts paintNode).
+export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
+// A FRAME's label being renamed in place, on its tab.
 // A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
-// A container can't do that, and the reason is structural rather than stylistic — its `.body` is
+// A frame can't do that, and the reason is structural rather than stylistic — its `.body` is
 // `display:none` (styles.css: a frame's box holds child cards, not its own note), and an editor inside a
 // hidden element can't be focused or typed into. So its label is edited ON itself, one line, in a
 // contenteditable. Same contract as BodyEdit otherwise: while set, persistence freezes this node's
@@ -64,18 +47,6 @@ export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLT
 // No `orig`: unlike a card's editor there is nothing to compare against on commit — an empty label
 // falls back to what the node had, and the element's own text is the only value read.
 export interface TitleEdit { id: string; el: HTMLElement; isNew?: boolean; }
-// A query card's search-field editing session (main.ts nodeEl/onQueryInput/endQueryEdit) — mirrors
-// InlineEdit/BodyEdit's touch-once-on-focus, commit-on-blur shape so the whole typing session is one
-// undo step instead of one per keystroke.
-export interface QueryEdit { id: string; orig: string; }
-// A full-screen editor-sheet session (features/editor-sheet.ts) — the phone/outline replacement
-// for the in-card editors. Same contract: while set, persistence defers the file rename and the
-// focus-reload (the sheet holds uncommitted text even when the field itself is blurred on iOS).
-export interface SheetEdit { id: string; origTitle: string; origBody: string; isNew?: boolean; }
-// A panel title/body editing session (outline mode edits in the right/left edit panel, not the
-// full-screen sheet) — same shape as SheetEdit and the same contract: while set, persistence
-// freezes the node's filename (rename lands on blur) and skips the focus-reload so live typing
-// isn't clobbered.
 export interface PanState { sx: number; sy: number; ox: number; oy: number; }
 export interface Marquee { sx: number; sy: number; add: boolean; base: Set<string>; moved: boolean;
   // When a marquee is started from an unselected FRAME (drag inside it rubber-band-selects its
@@ -96,28 +67,15 @@ export const ui = {
   spaceHeld: false,
   spaceUsedForPan: false,
   pinch: null as Pinch | null,                    // active two-finger gesture
-  // A free EDGE being drawn or re-routed, following the pointer. `from` is the fixed end (a socket
-  // on the source card, or the endpoint that isn't being dragged); `to` is the pointer. `edgeId` is
-  // set only when RE-ROUTING an existing edge — a fresh draw has no edge until it lands.
-  // The live dock state of a draw, in two separate parts:
-  //  · hintId  — a card close enough that its four ports are worth SHOWING, so you can see what
-  //              there is to aim at. Generous.
-  //  · overId/overSide — the port actually SNAPPED to, which is tight (a small radius around the
-  //              port itself). Only this one decides where the edge lands; the hint is just an aid.
-  // Keeping them apart is what stopped the line lunging at a card from halfway across the canvas.
-  //  · overJunction — an existing meeting point the pointer has reached, snapped to exactly as a port
-  //              is: dropping there makes several lines meet at the one point.
-  //  · overEdge / overEdgeAt — another EDGE the pointer is on, which a drop SPLITS, and the exact point
-  //              it would be split at (already projected onto that line and put on the grid). Stored
-  //              rather than recomputed, so the ghost, the draft's own end and the drop all use the ONE
-  //              point — and the route it was projected from is not re-derived three times a frame.
-  //              Released over none of the three, a drop lands nothing at all: "mid-air" needs no state.
-  //  · grabbedAt — where the pointer went down, in world units. A drop only counts if it travelled
-  //              (features/edge-tools.ts MIN_DRAG_PX): a twitch on a socket or a handle is a click.
-  edgeDraw: null as { from: Pt; to: Pt; sourceId: string; fromSide: EdgeSide; grabbedAt: Pt;
-                      hintId?: string; overId?: string; overSide?: EdgeSide;
-                      overJunction?: string; overEdge?: string; overEdgeAt?: Pt;
-                      edgeId?: string; end?: 'from' | 'to' } | null,
+  // A free EDGE being drawn or re-routed, following the pointer. `sourceId` is the card at the fixed
+  // end (the one you dragged a ring off, or the end that isn't moving); `to` is the pointer; `overId`
+  // the card under it — the only thing a drop can land on. `edgeId`/`end` are set only when moving one
+  // end of an existing edge. `grabbedAt` (world units) is where the press began: a drop only counts if
+  // it travelled (features/edge-tools.ts MIN_DRAG_PX), so a twitch on a ring or a handle is a click.
+  // `side` is the port a fresh draw started from (a CLICK on it makes a connected card that way, and a
+  // line drawn from it is pinned to it); `overSide` the target's port under the pointer, if any.
+  edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string; overSide?: EdgeSide;
+                      edgeId?: string; end?: 'from' | 'to'; side?: EdgeSide } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,
   // ---- in-place card editing (features/inline-edit.ts) ----
@@ -126,17 +84,6 @@ export const ui = {
   // At most one of the two is ever set — each opener closes the other.
   bodyEdit: null as BodyEdit | null,
   titleEdit: null as TitleEdit | null,
-  queryEdit: null as QueryEdit | null,
-  // ---- full-screen editor sheet (features/editor-sheet.ts) ----
-  sheetEdit: null as SheetEdit | null,
-  // ---- panel title/body editing (outline mode; wired in main.ts) ----
-  panelEdit: null as SheetEdit | null,
-  // ---- sketch / freehand drawing (features/sketch.ts) ----
-  sketchOn: false,                                // sketch mode active: canvas pointers draw, not select
-  // A stroke (pen) or erase gesture in progress; gestures.ts checks its truthiness to route
-  // single-pointer input to sketch.ts and to skip the disk-reload while mid-draw. The active
-  // stroke/path themselves live in features/sketch.ts module scope.
-  sketchDraw: null as { tool: 'pen' | 'eraser' } | null,
   // ---- animated relayout (main) ----
   animToken: 0,
   // ---- last known mouse position (window pointermove, main) ----
@@ -148,15 +95,10 @@ export const ui = {
 // pointerId -> position, for the multi-touch gesture layer (a const Map, mutated in place).
 export const gPointers = new Map<number, Pt>();
 
-// ---- edit-session predicates (shared by persistence.ts) ----
-// One source of truth for "is some editor holding uncommitted text", so the save loop and the
-// disk-reload guard can't drift as editors are added (in-card title/body + the full-screen sheet).
-export function editSessionActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit || ui.sheetEdit || ui.panelEdit); }
-// "Is an IN-PLACE editor open" — the two on-canvas sessions only (a card's one text field, a
-// container's label), as against editSessionActive's four. Named here rather than spelled out as
-// `ui.bodyEdit || ui.titleEdit` at each of its call sites — the render core, drag's tap/pointerdown
-// bails, the float bar's busy test, a canvas tap — because that pair is exactly what had to be found
-// and rewritten by hand when the single inlineEdit session split in two.
+// ---- edit-session predicates ----
+// "Is an editor holding uncommitted text" — a card's one text field, or a frame's label. One source of
+// truth for the save loop, the disk-reload guard, the render core, the float bar and a canvas tap,
+// rather than `ui.bodyEdit || ui.titleEdit` spelled out at each.
 export function inPlaceEditActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
 // …and the same question about ONE node: is this the card/label currently being typed into.
 export function inPlaceEditOn(id: string): boolean {
@@ -167,13 +109,7 @@ export function inPlaceEditOn(id: string): boolean {
 // it used to be excluded because a body edit couldn't touch the title, and now the title is the first
 // line of the very text it holds. null → nothing frozen. Every arm names its OWN node, so the
 // selection has nothing to say about it.
-export function frozenFileNodeId(): string | null {
-  if (ui.bodyEdit) return ui.bodyEdit.id;
-  if (ui.titleEdit) return ui.titleEdit.id;
-  if (ui.sheetEdit) return ui.sheetEdit.id;
-  if (ui.panelEdit) return ui.panelEdit.id;
-  return null;
-}
+export function frozenFileNodeId(): string | null { return ui.bodyEdit?.id ?? ui.titleEdit?.id ?? null; }
 
 // ---- responsive mode predicates ----
 // 700px MUST match the `@media (max-width:700px)` breakpoint in styles.css (bottom-sheet panel).
@@ -184,16 +120,6 @@ const COARSE_MQ = matchMedia('(pointer: coarse)');
 // phone all title/body editing routes to the full-screen editor sheet instead of the in-card
 // editors (see features/inline-edit.ts).
 export function phoneMode(): boolean { return COARSE_MQ.matches && NARROW_MQ.matches; }
-
-// "Phone", orientation-independent (features/outline.ts's canvas/outline split): coarse pointer
-// AND a SHORT axis — either dimension at or under the 700px breakpoint, so an iPhone reads as a
-// phone in both portrait AND landscape (it's still short sideways), while a tablet (large in both
-// dimensions) or a narrowed desktop window (fine pointer) stay excluded. The two `max-*` clauses
-// MUST match NARROW_MQ's own 700px breakpoint.
-export const PHONE_MQ = matchMedia(
-  '(pointer: coarse) and (max-width: 700px), (pointer: coarse) and (max-height: 700px)'
-);
-export const PORTRAIT_MQ = matchMedia('(orientation: portrait)');
 
 // True when focus is in a text field (sidebar input/textarea) or a contenteditable (the in-card
 // title rename) — i.e. the user is typing, so card/canvas shortcuts and disk-reload should stand down.

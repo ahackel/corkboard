@@ -1,11 +1,11 @@
 // Confine `v` to [lo, hi]. Spelled out as a nested Math.max(lo, Math.min(hi, v)) at a dozen sites
-// across the camera, the grid, the sketch smoother, the edge geometry and the stack's drop depth —
+// across the camera, the grid, and the edge geometry —
 // which reads as arithmetic rather than as the intent, and gets its bounds swapped exactly often
 // enough to be worth a name.
 export function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)); }
 
 // The GRID's snap: the nearest multiple of `step`, and the ONE rule everything the pointer moves obeys
-// — a dragged card, a resized box, a dragged junction dot. A step of 1 or less (grid off: the "No snap"
+// — a dragged card, a resized box. A step of 1 or less (grid off: the "No snap"
 // size, see main.ts gridSnap) is no snap at all.
 //
 // It is applied CONTINUOUSLY, not eased and not deferred, so the thing being dragged is always sitting

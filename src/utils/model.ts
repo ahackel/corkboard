@@ -3,8 +3,19 @@
 // walk that live structure in state.nodes.
 import { state, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
-import { scope, isReadingRoot } from '../nav/scope.js';
+import { scope } from '../nav/scope.js';
 
+// The nodes for some ids, skipping any that are gone.
+export function nodesOf(ids: Iterable<string>): MindNode[] {
+  const out: MindNode[] = [];
+  for (const id of ids) { const n = state.nodes.get(id); if (n) out.push(n); }
+  return out;
+}
+// The node a file path names (a path is a node's identity on disk), if it is in memory.
+export function nodeByFile(file: string): MindNode | undefined {
+  for (const n of state.nodes.values()) if (n.file === file) return n;
+  return undefined;
+}
 export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
 }
@@ -23,32 +34,27 @@ export function* ancestors(n: MindNode): Generator<MindNode> {
   let guard = 0;
   for (let p = parentOf(n); p && guard++ < 4096; p = parentOf(p)) yield p;
 }
-export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
-// The top level in its ONE canonical order — canvas y, then x, with the filename as a stable
-// tie-break so the sequence can't reshuffle between two reads of the same map. Roots have no parent
-// to hold a kidOrder (unlike orderedKids), so this is what stands in for it: the outline's top-level
-// list and the arrow-key walk (main.ts navSiblings) both read it, which is what makes them agree.
-// `keep` narrows it — the outline drops annotations and the row being dragged.
-export function rootsInOrder(keep?: (n: MindNode) => boolean): MindNode[] {
-  return [...state.nodes.values()].filter(n => isRoot(n) && (!keep || keep(n)))
-    .sort((a, b) => a.y - b.y || a.x - b.x || (a.file ?? a.title).localeCompare(b.file ?? b.title));
+// The OUTERMOST of some nodes: those with no ancestor among them (an inner one rides along with it).
+export function outermost(nodes: MindNode[]): MindNode[] {
+  const ids = new Set(nodes.map(n => n.id));
+  return nodes.filter(n => ![...ancestors(n)].some(a => ids.has(a.id)));
 }
-// THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both.
+export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
+// THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both. A new term goes IN here,
+// never beside it.
 //
-//  1. FOLD (persisted, mm_collapsed): `collapsed` on a node hides its CHILDREN but keeps the node
-//     itself visible (outliner model), so a node is hidden iff one of its ANCESTORS is collapsed.
+//  1. FOLD (persisted, board.json `collapsed`): a FOLDED FRAME is its label pill and nothing else, so a
+//     node is hidden iff one of its ANCESTORS is folded. (A folded card only tucks away its own text —
+//     cards hold no cards — so in practice the ancestor is always a frame.)
 //  2. SCOPE (ephemeral, nav/scope.ts): while a frame is OPEN, only what's inside it is on the
 //     canvas. Reaching the open frame on the way up means we're inside it; running out of
 //     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS
 //     the open frame, which is precisely what stops its box, border, tab and fill from being
 //     painted. No per-kind CSS, no second predicate.
 //
-// Nothing writes through this function. That matters: term 1 is backed by a saved flag while term 2
-// must never touch disk, and the only mover keyed on isHidden is layoutSubtree — which applyLayouts
-// confines to the current scope, so opening a frame can't dirty a file outside it.
-// The open frame is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
-// own collapsed flag nor anything above it can hide what's inside — which is also what lets a frame
-// buried in a folded branch be opened from a URL and still show its contents.
+// Nothing writes through this function: term 1 is backed by a saved flag while term 2 must never touch
+// disk. The open frame is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
+// own collapsed flag nor anything above it can hide what's inside.
 export function isHidden(n: MindNode): boolean {
   const scopeId = scope.rootId;            // null in the overwhelmingly common case
   // A plain loop rather than `ancestors`: this is the hottest walk in the app (~38 call sites, every
@@ -57,13 +63,12 @@ export function isHidden(n: MindNode): boolean {
     if (p.id === scopeId) return false;
     if (p.collapsed) return true;
   }
-  // Nothing above n is the open frame, so n is outside it — EXCEPT when n is an open CARD, whose note
-  // is what the scope exists to show (isReadingRoot). A new term IN here, not a predicate beside it.
-  return scopeId !== null && !isReadingRoot(n);
+  // Nothing above n is the open frame, so n is outside it.
+  return scopeId !== null;
 }
 // The visible card standing in for n: n itself when it's shown, otherwise its nearest
-// ancestor that is still visible. Search uses this to highlight the first visible parent
-// containing a match that's buried inside a collapsed branch.
+// ancestor that is still visible: the folded frame a card is tucked inside. Search highlights it for a
+// match it hides, and a line to a hidden card attaches to it (view/free-edges.ts edgeEnd).
 export function firstVisible(n: MindNode): MindNode {
   if (!isHidden(n)) return n;
   for (const p of ancestors(n)) if (!isHidden(p)) return p;
@@ -92,9 +97,6 @@ export function subtreeHasLocked(id: string): boolean {
   if (n?.locked) return true;
   return childrenOf(id).some(ch => subtreeHasLocked(ch.id));
 }
-// The set of titles already in use (lowercased + trimmed), optionally excluding one node.
-// Filenames collide case-insensitively on macOS/Windows, so collision checks compare lowercased.
-// Shared by the rename validator (inline-edit) and the unique-name minter (crud).
 // The name to SHOW for a node ANYWHERE the card itself isn't — the outline, search results, a status
 // line, the move picker. A card may be untitled (no `# ` heading, see utils/frontmatter.ts splitHeading),
 // and on the canvas that's the point: it shows its text and no title row. But a LIST row can't be blank,
@@ -124,7 +126,7 @@ function namelessLabel(n: MindNode): string {
   return `No-title ${i || 1}`;   // `|| 1`: a node still being created isn't in state.nodes yet
 }
 // …and the label with its PARENT appended, but only where the label alone is ambiguous. Two cards may
-// share a title now, and in a FLAT list (search hits, a query card's results) two identical rows give
+// share a title now, and in a FLAT list (search hits) two identical rows give
 // you no way to tell which is which. The outline needs none of this: its indentation already says where
 // a row sits. The suffix is the parent rather than the filename because "which one" is a question about
 // the map, not about the disk — the file's ` 2` would answer it in bookkeeping nobody chose.
