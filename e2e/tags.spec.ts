@@ -151,6 +151,17 @@ test('a tag dragged to another card moves there; dragged off onto the canvas it 
   expect(errors).toEqual([]);
 });
 
+test('⇧-dragging a tag to another card copies it, as ⇧-drag clones a card', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await clickAway(page);
+  await page.keyboard.down('Shift');
+  await drag(page, card(page, 'Fix login').locator('.tag', { hasText: '#backend' }), card(page, 'Logo ideas'));
+  await page.keyboard.up('Shift');
+  await expect(card(page, 'Logo ideas').locator('.tag')).toHaveText(['#backend']);
+  await expect(card(page, 'Fix login').locator('.tag', { hasText: '#backend' })).toBeVisible();
+});
+
 test('a folded frame says how many of its cards match the search', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, {

@@ -1,7 +1,8 @@
 // ---------- dragging a tag: the tactile way to tag ----------
 // A tag is a sticker you can pick up (features/tags.ts draws them; utils/tags.ts says what one is):
 //   · from the TAG TRAY onto a card — tags it (features/tag-tray.ts);
-//   · from one card onto another — MOVES it there; hold ⌥ to copy instead;
+//   · from one card onto another — MOVES it there; hold ⇧ to copy instead, the way ⇧-drag clones a card
+//     (the chip it came from stays put while ⇧ is held, so you see which it will be);
 //   · from a card off onto the canvas — REMOVES it, with a little puff, the way the Dock lets go of an app.
 // Dropped on a card that is part of the selection, it lands on every selected card, like a colour does.
 // A tag written in a note's TEXT can be dragged out as a copy, never moved or removed: it's the text's.
@@ -42,9 +43,9 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
       ghost.innerHTML = tagFaceHTML(tag);
       document.body.appendChild(ghost);
       document.body.classList.add('tag-dragging');
-      chip.classList.add('lifted');
     }
     ghost.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px)`;
+    chip.classList.toggle('lifted', !!fromCard && !ev.shiftKey);   // a tray sticker never leaves the tray
     target(cardAt(ev.clientX, ev.clientY));
   };
   const end = (ev: PointerEvent | null): void => {
@@ -66,7 +67,7 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
     if (to && to !== fromCard) {
       const ids = state.sel.has(to) ? selectedIds().filter(id => state.nodes.get(id)?.type !== 'frame') : [to];
       const changes: TagChange[] = ids.map(id => ({ id, tag, on: true }));
-      if (fromCard && !ev.altKey && !ids.includes(fromCard)) changes.push({ id: fromCard, tag, on: false });
+      if (fromCard && !ev.shiftKey && !ids.includes(fromCard)) changes.push({ id: fromCard, tag, on: false });
       if (retag(changes)) pushMru(tag);
     } else if (!to && fromCard && onCanvas(ev.clientX, ev.clientY)) {
       if (retag([{ id: fromCard, tag, on: false }])) puff(ev.clientX, ev.clientY);

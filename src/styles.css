@@ -797,10 +797,14 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 @keyframes card-pop { from { scale:.8; opacity:0; } 65% { scale:1.04; opacity:1; } to { scale:1; } }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
 /* The lift is a SHADOW only, never a scale: a card in hand keeps its exact size, so the smart guides
-   (features/guides.ts) line up with the edges you actually see. */
+   (features/guides.ts) line up with the edges you actually see. FigJam's: a short contact shadow plus a
+   long one falling BELOW the card, as if it were held up off the board — and a selected card keeps its
+   ring while it travels (the ports and the toolbar are what stand down). */
+.node { --drag-lift:0 3px 6px rgba(0,0,0,.10), 0 16px 32px -4px rgba(0,0,0,.26); }
 .node.dragging:not(.frame),
-.node.frame.dragging {
-  box-shadow:0 2px 4px rgba(0,0,0,.12), 0 14px 32px rgba(0,0,0,.22); }
+.node.frame.dragging { box-shadow:var(--drag-lift); }
+.node.sel.dragging:not(.frame),
+.node.sel.frame.dragging { box-shadow:0 0 0 2px var(--node-sel), var(--drag-lift); }
 /* A dragged FRAME is what's lifted: the cards it carries ride on it as they rest (flat, or lifted if selected) (main.ts paints
    them `.carried`), rather than each casting the deep shadow of a card in hand. */
 .node.dragging.carried:not(.frame) { box-shadow:none; }
@@ -812,9 +816,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
    the rest of the canvas, because #dragLayer (below) is itself a z-index:9 stacking context. */
 .node.frame.dragging { z-index:auto; }
-/* the group-opacity layer: while dragging, main.ts moves the dragged cards in here. Opacity on the layer composites
-   the whole set once — you see the canvas below, but the items never show through one another. */
-#dragLayer { position:absolute; top:0; left:0; z-index:9; opacity:.9; pointer-events:none; }
+/* the drag layer: while dragging, main.ts moves the dragged cards in here, above everything. Opaque, as in
+   FigJam — a card in hand is held over the board, not a ghost of itself; its shadow says it's lifted. */
+#dragLayer { position:absolute; top:0; left:0; z-index:9; pointer-events:none; }
 #dragLayer > .node, #dragLayer > .frame-content { pointer-events:auto; }
 /* The DRAG IMAGE for a body-text drag (features/text-drag.ts buildGhost): a card, so it's plain that
    a card is what the drop makes — not the browser's default snapshot of the dragged letters. It's in

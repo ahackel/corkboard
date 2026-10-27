@@ -33,7 +33,7 @@ export function tagFaceHTML(t: string): string {
 // …and one on a card, which is a button: click to search by it, drag to move or remove it.
 export function tagChipHTML(t: ShownTag): string {
   return `<button type="button" class="${tagClass(t.tag, t.inText)}"${tagAttrs(t.tag)}${t.inText ? ' data-in-text="1"' : ''}` +
-    ` title="${esc(tagText(t.tag))} · click to find its cards${t.inText ? '' : ', drag to move or remove'}">${esc(tagText(t.tag))}</button>`;
+    ` title="${esc(tagText(t.tag))} · click to find its cards${t.inText ? '' : ', drag to move (⇧ copies) or remove'}">${esc(tagText(t.tag))}</button>`;
 }
 
 // ---- the one path that changes tags: each change adds or removes a tag on one card, all of them ONE

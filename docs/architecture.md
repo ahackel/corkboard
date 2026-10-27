@@ -826,7 +826,7 @@ moved or rewritten: the note's, not ours). Matching ignores case and a parent ma
   hand list), else a new tag (`cleanTag`); the selection's own tags are listed ticked, untick to remove. The
   hands: the TAG TRAY (`features/tag-tray.ts`, the dock's tag button or T) is a sheet of the board's tags as
   stickers, plus any typed into its last slot; DRAG one onto a card (`features/tag-drag.ts`). A card's own tag
-  dragged onto another card MOVES there (⌥ copies), dragged off onto the bare canvas it goes, in a puff — the
+  dragged onto another card MOVES there (⇧ copies, as ⇧-drag clones a card), dragged off onto the bare canvas it goes, in a puff — the
   Dock's gesture. Dropped on a selected card, it lands on the whole selection. Every change is ONE undo step
   (`retag`). A text tag drags out as a copy only.
 - **A click on a tag SEARCHES by it** — there's ONE search (`features/search.ts`, ⌘F like every canvas app,

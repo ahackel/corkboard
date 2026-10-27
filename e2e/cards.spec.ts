@@ -63,3 +63,19 @@ test('⇧D duplicates a card as the next of its series: next day, next slot of t
   expect(Math.round(w!.x - (t!.x + t!.width))).toBe(Math.round(t!.x - (m!.x + m!.width)));   // same gap
   expect(errors).toEqual([]);
 });
+
+test('a selected card in hand keeps its ring and casts FigJam’s lift; nothing of it fades', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, 'Lift me');
+  await select(page, c);
+  const b = (await c.boundingBox())!;
+  await page.mouse.move(b.x + 30, b.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 130, b.y + 120, { steps: 8 });
+  const shadow = await page.locator('#world .node.dragging').first().evaluate(el => getComputedStyle(el).boxShadow);
+  expect(shadow).toContain('rgb(13, 153, 255) 0px 0px 0px 2px');   // the selection ring
+  expect(shadow).toContain('32px');                                  // the long lift
+  expect(await page.locator('#dragLayer').evaluate(el => getComputedStyle(el).opacity)).toBe('1');
+  await expect(page.locator('#floatBar')).toHaveClass(/hide-interact/);
+  await page.mouse.up();
+});
