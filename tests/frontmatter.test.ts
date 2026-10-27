@@ -78,11 +78,11 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(out).not.toMatch(/mm_x|mm_position|mm_w|mm_collapsed/);
   });
 
-  it('writes the parent as its path', () => {
-    const parent = nodeFrom('# Parent', 'dir/Parent.md', 'p');
-    const child = nodeFrom('# Child', 'dir/Child.md', 'c');
+  it('never writes the parent — the folder says it — and drops an old mm_parent', () => {
+    const parent = nodeFrom('# Parent', 'dir/_index.md', 'p');
+    const child = nodeFrom('---\nmm_parent: Parent.md\n---\n\n# Child', 'dir/Child.md', 'c');
     child.parent = parent.id;
-    expect(serializeMd(child)).toContain('mm_parent: dir/Parent.md');
+    expect(serializeMd(child)).not.toContain('mm_parent');
   });
 
   it('marks a note that was emptied on purpose', () => {

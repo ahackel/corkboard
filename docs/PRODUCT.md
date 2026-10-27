@@ -59,7 +59,9 @@ one searchable list.
   note (lists, `- [ ]` tasks).
 - A **frame** is a FigJam-style section: a pale box with its name (and an optional one-line
   description) on a label above it. Delete the text and it's an untitled box; the toolbar's T brings
-  the name back. Cards sit in it wherever you put them, and frames nest.
+  the name back. Cards sit in it wherever you put them, and frames nest. On disk a frame IS a
+  folder of its cards, so Finder and Obsidian see the same grouping; a folded frame isn't even read
+  until you open it, which keeps a big board quick.
 - **The rule:** a card is in the frame its centre is over — whether you drop the card there, or move,
   resize or draw the frame over it. A frame grows to hold what you drop into it, so nothing is hidden
   past its edge.

@@ -650,7 +650,7 @@ export function reparentOnly(childId: string, newParentId: string | null): boole
   if (newParent && isAncestor(childId, newParent.id)) return false;   // would create a cycle
   touch(childId, child.parent, newParentId);
   child.parent = newParentId;
-  // `mm_parent` lives in the NOTE, so a reparent is a note write; the offset is the board's.
+  // The parent is the note's FOLDER, so a reparent moves the file (the save works out where); the offset is the board's.
   child.dirty = true; child.dirtyLayout = true;
   return true;
 }

@@ -1,19 +1,43 @@
 // Pure file operations over a FileSystemDirectoryHandle. The OPFS and FSA adapters share
 // the same handle-based API and differ ONLY in how they obtain the root handle, so the
 // actual list/write/remove/read logic lives here once (DRY) and both adapters delegate.
-import type { NoteFile } from './types.js';
+import type { NoteFile, TreeListing } from './types.js';
+import { planTree, type FoldTest } from './tree.js';
 
-export async function listMd(root: FileSystemDirectoryHandle): Promise<NoteFile[]> {
-  const out: NoteFile[] = [];
+// Every file's path under `under` ('' = the whole map), by NAME only — nothing is read. Dot-folders
+// (`.obsidian`, `.trash`) are another app's business and are never walked.
+async function listPaths(root: FileSystemDirectoryHandle, under: string): Promise<string[]> {
+  const out: string[] = [];
   const walk = async (handle: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
     for await (const [name, h] of handle.entries()){
-      if (h.kind === 'directory'){ await walk(h as FileSystemDirectoryHandle, prefix + name + '/'); continue; }
-      if (!name.endsWith('.md')) continue;
-      out.push({ path: prefix + name, text: await (await (h as FileSystemFileHandle).getFile()).text() });
+      if (name.startsWith('.')) continue;
+      if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, prefix + name + '/');
+      else out.push(prefix + name);
     }
   };
-  await walk(root, '');
+  let start = root;
+  try { for (const part of under.split('/').filter(Boolean)) start = await start.getDirectoryHandle(part); }
+  catch { return out; }                       // the folder isn't there (any more): nothing under it
+  await walk(start, under);
   return out;
+}
+// The notes under `under`, minus the contents of every folder `fold` leaves unread (store/tree.ts).
+export async function listTree(root: FileSystemDirectoryHandle, under: string, fold: FoldTest): Promise<TreeListing> {
+  const plan = planTree(await listPaths(root, under), under, fold);
+  const files: NoteFile[] = [];
+  for (const path of plan.read) {
+    const [d, name] = await resolvePath(root, path);
+    files.push({ path, text: await (await (await d.getFileHandle(name)).getFile()).text() });
+  }
+  return { files, lazy: plan.lazy, foreign: plan.foreign };
+}
+// Remove a folder if it is EMPTY — a frame's old folder after its notes moved out. Never recursive:
+// whatever else is still in there (a file another app put there) keeps the folder alive.
+export async function removeEmptyDir(root: FileSystemDirectoryHandle, dir: string): Promise<void> {
+  try {
+    const [d, name] = await resolvePath(root, dir.replace(/\/$/, ''));
+    await d.removeEntry(name);
+  } catch { /* not empty, or already gone — fine */ }
 }
 // Walk to the directory holding the final segment of `path`, returning [that dir, the leaf name].
 // `create` makes the intermediate dirs as it goes (for writes); without it a missing dir throws.

@@ -107,10 +107,14 @@ export async function seedBoard(page: Page, files: Record<string, string>): Prom
       return undefined;
     }
     const dir = (await find(await navigator.storage.getDirectory()))!;
-    for await (const [n] of (dir as unknown as AsyncIterable<[string, FileSystemHandle]>))
-      if (n.endsWith('.md') || n === 'board.json') await dir.removeEntry(n);
+    // the map's notes, board and frame FOLDERS go; the map's own meta file stays
+    for await (const [n, h] of (dir as unknown as AsyncIterable<[string, FileSystemHandle]>))
+      if (n.endsWith('.md') || n === 'board.json' || h.kind === 'directory') await dir.removeEntry(n, { recursive: true });
     for (const [name, text] of Object.entries(files)) {
-      const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+      const parts = name.split('/');
+      let d = dir;
+      for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p, { create: true });
+      const w = await (await d.getFileHandle(parts[parts.length - 1], { create: true })).createWritable();
       await w.write(text); await w.close();
     }
   }, files);
@@ -123,7 +127,8 @@ export async function seedBoard(page: Page, files: Record<string, string>): Prom
 
 export function note(body: string, fm: Record<string, string> = {}): string {
   const lines = Object.entries(fm).map(([k, v]) => `${k}: ${v}`);
-  return `---\n${lines.join('\n')}${lines.length ? '\n' : ''}---\n\n${body}\n`;
+  if (!lines.length) return `${body}\n`;   // no frontmatter at all, the way a hand-written note has none
+  return `---\n${lines.join('\n')}\n---\n\n${body}\n`;
 }
 
 // Collect uncaught page errors and console errors; a spec asserts the list is empty at the end.
@@ -132,4 +137,26 @@ export function watchErrors(page: Page): string[] {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   return errors;
+}
+
+// Every file of the open map on disk (OPFS), path → text — what a frame-as-folder test reads back.
+export async function diskFiles(page: Page): Promise<Record<string, string>> {
+  await page.waitForTimeout(1200);   // the debounced autosave and board write
+  return page.evaluate(async () => {
+    async function find(d: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle | undefined> {
+      for await (const [n] of (d as unknown as AsyncIterable<[string, FileSystemHandle]>)) if (n === 'board.json') return d;
+      for await (const [, h] of (d as unknown as AsyncIterable<[string, FileSystemHandle]>))
+        if (h.kind === 'directory') { const r = await find(h as FileSystemDirectoryHandle); if (r) return r; }
+      return undefined;
+    }
+    const out: Record<string, string> = {};
+    async function walk(d: FileSystemDirectoryHandle, prefix: string): Promise<void> {
+      for await (const [n, h] of (d as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
+        if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, prefix + n + '/');
+        else if (n.endsWith('.md')) out[prefix + n] = await (await (h as FileSystemFileHandle).getFile()).text();
+      }
+    }
+    await walk((await find(await navigator.storage.getDirectory()))!, '');
+    return out;
+  });
 }

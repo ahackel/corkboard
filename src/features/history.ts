@@ -69,6 +69,22 @@ const cloneSnap = (s: NodeSnap): NodeSnap => structuredClone(s);
 const sameSnap = (a: NodeSnap | null, b: NodeSnap | null): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
+// Every node id the history can still reach — an undo or redo would recreate or rewrite these, so
+// none of them may be let go of while it can (data/lazy.ts releaseFolded).
+export function historyRefs(): Set<string> {
+  const out = new Set<string>();
+  const graph = (g?: EdgeGraph): void => { for (const e of g?.edges ?? []) { out.add(e.from); out.add(e.to); } };
+  // …and the PARENT each image names: restoring a card into a frame that had been let go of would
+  // otherwise hand it a parent id that no longer exists, and drop it at the top level.
+  const images = (m: Images): void => { for (const [id, im] of m) { out.add(id); if (im?.parent) out.add(im.parent); } };
+  for (const st of [...undoStack, ...redoStack]) {
+    images(st.before); images(st.after);
+    graph(st.edges?.before); graph(st.edges?.after);
+  }
+  if (pending) images(pending);
+  graph(pendingEdges ?? undefined);
+  return out;
+}
 // Remember a node's pre-mutation image in the pending step (opening one if needed). Call
 // BEFORE mutating — and for creations, before state.nodes.set(), so the image is null.
 // Idempotent per id; a no-op in read-only mode (nothing records there).

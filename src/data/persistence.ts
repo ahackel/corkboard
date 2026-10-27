@@ -6,7 +6,7 @@
 // ============================================================
 import { state, world, setStatus, isBoxType, type MindNode } from '../core/state.js';
 import { parseMd, serializeMd, fileStem } from '../utils/frontmatter.js';
-import { safeName, slugStem, desiredFileFor, retargetLinks } from '../utils/filenames.js';
+import { safeName, slugStem, desiredFileFor, retargetLinks, FRAME_NOTE, isFrameNote, parentFileOf, dirOf, folderOf } from '../utils/filenames.js';
 import { soleImage } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
 import { downloadBlob } from '../utils/download.js';
@@ -16,6 +16,8 @@ import { fit } from '../view/camera.js';
 import { resetImageCache } from '../features/images.js';
 import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import type { TreeListing } from '../store/types.js';
+import type { FoldTest } from '../store/tree.js';
 import { paintAll, paintNode, selectNode, nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER, MIN_FRAME_W } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
@@ -23,9 +25,10 @@ import { SPACING } from '../utils/guides.js';
 import { refreshGrid } from '../view/grid.js';
 import { isTypingInField, editSessionActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
+import { releaseFolded, readAll } from './lazy.js';
 import { byId } from '../utils/dom.js';
 import { saveFailed, saveSucceeded } from './save-alert.js';
-import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge } from './board.js';
+import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge, unparkEdges } from './board.js';
 
 // Everything that is about the BOARD rather than about a note — the free edges, the ink layer, the
 // per-map view prefs — lives in one board.json beside the notes; see data/board.ts, which owns its
@@ -107,10 +110,11 @@ export async function importFiles(files: File[]): Promise<void> {
   const ref = await createDeviceMap(await resolveOnDeviceStore(), zipBase || 'Imported map');
   await switchToDeviceMap(ref);
   // strip a single common top-level folder (e.g. a zip of "MyNotes/…") from notes AND attachments,
-  // so the relative ![](attachments/…) links still resolve after import
+  // so the relative ![](attachments/…) links still resolve after import — unless that folder is a
+  // FRAME of a zip this app wrote (its board.json at the root says so): then it is part of the map.
   const slash = md[0].name.indexOf('/');
   const top = slash >= 0 ? md[0].name.slice(0, slash + 1) : '';
-  if (top && md.every(e => e.name.startsWith(top))){
+  if (top && md.every(e => e.name.startsWith(top)) && !entries.some(e => e.name === BOARD_FILE)){
     md  = md.map(e => ({ ...e, name: e.name.slice(top.length) }));
     img = img.map(e => e.name.startsWith(top) ? { ...e, name: e.name.slice(top.length) } : e);
   }
@@ -126,6 +130,7 @@ export async function importFiles(files: File[]): Promise<void> {
 
 // download every current note (plus the image attachments they reference) packed into a .zip
 export async function exportZip(): Promise<void> {
+  await readAll();   // the zip is the WHOLE map, folded frames' notes included
   const nodes = [...state.nodes.values()];
   if (!nodes.length){ setStatus('Nothing to export yet.'); return; }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
@@ -159,130 +164,197 @@ export async function exportZip(): Promise<void> {
   setStatus(`Exported ${nodes.length} notes${attached ? ` + ${attached} image${attached === 1 ? '' : 's'}` : ''} → ${zipName}`);
 }
 
+// ---------- reading notes into nodes ----------
+// Shared by the load of the whole map and the read of ONE folded frame's folder (readFolder, below):
+// both turn listed notes into nodes, take each node's parent off its FOLDER, and settle positions.
+//
+// How each node's rx/ry was seeded decides how the top-down pass (settle) reads it:
+//  · rel    — board.json or the current mm_position_x/y fields: already parent-relative.
+//  · legacy — the legacy mm_x/mm_y fields: parent-relative ONLY for frame children (the old
+//    behaviour), otherwise ABSOLUTE — converted to relative in the top-down pass.
+//  · neither — a grid fallback (absolute), likewise converted; and `unplaced`, so a frame whose notes
+//    ALL lack a position lays them out once (arrangeFrames).
+// TODO: legacy is a transitional migration shim — it can go once every map has been re-saved
+// (serializeMd only re-emits mm_position_*, so the first save of any note drops its mm_x/mm_y).
+interface Seeds { rel: Set<string>; legacy: Set<string>; wasStack: Set<string>; unplaced: Set<string>; placed: number; }
+const newSeeds = (): Seeds => ({ rel: new Set(), legacy: new Set(), wasStack: new Set(), unplaced: new Set(), placed: 0 });
+// mm_w is now written for every kind (an authored width), but it USED to be written ungated for a
+// while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
+// width from a time when `n.w` also held derived values (an outline row's stretched width, for
+// one). Those are all NARROWER than a normal card, and a card can only ever be widened past
+// its default, so anything under the default is junk from that era: drop it. One kind of note
+// legitimately goes narrower and is exempt: an IMAGE card — a small picture is a small card, and one
+// that used to carry `mm_type: image` now loads as an ordinary card (foldTypeLayout), so without
+// this its authored size would be read as junk from that era and thrown away.
+function authoredW(w: number | null | undefined, type: MindNode['type'], isImage: boolean): number | undefined {
+  if (w == null) return undefined;
+  if (isBoxType(type) || isImage) return w;
+  return w >= NODE_W ? w : undefined;
+}
+function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Seeds): MindNode {
+  const { mm, ...rest } = parsed;
+  // An UNMIGRATED note: no `# ` heading AND nothing in its body either. Its title used to BE its
+  // filename, so there is no longer anything in the file to read a name off, and the card would show
+  // up as a blank on the canvas and "Untitled" in every list. So take the name off the filename ONE
+  // last time and mark the note dirty, which persists it as the `# Heading` it should have been —
+  // after that the file stands on its own and this never fires for it again.
+  // Deliberately only when the body is EMPTY. A note WITH text and no heading is a legitimately
+  // UNTITLED card under this format (it shows its text and no title row, which is the point of
+  // allowing it), and promoting its filename to a title would put a name on something nobody named.
+  // And never when the note SAYS it is empty on purpose (`mm_blank`, written by serializeMd for exactly
+  // this): emptying an existing card is an ordinary edit, and this migration used to undo it on the next
+  // load — reading the card's old filename slug back as the title and saving it as a heading.
+  // Nothing but a picture in the note → this is an IMAGE card (core/state.ts isImageCard reads the
+  // same thing off the live node). Needed here before the node exists, for the width filter below.
+  const imageOnly = !rest.title.trim() && !!soleImage(rest.body);
+  const unmigrated = !rest.title.trim() && !rest.body.trim() && !mm.blank;
+  if (unmigrated) rest.title = fileStem(rel);
+  // A folder's frame note IS a frame, whatever its frontmatter says (or doesn't).
+  const type: MindNode['type'] = isFrameNote(rel) ? 'frame' : mm.type;
+  // The PARENT is the folder the note sits in (utils/filenames.ts parentFileOf). Only a note at the top
+  // level can still name one in `mm_parent` — a map from before frames were folders — and that note is
+  // marked dirty: the save that follows moves it into its frame's folder and drops the key.
+  const folderParent = parentFileOf(rel);
+  const legacyParent = !folderParent && mm.parent ? mm.parent : '';
+  // GEOMETRY comes from board.json first (data/board.ts) and falls back to the note's own mm_*
+  // for a vault written before it moved. Same meaning either way — an offset from the parent —
+  // so the top-down pass doesn't care which supplied it.
+  const g = boardGeom(rel);
+  const hasBoard = (g?.x != null && g?.y != null);
+  const hasRel = hasBoard || (mm.px != null && mm.py != null);
+  const hasLegacy = (mm.x != null && mm.y != null);
+  const hasPos = hasRel || hasLegacy;
+  const placed = seeds.placed;
+  const node: MindNode = {
+    id: 'n' + (state.idSeq++), file:rel, x: 0, y: 0,   // x/y derived from rx/ry in settle()
+    rx: hasBoard ? g!.x! : (mm.px != null && mm.py != null) ? mm.px! : hasLegacy ? mm.x! : (120 + (placed % 4) * 240),
+    ry: hasBoard ? g!.y! : (mm.px != null && mm.py != null) ? mm.py! : hasLegacy ? mm.y! : (120 + Math.floor(placed / 4) * 200),
+    _parentPath: folderParent ?? legacyParent,   // resolved to an id once all notes are loaded
+    parent: null,
+    collapsed: g ? !!g.collapsed : !!mm.collapsed,
+    locked: !!mm.locked,
+    type,
+    // authoredW's junk-width filter is for the FRONTMATTER value only — a width in board.json was
+    // written by this build and means exactly what it says.
+    w: g?.w ?? authoredW(mm.w, type, imageOnly),
+    // A legacy frontmatter mm_h only ever meant a box's size; a card's own (minimum) height is newer
+    // than that and lives in board.json alone.
+    h: g?.h ?? (isBoxType(type) || imageOnly ? mm.h : undefined) ?? undefined,
+    clip: !!g?.clip,
+    ...rest, dirty: unmigrated || !!mm.parent, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
+  };
+  if (mm.wasStack) seeds.wasStack.add(node.id);
+  if (hasRel) seeds.rel.add(node.id);
+  else if (hasLegacy) seeds.legacy.add(node.id);
+  else { seeds.placed++; seeds.unplaced.add(node.id); }   // no saved position → fallback layout
+  return node;
+}
+// A folder with notes in it but no frame note of its own — one made outside the app, in Finder or
+// Obsidian — is a frame all the same, named after the folder. Its frame note is written by the next
+// save (dirty), so from then on it is an ordinary frame.
+function folderFrame(path: string, seeds: Seeds): MindNode {
+  const d = dirOf(path).slice(0, -1);
+  const n = nodeFromNote(path, parseMd(`# ${d.slice(d.lastIndexOf('/') + 1)}\n`), seeds);
+  n.dirty = true;
+  return n;
+}
+// Add every node a listing yields: its notes, a frame for each folder that lacks one, and the FOLDED
+// frames whose notes stayed unread (`lazy`, with how many there are). Returns the nodes added.
+function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
+  for (const d of listing.foreign) foreignDirs.add(d);
+  const known = new Set([...state.nodes.values()].map(n => n.file));
+  const added: MindNode[] = [];
+  const add = (n: MindNode): void => { state.nodes.set(n.id, n); known.add(n.file); added.push(n); };
+  for (const { path, text } of listing.files) if (!known.has(path)) add(nodeFromNote(path, parseMd(text), seeds));
+  for (const [dir, f] of listing.lazy) {
+    const path = dir + FRAME_NOTE;
+    let n = [...state.nodes.values()].find(m => m.file?.toLowerCase() === path.toLowerCase());
+    if (!n) add(n = folderFrame(path, seeds));
+    n.lazy = f.count;
+    n.collapsed = true;   // a folder nobody has unfolded yet arrives as its pill
+  }
+  // Frames for the folders that have notes but no frame note — outermost last, since each one asks
+  // for its own parent folder's frame in turn.
+  for (let i = 0; i < added.length; i++) {
+    const want = added[i]._parentPath;
+    if (!want || !parentFileOf(added[i].file!) || known.has(want)) continue;
+    add(folderFrame(want, seeds));
+  }
+  return added;
+}
+// Resolve each new node's parent path -> a loaded node's id (drops links to missing files), then settle
+// every rx/ry to parent-relative and derive the working x/y — top-down, so a parent's absolute x/y is
+// final by the time its children are reached. rel seeds and legacy frame children are already
+// relative; the rest hold an ABSOLUTE seed, so subtract the parent's position.
+function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
+  const byPath = new Map<string | null, string>([...state.nodes.values()].map(n => [n.file, n.id]));
+  for (const n of added) {
+    n.parent = n._parentPath ? (byPath.get(n._parentPath) || null) : null;
+    delete n._parentPath;
+  }
+  const mine = new Set(added.map(n => n.id));
+  const kidsOf = new Map<string | null, MindNode[]>();
+  for (const n of added) { const k = kidsOf.get(n.parent) ?? []; k.push(n); kidsOf.set(n.parent, k); }
+  const stack = added.filter(n => !n.parent || !mine.has(n.parent));
+  while (stack.length) {
+    const n = stack.pop()!;
+    const p = parentOf(n);
+    const pax = p ? p.x : 0, pay = p ? p.y : 0;   // final (parents are visited before their children)
+    const alreadyRel = seeds.rel.has(n.id) || (seeds.legacy.has(n.id) && !!p && p.type === 'frame');
+    if (p && !alreadyRel) { n.rx -= pax; n.ry -= pay; }   // absolute seed → parent-relative
+    n.x = pax + n.rx; n.y = pay + n.ry;                   // working absolute coords
+    for (const k of kidsOf.get(n.id) ?? []) stack.push(k);
+  }
+  return byPath;
+}
+// The frame an unread note sits in, for a line that ends on it: the deepest folded frame in memory
+// whose folder holds the path (data/board.ts resolveEdges).
+function standInFor(path: string): string | null {
+  let best: MindNode | null = null;
+  for (const n of state.nodes.values())
+    if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) best = n;
+  return best?.id ?? null;
+}
+// Which folders a read leaves UNREAD (store/tree.ts): a frame folded in board.json, and a folder the
+// board has never seen — it arrives as a folded pill. Never one on the way to a path in `keep` (the
+// frames you are standing in), which has to be on the canvas.
+function foldTest(keep: string[]): FoldTest {
+  return (dir) => {
+    if (keep.some(k => k.startsWith(dir))) return false;
+    const g = boardGeom(dir + FRAME_NOTE);
+    return g ? !!g.collapsed : true;
+  };
+}
+// Folders on disk that are NOT frames (`attachments/`, …), lowercased: a frame may not move into one.
+let foreignDirs = new Set<string>();
+const scopeFiles = (): string[] => scope.stack.map(l => l.file).filter((f): f is string => !!f);
+
 export async function loadFromDir({ keepView = false }: { keepView?: boolean } = {}): Promise<void> {
   clearHistory();   // ids are minted fresh per load, so no snapshot survives a (re)load / map switch
   // …including the container wrappers, which carry no data-id: a frame's clipping wrapper
   // hangs off the NODE object (frameContentEl), so once state.nodes is
   // cleared nothing can reach the old ones to remove them and they'd pile up in #world on every load.
-  state.nodes.clear(); state.toDelete = []; pendingRemovals.clear();
+  state.nodes.clear(); state.toDelete = []; pendingRemovals.clear(); emptied.clear();
+  foreignDirs = new Set(['attachments/']);   // where pasted pictures go, even before the first one has
   world.querySelectorAll('[data-id], .frame-content').forEach(e=>e.remove());
   resetImageCache();   // blob URLs from the previous map (or store) are stale now
   await loadBoard();   // edges + ink layer + view prefs for this map (board.json), if any
   refreshGrid();
 
-  // First pass: read every .md and parse it (layout now lives in each note's frontmatter).
-  const entries: { rel: string; parsed: ReturnType<typeof parseMd> }[] = [];
-  for (const { path, text } of await store.list())
-    entries.push({ rel: path, parsed: parseMd(text) });
-
-  // Ids are ephemeral (minted fresh each load) since the filename is the real identity —
-  // parent links are stored/resolved BY PATH, so ids never need to survive a reload.
-  let seq = 0;
-  let placed = 0;          // count of notes lacking a saved position, for fallback layout
-  // Seed each node's rx/ry from disk; the top-down pass below settles them to parent-relative and
-  // derives the working x/y. The raw seed's frame of reference depends on the fields present:
-  //  · relSeed  — the current mm_position_x/y fields: already parent-relative (roots world-relative).
-  //  · legacySeed — the legacy mm_x/mm_y fields: parent-relative ONLY for frame children (the old
-  //    behaviour), otherwise ABSOLUTE — converted to relative in the top-down pass below.
-  //  · neither — a grid fallback (absolute), likewise converted below.
-  // TODO: legacySeed is a transitional migration shim — it can go once every map has been re-saved
-  // (serializeMd only re-emits mm_position_*, so the first save of any note drops its mm_x/mm_y).
-  const relSeed = new Set<string>();
-  const legacySeed = new Set<string>();
-  const wasStack = new Set<string>();   // notes that carried the legacy stack kind (flattenLegacyBranches)
-  // mm_w is now written for every kind (an authored width), but it USED to be written ungated for a
-  // while before the box-kinds-only gate landed — so an old, not-since-re-saved note can carry a stale
-  // width from a time when `n.w` also held derived values (an outline row's stretched width, for
-  // one). Those are all NARROWER than a normal card, and a card can only ever be widened past
-  // its default, so anything under the default is junk from that era: drop it. One kind of note
-  // legitimately goes narrower and is exempt: an IMAGE card — a small picture is a small card, and one
-  // that used to carry `mm_type: image` now loads as an ordinary card (foldTypeLayout), so without
-  // this its authored size would be read as junk from that era and thrown away.
-  const authoredW = (w: number | null | undefined, type: MindNode['type'], isImage: boolean): number | undefined => {
-    if (w == null) return undefined;
-    if (isBoxType(type) || isImage) return w;
-    return w >= NODE_W ? w : undefined;
-  };
-  for (const { rel, parsed } of entries) {
-    const { mm, ...rest } = parsed;
-    // An UNMIGRATED note: no `# ` heading AND nothing in its body either. Its title used to BE its
-    // filename, so there is no longer anything in the file to read a name off, and the card would show
-    // up as a blank on the canvas and "Untitled" in every list. So take the name off the filename ONE
-    // last time and mark the note dirty, which persists it as the `# Heading` it should have been —
-    // after that the file stands on its own and this never fires for it again.
-    // Deliberately only when the body is EMPTY. A note WITH text and no heading is a legitimately
-    // UNTITLED card under this format (it shows its text and no title row, which is the point of
-    // allowing it), and promoting its filename to a title would put a name on something nobody named.
-    // And never when the note SAYS it is empty on purpose (`mm_blank`, written by serializeMd for exactly
-    // this): emptying an existing card is an ordinary edit, and this migration used to undo it on the next
-    // load — reading the card's old filename slug back as the title and saving it as a heading.
-    // Nothing but a picture in the note → this is an IMAGE card (core/state.ts isImageCard reads the
-    // same thing off the live node). Needed here before the node exists, for the width filter below.
-    const imageOnly = !rest.title.trim() && !!soleImage(rest.body);
-    const unmigrated = !rest.title.trim() && !rest.body.trim() && !mm.blank;
-    if (unmigrated) rest.title = fileStem(rel);
-    // GEOMETRY comes from board.json first (data/board.ts) and falls back to the note's own mm_*
-    // for a vault written before it moved. Same meaning either way — an offset from the parent —
-    // so the top-down pass below doesn't care which supplied it.
-    const g = boardGeom(rel);
-    const hasBoard = (g?.x != null && g?.y != null);
-    const hasRel = hasBoard || (mm.px != null && mm.py != null);
-    const hasLegacy = (mm.x != null && mm.y != null);
-    const hasPos = hasRel || hasLegacy;
-    const node: MindNode = {
-      id: 'n' + (++seq), file:rel, x: 0, y: 0,   // x/y derived from rx/ry in the top-down pass below
-      rx: hasBoard ? g!.x! : (mm.px != null && mm.py != null) ? mm.px! : hasLegacy ? mm.x! : (120 + (placed % 4) * 240),
-      ry: hasBoard ? g!.y! : (mm.px != null && mm.py != null) ? mm.py! : hasLegacy ? mm.y! : (120 + Math.floor(placed / 4) * 200),
-      _parentPath: mm.parent || '',                // resolved to an id once all notes are loaded
-      parent: null,
-      collapsed: g ? !!g.collapsed : !!mm.collapsed,
-      locked: !!mm.locked,
-      type: mm.type,
-      // authoredW's junk-width filter is for the FRONTMATTER value only — a width in board.json was
-      // written by this build and means exactly what it says.
-      w: g?.w ?? authoredW(mm.w, mm.type, imageOnly),
-      // A legacy frontmatter mm_h only ever meant a box's size; a card's own (minimum) height is newer
-      // than that and lives in board.json alone.
-      h: g?.h ?? (isBoxType(mm.type) || imageOnly ? mm.h : undefined) ?? undefined,
-      clip: !!g?.clip,
-      ...rest, dirty:unmigrated, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
-    };
-    if (mm.wasStack) wasStack.add(node.id);
-    if (hasRel) relSeed.add(node.id);
-    else if (hasLegacy) legacySeed.add(node.id);
-    else placed++;                                  // no saved position → fallback layout
-    state.nodes.set(node.id, node);
-  }
-  // Resolve each note's parent path -> the loaded node's id (drops links to missing files).
-  const byPath = new Map([...state.nodes.values()].map(n => [n.file, n.id]));
-  for (const n of state.nodes.values()) {
-    n.parent = n._parentPath ? (byPath.get(n._parentPath) || null) : null;
-    delete n._parentPath;
-  }
-  resolveEdges(byPath);   // the board's edges hold paths too — same index, same drop-if-missing rule
+  // Read every note — except the insides of FOLDED frames, which stay on disk until unfolded.
+  // Ids are ephemeral (minted fresh each load) since the path is the real identity.
+  state.idSeq = 1;
+  const seeds = newSeeds();
+  const added = addListed(await store.listTree('', foldTest(scopeFiles())), seeds);
+  const byPath = settle(added, seeds);
+  resolveEdges(byPath, standInFor);   // the board's edges hold paths too — same index, same drop-if-missing rule
   resolveOrder(byPath);   // …and so does each parent's stored child order
-  // Settle every rx/ry to parent-relative and derive the working x/y, in one top-down pass so the
-  // parent's absolute x/y is already final when we reach a child. relSeed and legacy frame children
-  // are already relative; the rest hold an ABSOLUTE seed, so subtract the parent's position.
-  const kidsOf = new Map<string | null, MindNode[]>();
-  for (const n of state.nodes.values()) { const k = kidsOf.get(n.parent) ?? []; k.push(n); kidsOf.set(n.parent, k); }
-  const stack = [...(kidsOf.get(null) ?? [])];
-  while (stack.length) {
-    const n = stack.pop()!;
-    const p = parentOf(n);
-    const pax = p ? p.x : 0, pay = p ? p.y : 0;   // final (parents are visited before their children)
-    const alreadyRel = relSeed.has(n.id) || (legacySeed.has(n.id) && !!p && p.type === 'frame');
-    if (p && !alreadyRel) { n.rx -= pax; n.ry -= pay; }   // absolute seed → parent-relative
-    n.x = pax + n.rx; n.y = pay + n.ry;                   // working absolute coords
-    for (const k of kidsOf.get(n.id) ?? []) stack.push(k);
-  }
   // A map written before containment: its card-to-card links meant "beside", not "inside". Convert
   // them now that every node has final absolute coordinates to be re-anchored from.
-  const flattened = boardIsLegacy() ? flattenLegacyBranches(wasStack) : 0;
+  const flattened = boardIsLegacy() ? flattenLegacyBranches(seeds.wasStack) : 0;
   // …and cards no longer hold cards: any card that still has children becomes a frame holding them.
   const folded = foldCardsIntoFrames();
-  // advance the runtime id counter past everything we just loaded so new nodes don't collide
-  state.idSeq = seq + 1;
+  arrangeFrames(unplacedFrames(added, seeds));
   // Re-point the open-frame scope at the freshly minted ids BEFORE the first layout/paint, so a
   // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).
@@ -293,7 +365,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   paintAll();
   if (!keepView) fit();
   // A migration is persisted BOARD FIRST, and awaited: the new edges and the model stamp have to be
-  // on disk before any note loses its mm_parent, or a failed write between the two would drop the
+  // on disk before any note moves into its frame's folder, or a failed write between the two would drop the
   // hierarchy AND the edges that replaced it. If the board write throws, the notes are left alone and
   // the map simply migrates again next time — the conversion is a pure function of what's on disk.
   if (flattened && !state.readOnly && store.isOpen) {
@@ -307,6 +379,41 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout))
     scheduleSave();
   updateMapTitle();
+}
+// Read the notes of ONE folded frame's folder into memory (data/lazy.ts decides when). `deep` reads
+// everything under it; otherwise the frames folded INSIDE it stay unread in turn, like on a load.
+// Nothing is painted or laid out here — the caller unfolds, opens or moves what it read.
+// Two asks for the same folder at once (a double-click, a save) share ONE read.
+const reading = new Map<string, Promise<void>>();
+export function readFolder(f: MindNode, deep: boolean): Promise<void> {
+  const busy = reading.get(f.id);
+  if (busy) return busy;
+  const p = readFolderNow(f, deep).finally(() => reading.delete(f.id));
+  reading.set(f.id, p);
+  return p;
+}
+async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
+  if (f.lazy == null || !f.file || !store.isOpen) return;
+  const listing = await store.listTree(dirOf(f.file), deep ? () => false : foldTest(scopeFiles()));
+  if (f.lazy == null || !state.nodes.has(f.id)) return;   // read twice at once, or gone meanwhile
+  f.lazy = undefined;
+  const seeds = newSeeds();
+  const added = addListed(listing, seeds);
+  const byPath = settle(added, seeds);
+  unparkEdges(byPath);
+  resolveOrder(byPath);
+  // Paint what was read, so the arrangement below can measure it (it is hidden under its folded frame
+  // anyway until the caller unfolds that).
+  for (const n of added) paintNode(n);
+  arrangeFrames(unplacedFrames([f, ...added], seeds));
+}
+// Frames whose notes ALL arrived with no saved position — a folder made outside the app, or a map
+// imported without its board.json: they get laid out once, rather than dropped on a grid at the origin.
+function unplacedFrames(nodes: MindNode[], seeds: Seeds): MindNode[] {
+  return nodes.filter(f => f.type === 'frame' && f.lazy == null).filter(f => {
+    const kids = childrenOf(f.id);
+    return kids.length > 0 && kids.every(k => seeds.unplaced.has(k.id));
+  });
 }
 // ---------- cards that hold cards become frames (runs on every load; a no-op once done) ----------
 // A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
@@ -329,11 +436,21 @@ function foldCardsIntoFrames(): number {
   const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
     && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
   for (const n of cards) { n.type = 'frame'; n.dirty = true; n.dirtyLayout = true; }
+  arrangeFrames(arrange);
+  return cards.length;
+}
+// Lay each frame's cards out ONCE, in a column in their stored order (kidOrder), with the house spacing,
+// and size the frame around them. Deepest first, so an inner frame has its final size before its parent
+// stacks it. That needs MEASURED heights, so every affected node is unfolded and painted for the
+// duration (scope set aside too: on a reload its ids are still the previous load's, and it would hide
+// everything), then folded back exactly as it was.
+function arrangeFrames(frames: MindNode[]): void {
+  if (!frames.length) return;
   const unfolded = new Set<MindNode>();
-  for (const f of arrange) for (const a of [f, ...ancestors(f)]) if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
+  for (const f of frames) for (const a of [f, ...ancestors(f)]) if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
   const keepScope = scope.rootId; scope.rootId = null;
   for (const n of state.nodes.values()) paintNode(n);
-  for (const f of arrange.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
+  for (const f of frames.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
     const x = f.x + FRAME_BORDER + SPACING;
     let y = f.y + FRAME_BORDER + SPACING, w = 0;
     for (const k of orderedKids(f, childrenOf(f.id))) {
@@ -350,7 +467,6 @@ function foldCardsIntoFrames(): number {
   }
   scope.rootId = keepScope;
   for (const a of unfolded) a.collapsed = true;
-  return cards.length;
 }
 
 // ---------- the containment migration (runs once per map) ----------
@@ -438,14 +554,46 @@ function retargetWikilinks(renames: Map<string, string>): string[] {
   }
   return touched;
 }
+// Where every node's file SHOULD be, settled top-down: a node's folder is its parent frame's folder, so
+// a parent's final path has to be known before its children's (utils/filenames.ts desiredFileFor).
+// Pure — nothing is renamed here; saveAll adopts the result.
+function planPaths(): Map<string, string> {
+  const out = new Map<string, string>();
+  // Kept in step below, so a name this loop has already handed out is seen as taken by the nodes after it.
+  const inUse = filesInUse();
+  for (const n of [...state.nodes.values()].sort((a, b) => ancestorDepth(a) - ancestorDepth(b))) {
+    // While the title is being typed (in-card rename OR the editor sheet), keep the current
+    // filename (rename happens when the edit session commits).
+    const frozen = frozenFileNodeId() === n.id ? n.file : null;
+    const p = parentOf(n);
+    const pFile = p ? out.get(p.id) ?? p.file : null;
+    const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs);
+    if (n.file) inUse.delete(n.file.toLowerCase());
+    inUse.set(target.toLowerCase(), n.id);
+    out.set(n.id, target);
+  }
+  return out;
+}
 export async function saveAll(): Promise<void> {
   if (state.readOnly) return;        // read-only mode never writes to disk
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
+  // Phase 0 — a FOLDED frame whose notes were never read can't move them without reading them: one
+  // that is about to move (renamed, retyped, dropped into another frame, or inside one that is) reads
+  // its whole folder first, and one that somehow holds a note in memory reads its own level, so the
+  // rest of the save sees a complete tree under every path it changes (data/lazy.ts).
+  for (let guard = 0; guard < 16; guard++) {
+    const plan = planPaths();
+    const moving = [...state.nodes.values()].filter(n => n.lazy != null && n.file && plan.get(n.id) !== n.file);
+    const holding = [...state.nodes.values()].filter(n => n.lazy != null && childrenOf(n.id).length);
+    if (!moving.length && !holding.length) break;
+    for (const f of moving) await readFolder(f, true);
+    for (const f of holding) await readFolder(f, false);
+  }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
   // Each step below records its progress AS it lands, so a save that throws half-way (quota, a revoked
   // folder permission) leaves exactly the unfinished part pending, and the retry (data/save-alert.ts)
-  // picks it up — rather than a renamed note's old file, or a child's stale mm_parent, surviving it.
-  while (state.toDelete.length) { await store.remove(state.toDelete[0]); state.toDelete.shift(); }
+  // picks it up — rather than a renamed note's old file surviving it.
+  while (state.toDelete.length) { const gone = state.toDelete[0]; await store.remove(gone); emptied.add(dirOf(gone)); state.toDelete.shift(); }
 
   // CONTENT changes rewrite the note; GEOMETRY changes don't — position, size, collapse and child
   // order live in board.json now, so `dirtyLayout` alone is not a reason to touch a .md. Moving a
@@ -453,35 +601,26 @@ export async function saveAll(): Promise<void> {
   const needWrite = new Set<string>();
   for (const n of state.nodes.values()) if (n.dirty || !n.file) needWrite.add(n.id);
 
-  // Phase 1 — settle every note's final filename IN MEMORY first. A child records its parent
-  // by path (mm_parent), so a renamed parent forces its children to be rewritten, and all
-  // parent paths must be final before we serialize anyone.
+  // Phase 1 — settle every note's final path IN MEMORY first (planPaths). A frame is a folder, so a
+  // renamed or moved frame moves every note inside it: each one is a rename of its own here.
   const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
-  // Kept in step with n.file below, so a name this loop has already handed out is seen as taken by
-  // the nodes after it — the live `state.nodes` scan this replaced got that for free.
-  const inUse = filesInUse();
   let pathsMoved = false;   // board.json is keyed by path, so a new or renamed note needs it rewritten
+  const plan = planPaths();
   for (const n of state.nodes.values()) {
-    // While the title is being typed (in-card rename OR the editor sheet), keep the current
-    // filename (rename happens when the edit session commits).
-    const frozen = frozenFileNodeId() === n.id ? n.file : null;
-    const target = frozen ?? desiredFileFor(n, inUse);
+    const target = plan.get(n.id)!;
     if (n.file && n.file !== target) {
       pendingRemovals.add(n.file);                 // old file to delete once the rename is written
       renames.set(n.file, target);
-      for (const c of childrenOf(n.id)) needWrite.add(c.id);
     }
     if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }   // brand-new node, or a rename
-    if (n.file) inUse.delete(n.file.toLowerCase());
     n.file = target;                               // adopt the final name
-    inUse.set(target.toLowerCase(), n.id);
   }
 
-  // Phase 1b — a rename drags its INBOUND links along, for the same reason it rewrites its children's
-  // mm_parent: a path recorded elsewhere in the vault must not outlive the path it records.
+  // Phase 1b — a rename drags its INBOUND links along: a path recorded elsewhere in the vault must not
+  // outlive the path it records.
   for (const id of retargetWikilinks(renames)) needWrite.add(id);
   // Everything phase 1 decided must be written is now DIRTY, not just in this call's set: n.file has
-  // already moved to its new name, so a retry would see no rename and forget the children it implied.
+  // already moved to its new name, so a retry would see no rename and forget it had to write it.
   for (const id of needWrite) state.nodes.get(id)!.dirty = true;
 
   // Phase 2 — write everything that changed, now that all paths are final.
@@ -492,25 +631,37 @@ export async function saveAll(): Promise<void> {
     n.dirty = false;
     written++;
   }
-  // Phase 3 — drop files left behind by renames (unless some node now legitimately holds the path).
+  // Phase 3 — drop files left behind by renames (unless some node now legitimately holds the path)…
+  const held = new Set([...state.nodes.values()].map(n => n.file));
   for (const old of [...pendingRemovals]) {
-    if (![...state.nodes.values()].some(n => n.file === old)) await store.remove(old);
+    if (!held.has(old)) { await store.remove(old); emptied.add(dirOf(old)); }
     pendingRemovals.delete(old);
   }
+  // …and the FOLDERS they leave empty: a frame renamed, moved or deleted leaves its old folder behind.
+  // Deepest first, and up the chain, since emptying `A/B/` can empty `A/` too. removeDir only ever
+  // removes an EMPTY folder, so one still holding anything — a live note, another app's file — stays.
+  const live = new Set<string>();
+  for (const f of held) if (f) for (let d = dirOf(f); d; d = dirOf(d.slice(0, -1))) live.add(d);
+  const dirs = new Set<string>();
+  for (const d0 of emptied) for (let d = d0; d; d = dirOf(d.slice(0, -1))) dirs.add(d);
+  emptied.clear();
+  for (const d of [...dirs].sort((a, b) => b.length - a.length)) if (!live.has(d)) await store.removeDir(d);
 
-  // …and the board follows. Its own debounce fires alongside this save, so it may already have been
-  // written with this note still nameless (a card created a moment ago) or under its old path — and
-  // then nothing would ever write that card's position. A reload would drop it at the origin.
-  if (pathsMoved) scheduleSaveBoard();
+  // …and the board follows, AWAITED: it is keyed by path, so after a move it must land before anything
+  // else does — a reload in between would find the notes in their new folders and no layout for them.
+  if (pathsMoved) await flushBoard();
   for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write carries these
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   paintAll();
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
+  releaseFolded();   // a folded frame whose notes are all safely on disk can let go of them (data/lazy.ts)
 }
 
 // Old paths of renamed notes, still on disk until phase 3 removes them. Module-level so a failed save
 // carries them to its retry; cleared by loadFromDir, since they belong to the map that was open.
 const pendingRemovals = new Set<string>();
+// Folders a removal may have left empty, for phase 3 to prune. Module-level for the same reason.
+const emptied = new Set<string>();
 
 // ---------- autosave (debounced) ----------
 let saveTimer: number | undefined, saveAgain = false;

@@ -17,6 +17,8 @@ const searchWrap = byId('searchWrap');
 const searchResults = byId('searchResults');
 const searchClear = byId<HTMLButtonElement>('searchClear');
 let searchHits: MindNode[] = [], searchActive = -1;
+// Does the open result list point at this node? Nothing a result points at may be let go of.
+export function searchHolds(id: string): boolean { return searchHits.some(h => h.id === id); }
 // Open the search bar and focus the box (also the "/" shortcut entry point). The bar sits where
 // a toolbar would.
 export function openSearch(): void {

@@ -6,7 +6,7 @@
 // rewrite ONLY the app-owned keys (tags/color/mm_*) while preserving everything else —
 // `date`, `category`, `aliases`, custom fields, and the note body — verbatim.
 // ============================================================
-import { state, type MindNode, type NodeType, type FmEntry } from '../core/state.js';
+import { type MindNode, type NodeType, type FmEntry } from '../core/state.js';
 
 // ---------- a note's TITLE is the leading heading of its body ----------
 // `# Notes` on the first non-blank line IS the title, and nothing else is. Not a frontmatter key,
@@ -218,14 +218,13 @@ export function serializeMd(n: MindNode): string {
   if (n.color) fmSet(entries, 'color', `color: ${n.color.startsWith('#') ? `"${n.color}"` : n.color}`);
   else fmRemove(entries, 'color');
   if (!fmEntry(entries, 'date')) entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
-  const parentNode = n.parent ? state.nodes.get(n.parent) ?? null : null;
-  if (parentNode) entries.push({ key:'mm_parent', lines:[`mm_parent: ${parentNode.file}`] });
   // GEOMETRY IS NOT WRITTEN HERE any more — position, size and collapse live in board.json
   // (data/board.ts), which is what "frontmatter describes the NOTE, board.json describes the BOARD's
   // arrangement of it" means in practice. mm_position_x/y, mm_w/mm_h and mm_collapsed are still READ
   // (parseMd) so an older vault opens unchanged, and the stale-mm_* sweep at the top drops them from
-  // each note the first time it is rewritten. `mm_parent` above is the deliberate exception: it is
-  // what keeps the folder self-describing if the board file is ever lost.
+  // each note the first time it is rewritten. Neither is the PARENT written any more: a frame is a
+  // folder, so where the file sits says which frame holds it (utils/filenames.ts parentFileOf), and
+  // the old `mm_parent` is swept with the rest.
   if (n.locked) entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
   // A note that is blank ON PURPOSE — the user cleared every character out of an existing card, which is
   // allowed and keeps the card's file, children and position (features/inline-edit.ts endBodyEdit). On

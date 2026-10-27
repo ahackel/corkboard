@@ -4,6 +4,9 @@
 // A note read from / written to disk: relative '/'-separated path + its text.
 export interface NoteFile { path: string; text: string; }
 
+import type { FoldTest, LazyFolder } from './tree.js';
+export interface TreeListing { files: NoteFile[]; lazy: Map<string, LazyFolder>; foreign: Set<string>; }
+
 // Outcome of an open attempt. Different backends use different subsets.
 export type PickResult = 'ok' | 'cancel' | 'denied' | 'unsupported' | 'error' | 'gone';
 
@@ -13,7 +16,10 @@ export interface Store {
   pick(): Promise<PickResult>;
   openRecent(key?: string): Promise<PickResult>;
   resume?(key: string): Promise<boolean>;   // FSA only: silent reopen if permission persists
-  list(): Promise<NoteFile[]>;
+  // The notes under the folder `under` ('' = all), leaving unread every folder `fold` says is folded
+  // (store/tree.ts) — what the load and the unfold of a frame read through.
+  listTree(under: string, fold: FoldTest): Promise<TreeListing>;
+  removeDir(dir: string): Promise<void>;     // only if empty
   write(path: string, data: string | Blob): Promise<void>;
   remove(path: string): Promise<void>;
   readBlob(path: string): Promise<Blob | null>;

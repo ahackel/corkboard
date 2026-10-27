@@ -7,8 +7,8 @@ CLAUDE.md and are not repeated. Symbol names are the contract; grep for them.
 
 ## Identity, titles, frontmatter
 
-**One `.md` file per node; the file's PATH is the node's identity** — it is what `mm_parent` points at and
-what the hash encodes. No database, no sidecar. In-memory `id`s are minted fresh on every load; never
+**One `.md` file per node; the file's PATH is the node's identity** — it says which frame holds the node
+(its folder: see "A frame IS a folder") and it is what the hash and `board.json` encode. No database, no sidecar. In-memory `id`s are minted fresh on every load; never
 persist them.
 
 **A node's TITLE is the leading `# ` line of its body, and nothing else is** (`splitHeading`/`joinHeading`,
@@ -30,9 +30,9 @@ filename. Three things follow:
   ORDINARY card: every card is born empty and the autosave 400ms later names it off nothing, so it got
   `safeName('')` — `Untitled.md`, `Untitled 2.md`, … from the collision suffix — and the text typed a
   second later never reached the filename. A vault filled up with `Untitled 47.md`.
-- **Tracking is paid for in renames, and everything holding a path follows one.** A rename rewrites the
-  children's `mm_parent` (`saveAll` phase 1, which is why every path must be final before anything is
-  serialized) and re-points the inbound PATH-form `[[wikilinks]]` (phase 1b, `retargetWikilinks`, alias
+- **Tracking is paid for in renames, and everything holding a path follows one.** A renamed FRAME renames
+  its folder, which moves every note inside it (`saveAll` phase 1, `planPaths`, which settles every path
+  top-down before anything is serialized), and a rename re-points the inbound PATH-form `[[wikilinks]]` (phase 1b, `retargetWikilinks`, alias
   half kept verbatim). Title-form links need no fixup: re-slugging a file never changes a title.
 - **It is not a rename per keystroke.** While any of the four editors holds the note's text the name is
   FROZEN (`ui-state.ts frozenFileNodeId`), so the rename lands once, when the edit session commits —
@@ -57,7 +57,7 @@ which is what the paths that BUILD a note rather than re-read one (a merge, an e
 **A body-less note is MIGRATED on load, once** (`loadFromDir`): no `# ` heading *and* an empty body means
 the title used to be the filename and nothing in the file says so any more, so the stem becomes the title
 and the note is marked dirty; the next save writes the `# Heading` it should have had and it never fires
-again (idempotent). The filename doesn't change, so no `mm_parent` is rewritten. Only when the body is
+again (idempotent). The filename doesn't change. Only when the body is
 EMPTY — a note WITH text and no heading is a legitimately untitled card.
 
 **A note that is blank ON PURPOSE says so, with `mm_blank: true`.** Clearing every character out of an
@@ -86,9 +86,45 @@ only thing you can grab the box by.
 `Notes.md` with `notes.md`, so an exact test would hand two nodes "their own" filename and let the second
 write eat the first.
 
-**Hierarchy is `mm_parent`; a LINE is something the user drew.** A node's parent is `mm_parent` (the parent
-note's relative path) and the tree is computed from it — a card sits INSIDE the frame that is its parent, so
-no line is ever derived from it. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
+**A frame IS a folder.** A frame `Ideas` is the folder `Ideas/`: its own note is `Ideas/_index.md`
+(`FRAME_NOTE`), and every card and frame inside it lives in that folder — `Ideas/Milk.md`, `Ideas/Sub/_index.md`.
+So a node's PARENT is never written down: it is read off the path (`utils/filenames.ts parentFileOf`), and the
+folder tree in Finder or Obsidian IS the board's grouping. What follows from that:
+
+- **Moving a card into or out of a frame MOVES ITS FILE**, and renaming or moving a frame moves its whole
+  folder. `saveAll` settles every node's path top-down (`planPaths` — a node's folder is its parent's folder)
+  before writing anything, writes the new files, deletes the old ones, then prunes the folders that left
+  empty (`store.removeDir`, which only ever removes an EMPTY folder — another app's file keeps one alive).
+  `board.json` is keyed by path, so after a move it is written AWAITED, before anything else can reload.
+- **A card can't be called `_index`** (it would be its folder's frame note), and a frame never takes a folder
+  that is something else's (`foreignDirs`: `attachments/`, or any folder holding no notes).
+- **A folder with notes but no `_index.md`** — made in Finder, or a phone's inbox — is a frame all the same,
+  named after the folder (`folderFrame`); the next save writes its `_index.md`. A frame whose notes have no
+  saved positions lays them out once, in a column (`arrangeFrames`).
+- **An old flat map migrates on load**: a top-level note with `mm_parent` takes that parent (and is marked
+  dirty), so the first save moves every card into its frame's folder and the key is swept.
+- Dot-folders (`.obsidian`, `.trash`) are another app's and are never walked.
+
+**A FOLDED frame is not read.** The load asks the store for the tree (`store.listTree` →
+`store/tree.ts planTree`, pure and tested) and leaves UNREAD every folder whose frame `board.json` says is folded
+— and every folder the board has never seen, which arrives as a folded pill. Only the frame's own `_index.md`
+is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts` holds the policy:
+- **Reading:** unfolding, opening, Expand all, delete, duplicate, copy/cut, export and a link into the folder
+  read it first (`afterReading` / `readAll` / `revealPath`; persistence.ts `readFolder` is the mechanism). A save
+  that would MOVE a folded frame reads its whole folder first (`saveAll` phase 0) — it can't move notes it
+  hasn't got. A frame that is open on the canvas with its notes unread (an undo unfolded it) reads them on the
+  next paint (`readOpenUnread`, the safety net).
+- **Letting go:** after every save, a folded frame drops its notes from memory again (`releaseFolded`) — but
+  only when all of them are saved and nothing can still reach one: the selection, the undo/redo history
+  (`historyRefs`), a search result, the frame you stand in. Their geometry is remembered in `board.json`
+  (`rememberGeom`), their lines PARK on the frame (an end keeps its path, `fromPath`/`toPath`, and the frame
+  stands in for it the way a pill always did — `parkEdges` / `unparkEdges`), their pictures' blob URLs are
+  revoked (`forgetImages`). Demo and read-only mode never let go.
+- **What doesn't see unread notes:** search, and `[[wikilink]]` resolution and fix-up — a path-form link
+  INSIDE an unread note isn't re-pointed when its target is renamed.
+
+**A LINE is something the user drew.** A card sits INSIDE the frame that is its parent, so no line is ever
+derived from the tree. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
 caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `route` → `polyline`, behind
 `edgeGeometry`, the one place the geometry is computed): along the axis the two cards are further apart
 on, a line runs straight across where they face each other, else leaves the middle of one side, turns
@@ -105,10 +141,11 @@ onto ANY point of another card; an end handle moves that end. Older boards may c
 where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
 into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
 
-**Layout lives in frontmatter as `mm_*` keys:** `mm_parent`, `mm_position_x`/`_y` (relative to the parent,
+**Layout lives in frontmatter as `mm_*` keys:** `mm_position_x`/`_y` (relative to the parent,
 world origin for a root — see `commitRel`), `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, plus the flags
 `mm_locked` and `mm_blank` (positions, sizes and collapse now live in `board.json` and are only READ from an
-older note). `mm_layout`, `mm_checklist` and `mm_done` belong to cut features: still read where they
+older note). `mm_parent` is READ only from a top-level note of an old flat map (the folder says it now).
+`mm_layout`, `mm_checklist` and `mm_done` belong to cut features: still read where they
 mean something on load (a legacy `mm_layout: frame`), dropped on a note's next write. Serialization rewrites **only**
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter field and the body verbatim —
 keep that property when touching `parseFM`/`fmSet`/`fmRemove`.

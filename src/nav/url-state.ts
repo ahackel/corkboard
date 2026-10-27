@@ -19,6 +19,7 @@
 // instead (scheduleUrlSync, debounced) — they tag along with wherever you last navigated
 // rather than creating their own back-stops.
 // ============================================================
+import { revealPath } from '../data/lazy.js';
 import { state, setStatus } from '../core/state.js';
 import { store, currentMap, openMapRef } from '../data/persistence.js';
 import { readMaps, type MapKind } from '../store/index.js';
@@ -132,6 +133,10 @@ export async function applyUrlFromHash(): Promise<void> {
     // scope it's in; ahead of the camera because restoring the scope would otherwise fit over the
     // pan/zoom the URL explicitly asked for (hence restoreScopeFromFile's own no-camera contract).
     const open = params.get('open');
+    // A link may point INTO a folded frame whose notes haven't been read (data/lazy.ts): read the
+    // folders on the way first, so there is a node there to stand in or select.
+    if (open) await revealPath(decodeFilePath(open));
+    if (pathSegs.length) await revealPath(decodeFilePath(pathSegs.join('/')));
     restoreScopeFromFile(open ? decodeFilePath(open) : null);
     if (pathSegs.length) {
       const file = decodeFilePath(pathSegs.join('/'));

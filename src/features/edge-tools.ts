@@ -219,8 +219,9 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
     const dup = edgeBetween(other, target, otherPort, draw.overSide);
     if (target === other || (dup && dup !== existing)) { paintFreeEdges(); return; }
     touchEdges();
-    if (draw.end === 'to') { existing.to = target; existing.toPort = draw.overSide; }
-    else { existing.from = target; existing.fromPort = draw.overSide; }
+    // …and the end lets go of the path it held into a folded frame's unread notes, if any (data/board.ts)
+    if (draw.end === 'to') { existing.to = target; existing.toPort = draw.overSide; delete existing.toPath; }
+    else { existing.from = target; existing.fromPort = draw.overSide; delete existing.fromPath; }
     scheduleSaveBoard(); paintAll(); syncEdgeBar();
     commitStep();
     setStatus('Edge moved');

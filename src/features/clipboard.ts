@@ -29,6 +29,7 @@ import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { screenToWorld } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
+import { readAll, afterReading } from '../data/lazy.js';
 import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
 
 const MARK = '<!-- corkboard-card: ';
@@ -83,6 +84,7 @@ export const cardsToPayload = (files: CardFile[]): string =>
 // Copy the selected cards INCLUDING their subtrees to the system clipboard. Allowed in
 // read-only mode (copying mutates nothing). Resolves true iff the clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
+  await readAll(selectedIds());   // a folded frame's notes are part of what's copied
   const files = selectionFiles();
   if (!files.length) return false;
   try {
@@ -227,6 +229,7 @@ export function bindCardFileDrag(n: MindNode): void {
 // as one .zip. A plain download works in every browser; for drag-to-Finder use ⌥-drag on the
 // card itself.
 export function exportSelection(): void {
+  if (afterReading(selectedIds(), exportSelection)) return;
   const files = selectionFiles();
   if (!files.length) return;
   const name = zipName(files);
@@ -259,6 +262,7 @@ export const canShareFiles = location.protocol !== 'file:' && !noOsShareSurface
 // downloaded. The receiving side just needs to accept a .md/.zip file (e.g. another Corkboard
 // tab/device via its "Open .md/.zip" import, AirDrop, Files, a chat app, …).
 export async function shareSelection(): Promise<void> {
+  await readAll(selectedIds());
   const files = selectionFiles();
   if (!files.length) return;
   const f = exportFile(files);

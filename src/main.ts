@@ -5,10 +5,9 @@
 // back into. Fully strict-typed and covered by `npm run typecheck`.
 /* ============================================================
    Corkboard — hierarchy + collapse + add-child
-   Storage: one .md per node. Layout lives in each note's frontmatter as mm_* keys
-   (mm_parent = parent note's path, mm_x/mm_y, mm_collapsed) — no sidecar, no ids on disk.
-   The filename IS the node's identity; in-memory ids are ephemeral, minted per load.
-   Edges are DERIVED from parent — no separate edge list.
+   Storage: one .md per node, and a frame is a FOLDER holding its cards (`_index.md` is its own
+   note); arrangement lives in board.json — no ids on disk.
+   The path IS the node's identity; in-memory ids are ephemeral, minted per load.
    ============================================================ */
 
 import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
@@ -39,6 +38,7 @@ import { commitStep, record, touch, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/persistence.js';
+import { afterReading, readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
 import { scope, scopeActive, scopeRootNode, isScopeRoot, isReadingRoot, readingActive, readingWidth, canOpen, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
@@ -428,7 +428,8 @@ export function paintNode(n: MindNode): void {
       // pill is one line: the name, then how many notes it holds (`.frame-count`).
       const desc = isFrameBox(n) ? frameDescription(n) : '';
       const md = desc || isFrameFold(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(label) : cardMarkdown(label);
-      const count = isFrameFold(n) ? descendantCount(n.id) : 0;
+      // A folded frame whose notes weren't read knows only HOW MANY there are (data/lazy.ts).
+      const count = isFrameFold(n) ? n.lazy ?? descendantCount(n.id) : 0;
       const full = nodeLabel(label) + (desc ? '\n' + desc : '');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
@@ -987,6 +988,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   window.addEventListener('pointerup', up);
 }
 export function paintAll(): void {
+  readOpenUnread();   // an open frame whose notes are still on disk reads them (data/lazy.ts)
   for (const n of state.nodes.values()) paintNode(n);
   paintFreeEdges();
   updateEmptyHints();
@@ -1138,6 +1140,8 @@ export function toggleCollapse(id: string): void {
   const n = state.nodes.get(id); if (!n) return;
   if (isLockedEffective(n)) { setStatus('Locked — can’t collapse/expand'); return; }
   if (!canFold(n)) return;   // a card with nothing to tuck away
+  // Unfolding a frame whose notes are still on disk reads them first (data/lazy.ts), then unfolds.
+  if (n.collapsed && afterReading([id], () => toggleCollapse(id), false)) return;
   // animate the reflow; withLayoutAnimation paints, measures heights, and lays out the children
   record([id], () => withLayoutAnimation(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
   dropHiddenFromSelection();
@@ -1163,6 +1167,7 @@ function foldableSelection(ids: Iterable<string>): MindNode[] {
 }
 // Apply one shared fold state to a whole set, as ONE undo step and one animated reflow.
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
+  if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) return;
   record(cards.map(n => n.id),
     () => withLayoutAnimation(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
@@ -1186,6 +1191,12 @@ export function foldScope(): MindNode[] {
     ? frames.flatMap(f => subtreeIds(f.id).map(id => state.nodes.get(id)!))
     : [...state.nodes.values()].filter(n => !outOfScope(n));
   return pool.filter(n => canFold(n) && !isLockedEffective(n) && !isScopeRoot(n));
+}
+// Expand all brings back the WHOLE lot, so every folded frame in reach is read to the bottom first
+// (data/lazy.ts) — and the set is taken again after, since what was read holds more to unfold.
+function expandAll(): void {
+  const go = (): void => setCollapsedSelection(foldScope().map(n => n.id), false);
+  if (!afterReading(foldScope().map(n => n.id), go)) go();
 }
 // The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
 // leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
@@ -1432,6 +1443,7 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
 export function openFrame(target: MindNode | undefined): void {
   const t = target;
   if (!t || !canOpen(t)) { setStatus('This can’t be opened'); return; }
+  if (afterReading([t.id], () => openFrame(t), false)) return;   // its notes are the canvas you open onto
   const back = currentBack();
   // Unfolding on the way in is the ONE node mutation opening performs, so it alone is recorded:
   // ⌘Z re-folds the frame instead of teleporting you between scopes. Opening itself is navigation,
@@ -1992,7 +2004,7 @@ function paletteCommands(): Command[] {
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
     { label: 'Collapse all', keywords: 'fold every card frame', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
-    { label: 'Expand all', keywords: 'unfold every card frame', when: () => foldScope().some(n => n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), false) },
+    { label: 'Expand all', keywords: 'unfold every card frame', when: () => foldScope().some(n => n.collapsed), run: expandAll },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },

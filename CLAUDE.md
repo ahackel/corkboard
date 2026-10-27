@@ -30,9 +30,9 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 - `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list/table Enter, Tab, ⌘B/I/L, ⌥↑↓), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `paste-list.ts`, `guides.ts` (smart-guide geometry), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
-  `idb-store.ts`, `handle-store.ts`, `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
+  `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
-  `flushSave`, `loadFromDir`, zip import/export) `board.ts` (the ONE sidecar), `save-alert.ts` (the only UI here).
+  `flushSave`, `loadFromDir`/`readFolder`, zip import/export) `board.ts` (the ONE sidecar), `lazy.ts` (when a folded frame is read / let go), `save-alert.ts` (the only UI here).
 - `view/` — `camera.ts`, `layout.ts` (frame geometry, the drop test `frameAt`, `holderOf`),
   `free-edges.ts`, `theme.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
@@ -47,8 +47,9 @@ dependencies, no lint; `npm test` (vitest, `tests/`) pins the FILE FORMAT — ru
 
 Each has a longer "why" in `docs/architecture.md`; read it before changing the code it governs.
 
-- **One `.md` file per node, and the file's PATH is its identity** (`mm_parent` points at it, the hash
-  encodes it). No database; ONE `board.json` holds ARRANGEMENT, never content. Ids are ephemeral.
+- **One `.md` file per node, and the file's PATH is its identity**; ONE `board.json` holds ARRANGEMENT, never content.
+- **A frame IS a folder** (`Name/_index.md` + its cards; parent = the path, `parentFileOf`); a move moves the file
+  (`planPaths`). A FOLDED frame's folder is NOT READ until needed and lets go once saved (`data/lazy.ts`).
 - **A node's TITLE is the leading `# ` line of its body and nothing else** (`splitHeading`/
   `joinHeading`, exact inverses). Not frontmatter, not the filename; no heading = an UNTITLED card. The
   filename is a slug TRACKING that text: re-derived each save, renamed on edit-commit, suffixed `Notes 2.md`.
@@ -56,7 +57,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
 - **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the frame that is its parent;
   free edges live in `board.json`, ELBOW card to card (route derived, never stored), and mean nothing structural.
-- **Layout lives in `mm_*` frontmatter** (`mm_parent`, `mm_position_x`/`_y`,
+- **Layout lives in `mm_*` frontmatter** (`mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **Two kinds, card and frame (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes

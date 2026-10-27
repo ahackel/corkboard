@@ -2,7 +2,8 @@
 // prompts and IndexedDB-persisted handles for silent resume at boot. File ops delegate to
 // the shared handle-store helpers (DRY); only handle acquisition is FSA-specific.
 import { idbGet, idbPut } from '../utils/idb.js';
-import { listMd, writeFile, removeFile, readFileBlob } from './handle-store.js';
+import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob } from './handle-store.js';
+import type { FoldTest } from './tree.js';
 import { rememberFolder, notifyRecentsChanged } from './recents.js';
 import { installWatch } from './watch.js';
 import type { Store, PickResult } from './types.js';
@@ -71,7 +72,8 @@ export const fsaStore = {
     this._dir = handle; this._key = key; return true;
   },
 
-  list(){ return listMd(this._dir!); },
+  listTree(under: string, fold: FoldTest){ return listTree(this._dir!, under, fold); },
+  removeDir(dir: string){ return removeEmptyDir(this._dir!, dir); },
   write(path: string, data: string | Blob){ return writeFile(this._dir!, path, data); },
   remove(path: string){ return removeFile(this._dir!, path); },
   readBlob(path: string){ return readFileBlob(this._dir!, path); },

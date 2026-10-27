@@ -46,8 +46,11 @@ export interface MindNode {
   y: number;
   rx: number;                      // persisted as mm_position_x/y
   ry: number;
-  parent: string | null;           // parent node id (resolved from mm_parent path at load)
-  _parentPath?: string;            // transient: the mm_parent path, resolved to `parent` post-load
+  parent: string | null;           // parent node id (resolved from the file's FOLDER at load)
+  // A FOLDED frame whose notes are still on disk, unread (data/lazy.ts): how many there are, for its
+  // pill. Undefined once they're in memory. Ephemeral — what's read is a property of this session.
+  lazy?: number;
+  _parentPath?: string;            // transient: the parent's path (its folder), resolved to `parent` post-load
   collapsed: boolean;
   locked: boolean;                 // this card can be selected but not moved, (un)collapsed, or
                                     // edited (rename/body/color/delete); the
@@ -81,7 +84,7 @@ export interface MindNode {
                                     // it's needed, spliced by a drag, and persisted to board.json as
                                     // paths (data/board.ts). Reconciled by orderedKids, which drops
                                     // unknown ids and appends unlisted children: the stored list is a
-                                    // sort HINT, never a record of membership — mm_parent is that.
+                                    // sort HINT, never a record of membership — the folder is that.
   el?: HTMLElement | null;         // the rendered card (added during paint)
   frameContentEl?: HTMLElement | null;   // this frame's overflow:hidden content wrapper (frames only)
   hostFrameId?: string | null;     // which frame's content wrapper el/frameContentEl currently live
@@ -108,7 +111,7 @@ export interface View { x: number; y: number; k: number; }
 //
 // Its `id` is PERSISTED, unlike a node's — a node's identity is its file path, and an edge has no
 // file to be identified by. Its ENDPOINTS are node ids at runtime but paths on disk, for exactly
-// the reason `mm_parent` is a path: in-memory ids are minted fresh every load. `fromPath`/`toPath`
+// the reason a node is known by its path: in-memory ids are minted fresh every load. `fromPath`/`toPath`
 // are the transient carriers between reading the file and resolving them (data/board.ts
 // resolveEdges), mirroring MindNode's `_parentPath`.
 // What each END of an edge WEARS. Two independent caps rather than one three-way direction setting:
@@ -124,7 +127,10 @@ export interface BoardEdge {
   id: string;
   from: string;                    // node id (resolved from fromPath at load)
   to: string;
-  fromPath?: string;               // transient: the on-disk path, resolved to `from` post-load
+  fromPath?: string;               // the on-disk path, resolved to `from` post-load — and KEPT while
+                                    // that end is a note inside a folded frame nobody has read yet:
+                                    // `from` is then that frame (it stands in, the way a pill does),
+                                    // and the path is what goes back to disk (data/board.ts)
   toPath?: string;
   color: string;                   // palette key, an authored '#rrggbb', or '' for the default ink
   dashed: boolean;

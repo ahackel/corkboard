@@ -17,6 +17,7 @@ import { SPACING } from '../utils/guides.js';
 import { growFramesToHold } from './float-bar.js';
 import { settleFrames } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
+import { afterReading } from '../data/lazy.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -174,6 +175,8 @@ function copyNode(s: MindNode): MindNode {
 export function duplicateSelection({ edit = true }: { edit?: boolean } = {}): MindNode[] | undefined {
   if (state.readOnly) return;
   const ids = selectedIds();
+  // A folded frame's notes may still be on disk: duplicating it copies them, so they're read first.
+  if (afterReading(ids, () => duplicateSelection({ edit }))) return;
   const srcs = ids.map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n);
   if (!srcs.length) return;
   const copies = srcs.map(copyNode);
@@ -422,6 +425,9 @@ export function deleteNode(id: string): void {
   if (state.readOnly) return;
   if (!state.nodes.has(id)) return;
   if (subtreeHasLocked(id)) { setStatus('Locked — can’t delete'); return; }
+  // Deleting a folded frame deletes the notes in its folder, so they're read first — that way they
+  // go through the history like any other delete, and one ⌘Z brings them all back.
+  if (afterReading([id], () => deleteNode(id))) return;
   record([], () => {                 // ids are touched inside deleteNodes
     deleteNodes(subtreeIds(id));
     applyLayouts(); selectNode(null); paintAll();
@@ -446,6 +452,7 @@ export function deleteSelection(): void {
   if (state.readOnly) return;
   const ids = [...state.sel].filter(id => !subtreeHasLocked(id));
   if (!ids.length) { setStatus('Locked — can’t delete'); return; }
+  if (afterReading(ids, deleteSelection)) return;   // a folded frame's notes first (see deleteNode)
   record([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
     deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
@@ -474,6 +481,7 @@ export function deleteSelectionKeepChildren(): void {
   if (state.readOnly) return;
   const ids = selectedIds().filter(canPromoteDelete);
   if (!ids.length) { setStatus('Locked — can’t delete'); return; }
+  if (afterReading(ids, deleteSelectionKeepChildren, false)) return;   // the children it keeps must exist
   const promoted = new Set<string>();
   record([], () => {
     for (const id of ids) {

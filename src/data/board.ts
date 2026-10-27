@@ -7,10 +7,11 @@
 // settings.json), which are still READ so an older vault opens unchanged — but never written again.
 //
 // The split rule, in one line: frontmatter describes the NOTE, board.json describes the BOARD's
-// arrangement of it. `mm_parent` is the deliberate exception (see docs/architecture.md) — keeping
-// membership in the note is what lets a folder stand on its own if this file is lost.
+// arrangement of it. Membership is neither: a frame is a FOLDER (docs/architecture.md), so which frame
+// holds a note is where its file sits — which is what lets a folder stand on its own if this file is lost.
 // ============================================================
-import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide } from '../core/state.js';
+import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+import { dirOf } from '../utils/filenames.js';
 import { store } from './persistence.js';
 import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';
@@ -62,7 +63,9 @@ type StoredEdge = { id: string; from: string; to: string;
                     arrows?: 'none' | 'to' | 'both';   // legacy: ONE direction axis, read never written
                     label?: string };
 function serializeEdge(e: BoardEdge): StoredEdge | null {
-  const from = state.nodes.get(e.from)?.file, to = state.nodes.get(e.to)?.file;
+  // An end held by a PATH is a note inside a folded frame nobody has read (resolveEdges): the frame
+  // stands in for it on the canvas, but the path is still where the line goes.
+  const from = e.fromPath ?? state.nodes.get(e.from)?.file, to = e.toPath ?? state.nodes.get(e.to)?.file;
   if (!from || !to) return null;
   // Most fields are omitted when they equal the DEFAULT a fresh edge is born with (makeEdge), so a
   // board file stays readable. `dashed` is written ALWAYS, deliberately: it is a boolean whose
@@ -94,7 +97,7 @@ export function makeEdge(from: string, to: string): BoardEdge {
 // `x`/`y` keep the meaning `mm_position_x/y` had — an offset from the parent, world coords for a
 // top-level card — so nothing about the layout pipeline had to change when they moved file.
 //
-// `order` is a SORT HINT, never a record of membership: `mm_parent` alone says who belongs to whom.
+// `order` is a SORT HINT, never a record of membership: the folder alone says who belongs to whom.
 // Entries that don't resolve are ignored and children missing from the list are appended by position
 // (view/layout.ts orderedKids already does exactly this), so the list cannot lie about the tree — at
 // worst it is incomplete, and incomplete degrades to filename order.
@@ -103,8 +106,16 @@ let geom = new Map<string, StoredGeom>();
 export function boardGeom(path: string | null): StoredGeom | undefined {
   return path ? geom.get(path) : undefined;
 }
+// The folders of the folded frames whose notes are still unread (MindNode.lazy).
+function lazyFolders(): string[] {
+  return [...state.nodes.values()].filter(n => n.lazy != null && n.file).map(n => dirOf(n.file!));
+}
 function collectGeom(): Record<string, StoredGeom> {
   const out: Record<string, StoredGeom> = {};
+  // What sits in an UNREAD folder isn't in memory, so its geometry is carried over as it was read
+  // (or as it was when it was let go of — rememberGeom), or the next write would forget it.
+  const lazy = lazyFolders();
+  if (lazy.length) for (const [path, g] of geom) if (lazy.some(d => path.startsWith(d))) out[path] = g;
   for (const n of state.nodes.values()) {
     if (!n.file) continue;                       // never saved yet: it has no key to be stored under
     const g: StoredGeom = { x: Math.round(n.rx), y: Math.round(n.ry) };
@@ -116,9 +127,21 @@ function collectGeom(): Record<string, StoredGeom> {
     if (n.collapsed) g.collapsed = true;
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     if (order.length > 1) g.order = order;       // a single child has no order worth writing
+    if (n.lazy != null && geom.get(n.file)?.order) g.order = geom.get(n.file)!.order;   // its kids are unread
     out[n.file] = g;
   }
   return out;
+}
+// Note the live geometry of nodes about to be LET GO of (data/lazy.ts releaseFolded), so collectGeom
+// keeps writing it while they're not in memory, and the next read of their folder seeds them from it.
+export function rememberGeom(nodes: Iterable<MindNode>): void {
+  commitRel();
+  for (const n of nodes) {
+    if (!n.file) continue;
+    const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
+    geom.set(n.file, { x: Math.round(n.rx), y: Math.round(n.ry), w: n.w, h: n.h, clip: !!n.clip,
+                       collapsed: n.collapsed, order: order.length > 1 ? order : geom.get(n.file)?.order });
+  }
 }
 // Re-seed each parent's in-memory child order from the stored paths. Called by loadFromDir once the
 // path index exists. orderedKids owns the reconciliation from here — see the `order` note above.
@@ -239,14 +262,22 @@ export async function loadBoard(): Promise<void> {
 // Turn each edge's stored PATHS into live node ids. Called by loadFromDir once every note is in
 // state.nodes and the path index exists. An endpoint that doesn't resolve — a note deleted in
 // Finder, a renamed file — drops the whole edge silently: a board degrades, it never corrupts.
-export function resolveEdges(byPath: Map<string | null, string>): void {
+// …EXCEPT an end inside a folded frame whose notes weren't read (data/lazy.ts): `standIn` names that
+// frame, which holds the end on the canvas the way a folded pill always has, and the path is KEPT —
+// it is what serializeEdge writes back, and what resolves once the folder is read (unparkEdges).
+export function resolveEdges(byPath: Map<string | null, string>, standIn: (path: string) => string | null = () => null): void {
   state.edges = state.edges.filter(e => {
     // A legacy junction end has no path; only the note ends go through the index.
-    const from = e.fromPath == null ? e.from : byPath.get(e.fromPath);
-    const to = e.toPath == null ? e.to : byPath.get(e.toPath);
-    if (!from || !to || from === to) return false;
+    const end = (path: string | undefined, id: string): [string | null | undefined, boolean] => {
+      if (path == null) return [id, false];
+      const real = byPath.get(path);
+      return real ? [real, false] : [standIn(path), true];
+    };
+    const [from, fromParked] = end(e.fromPath, e.from), [to, toParked] = end(e.toPath, e.to);
+    if (!from || !to || (from === to && !fromParked && !toParked)) return false;
     e.from = from; e.to = to;
-    delete e.fromPath; delete e.toPath;
+    if (!fromParked) delete e.fromPath;
+    if (!toParked) delete e.toPath;
     return true;
   });
   // …and lines that met at a junction become plain card-to-card lines (utils/edge-graph.ts). The next
@@ -255,6 +286,24 @@ export function resolveEdges(byPath: Map<string | null, string>): void {
     state.edges = flattenJunctions(state.edges, id => legacyJunctions.has(id))
       .filter(e => state.nodes.has(e.from) && state.nodes.has(e.to) && e.from !== e.to);
     legacyJunctions = new Set();
+  }
+}
+
+// A folder has just been read: the ends that were waiting on its notes take their real ids.
+export function unparkEdges(byPath: Map<string | null, string>): void {
+  for (const e of state.edges) {
+    const f = e.fromPath != null ? byPath.get(e.fromPath) : undefined;
+    if (f) { e.from = f; delete e.fromPath; }
+    const t = e.toPath != null ? byPath.get(e.toPath) : undefined;
+    if (t) { e.to = t; delete e.toPath; }
+  }
+}
+// Nodes are being let go of: every end on one of them goes back to its PATH, held by `standIn`.
+export function parkEdges(gone: Map<string, string>, standIn: string): void {
+  for (const e of state.edges) {
+    // An end already held by a path (it was on a folded frame inside this one) keeps that path.
+    const f = gone.get(e.from); if (f) { e.fromPath ??= f; e.from = standIn; }
+    const t = gone.get(e.to); if (t) { e.toPath ??= t; e.to = standIn; }
   }
 }
 
