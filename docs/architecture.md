@@ -564,6 +564,11 @@ pink rule per aligned position (the centre rule only when no edge lines up) and 
 gap. An axis the guides claim skips the grid: guides read the RAW position because a 20px grid step
 would otherwise jump past a 6px pull, and measured card heights put bottoms off the grid anyway. Off
 for a reparent, a merge, Alt, and managed layouts; hidden on every drop and abort.
+A RESIZE uses the same guides on the edge being dragged (`snapEdges`, via `guideResize` in
+`startNodeResize`): onto a neighbour's edge (never a centre, which would move with the edge), `SPACING`
+from a neighbour it faces, or the gap of the pair it continues; only rules through a dragged edge are
+drawn, and the grid keeps any axis the guides don't claim. Not for an aspect-locked image card, whose
+other axis is derived.
 
 An eased pull toward the grid — a magnet, the value sliding toward the nearest line in proportion to how
 close it was — was built and then removed, and the reason is worth keeping. Any pull is a GAP between the

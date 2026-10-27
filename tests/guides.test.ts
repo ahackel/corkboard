@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapBox, type Box } from '../src/utils/guides.js';
+import { snapBox, snapEdges, type Box } from '../src/utils/guides.js';
 
 const b = (x: number, y: number, w = 100, h = 50): Box => ({ x, y, w, h });
 
@@ -44,5 +44,26 @@ describe('snapBox', () => {
     expect(s.dy).toBe(-3);
     expect(s.gaps).toEqual([{ axis: 'y', from: 50, to: 70, at: 50 }]);
     expect(snapBox(b(500, 73), [b(0, 0)], 6).gaps).toEqual([]);   // not facing: no spacing pull
+  });
+});
+
+describe('snapEdges', () => {
+  it('pulls the dragged right edge onto a neighbour edge and leaves the left alone', () => {
+    // box 0..104 wide, neighbour below spans 0..100: the right edge goes to 100
+    const s = snapEdges(b(0, 0, 104, 50), { x: 'hi' }, [b(0, 200)], 6);
+    expect(s.dx).toBe(-4);
+    expect(s.guides).toEqual([{ axis: 'x', at: 100, from: 0, to: 250 }]);   // not the shared left edge
+  });
+  it('pulls a dragged top edge to the house spacing below a neighbour', () => {
+    const s = snapEdges(b(0, 73, 100, 50), { y: 'lo' }, [b(0, 0)], 6);
+    expect(s.dy).toBe(-3);   // 50 + SPACING
+    expect(s.gaps).toEqual([{ axis: 'y', from: 50, to: 70, at: 50 }]);
+  });
+  it('never pulls a dragged edge onto a centre', () => {
+    expect(snapEdges(b(0, 0, 149, 50), { x: 'hi' }, [b(100, 200, 100, 50)], 1).dx).toBe(0);
+  });
+  it('ignores an axis that is not dragged', () => {
+    const s = snapEdges(b(2, 0, 104, 50), { y: 'hi' }, [b(0, 200)], 6);
+    expect([s.dx, s.guides.length]).toEqual([0, 0]);
   });
 });
