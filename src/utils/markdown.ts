@@ -72,6 +72,11 @@ export function soleImage(body: string | null | undefined): SoleImage | null {
 export function* bodyImages(body: string | null | undefined): Generator<SoleImage> {
   for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) yield { alt: m[1].trim(), src: m[2] };
 }
+// A note with `md` added at its end, a blank line between.
+export function appendMd(body: string, md: string): string {
+  return body.trim() ? body.replace(/\s*$/, '') + '\n\n' + md : md;
+}
+
 export const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A note with one picture's reference taken out (its line too, if that was all the line held).
 export function stripImageRef(body: string, src: string): string {

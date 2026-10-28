@@ -13,7 +13,7 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
+import { joinHeading, setNoteText, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
@@ -141,9 +141,8 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     discardNewCard(n.id, 'Cancelled new card');
     return;
   }
-  if (!cancel){
-    const { title, body, gap } = splitHeading(val);
-    n.title = title; n.body = body; n.titleGap = gap;
+  if (!cancel) {
+    setNoteText(n, val);
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow
@@ -394,8 +393,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   if (changed){
     // No sweeping-up of a bare `# ` first line here either: nothing puts one there but the user now,
     // and deleting what somebody typed is worse than leaving an empty heading in their note.
-    const { title, body, gap } = splitHeading(be.ta.value);
-    n.title = title; n.body = body; n.titleGap = gap;
+    setNoteText(n, be.ta.value);
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change

@@ -5,9 +5,9 @@
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf } from '../utils/model.js';
-import { stripImageRef } from '../utils/markdown.js';
+import { stripImageRef, appendMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
-import { splitHeading } from '../utils/frontmatter.js';
+import { splitHeading, setNoteText } from '../utils/frontmatter.js';
 import { frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
@@ -15,7 +15,8 @@ import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
-import { SPACING } from '../utils/guides.js';
+import { SPACING, slidePast } from '../utils/guides.js';
+import { boxOf } from './guides.js';
 import { growFramesToHold } from './float-bar.js';
 import { settleFrames } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
@@ -183,14 +184,7 @@ function copyNext(s: MindNode): MindNode {
   const left = sibs.filter(o => inRow(o, s.y) && o.x + nodeW(o) <= s.x)
     .sort((a, b) => (b.x + nodeW(b)) - (a.x + nodeW(a)))[0];
   const gap = left ? s.x - (left.x + nodeW(left)) : LIST_GAP;
-  let x = s.x + w + gap;
-  for (let moved = true; moved;) {
-    moved = false;
-    for (const o of sibs) {
-      if (!inRow(o, s.y) || o.x >= x + w || o.x + nodeW(o) <= x) continue;
-      x = o.x + nodeW(o) + gap; moved = true;
-    }
-  }
+  const { x } = slidePast({ x: s.x + w + gap, y: s.y, w, h }, sibs.map(o => boxOf(o)), 'x', gap);
   const at = snapPt({ x, y: s.y });
   const c = cloneNodeAt(s, at.x, at.y);
   if (c.title.trim()) c.title = advanceTitle(c.title);
@@ -271,16 +265,8 @@ export function createSibling(refId: string){
   const ref = state.nodes.get(refId); if (!ref) return;
   const parent = parentOf(ref);
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t add a card here'); return; }
-  const w = nodeW(ref);
-  let y = ref.y + nodeH(ref) + LIST_GAP;
-  for (let moved = true; moved;) {
-    moved = false;
-    for (const o of childrenOf(ref.parent)) {
-      const oh = nodeH(o);
-      if (o === ref || o.x >= ref.x + w || o.x + nodeW(o) <= ref.x || o.y >= y + NEW_CARD_H || o.y + oh <= y) continue;
-      y = o.y + oh + LIST_GAP; moved = true;
-    }
-  }
+  const others = childrenOf(ref.parent).filter(o => o !== ref).map(o => boxOf(o));
+  const { y } = slidePast({ x: ref.x, y: ref.y + nodeH(ref) + LIST_GAP, w: nodeW(ref), h: NEW_CARD_H }, others, 'y', LIST_GAP);
   createNode({ x: ref.x, y, parent: ref.parent });
 }
 
@@ -304,8 +290,7 @@ function cutCardText(n: MindNode, start: number, end: number, value: string): st
   touch(n.id);   // usually already touched by startCardEdit — idempotent
   const text = value.slice(start, end);
   const rest = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
-  const split = splitHeading(rest);
-  n.title = split.title; n.body = split.body; n.titleGap = split.gap;
+  setNoteText(n, rest);
   n.dirty = true;
   dropBodyEdit();   // see inline-edit.ts — the editor still shows the pre-cut text
   return text;
@@ -318,7 +303,7 @@ function appendToBody(t: MindNode, md: string): void {
   if (!md) {
     return;
   }
-  t.body = (t.body && t.body.trim()) ? t.body.replace(/\s*$/, '') + '\n\n' + md : md;
+  t.body = appendMd(t.body, md);
   t.dirty = true;
   syncOpenEditor(t);
 }
@@ -577,9 +562,7 @@ export function extractImage(sourceId: string, path: string, alt: string,
     const tgt = state.nodes.get(target.toCardId);
     if (tgt){
       touch(tgt.id);
-      tgt.body = (tgt.body && tgt.body.trim()) ? tgt.body.replace(/\s*$/, '') + '\n\n' + md : md;
-      tgt.dirty = true;
-      syncOpenEditor(tgt);
+      appendToBody(tgt, md);
     }
     setStatus('Image moved');
   } else {

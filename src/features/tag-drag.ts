@@ -13,6 +13,7 @@ import { taggableSelection } from '../main.js';
 import { wearsTags } from '../utils/tags.js';
 import { retag, tagFaceHTML, type TagChange } from './tags.js';
 import { pushMru } from './tag-picker.js';
+import { classMarker, trackPointer } from '../utils/dom.js';
 
 const SLOP = 4;
 
@@ -31,12 +32,10 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
   offBoard?: (x: number, y: number) => void): void {
   if (e.button !== 0 || state.readOnly) return;
   const x0 = e.clientX, y0 = e.clientY;
-  let ghost: HTMLElement | null = null, over: HTMLElement | null = null;
+  let ghost: HTMLElement | null = null;
+  const markDrop = classMarker('tag-drop');
   const target = (on: string | null): void => {
-    const el = on && on !== fromCard ? state.nodes.get(on)?.el ?? null : null;
-    if (el === over) return;
-    over?.classList.remove('tag-drop');
-    over = el; over?.classList.add('tag-drop');
+    markDrop(on && on !== fromCard ? state.nodes.get(on)?.el ?? null : null);
   };
   const move = (ev: PointerEvent): void => {
     if (!ghost) {
@@ -52,9 +51,7 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
     target(cardAt(ev.clientX, ev.clientY));
   };
   const end = (ev: PointerEvent | null): void => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    window.removeEventListener('pointercancel', cancel);
+    stop();
     target(null);
     if (!ghost) return;
     ghost.remove();
@@ -78,11 +75,7 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
       offBoard(ev.clientX, ev.clientY);
     }
   };
-  const up = (ev: PointerEvent): void => end(ev);
-  const cancel = (): void => end(null);
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
-  window.addEventListener('pointercancel', cancel);
+  const stop = trackPointer({ move, up: ev => end(ev), cancel: () => end(null) });
 }
 
 export function puff(x: number, y: number): void {

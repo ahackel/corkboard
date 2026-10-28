@@ -18,6 +18,7 @@ import { screenToWorld } from '../view/camera.js';
 import { paintAll, nodeW, nodeH, snapPt } from '../main.js';
 import { createNode } from './crud.js';
 import { SPACING } from '../utils/guides.js';
+import { trackPointer } from '../utils/dom.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
@@ -177,16 +178,7 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
     const draw = ui.edgeDraw; ui.edgeDraw = null;
     if (draw) finishDraw(draw, screenToWorld(e.clientX, e.clientY));
   };
-  const stop = (): void => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    window.removeEventListener('pointercancel', abort);
-    window.removeEventListener('keydown', key);
-  };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
-  window.addEventListener('pointercancel', abort);
-  window.addEventListener('keydown', key);
+  const stop = trackPointer({ move, up, cancel: abort, key });
 }
 
 // How far the pointer must travel before a release lands anything — below it the gesture was a press.

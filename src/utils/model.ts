@@ -171,3 +171,9 @@ export function resolveWikilink(name: string): MindNode[] {
   });
   return byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
 }
+
+// The node whose card on the canvas holds `t` (an event target, or what is under a point).
+export function nodeAtTarget(t: EventTarget | null | undefined): MindNode | null {
+  const el = t instanceof Element ? t.closest<HTMLElement>('#world [data-id]') : null;
+  return el ? state.nodes.get(el.dataset.id ?? '') ?? null : null;
+}

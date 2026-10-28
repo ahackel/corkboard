@@ -25,6 +25,7 @@ import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
 import { guidePull, hideGuides } from './guides.js';
 import { growFramesToHold } from './float-bar.js';
+import { trackPointer } from '../utils/dom.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
@@ -312,19 +313,17 @@ export function bindNodeDrag(n: MindNode): void {
     // gesture (not left permanently on window) so they can't double-fire alongside the ghost-card
     // flow's own window listeners in main.ts, which drives its drag through the same dragPointerMove
     // /dragPointerUp via feedDragMove/commitDrag.
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    const stop = trackPointer({ move: onMove, up: onUp, cancel: onUp });
     // Guard on `ui.drag.n === n` (not just truthiness): there's a single shared `ui.drag` slot, so
     // if a second card's pointerdown ever hijacks it before this gesture's up/cancel arrives (e.g.
     // true two-finger touch on two different cards at once), this stale pair must still remove
     // itself without touching the OTHER drag that's now live.
     function onMove(ev: PointerEvent): void { if (ui.drag && ui.drag.n === n) dragPointerMove(ev); }
     function onUp(): void {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      if (ui.drag && ui.drag.n === n) dragPointerUp();
+      stop();
+      if (ui.drag && ui.drag.n === n) {
+        dragPointerUp();
+      }
     }
   });
 }

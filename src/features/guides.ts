@@ -20,7 +20,7 @@ function guideLayer(): HTMLElement {
 }
 export function hideGuides(): void { if (layer) layer.replaceChildren(); }
 
-const boxOf = (n: MindNode, x = n.x, y = n.y): Box => ({ x, y, w: nodeW(n), h: nodeH(n) });
+export const boxOf = (n: MindNode, x = n.x, y = n.y): Box => ({ x, y, w: nodeW(n), h: nodeH(n) });
 
 // The cards a dragged one lines up against: its siblings in the same space (the top level, or the
 // same frame), on screen, and not part of the drag.

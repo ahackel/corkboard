@@ -59,6 +59,14 @@ export function joinHeading(title: string, body: string, gap = true): string {
   if (!t) return b;
   return b ? `# ${t}\n${gap ? '\n' : ''}${b}` : `# ${t}`;
 }
+// A node's title and body from the whole text of its note (the editor's text, a cut, a split).
+export function setNoteText(n: MindNode, text: string): void {
+  const { title, body, gap } = splitHeading(text);
+  n.title = title;
+  n.body = body;
+  n.titleGap = gap;
+}
+
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
 // this, and it survives in two places for that reason: the one-shot migration of a body-less note
 // (data/persistence.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).

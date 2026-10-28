@@ -17,13 +17,14 @@
 // Registers its listeners on import, like features/attachments.ts and features/gestures.ts.
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
-import { isLockedEffective } from '../utils/model.js';
+import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
 import { isFrame } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { centredAt, dropCardText, cardText, canMerge,
          type TextSource } from './crud.js';
 import { firstLineSplit } from '../utils/frontmatter.js';
 import { effectiveColor, colorClass, applyColorVars, NODE_W } from '../main.js';
+import { classMarker } from '../utils/dom.js';
 
 // The selection as it stood when the drag began (crud.ts TextSource — which card, which half of it,
 // which range). Captured here because it's read at DROP time, by when the editor may have lost the
@@ -35,11 +36,9 @@ let pending: TextSource | null = null;
 // the selection back into its own note must stay a plain in-textarea move.
 type Dest = { into: MindNode } | { container: MindNode | null };
 function destAt(t: EventTarget | null, sourceId: string): Dest | null {
-  const el = t instanceof Element ? t : null;
   // A card's own element is what a drop hits: .frame-content is pointer-events:none, so the empty
   // interior of a frame resolves to the FRAME, and a card inside it to that card.
-  const nodeEl = el?.closest?.('#world [data-id]') as HTMLElement | null;
-  const n = nodeEl ? state.nodes.get(nodeEl.dataset.id ?? '') ?? null : null;
+  const n = nodeAtTarget(t);
   if (n?.id === sourceId) return null;                   // its own card (editor or not): a native move
   if (!n) return { container: null };                    // open canvas → the top level
   if (isLockedEffective(n)) return null;                 // locked: no drop, no hint
@@ -53,18 +52,12 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
 
 // The drop hint: the same dashed outline the ⌥ card merge uses when the text lands IN a card, and
 // the frame-drop outline when it lands inside a frame.
-let hintEl: Element | null = null;
-let hintCls = '';
-function setHint(el: Element | null, cls = ''): void {
-  if (hintEl === el && hintCls === cls) return;
-  if (hintEl) hintEl.classList.remove(hintCls);
-  hintEl = el; hintCls = cls;
-  if (hintEl && hintCls) hintEl.classList.add(hintCls);
-}
+const markMerge = classMarker('drop-merge');
+const markFrame = classMarker('drop-target');
+
 function showHint(dest: Dest | null): void {
-  if (!dest) { setHint(null); return; }
-  if ('into' in dest) setHint(dest.into.el ?? null, 'drop-merge');
-  else setHint(dest.container?.el ?? null, 'drop-target');
+  markMerge(dest && 'into' in dest ? dest.into.el ?? null : null);
+  markFrame(dest && 'container' in dest ? dest.container?.el ?? null : null);
 }
 
 // What a native drag beginning on `target` is dragging, if it's THIS gesture: a range of the open
@@ -146,11 +139,11 @@ document.addEventListener('drop', (e) => {
   if (!p) return;
   pending = null;
   const dest = destAt(e.target, p.id);
-  setHint(null);
+  showHint(null);
   if (!dest) return;
   e.preventDefault();
   dropCardText(p,
     'into' in dest ? dest : { container: dest.container, at: centredAt(screenToWorld(e.clientX, e.clientY)) });
 });
 // Cancelled (Esc, released outside the window) or finished: nothing to clean up but the hint.
-document.addEventListener('dragend', () => { pending = null; setHint(null); });
+document.addEventListener('dragend', () => { pending = null; showHint(null); });

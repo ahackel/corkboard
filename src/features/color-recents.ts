@@ -14,7 +14,7 @@
 // recolour the last card away from a shade and it stops being offered, without a cache to invalidate.
 import { state } from '../core/state.js';
 import { isHexColor } from '../utils/ink.js';
-import { readStrings, writeJSON } from '../utils/local-json.js';
+import { readStrings, pushRecent } from '../utils/local-json.js';
 
 const MRU_KEY = 'corkboard.colorMru';
 const MRU_MAX = 8;    // what's remembered
@@ -35,9 +35,10 @@ const loadMru = (): string[] => readStrings(MRU_KEY);
 // native sheet streams a colour for every pointer move, which would bury the real picks under a
 // drag's worth of intermediates.
 export function rememberColor(color: string): void {
-  const c = normalizeColor(color); if (!c) return;
-  const mru = [c, ...loadMru().filter(x => x !== c)].slice(0, MRU_MAX);
-  writeJSON(MRU_KEY, mru);
+  const c = normalizeColor(color);
+  if (c) {
+    pushRecent(MRU_KEY, c, MRU_MAX);
+  }
 }
 // Every distinct custom colour in the open map, in first-seen order.
 function mapColors(): string[] {

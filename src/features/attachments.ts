@@ -3,25 +3,26 @@
 // Added by pasting into the in-card body editor, dropping a file on a card (or the editor), or by
 // typing the markdown. Importing this module registers the document-level drag/drop listeners.
 import { state, setStatus, isImageCard } from '../core/state.js';
-import { isLockedEffective } from '../utils/model.js';
+import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
-import { store, scheduleSave, IMAGE_FILE_RE } from '../data/persistence.js';
+import { store, scheduleSave } from '../data/persistence.js';
+import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
 import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
 import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
 import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
+import { appendMd } from '../utils/markdown.js';
 import { nodeLabel } from '../utils/model.js';
 import { autosizeBody, syncOpenEditor } from './inline-edit.js';
 import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
 import { isFrame, frameAt } from '../view/layout.js';
+import { classMarker } from '../utils/dom.js';
 
-const IMG_EXT: Record<string, string> = { 'image/png':'.png', 'image/jpeg':'.jpg', 'image/gif':'.gif', 'image/webp':'.webp',
-                  'image/svg+xml':'.svg', 'image/avif':'.avif', 'image/bmp':'.bmp' };
 function imgExt(file: File): string {
   const m = (file.name || '').match(/\.[a-z0-9]+$/i);
-  return m ? m[0].toLowerCase() : (IMG_EXT[file.type] || '.png');
+  return m ? m[0].toLowerCase() : imageExtFor(file.type);
 }
 // …or by NAME when the drop hands us no MIME type, which some file managers do — an .svg dragged out
 // of Finder/Explorer is the usual one, and it would otherwise be silently ignored.
@@ -107,7 +108,7 @@ async function appendImagesToNode(id: string, files: FileList | File[]): Promise
   setStatus('Adding image…');
   const md = await markdownForImages(imgs);
   record([id], () => {
-    n.body = (n.body && n.body.trim()) ? n.body.replace(/\s*$/, '') + '\n\n' + md : md;
+    n.body = appendMd(n.body, md);
     n.dirty = true;
   });
   syncOpenEditor(n);
@@ -171,8 +172,7 @@ export function onBodyPaste(e: ClipboardEvent): void {
 // A hidden <input type="file"> is the one attach mechanism every mobile browser supports — on iOS it
 // opens the Photos library / Camera / Files share sheet. Routes into the exact same storage/rendering
 // pipeline as paste and drop; the canvas menu's Insert image… (context-menu.ts) triggers it.
-type PickTarget =
-  | { kind: 'new'; sx: number | null; sy: number | null; parent: string | null };
+interface PickTarget { sx: number | null; sy: number | null; parent: string | null }
 let pickTarget: PickTarget | null = null;
 const filePicker = document.createElement('input');
 filePicker.type = 'file'; filePicker.accept = 'image/*'; filePicker.multiple = true;
@@ -188,7 +188,7 @@ filePicker.addEventListener('change', () => {
 // Drop a new image card at a canvas point.
 export function pickImagesAt(sx: number | null, sy: number | null, parent: string | null): void {
   if (!canAttach()) return;
-  pickTarget = { kind: 'new', sx, sy, parent };
+  pickTarget = { sx, sy, parent };
   filePicker.click();
 }
 
@@ -225,7 +225,7 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   // Many image URLs carry no file extension (CDNs), so those are pasted as a link first and
   // probed in the background: if the URL actually loads as an image, the link upgrades to ![](…).
   if (/^https?:\/\/\S+$/i.test(text)){
-    const isImg = /\.(png|jpe?g|gif|webp|svg|avif|bmp)(\?\S*)?$/i.test(text);
+    const isImg = IMAGE_URL_RE.test(text);
     const n = createNode({ ...opts, body: isImg ? `![](${text})` : text });
     if (n) setStatus(isImg ? 'Pasted image link' : 'Pasted link');
     if (n && !isImg) void probeImage(text).then(ok => {
@@ -278,7 +278,7 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
     const items = await navigator.clipboard.read();
     for (const it of items){
       const imgType = it.types.find(t => t.startsWith('image/'));
-      if (imgType) imgs.push(new File([await it.getType(imgType)], 'pasted' + (IMG_EXT[imgType] || '.png'), { type: imgType }));
+      if (imgType) imgs.push(new File([await it.getType(imgType)], 'pasted' + imageExtFor(imgType), { type: imgType }));
       else if (it.types.includes('text/plain')) text = await (await it.getType('text/plain')).text();
     }
   } catch {
@@ -293,22 +293,15 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
 
 // Drag an image file from the OS onto a card (or the body editor). We handle this at the document
 // level so we can both highlight the target and stop the browser from navigating to the dropped file.
-let imgDropTarget: Element | null = null;   // the element currently showing the .img-drop hint
-function setImgDropTarget(el: Element | null): void {
-  if (imgDropTarget === el) return;
-  imgDropTarget?.classList.remove('img-drop');
-  imgDropTarget = el;
-  imgDropTarget?.classList.add('img-drop');
-}
+const setImgDropTarget = classMarker('img-drop');
 document.addEventListener('dragover', (e) => {
   if (!dragHasFiles(e)) return;
   e.preventDefault();
   if (state.readOnly){ setImgDropTarget(null); return; }
   const t = e.target as HTMLElement;
-  const cardEl = t.closest?.('#world [data-id]') as HTMLElement | null;
-  const cardNode = cardEl ? state.nodes.get(cardEl.dataset.id ?? '') : null;
+  const cardNode = nodeAtTarget(t);
   if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint
-  setImgDropTarget(t.closest?.('.body-edit') || cardEl || null);
+  setImgDropTarget(t.closest?.('.body-edit') || cardNode?.el || null);
 });
 document.addEventListener('dragleave', (e) => { if (e.relatedTarget == null) setImgDropTarget(null); });
 document.addEventListener('drop', async (e) => {
@@ -316,11 +309,11 @@ document.addEventListener('drop', async (e) => {
   e.preventDefault();
   const t = e.target as HTMLElement;
   const onEditor = !!t.closest?.('.body-edit');
-  const cardEl   = t.closest?.('#world [data-id]') as HTMLElement | null;
-  const cardId   = cardEl?.dataset.id ?? null;
+  const cardNode = nodeAtTarget(t);
+  const cardEl   = cardNode?.el ?? null;
+  const cardId   = cardNode?.id ?? null;
   // an image card is a card that IS its picture (core/state.ts isImageCard): dropping notes or a
   // second image ONTO it would end that — so those land beside it, on the canvas, instead
-  const cardNode = cardId ? state.nodes.get(cardId) : null;
   const cardIsImage = !!cardNode && isImageCard(cardNode);
   const cardIsFrame = !!cardNode && isFrame(cardNode);
   const cardIsLocked = !!cardNode && isLockedEffective(cardNode);

@@ -162,3 +162,20 @@ export function snapEdges(box: Box, edges: { x?: Side; y?: Side }, others: Box[]
     gaps: [...(px?.gaps(fin) ?? []), ...(py?.gaps(fin) ?? [])],
   };
 }
+
+// Where `b` comes to rest sliding along `axis` (rightwards or downwards): past every box in its way,
+// `gap` clear of each.
+export function slidePast(b: Box, others: Box[], axis: 'x' | 'y', gap: number): Box {
+  const at = { ...b };
+  for (let moved = true; moved;) {
+    moved = false;
+    for (const o of others) {
+      const overlaps = o.x < at.x + at.w && o.x + o.w > at.x && o.y < at.y + at.h && o.y + o.h > at.y;
+      if (overlaps) {
+        at[axis] = axis === 'x' ? o.x + o.w + gap : o.y + o.h + gap;
+        moved = true;
+      }
+    }
+  }
+  return at;
+}

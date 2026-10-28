@@ -53,7 +53,7 @@ import { installPeek, peekCard } from './features/peek.js';
 import { tidyShortcut, TIDY_ACTIONS } from './features/tidy.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
-import { byId } from './utils/dom.js';
+import { byId, trackPointer } from './utils/dom.js';
 import { snapTo } from './utils/num.js';
 import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
 
@@ -984,8 +984,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     });
   };
   const up = (): void => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
+    stop();
     resizingId = null; n.el?.classList.remove('resizing');
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // the final delta; the size was already on the grid throughout
@@ -1016,8 +1015,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     relayout(); scheduleSave(); commitStep();
     syncFloatBar();   // a card that now has an authored height offers Fit (↔)
   };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
+  const stop = trackPointer({ move, up });
 }
 export function paintAll(): void {
   readOpenUnread();   // an open frame whose notes are still on disk reads them (data/lazy.ts)
@@ -2024,12 +2022,12 @@ window.addEventListener('keyup', (e) => {
   // deliver pointerup to the card underneath, whose handler ignores it — leaving the ghost stuck and
   // nothing created). setPointerCapture is still requested (best-effort) so the dragged card's own
   // handlers stay quiet; capture events bubble to window regardless.
+  let stopGhostDrag: (() => void) | null = null;
   function endGhostDrag(): MindNode | null {
     const n = newNode;
     newNode = null;
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
-    window.removeEventListener('pointercancel', onCancel);
+    stopGhostDrag?.();
+    stopGhostDrag = null;
     return n;
   }
   function onMove(e: PointerEvent): void { if (newNode) feedDragMove(e.clientX, e.clientY); }
@@ -2061,9 +2059,7 @@ window.addEventListener('keyup', (e) => {
     if (!newNode) return;
     try { ghost.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
     startNodeDrag(newNode, e.clientX, e.clientY);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onCancel);
+    stopGhostDrag = trackPointer({ move: onMove, up: onUp, cancel: onCancel });
   });
 }
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen

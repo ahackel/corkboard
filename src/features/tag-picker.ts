@@ -17,13 +17,13 @@ import { allTags, noteTags, cleanTag, tagKey, wearsTags } from '../utils/tags.js
 import { emojiByName } from '../utils/emoji-names.js';
 import { taggableSelection } from '../main.js';
 import { setTagOnNodes, tagText } from './tags.js';
-import { readStrings, writeJSON } from '../utils/local-json.js';
+import { readStrings, writeJSON, pushRecent } from '../utils/local-json.js';
 
 const MRU_KEY = 'corkboard.tagMru';
 export const loadMru = (): string[] => readStrings(MRU_KEY);
 export function dropMru(tag: string): void { writeJSON(MRU_KEY, loadMru().filter(t => tagKey(t) !== tagKey(tag))); }
 export function pushMru(tag: string): void {
-  writeJSON(MRU_KEY, [tag, ...loadMru().filter(t => tagKey(t) !== tagKey(tag))].slice(0, 16));   // private window: no recents
+  pushRecent(MRU_KEY, tag, 16, tagKey);
 }
 
 // Every tag on the board, most used first.

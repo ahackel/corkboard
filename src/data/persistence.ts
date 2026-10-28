@@ -9,6 +9,7 @@ import { parseMd, serializeMd, fileStem } from '../utils/frontmatter.js';
 import { safeName, slugStem, desiredFileFor, retargetLinks, FRAME_NOTE, isFrameNote, parentFileOf, dirOf, folderOf } from '../utils/filenames.js';
 import { soleImage, bodyImages } from '../utils/markdown.js';
 import { zipBlob, unzip } from '../utils/zip.js';
+import { IMAGE_FILE_RE, IMAGE_ACCEPT } from '../utils/image-types.js';
 import { downloadBlob } from '../utils/download.js';
 import { childrenOf, parentOf, ancestors } from '../utils/model.js';
 import { commitRel, orderedKids, moveSubtreeTo, ancestorDepth, frameLabelH } from '../view/layout.js';
@@ -86,7 +87,7 @@ export async function loadFolder(id: string): Promise<void> {
 // ---- import / export as .zip (move a map between devices / back it up) ----
 const importInput = document.createElement('input');
 importInput.type = 'file';
-importInput.accept = '.zip,.md,.markdown,.png,.jpg,.jpeg,.gif,.webp,.svg,.avif,.bmp';
+importInput.accept = '.zip,.md,.markdown,' + IMAGE_ACCEPT;
 importInput.multiple = true;
 importInput.style.display = 'none';
 document.body.appendChild(importInput);
@@ -100,7 +101,6 @@ export function openImportPicker(): void { importInput.click(); }
 // The image formats this app takes, BY FILENAME — the one list, shared with features/attachments.ts,
 // which needs it for the files an OS drop hands over with no MIME type at all (an .svg dragged out of
 // a file manager is the common one).
-export const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
 interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
 async function importFiles(files: File[]): Promise<void> {
   const entries: ImportEntry[] = [];
