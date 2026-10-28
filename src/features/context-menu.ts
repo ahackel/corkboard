@@ -20,6 +20,7 @@ import { relayout } from '../main.js';
 // copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
 // sides only touch it inside event handlers, never at module-eval time, so it's safe.
 import { buildCardMenu } from './float-bar.js';
+import { deleteSelectedEdge } from './edge-tools.js';
 import { nodeLabel } from '../utils/model.js';
 import { byId, placeInViewport } from '../utils/dom.js';
 import { exitScope, goToScopeDepth } from '../nav/sections.js';
@@ -220,7 +221,11 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
   const id = nodeEl?.dataset.id;
   const n = id ? state.nodes.get(id) : undefined;
   let entries: MenuEntry[];
-  if (n){
+  if (t.closest('[data-edge]') && state.selEdges.size) {
+
+    // a LINE: the press before this already selected it (edge-tools.ts), so Delete acts on the selection
+    entries = state.readOnly ? [] : [{ label: 'Delete', shortcut: '⌫', run: () => { deleteSelectedEdge(); } }];
+  } else if (n){
     const img = bodyImageAt(nodeEl!, e.clientX, e.clientY);
     // image entries above the card's own; same list the kebab menu shows for this card
     entries = [...(img ? imageMenuEntries(n, img) : []), ...buildCardMenu(n, e.clientX, e.clientY)];

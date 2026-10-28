@@ -116,3 +116,15 @@ test('a one-way arrow between cards nearly touching is drawn as just its head', 
   const ra = (await card(page, 'A').boundingBox())!, rb = (await card(page, 'B').boundingBox())!;
   expect(Math.abs(head.x + head.width / 2 - (ra.x + ra.width + rb.x) / 2)).toBeLessThan(1.5);
 });
+
+test('right-clicking a line offers Delete', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 300, 250, 'Left');
+  const b = await makeCard(page, 750, 250, 'Right');
+  await drawLine(page, a, 'right', b);
+  await clickAway(page);
+  const box = (await page.locator('#freeEdges path.fe').first().boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
+  await page.locator('#ctxMenu').getByText('Delete', { exact: true }).click();
+  await expect(lines(page)).toHaveCount(0);
+});
