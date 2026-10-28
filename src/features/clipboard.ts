@@ -27,7 +27,7 @@ import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
-import { screenToWorld } from '../view/camera.js';
+import { worldAtOrCentre } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { readAll, afterReading } from '../data/lazy.js';
 import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
@@ -129,9 +129,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   // anchor the payload roots' top-left at the target point (+ a nudge off the source)
   // On the grid (main.ts snapPt), like every other card the user places: the payload keeps its own
   // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
-  const target = snapPt((at.sx != null && at.sy != null)
-    ? screenToWorld(at.sx, at.sy)
-    : screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
+  const target = snapPt(worldAtOrCentre(at.sx, at.sy));
   let ax = Infinity, ay = Infinity;
   for (const c of cards) if (isPayloadRoot(c) && c.p.mm.x != null && c.p.mm.y != null){
     ax = Math.min(ax, c.p.mm.x); ay = Math.min(ay, c.p.mm.y);

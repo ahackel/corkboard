@@ -19,7 +19,7 @@ import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, 
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, stageSize, animateViewTo, cancelViewAnim, labelScale } from './view/camera.js';
+import { zoomAt, frameBox, screenToWorld, worldAtOrCentre, stageSize, animateViewTo, cancelViewAnim, labelScale } from './view/camera.js';
 import { applyLayouts, hostFrame, frameInterior, containerBox, isFrame, frameLabelled, frameDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
@@ -151,14 +151,19 @@ function nodeEl(n: MindNode): HTMLElement {
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
 // what a Space tap used to.
 function newCardAtPointer(): void {
-  if (ui.lastMouse) createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
-  else createNode();
+  createNode(centredAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y)));
 }
+
 // …and an empty FRAME there, named on the spot — the palette's "New frame".
 function newFrameAtPointer(): void {
-  const m = ui.lastMouse ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-  newFrameAt(screenToWorld(m.x, m.y));
+  newFrameAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y));
 }
+
+// Zoom about the middle of the screen — ⌘+/⌘− and the palette's Zoom in/out.
+function zoomStep(factor: number): void {
+  zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
+}
+
 // The phone INBOX (docs/inbox.md) is the top-level frame whose folder is `Inbox/`: a note saved into
 // that folder from elsewhere shows up on the next reload (data/persistence.ts reloadFromDisk). The
 // palette's "Inbox" goes to it, unfolded, and makes it first — to the left of the board's top-level
@@ -178,7 +183,7 @@ function goToInbox(): void {
   while (scopeActive()) exitScope();
   const tops = [...state.nodes.values()].filter(n => !n.parent);
   const left = tops.reduce((x, n) => Math.min(x, n.x), Infinity), top = tops.reduce((y, n) => Math.min(y, n.y), Infinity);
-  const at = tops.length ? snapPt({ x: left - FRAME_W - 80, y: top }) : centredAt(screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
+  const at = tops.length ? snapPt({ x: left - FRAME_W - 80, y: top }) : centredAt(worldAtOrCentre());
   const n = createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, title: 'Inbox', parent: null, edit: false });
   if (!n) return;
   focusNode(n);
@@ -399,7 +404,7 @@ export function paintNode(n: MindNode): void {
   // While its editor is open a card also holds the height it had (BodyEdit.holdH): the raw markdown
   // is a different height from the rendered note, and the card must not jump as editing starts.
   // FOLDED it's a 40px chip whatever height it was dragged to: n.h waits for the unfold.
-  if (!isBoxNode(n) && !isImageFold(n) && !isFrameFold(n) && !collapsed) {
+  if (!heightIsDeclared(n) && !collapsed) {
     const hold = ui.bodyEdit?.id === n.id ? ui.bodyEdit.holdH ?? 0 : 0;
     const min = Math.max(n.h != null ? n.h : 0, hold);
     el.style.minHeight = min ? min + 'px' : '';
@@ -546,7 +551,7 @@ export function paintNode(n: MindNode): void {
   } else if (bodyEl.style.maxHeight) bodyEl.style.maxHeight = '';
 }
 function clipHeight(n: MindNode, editing: boolean): number | null {
-  return n.clip && n.h != null && !n.collapsed && !editing && !isBoxNode(n) && !isImageFold(n) ? n.h : null;
+  return n.clip && n.h != null && !n.collapsed && !editing && !heightIsDeclared(n) ? n.h : null;
 }
 // The markdown a node RENDERS — its whole note, title included.
 //
@@ -618,8 +623,7 @@ export const canToggleFold = (n: MindNode): boolean => canFold(n) && !isLockedEf
 // Being HIDDEN (an ancestor folded) counts as holding nothing, which is what lets paintNode maintain
 // "a wrapper exists iff hostsContent(n)" with ONE drop, ahead of its isHidden early return.
 function hostsContent(n: MindNode): boolean {
-  if (isHidden(n)) return false;
-  return isFrame(n);
+  return isFrame(n) && !isHidden(n);
 }
 // WHICH element carries this node's visible title. Its own `.title-row`, except for a frame that
 // renders as nothing but its tab (folded or docked), where the element IS the label. Exported because
@@ -646,6 +650,12 @@ function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed;
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
 // below.
 function isBoxNode(n: MindNode): boolean { return isFrame(n) || isImageBox(n); }
+
+// Every kind whose height is set rather than measured: a box, and anything folded to a fixed size.
+function heightIsDeclared(n: MindNode): boolean {
+  return isBoxNode(n) || isImageFold(n) || isFrameFold(n);
+}
+
 function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRAME_W; }
 function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
 // A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
@@ -673,9 +683,10 @@ export function nodeH(n: MindNode): number {
 // 0 (the tags on the top edge are absolutely positioned and
 // overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
-  if (isBoxNode(n) || isImageFold(n) || isFrameFold(n)) return nodeH(n);
-  const el = n.el; if (!el) return 64;
-  return el.offsetHeight;
+  if (heightIsDeclared(n)) {
+    return nodeH(n);
+  }
+  return n.el ? n.el.offsetHeight : 64;
 }
 // ---------- frame content containment (real CSS clipping, not per-card math) ----------
 // A card living inside a frame must never visually spill past its box — dragging near a border, or
@@ -809,12 +820,14 @@ export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;
 // trading height for width on a card whose text wraps badly, so its natural size is the floor. That
 // floor is NODE_W for a plain card and a frame alike, so they share the one fall-through.
 function minWOf(n: MindNode): number {
-  if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
-  return NODE_W;
+  return imageLook(n) ? IMAGE_FOLD : NODE_W;
 }
 // The shortest a CLIPPED card goes: about one line of text under its padding.
 const CLIP_MIN_H = 44;
-function minHOf(n: MindNode): number { return (isImageBox(n) || isImageFold(n)) ? IMAGE_FOLD : MIN_FRAME_H; }
+
+function minHOf(n: MindNode): number {
+  return imageLook(n) ? IMAGE_FOLD : MIN_FRAME_H;
+}
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
 // which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
 const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
@@ -862,7 +875,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   // Is this a BOX (its size is exactly what's dragged) or a card (its height is a minimum over what
   // its text measures)? A FOLDED image card counts as a box here even though isBoxNode says no: its
   // 40px icon is the small end of its own size range, and scaling it back up is how you unfold it.
-  const img = isImageBox(n) || isImageFold(n);
+  const img = imageLook(n);
   const sizeH = isBoxNode(n) || img;
   const minW = minWOf(n);
   // A card's text height at the width it starts from is where its min-height stops and its clip starts.
@@ -906,16 +919,14 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
       const w0 = right0 - left0, h0 = bottom0 - top0;
       const hasX = east || west, hasY = north || south;
       let w = w0, h = h0;
-      if (hasX && hasY) {
-        const wCand = Math.max(minW, round(w0 + (east ? lastDx : -lastDx)));
-        const hCand = Math.max(minH, round(h0 + (south ? lastDy : -lastDy)));
-        if (Math.abs(wCand - w0) * h0 >= Math.abs(hCand - h0) * w0) { w = wCand; h = Math.max(minH, w / aspect); }
-        else { h = hCand; w = Math.max(minW, h * aspect); }
-      } else if (hasX) {
-        w = Math.max(minW, round(w0 + (east ? lastDx : -lastDx)));
+      const wDragged = Math.max(minW, round(w0 + (east ? lastDx : -lastDx)));
+      const hDragged = Math.max(minH, round(h0 + (south ? lastDy : -lastDy)));
+      const byWidth = hasX && (!hasY || Math.abs(wDragged - w0) * h0 >= Math.abs(hDragged - h0) * w0);
+      if (byWidth) {
+        w = wDragged;
         h = Math.max(minH, w / aspect);
       } else if (hasY) {
-        h = Math.max(minH, round(h0 + (south ? lastDy : -lastDy)));
+        h = hDragged;
         w = Math.max(minW, h * aspect);
       }
       left = west ? right0 - w : left0;  right = left + w;
@@ -1195,23 +1206,29 @@ function animateReflow(before: Map<string, Pt>): void {
 // Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
 // children, folds them (and everything below) too. A leaf with a body can fold its body alone.
 export function toggleCollapse(id: string): void {
-  const n = state.nodes.get(id); if (!n) return;
-  if (isLockedEffective(n)) { setStatus('Locked — can’t collapse/expand'); return; }
-  if (!canFold(n)) return;   // a card with nothing to tuck away
-  // Unfolding a frame whose notes are still on disk reads them first (data/lazy.ts), then unfolds.
-  if (n.collapsed && afterReading([id], () => toggleCollapse(id), false)) return;
-  // animate the reflow; animateLayout paints, measures heights, and lays out the children
-  record([id], () => animateLayout(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
-  dropHiddenFromSelection();
-  syncFloatBar();   // its fold button shows the state a click would make
-  scheduleSave();
-  setStatus(n.collapsed ? `Collapsed “${nodeLabel(n)}”` : `Expanded “${nodeLabel(n)}”`);
+  const n = state.nodes.get(id);
+  if (!n) {
+    return;
+  }
+  if (isLockedEffective(n)) {
+    setStatus('Locked — can’t collapse/expand');
+    return;
+  }
+  if (canFold(n)) {
+    applyCollapsed([n], !n.collapsed);
+  }
 }
+
 // A frame folded around selected cards takes them off the canvas — and out of the selection, so no key
 // or bar acts on cards you can't see.
 function dropHiddenFromSelection(): void {
-  if ([...state.sel].some(id => { const m = state.nodes.get(id); return !!m && isHidden(m); }))
-    setSelectionSet([...state.sel].filter(id => { const m = state.nodes.get(id); return !m || !isHidden(m); }));
+  const shown = [...state.sel].filter(id => {
+    const m = state.nodes.get(id);
+    return !m || !isHidden(m);
+  });
+  if (shown.length !== state.sel.size) {
+    setSelectionSet(shown);
+  }
 }
 // Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
 // Only foldable cards (children or a body) count; the group lands on one shared state — expand
@@ -1219,11 +1236,11 @@ function dropHiddenFromSelection(): void {
 // Which of `ids` can actually be folded — the one filter both the toggling and the directional paths
 // below share, so the chip, X and ←/→ can't disagree about what counts.
 function foldableSelection(ids: Iterable<string>): MindNode[] {
-  return nodesOf(ids)
-    .filter(n => !isLockedEffective(n))
-    .filter(canFold);
+  return nodesOf(ids).filter(n => canFold(n) && !isLockedEffective(n));
 }
-// Apply one shared fold state to a whole set, as ONE undo step and one animated reflow.
+
+// Apply one shared fold state to a whole set, as ONE undo step and one animated reflow. Unfolding a
+// frame whose notes are still on disk reads them first (data/lazy.ts).
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) return;
   record(cards.map(n => n.id),
@@ -1244,9 +1261,9 @@ export function toggleCollapseSelection(ids: Iterable<string>): void {
 // the map) — cards tucked inside a folded frame included, so Expand all brings back the whole lot. Never
 // the open node itself: it's the canvas.
 function foldScope(): MindNode[] {
-  const frames = [...state.sel].map(id => state.nodes.get(id)).filter((n): n is MindNode => n?.type === 'frame');
+  const frames = nodesOf(state.sel).filter(n => n.type === 'frame');
   const pool = frames.length
-    ? frames.flatMap(f => subtreeIds(f.id).map(id => state.nodes.get(id)!))
+    ? frames.flatMap(f => nodesOf(subtreeIds(f.id)))
     : [...state.nodes.values()].filter(n => !outOfScope(n));
   return pool.filter(canToggleFold);
 }
@@ -1303,12 +1320,21 @@ function navArrow(key: string): void {
 // button need it, and the two must never disagree on the mixed-selection rule — that button is the
 // only escape hatch out of a locked selection.
 export function anyLocked(ids: Iterable<string>): boolean {
-  return [...ids].some(id => { const n = state.nodes.get(id); return !!n && isLockedEffective(n); });
+  return nodesOf(ids).some(isLockedEffective);
 }
+
+function toggleLockSelection(): void {
+  setLockedSelection(state.sel, !anyLocked(state.sel));
+}
+
 export function setLockedSelection(ids: Iterable<string>, locked: boolean): void {
-  if (state.readOnly) return;
-  const cards = [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n && n.locked !== locked);
-  if (!cards.length) return;
+  if (state.readOnly) {
+    return;
+  }
+  const cards = nodesOf(ids).filter(n => n.locked !== locked);
+  if (!cards.length) {
+    return;
+  }
   record(cards.map(n => n.id), () => { for (const n of cards){ n.locked = locked; n.dirty = true; } });
   paintAll();
   syncFloatBar();   // the bar collapses to just its lock toggle while the selection is locked
@@ -1588,9 +1614,7 @@ export function popScopeFor(t: MindNode): void {
 // ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
 // coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
 function hasAuthoredColor(n: MindNode): boolean {
-  if (n.color) return true;
-  for (const a of ancestors(n)) if (a.color) return true;
-  return false;
+  return [n, ...ancestors(n)].some(a => !!a.color);
 }
 // WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
 // standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
@@ -1873,11 +1897,38 @@ window.addEventListener('keydown', (e) => {
   // Intercept browser zoom shortcuts (Cmd/Ctrl +/-/0) so they drive the canvas, not the viewport.
   // Must be checked before the `typing` guard so they work even while a text field is focused.
   if (mod) {
-    if (key === '=' || key === '+') { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2); return; }
-    if (key === '-')                { e.preventDefault(); zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2); return; }
+    if (key === '=' || key === '+') { e.preventDefault(); zoomStep(1.2); return; }
+    if (key === '-')                { e.preventDefault(); zoomStep(1 / 1.2); return; }
     if (key === '0')                { e.preventDefault(); focusOrFit(); return; }
     // ⌘F is FIND here, the way it is on every canvas app — not the browser's find-in-page
     if (key === 'f' && !e.shiftKey && !e.altKey) { e.preventDefault(); openSearch(); return; }
+    if (key === 's') {
+      e.preventDefault();
+      flushSave();
+      return;
+    }
+
+    // ⌘P is FigJam's quick actions. Never the browser's print dialog, even while typing in a card.
+    if (key === 'p') {
+      e.preventDefault();
+      if (!isTypingInField()) {
+        openPalette();
+      }
+      return;
+    }
+
+    // While typing, ⌘A and ⌘Z/⌘Y belong to the field (its own select-all and native undo).
+    if (!isTypingInField() && (key === 'a' || key === 'z' || key === 'y')) {
+      e.preventDefault();
+      if (key === 'a') {
+        selectAll();
+      } else if (key === 'z' && !e.shiftKey) {
+        undo();
+      } else {
+        redo();
+      }
+      return;
+    }
   }
 
   const active = document.activeElement as HTMLElement | null;
@@ -1923,7 +1974,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (key === 'l' && !mod && state.sel.size && !state.readOnly){
     e.preventDefault();
-    setLockedSelection(state.sel, !anyLocked(state.sel));
+    toggleLockSelection();
     return;
   }
   // image cards have no title/body UI to rename or edit — they're a leaf that shows only the image
@@ -2035,8 +2086,8 @@ function paletteCommands(): Command[] {
     { label: 'Undo', shortcut: MOD + 'Z', when: editable, run: undo },
     { label: 'Redo', shortcut: '⇧' + MOD + 'Z', when: editable, run: redo },
     { label: state.selId ? 'Focus the selection' : 'Fit the map to the screen', shortcut: 'F', keywords: 'zoom view', run: focusOrFit },
-    { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2) },
-    { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2) },
+    { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomStep(1.2) },
+    { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomStep(1 / 1.2) },
     { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
     { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
     { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
@@ -2054,7 +2105,7 @@ function paletteCommands(): Command[] {
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
     { label: 'Collapse all', keywords: 'fold every card frame', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all', keywords: 'unfold every card frame', when: () => foldScope().some(n => n.collapsed), run: expandAll },
-    { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: () => setLockedSelection(state.sel, !anyLocked(state.sel)) },
+    { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },
@@ -2066,21 +2117,6 @@ function paletteCommands(): Command[] {
 setPaletteSource(paletteCommands);
 byId('paletteBtn').title = `Actions (${MOD.trim() === '⌘' ? '⌘P' : 'Ctrl+P'})`;
 byId('paletteBtn').onclick = (e) => { e.stopPropagation(); if (paletteOpen()) closePalette(); else openPalette(); };
-
-// keyboard shortcuts: ⌘S force-save, ⌘A select-all, ⌘Z/⇧⌘Z/⌘Y undo-redo  (duplicate = D, new node = Space)
-window.addEventListener('keydown', (e) => {
-  const mod = e.metaKey || e.ctrlKey;
-  if (!mod) return;
-  const k = e.key.toLowerCase();
-  if (k === 's') { e.preventDefault(); flushSave(); return; }
-  // ⌘P is FigJam's quick actions. Never the browser's print dialog, even while typing in a card.
-  if (k === 'p') { e.preventDefault(); if (!isTypingInField()) openPalette(); return; }
-  // While typing, ⌘A belongs to the field.
-  if (k === 'a' && !isTypingInField()) { e.preventDefault(); selectAll(); return; }
-  // While typing in a field, leave ⌘Z to the browser's native undo inside that editor.
-  if (k === 'z' && !isTypingInField()) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-  if (k === 'y' && !isTypingInField()) { e.preventDefault(); redo(); }
-});
 
 
 installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan

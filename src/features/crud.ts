@@ -9,7 +9,7 @@ import { stripImageRef } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { frameInterior, holderOf, frameAt } from '../view/layout.js';
-import { screenToWorld } from '../view/camera.js';
+import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
@@ -72,7 +72,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     const p = state.nodes.get(parentId);
     if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return; }
   }
-  const c = centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
+  const c = centredAt(worldAtOrCentre());
   const n = mkNode({
     x: opts.x ?? c.x, y: opts.y ?? c.y,
     parent: parentId,

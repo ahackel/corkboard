@@ -6,7 +6,7 @@ import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
 import { store, scheduleSave, IMAGE_FILE_RE } from '../data/persistence.js';
-import { screenToWorld } from '../view/camera.js';
+import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
 import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
 import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
@@ -142,7 +142,7 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
 async function createImageCards(imgs: File[], sx: number | null, sy: number | null, parent: string | null): Promise<void> {
   if (!imgs.length || !canAttach()) return;
   setStatus('Adding image…');
-  const p = sx != null && sy != null ? screenToWorld(sx, sy) : screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+  const p = worldAtOrCentre(sx, sy);
   let i = 0;
   for (const f of imgs){
     const [path, natural] = await Promise.all([storeImage(f), imageSize(f)]);
@@ -241,7 +241,7 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   // whose top-left sits where a single card would have (utils/paste-list.ts says what counts).
   const items = splitPastedList(text);
   if (items){
-    const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
+    const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(worldAtOrCentre());
     const made = createCards(items, at, opts.parent);
     if (made.length) setStatus(`Pasted ${made.length} cards`);
     return;

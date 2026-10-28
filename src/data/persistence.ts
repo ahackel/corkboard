@@ -70,10 +70,17 @@ export async function openMapRef(ref: MapRef): Promise<boolean> {
     return true;
   }
   await settleSave();
-  if (!(await fsaStore.resume(ref.id))) return false;
-  useStore(fsaStore, { kind: 'folder', id: ref.id });
-  await loadFromDir();
+  if (!(await fsaStore.resume(ref.id))) {
+    return false;
+  }
+  await loadFolder(ref.id);
   return true;
+}
+
+// Make the FSA folder (already resumed or picked) the open map, and read it.
+export async function loadFolder(id: string): Promise<void> {
+  useStore(fsaStore, { kind: 'folder', id });
+  await loadFromDir();
 }
 
 // ---- import / export as .zip (move a map between devices / back it up) ----

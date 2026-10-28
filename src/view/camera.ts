@@ -105,6 +105,11 @@ export function screenToWorld(sx: number, sy: number): { x: number; y: number } 
   return { x:(sx - r.left - state.view.x)/state.view.k, y:(sy - r.top - state.view.y)/state.view.k };
 }
 
+// The world point under screen (sx, sy) — or under the middle of the screen when there is no point.
+export function worldAtOrCentre(sx?: number | null, sy?: number | null): { x: number; y: number } {
+  return sx != null && sy != null ? screenToWorld(sx, sy) : screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+}
+
 // zoom toward a screen point (mx,my are relative to the stage) by a multiplier
 export function zoomAt(mx: number, my: number, factor: number): void {
   cancelViewAnim();
