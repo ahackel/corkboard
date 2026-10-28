@@ -7,12 +7,13 @@ import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
 import { ui, gPointers, inPlaceEditActive, type Pt, type GestureEvt } from '../core/ui-state.js';
-import { selectNode, setSelectionSet, exitScope } from '../main.js';
+import { selectNode, setSelectionSet } from '../main.js';
 import { scopeActive } from '../nav/scope.js';
 import { createNode, centredAt } from './crud.js';
 import { endInPlaceEdit } from './inline-edit.js';
 import { clamp } from '../utils/num.js';
 import { nodeW, nodeH } from '../view/geometry.js';
+import { exitScope } from '../nav/frames.js';
 
 const marqueeEl = document.createElement('div');
 marqueeEl.id = 'marquee'; stage.appendChild(marqueeEl);

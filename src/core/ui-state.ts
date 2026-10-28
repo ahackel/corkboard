@@ -78,6 +78,8 @@ export const ui = {
                       edgeId?: string; end?: 'from' | 'to'; side?: EdgeSide } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,
+  // ---- resize (features/resize.ts): the card whose edge is being dragged; paintNode keeps its class ----
+  resizingId: null as string | null,
   // ---- in-place card editing (features/inline-edit.ts) ----
   // Either open defers the file rename / disk-reload while typing. A CARD gets `bodyEdit`: one field
   // holding its title and its note together. A CONTAINER gets `titleEdit`: its label alone (see above).

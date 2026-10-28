@@ -14,13 +14,12 @@ import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStor
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
-import { inkFor, paleFill } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount, nodesOf, nodeByFile, subtreeIds } from './utils/model.js';
-import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
+import { isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, descendantCount, nodesOf } from './utils/model.js';
+import { state, world, dragLayer, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
-import { zoomAt, frameBox, screenToWorld, worldAtOrCentre, stageSize, animateViewTo, cancelViewAnim, labelScale } from './view/camera.js';
-import { applyLayouts, hostFrame, frameInterior, containerBox, isFrame, frameLabelled, frameDescription } from './view/layout.js';
+import { zoomAt, screenToWorld, worldAtOrCentre, labelScale } from './view/camera.js';
+import { applyLayouts, hostFrame, frameInterior, isFrame, frameLabelled, frameDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -28,17 +27,16 @@ import './features/text-drag.js';   // registers the drag-body-text-out-of-a-car
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
-import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag, settleFrames } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
-import { guideResize, hideGuides } from './features/guides.js';
+import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { openSearch, closeSearch, refreshSearch, searchActive, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
-import { syncFloatBar, autoSizeSelection, growFramesToHold, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
-import { setupCanvasColor, markCanvasColorBtn } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
+import { syncFloatBar, autoSizeSelection, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
+import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTags, tagChipHTML } from './features/tags.js';
 import { openTagPicker } from './features/tag-picker.js';
 import { refreshTray, toggleTray, trayOpen } from './features/tag-tray.js';
 import { noteTags, wearsTags } from './utils/tags.js';
-import { commitStep, record, touch, undo, redo } from './features/history.js';
+import { commitStep, record, undo, redo } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/persistence.js';
@@ -46,18 +44,20 @@ import { FRAME_NOTE } from './utils/filenames.js';
 import { afterReading, readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scope, scopeActive, scopeRootNode, isScopeRoot, canOpen, canEnter, outOfScope, openPathTo, type ScopeBack, type ScopeLevel } from './nav/scope.js';
-import { renderCrumbs } from './features/breadcrumbs.js';
+import { scopeActive, isScopeRoot, canOpen, canEnter, outOfScope } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
 import { tidyShortcut, TIDY_ACTIONS } from './features/tidy.js';
 import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
 import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId, trackPointer } from './utils/dom.js';
-import { snapTo } from './utils/num.js';
 import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
-import { applyColorVars, colorClass, colorFill, THEME_BG } from './view/color.js';
-import { snapPt, FRAME_W, FRAME_H, canFold, isFrameFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W, IMAGE_FOLD, IMAGE_W, IMAGE_H, gridSnap, canToggleFold } from './view/geometry.js';
+import { applyColorVars, colorClass } from './view/color.js';
+import { snapPt, FRAME_W, FRAME_H, canFold, isFrameFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
+import { ensureResizeHandles, FRAME_DIRS, clearResizeHandles } from './features/resize.js';
+import { toggleCollapse, setCollapsedSelection, toggleCollapseSelection, foldScope, expandAll } from './features/fold.js';
+import { popScopeFor, exitScope, openFrame, syncScopeChrome } from './nav/frames.js';
+import { focusByTitle, focusNode, focusOrFit } from './nav/focus.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();
@@ -285,9 +285,6 @@ export function effectiveColor(n: MindNode): string {
   // keeps a neutral white (above).
   return 'amber';
 }
-// The card whose edge is being dragged right now (startNodeResize). Declared ahead of paintNode, which
-// reads it, so no paint can reach it before it exists.
-let resizingId: string | null = null;
 // Notes that just ARRIVED from outside (a reload found them — the phone inbox, docs/inbox.md), each
 // shown as the node you can see: itself, or the folded pill it's tucked in. They pulse once (styles.css
 // .arrived). A class paintNode owns, since it rewrites className on every paint.
@@ -327,7 +324,7 @@ export function paintNode(n: MindNode): void {
   const col = effectiveColor(n);
   applyColorVars(el, col);   // a custom colour's --card/--ink/--scrim; removed again for a palette key
   el.className = 'node ' + colorClass(col)
-    + (n.id === resizingId ? ' resizing' : '')
+    + (n.id === ui.resizingId ? ' resizing' : '')
     + (arrivedIds.has(n.id) ? ' arrived' : '')   // just came in from outside (flashArrived)   // its tags step aside while it's resized (styles.css)
     + (isFrame(n) ? ' frame' : '')
     + (isFrameFold(n) ? ' frame-folded' : '')   // folded to its bare label pill (styles.css)
@@ -690,212 +687,6 @@ function frameContentEl(f: MindNode): HTMLElement {
   w.style.height = box.h + 'px';
   return w;
 }
-// ---------- resize ----------
-// a frame is never narrower than a normal card
-export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;
-// An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
-// (startNodeResize below), so there is no smaller expanded size to clamp at.
-// A width-only kind can only ever get WIDER than the width it has by default — the whole point is
-// trading height for width on a card whose text wraps badly, so its natural size is the floor. That
-// floor is NODE_W for a plain card and a frame alike, so they share the one fall-through.
-function minWOf(n: MindNode): number {
-  return imageLook(n) ? IMAGE_FOLD : NODE_W;
-}
-// The shortest a CLIPPED card goes: about one line of text under its padding.
-const CLIP_MIN_H = 44;
-
-function minHOf(n: MindNode): number {
-  return imageLook(n) ? IMAGE_FOLD : MIN_FRAME_H;
-}
-// 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
-// which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
-const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
-type FrameDir = typeof FRAME_DIRS[number];
-// Ensure the node has exactly the resize hit-zones its kind wants — one per edge/corner, added once
-// and reused. The corners of a lone selection draw FigJam's square handles (styles.css); the edges
-// have no grip, their resize cursor is the affordance.
-// `:scope >` throughout, NOT a descendant query: child cards are DOM-nested inside their parent
-// (see place/settledHost), so a plain card containing a nested image card would otherwise see the
-// CHILD's handles, conclude it already had its own, and never get any.
-function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
-  const el = n.el!;
-  const key = dirs.join('');
-  if (el.dataset.fhDirs === key) return;   // keyed by the direction SET, so a type flip rebuilds
-  clearResizeHandles(el);
-  for (const dir of dirs) {
-    const h = document.createElement('div');
-    h.className = 'fh fh-' + dir;
-    h.addEventListener('pointerdown', (e) => startNodeResize(e as PointerEvent, n, dir));
-    el.appendChild(h);
-  }
-  el.dataset.fhDirs = key;
-}
-function clearResizeHandles(el: HTMLElement): void {
-  if (!el.dataset.fhDirs) return;   // no handles to remove — skip the query, this runs every repaint
-  el.querySelectorAll(':scope > .fh').forEach(x => x.remove());
-  delete el.dataset.fhDirs;
-}
-// Drag an edge/corner to resize. Work in edge coordinates (left/top/right/bottom) so the edges NOT
-// being dragged stay fixed; the dragged edges snap to the grid and clamp to the min size. Top/left
-// edges moving means the frame's x/y move too. Children inside are free, so only the parent's own
-// layout reflows around the frame — done once on release, not every move.
-// An image card's aspect ratio (width/height): the actual loaded image if hydrateImages has
-// resolved it, else whatever the box currently shows (so an in-progress resize is stable even
-// before the blob URL loads).
-function imageAspect(n: MindNode): number {
-  const img = n.el?.querySelector('img.md-img') as HTMLImageElement | null;
-  if (img && img.naturalWidth && img.naturalHeight) return img.naturalWidth / img.naturalHeight;
-  const w = n.w ?? IMAGE_W, h = n.h ?? IMAGE_H;
-  return w / (h || 1);
-}
-function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
-  if (state.readOnly || isLockedEffective(n)) return;
-  e.stopPropagation(); e.preventDefault();
-  // Is this a BOX (its size is exactly what's dragged) or a card (its height is a minimum over what
-  // its text measures)? A FOLDED image card counts as a box here even though isBoxNode says no: its
-  // 40px icon is the small end of its own size range, and scaling it back up is how you unfold it.
-  const img = imageLook(n);
-  const sizeH = isBoxNode(n) || img;
-  const minW = minWOf(n);
-  // A card's text height at the width it starts from is where its min-height stops and its clip starts.
-  // (A clipped card's body cap is lifted too, or it would measure as its own clip.)
-  const natural = (): number => {
-    const el = n.el!, body = el.querySelector(':scope > .body') as HTMLElement;
-    const was = el.style.minHeight, wasMax = body.style.maxHeight;
-    el.style.minHeight = ''; body.style.maxHeight = ''; const h = el.offsetHeight;
-    el.style.minHeight = was; body.style.maxHeight = wasMax;
-    return h;
-  };
-  // …but it CAN be dragged shorter than that, down to a line: then it CLIPS (n.clip) instead of growing.
-  const natural0 = sizeH ? 0 : natural();
-  const minH = sizeH ? minHOf(n) : Math.min(natural0, CLIP_MIN_H);
-  const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
-  // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
-  // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
-  const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
-  const sx = e.clientX, sy = e.clientY;
-  resizingId = n.id; n.el?.classList.add('resizing');   // its tags step aside while its edge moves (paintNode keeps it)
-  const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
-  touch(n.id);
-  let lastDx = 0, lastDy = 0;
-  let subtreeRAF: number | null = null;
-  const g = gridSnap();
-  // The grid on the SIZE — the same snap a dragged card gets (utils/num.ts), live
-  // on every move, so the box steps between grid sizes under the pointer instead of taking one up at
-  // the end. One snapping rule for everything the pointer moves.
-  const snap = (v: number): number => snapTo(v, g);
-  // Apply the current drag delta, keeping the non-dragged edges fixed. We snap the SIZE (not the
-  // edges) to the grid so a box's w/h are always multiples of the snap — the moving edge derives
-  // from the fixed opposite edge minus the snapped size. Free (unsnapped) while dragging; snapped
-  // on release. Clamped to the min size (also grid multiples).
-  const resize = (round: (v: number) => number): void => {
-    let left = left0, right = right0, top = top0, bottom = bottom0;
-    if (aspect) {
-      // Image card: whichever axis the user is actually dragging drives the size (grid-snapped);
-      // the other axis is DERIVED from the image's own aspect ratio rather than dragged/snapped
-      // independently. A corner drags both — drive by whichever axis implies the bigger relative
-      // change, so the drag feels proportionate regardless of which corner is grabbed.
-      const w0 = right0 - left0, h0 = bottom0 - top0;
-      const hasX = east || west, hasY = north || south;
-      let w = w0, h = h0;
-      const wDragged = Math.max(minW, round(w0 + (east ? lastDx : -lastDx)));
-      const hDragged = Math.max(minH, round(h0 + (south ? lastDy : -lastDy)));
-      const byWidth = hasX && (!hasY || Math.abs(wDragged - w0) * h0 >= Math.abs(hDragged - h0) * w0);
-      if (byWidth) {
-        w = wDragged;
-        h = Math.max(minH, w / aspect);
-      } else if (hasY) {
-        h = hDragged;
-        w = Math.max(minW, h * aspect);
-      }
-      left = west ? right0 - w : left0;  right = left + w;
-      top  = north ? bottom0 - h : top0; bottom = top + h;
-    } else {
-      // Smart guides pull the DRAGGED edge (features/guides.ts), read off the RAW pointer like a move's,
-      // and win over the grid on an axis where they line something up; the grid has the other axis.
-      const pull = guideResize(n, {
-        x: west ? left0 + lastDx : left0, y: north ? top0 + lastDy : top0,
-        w: (east ? right0 + lastDx : right0) - (west ? left0 + lastDx : left0),
-        h: (south ? bottom0 + lastDy : bottom0) - (north ? top0 + lastDy : top0),
-      }, { x: west ? 'lo' : east ? 'hi' : undefined, y: north ? 'lo' : south ? 'hi' : undefined });
-      const px = pull.x ?? 0, py = pull.y ?? 0;
-      const rx = pull.x != null ? (v: number): number => v : round, ry = pull.y != null ? (v: number): number => v : round;
-      if (east)  { const w = Math.max(minW, rx(right0 + lastDx + px - left0));  right = left0 + w; }
-      if (west)  { const w = Math.max(minW, rx(right0 - (left0 + lastDx + px))); left = right0 - w; }
-      if (south) { const h = Math.max(minH, ry(bottom0 + lastDy + py - top0));   bottom = top0 + h; }
-      if (north) { const h = Math.max(minH, ry(bottom0 - (top0 + lastDy + py))); top = bottom0 - h; }
-    }
-    // An image card FOLDS by being scaled down and unfolds by being scaled up — the third fold
-    // control beside the chip and `X`, and the only one that is also a size. The threshold is the icon
-    // itself: once the SHORT axis is down to IMAGE_FOLD the card is icon-sized, so it becomes one, and
-    // dragging back out past that restores it. Live, so the icon appears and goes under the cursor.
-    // While folded the authored w/h are left ALONE — they're the size it comes back to, whether that's
-    // this same drag reversing or the chip unfolding it tomorrow.
-    if (aspect) {
-      const fold = Math.min(right - left, bottom - top) <= IMAGE_FOLD;
-      if (fold !== n.collapsed) n.collapsed = fold;
-      if (fold) { n.dirty = true; return; }
-    }
-    n.x = left; n.w = right - left;
-    if (sizeH || north || south) { n.y = top; n.h = bottom - top; if (!sizeH) n.clip = n.h < natural0 - 1 || undefined; }
-    n.dirty = true;
-  };
-  const move = (ev: PointerEvent): void => {
-    lastDx = (ev.clientX - sx) / state.view.k; lastDy = (ev.clientY - sy) / state.view.k;
-    resize(snap);
-    paintNode(n);
-    paintFreeEdges();
-    // A width-only kind re-wraps its text at the new width, which changes its measured HEIGHT — let
-    // everything that reads it (edges, the selection bar) settle as the drag goes, once per frame.
-    if (!sizeH && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
-      subtreeRAF = null;
-      relayout();
-    });
-    // A north/west resize shifts the frame's own x/y, which shifts its content wrapper's origin —
-    // repaint the whole subtree (not just direct children) so every hosted descendant's live,
-    // wrapper-relative position compensates and stays put in absolute space as the box resizes
-    // around it (an east/south-only resize doesn't move the origin, so this is skipped entirely).
-    // subtreeIds walks the whole node map, so coalesce it to once per animation frame rather than
-    // once per raw pointermove (which can fire far faster than the screen repaints).
-    else if ((north || west) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
-      subtreeRAF = null;
-      for (const id of subtreeIds(n.id)) { const k = state.nodes.get(id); if (k) paintNode(k); }
-    });
-  };
-  const up = (): void => {
-    stop();
-    resizingId = null; n.el?.classList.remove('resizing');
-    if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
-    resize(snap);   // the final delta; the size was already on the grid throughout
-    hideGuides();
-    // Back at (or under) the natural width → drop the authored width entirely rather than persisting
-    // a redundant mm_w on every card the user so much as nudges.
-    if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
-    // …and the same for a card's height: no taller than its text → it has no authored height.
-    // Shorter than its text (at the width it ended at) → it clips; else it's a minimum again.
-    if (!sizeH && n.h != null) {
-      paintNode(n);
-      const nat = natural();
-      if (Math.round(n.h) < nat - 1) n.clip = true;
-      else { n.clip = undefined; if (Math.round(n.h) <= nat + 1) n.h = undefined; }
-    }
-    // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
-    // the DOM has it.
-    paintNode(n);
-    // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
-    // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
-    // A resized FRAME takes in what it now covers and lets go of what it no longer does
-    // (settleFrames). It isn't grown back around what it took in — the user just chose its size —
-    // but a card it let go of grows the frame it landed in, as any drop does.
-    if (n.type === 'frame') {
-      const released = settleFrames([n.id]).filter(id => state.nodes.get(id)?.parent !== n.id);
-      growFramesToHold(released);
-    }
-    relayout(); scheduleSave(); commitStep();
-    syncFloatBar();   // a card that now has an authored height offers Fit (↔)
-  };
-  const stop = trackPointer({ move, up });
-}
 export function paintAll(): void {
   readOpenUnread();   // an open frame whose notes are still on disk reads them (data/lazy.ts)
   refreshSearch();    // what the search lights, off the tags and text as they are now
@@ -969,7 +760,7 @@ function followEdges(tok: number, ms: number): void {
 }
 // Snapshot the on-screen position of every visible card — the START frame animateReflow
 // glides away from. Take it BEFORE the structural change.
-function layoutSnapshot(): Map<string, Pt> {
+export function layoutSnapshot(): Map<string, Pt> {
   const before = new Map<string, Pt>();
   for (const m of state.nodes.values()) if (m.el && !isHidden(m)) before.set(m.id, { x:m.x, y:m.y });
   return before;
@@ -1027,7 +818,7 @@ function animateSizes(before: Map<HTMLElement, Size>): void {
     ], { duration: LAYOUT_ANIM_MS, easing: SIZE_EASE });
   }
 }
-function animateReflow(before: Map<string, Pt>): void {
+export function animateReflow(before: Map<string, Pt>): void {
   const visible = [...state.nodes.values()].filter(m => m.el && !isHidden(m));
   const tok = ++ui.animToken;                           // supersede any in-flight animation
   if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeSelf(m, m.x, m.y); } document.body.classList.remove('layout-anim'); paintFreeEdges(); return; }
@@ -1080,84 +871,6 @@ function animateReflow(before: Map<string, Pt>): void {
 }
 
 
-// Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
-// children, folds them (and everything below) too. A leaf with a body can fold its body alone.
-export function toggleCollapse(id: string): void {
-  const n = state.nodes.get(id);
-  if (!n) {
-    return;
-  }
-  if (isLockedEffective(n)) {
-    setStatus('Locked — can’t collapse/expand');
-    return;
-  }
-  if (canFold(n)) {
-    applyCollapsed([n], !n.collapsed);
-  }
-}
-
-// A frame folded around selected cards takes them off the canvas — and out of the selection, so no key
-// or bar acts on cards you can't see.
-function dropHiddenFromSelection(): void {
-  const shown = [...state.sel].filter(id => {
-    const m = state.nodes.get(id);
-    return !m || !isHidden(m);
-  });
-  if (shown.length !== state.sel.size) {
-    setSelectionSet(shown);
-  }
-}
-// Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
-// Only foldable cards (children or a body) count; the group lands on one shared state — expand
-// if they're all collapsed already, otherwise collapse them all.
-// Which of `ids` can actually be folded — the one filter both the toggling and the directional paths
-// below share, so the chip, X and ←/→ can't disagree about what counts.
-function foldableSelection(ids: Iterable<string>): MindNode[] {
-  return nodesOf(ids).filter(n => canFold(n) && !isLockedEffective(n));
-}
-
-// Apply one shared fold state to a whole set, as ONE undo step and one animated reflow. Unfolding a
-// frame whose notes are still on disk reads them first (data/lazy.ts).
-function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
-  if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) return;
-  record(cards.map(n => n.id),
-    () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
-  dropHiddenFromSelection();
-  syncFloatBar();   // its fold button shows the state a click would make
-  scheduleSave();
-  const what = cards.length > 1 ? `${cards.length} notes` : `“${nodeLabel(cards[0]!)}”`;
-  setStatus(`${collapsed ? 'Collapsed' : 'Expanded'} ${what}`);
-}
-export function toggleCollapseSelection(ids: Iterable<string>): void {
-  const cards = foldableSelection(ids);
-  if (!cards.length) return;
-  applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
-}
-// What "Collapse/Expand all" (⌘P) act on: the selected frames and everything inside them when frames
-// are selected, else every frame and card in the place you're looking at (the open frame's interior, or
-// the map) — cards tucked inside a folded frame included, so Expand all brings back the whole lot. Never
-// the open node itself: it's the canvas.
-function foldScope(): MindNode[] {
-  const frames = nodesOf(state.sel).filter(n => n.type === 'frame');
-  const pool = frames.length
-    ? frames.flatMap(f => nodesOf(subtreeIds(f.id)))
-    : [...state.nodes.values()].filter(n => !outOfScope(n));
-  return pool.filter(canToggleFold);
-}
-// Expand all brings back the WHOLE lot, so every folded frame in reach is read to the bottom first
-// (data/lazy.ts) — and the set is taken again after, since what was read holds more to unfold.
-function expandAll(): void {
-  const go = (): void => setCollapsedSelection(foldScope().map(n => n.id), false);
-  if (!afterReading(foldScope().map(n => n.id), go)) go();
-}
-// The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
-// leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
-// selection lands on one state in a single press instead of needing two.
-function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean): void {
-  const cards = foldableSelection(ids).filter(n => !!n.collapsed !== collapsed);
-  if (!cards.length) return;
-  applyCollapsed(cards, collapsed);
-}
 // ---------- arrow keys: go IN and OUT of frames, fold and unfold branches ----------
 //   ↑  open the selected frame (nav/scope.ts)        ↓  leave the open one
 //   →  unfold                                        ←  fold
@@ -1231,334 +944,7 @@ function toggleTask(n: MindNode, idx: number): void {
   paintNode(n); scheduleSave();
 }
 
-// ---------- node dragging + reparent-by-drop live in features/drag.ts ----------
-// ---------- pan / zoom / marquee-select gestures live in features/gestures.ts ----------
 
-
-// Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
-export function focusNode(target: MindNode | undefined, openTarget = false): void {
-  if (!target) return;
-  const before = layoutSnapshot();             // pre-reveal frame to glide away from
-  // Unfold the frames it's tucked inside (and, when openTarget, the card itself) so it's on the canvas.
-  const toReveal = [...ancestors(target)].filter(p => p.collapsed);
-  if (openTarget && target.collapsed) toReveal.push(target);
-  let revealed = false;
-  if (toReveal.length)
-    record(toReveal.map(m => m.id), () => { for (const m of toReveal){ m.collapsed = false; m.dirtyLayout = true; } revealed = true; });
-  selectNode(target.id);                       // select → the card shows its full body (grows)
-  relayout();                  // reflow siblings around the now-taller selection
-  animateReflow(before);                       // one glide from the pre-reveal frame to the final
-  frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
-  if (revealed && store.isOpen) scheduleSave();
-}
-// Follow a [[wikilink]] and focus its target. Map-wide, on purpose — a link that only worked inside the
-// frame you happened to be in would be a broken link — so it comes out of as many scope levels as it
-// takes to show the target (popScopeFor).
-//
-// Two cards may now share a title, so a bare `[[Notes]]` can be AMBIGUOUS. It resolves to the first
-// match either way (a link has to go somewhere, and refusing to move would read as a dead link), but it
-// SAYS so, since the alternative — picking silently and looking like a bug — is the worse of the two.
-// The way to be exact is the PATH form, `[[Frames/Notes]]` or `[[Notes 2]]`, matched against the node's
-// file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
-// there rather than in some new syntax.
-function focusByTitle(title: string, from?: MindNode): void {
-  const hits = resolveWikilink(title);
-  const target = hits[0];
-  // A link to a card that isn't there yet WRITES it (Obsidian's gesture): the new card lands beside
-  // the one you clicked from, free-standing — a wikilink is a relation, never containment. Only the
-  // TITLE form can be created: the PATH form names a folder nothing here chooses.
-  if (!target){
-    if (!from || state.readOnly || title.includes('/')){
-      setStatus(`No node titled “${title}” in this map`); return;
-    }
-    const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
-    if (createNode({ x: at.x, y: at.y, title, edit: false })) setStatus(`Created “${title}”`);
-    return;
-  }
-  popScopeFor(target);
-  focusNode(target);
-  if (hits.length > 1)
-    setStatus(`${hits.length} cards are titled “${title}” — went to the one in ${target.file ?? 'this map'}`);
-}
-// The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
-// frame the whole map when nothing is selected — both glide with the same easing. While a frame is
-// OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free.
-function focusOrFit(): void {
-  if (state.selId && state.nodes.has(state.selId)) focusNode(state.nodes.get(state.selId));
-  else focusScope();
-}
-// Re-frame whatever is ON the canvas right now: the open frame's contents while scoped (isHidden
-// does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
-// this", shared by F-with-nothing-selected, every open/exit and the current crumb.
-function focusScope(): void { frameBox([...state.nodes.values()]); }
-
-// ---------- OPENING a frame: the scoped canvas ----------
-// The ACTIONS; nav/scope.ts holds the model and the reasoning. They sit beside focusNode because
-// that's their template (reveal → select → glide), but this is a separate feature: focusNode frames
-// a card WITHIN the map, opening replaces what the map is for as long as you're inside.
-
-// The viewport rect the open frame lays its contents out in — read back through containerBox /
-// frameInterior. A SNAPSHOT, taken here and refreshed only on a window resize:
-//  · not LIVE: the drop test reads it on every move, and a rect that moved with every pan would
-//    make where a card lands depend on how you got there.
-//  · sized at k = 1 (the app's canonical 1 world px = 1 screen px), not at the current zoom: the
-//    camera is about to change, since opening fits the contents, so reading the live k is circular.
-//    frameBox clamps k ≤ 1.0 anyway, so the fitted result lands near 1 and the contents do fill it.
-//  · bottomInset() is deliberately NOT subtracted. It's nonzero only while the float bar is docked
-//    AND open, i.e. it tracks the SELECTION — folding it in would reflow the frame on every click.
-//    It belongs to the camera moves (frameBox/revealInView) and stays there. Same for the crumb bar,
-//    which is floating chrome over the canvas like #toolbar.
-//  · anchored at the frame's own content origin, so opening a frame moves nothing at all (and so
-//    dirties nothing).
-function scopeRectFor(t: MindNode): { x: number; y: number; w: number; h: number } {
-  const home = containerBox(t);   // read before the level is pushed, so it's the frame's real bounds
-  const s = stageSize();
-  return { x: home.x, y: home.y, w: s.width, h: s.height };
-}
-// Re-measure the open level after a window resize; the anchor is kept, since the open frame can't
-// move (it isn't selectable and nothing lays it out). Returns whether anything actually changed.
-function refreshScopeRect(): boolean {
-  const top = scope.stack[scope.stack.length - 1];
-  if (!top) return false;
-  const s = stageSize();
-  if (Math.round(top.rect.w) === Math.round(s.width) && Math.round(top.rect.h) === Math.round(s.height)) return false;
-  top.rect = { x: top.rect.x, y: top.rect.y, w: s.width, h: s.height };
-  return true;
-}
-function currentBack(): ScopeBack { return { view: { ...state.view }, sel: [...state.sel], selId: state.selId }; }
-
-// Rebuild the stack so its last level is `target` (null = the whole map). The stack IS the crumb
-// path — the openable ancestor chain, not just what the user happened to click through — so opening
-// a deep frame from the ⋯ menu still reads `Map › A › B › C`. Levels that survive the rebuild keep
-// their remembered camera and rect, which is what makes `open A → open B → leave` glide back to the
-// camera A really had; levels nobody stepped through get no `back` and are re-fitted instead.
-function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
-  if (!target) { scope.stack = []; scope.rootId = null; return; }
-  const keep = new Map(scope.stack.map(l => [l.rootId, l]));
-  const next: ScopeLevel[] = [];
-  for (const n of [...openPathTo(target), target])
-    next.push(keep.get(n.id) ?? { rootId: n.id, file: n.file ?? null, rect: scopeRectFor(n), back: null });
-  const top = next[next.length - 1]!;
-  if (!keep.has(top.rootId)) top.back = back;   // only a level you're newly entering records a way back
-  scope.stack = next;
-  scope.rootId = target.id;
-}
-
-// A FREE frame you were INSIDE had the whole viewport to arrange things in, so a card can easily end
-// up outside the box it goes back to being on the way out — where its wrapper's overflow:hidden would
-// clip it clean away. So grow the box to hold what's in it as you leave (growFramesToHold), and only
-// when something really does stick out, so a visit that moved nothing still writes nothing.
-// A locked frame is out: it refuses to be resized at all.
-// A FOLDED frame is measured as the box it unfolds to, not its pill: unfolded for the measurement
-// only, and folded straight back, so leaving it moves nothing unless a card really sticks out.
-function growToFitContents(f: MindNode): void {
-  if (state.readOnly || f.type !== 'frame') return;
-  const folded = f.collapsed;
-  f.collapsed = false;
-  try { growFramesToHold(childrenOf(f.id).map(k => k.id)); }
-  finally { f.collapsed = folded; }
-}
-
-interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiting?: boolean; camera?: boolean; }
-function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
-  // A scope change re-parents elements (a child moves between #world and a wrapper), which would
-  // drop a captured pointer or blur an open editor.
-  endInPlaceEdit();
-  cancelViewAnim();
-  const before = scope.rootId;
-  const left = before ? state.nodes.get(before) : undefined;
-  animateLayout(() => {
-    setScopeStack(target, opts.back ?? null);
-    // settledHost caches which wrapper each element sits in (hostFrameId), and the scope just
-    // changed which wrapper that IS. Drop the cache or the children keep being placed into a
-    // wrapper paintNode is about to remove.
-    for (const n of state.nodes.values()) n.hostFrameId = undefined;
-    refreshScopeRect();
-    // Now that the stack is settled, containerBox reports the frame we just left at its real size
-    // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
-    // step: ⌘Z undoes the resize without teleporting you between scopes.
-    // `type === 'frame'` and not a scope predicate: the scope stack has already moved above this line.
-    if (left && left.type === 'frame' && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
-  });
-  if (opts.exiting) {
-    // Leaving: select the frame you came out of — that's what makes a crumb read as a back button —
-    // and glide to the camera you left. A level nobody stepped through has none, so it re-fits.
-    const came = before ? state.nodes.get(before) : undefined;
-    const ids = came && !outOfScope(came) ? [came.id]
-      : (opts.restore?.sel ?? []).filter(id => { const n = state.nodes.get(id); return !!n && !outOfScope(n); });
-    setSelectionSet(ids);
-    if (opts.restore) animateViewTo(opts.restore.view.x, opts.restore.view.y, opts.restore.view.k);
-    else if (opts.camera !== false) focusScope();
-  } else {
-    selectNode(null);            // the frame itself is off the canvas now, so nothing is selected
-    if (opts.camera !== false) focusScope();
-  }
-  syncUrl();                     // a discrete navigation step, like selecting a node → a history entry
-  if (before !== scope.rootId) scheduleSave();
-}
-
-// Open a frame. Allowed in read-only and on a LOCKED frame: looking inside the box isn't changing it.
-export function openFrame(target: MindNode | undefined): void {
-  const t = target;
-  if (!t || !canOpen(t)) { setStatus('Only a frame can be opened'); return; }
-  if (afterReading([t.id], () => openFrame(t), false)) return;   // its notes are the canvas you open onto
-  const back = currentBack();
-  // Opening is pure navigation, in the same class as revealInView: it writes no node field. A FOLDED
-  // frame stays folded — while you stand in it its interior is the canvas whatever its fold says
-  // (isHidden asks about the open frame before the fold), and you come back out to the same pill.
-  if (isScopeRoot(t)) return;                  // already standing in it
-  applyScope(t, { back });
-  setStatus(`Opened “${nodeLabel(t)}”`);
-}
-// Leave the innermost level.
-export function exitScope(): void {
-  // Leave the level you're standing in — AND every SYNTHESIZED level beneath it. A level with no
-  // `back` is one nobody stepped through (setScopeStack): opening a card that lives three frames deep
-  // pushes those frames as crumbs, and leaving one at a time would walk you out through folders you
-  // were never in. Coming out of a card therefore lands you where you were when you went into it,
-  // which is what "close" means. A level you DID open by hand keeps its own back and stops the walk,
-  // so `open A → open B → leave` still lands in A exactly as before.
-  let d = scope.stack.length - 1;
-  while (d > 0 && scope.stack[d - 1]!.back === null) d--;
-  goToScopeDepth(d);
-}
-// Leave the level AT `depth`, landing in the one above it — so depth 0 is "back to the whole map".
-// A crumb click is exactly this, which is why the crumbs need no logic of their own.
-export function goToScopeDepth(depth: number): void {
-  if (depth < 0 || depth >= scope.stack.length) return;   // ↓ at the top level: silently inert
-  const leaving = scope.stack[depth]!;
-  const upId = depth > 0 ? scope.stack[depth - 1]!.rootId : null;
-  // Several levels can be left at once — exitScope pops the synthesized ones, a crumb click jumps out
-  // of many. The camera to glide back to belongs to the OUTERMOST level being left, or, when that one
-  // was synthesized and never recorded a camera, to the innermost that did: that is the state the user
-  // was actually in before the whole excursion.
-  let back = leaving.back;
-  for (let i = scope.stack.length - 1; i > depth && !back; i--) back = scope.stack[i]!.back;
-  applyScope(upId ? state.nodes.get(upId) ?? null : null, { restore: back, exiting: true });
-}
-// Restore the scope a URL hash asked for (nav/url-state.ts). No fit: the hash carries its own camera
-// and must win. The hash is AUTHORITATIVE, so a path that's absent, gone, or no longer a frame all
-// mean the same thing — the whole map — rather than quietly leaving you wherever you were: that
-// distinction only shows up on a back/forward step, where honouring the URL is the entire point.
-// No error either way; a shared link to a since-deleted frame should just open the map.
-export function restoreScopeFromFile(file: string | null): void {
-  const t = file ? nodeByFile(file) : undefined;
-  const want = t && canOpen(t) ? t : null;
-  if (!want) { if (scopeActive()) { withoutScopeFade(); applyScope(null, { exiting: true, camera: false }); } return; }
-  if (isScopeRoot(want)) return;
-  withoutScopeFade();
-  applyScope(want, { camera: false });
-}
-// The canvas colour must LAND, not fade in, whenever the scope comes from the URL rather than from
-// something the user just did. On a reload there is nothing to transition FROM — the map has only just
-// appeared — so the fade reads as the app flashing the wrong background before settling on the right
-// one; on a back/forward step the camera and selection jump too, so a sliding background would be the
-// only thing still catching up. Suppressed for two frames (long enough for the paint that sets
-// --canvas-bg to land), after which every real open/leave fades again.
-function withoutScopeFade(): void {
-  document.body.classList.add('scope-instant');
-  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('scope-instant')));
-}
-// Bring `t` into reach from ANYWHERE: leave as many levels as it takes for it to be inside the scope
-// we land in. The deliberately UNSCOPED jumps (a [[wikilink]], an undo that
-// resurrects a node elsewhere) all go through here, so none of them can select a card that isn't on
-// the canvas — isSelectable refuses an out-of-scope id.
-export function popScopeFor(t: MindNode): void {
-  for (let guard = 0; scopeActive() && outOfScope(t) && guard < 64; guard++) exitScope();
-}
-// Keep the crumb bar in step, and recover from the open frame having been deleted / undone away /
-// removed on disk. pruneScope (view/layout.ts's applyLayouts) already truncated the stack; the
-// camera half has to live here, and without it you'd be staring at the parent scope through the
-// departed child's camera. Driven from paintAll, so every mutation path gets it.
-// While a frame is OPEN the canvas IS its interior, so the canvas takes the frame's own fill — the
-// very colour its box was wearing a moment before, through the same resolver its box used
-// (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no frame and the
-// canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
-// #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
-// the grid still draws over it.
-// A FRAME's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
-// the cards in it, which take its full colour, read on it the same as they did inside the box.
-// …and, for a frame, only when that colour is AUTHORED somewhere up the chain. effectiveColor
-// deliberately falls back to the theme's neutral card fill for a frame nobody has coloured, and
-// painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
-// the light theme, where the near-white fill swallows the floating chrome sitting on the canvas — the
-// ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
-// coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
-function hasAuthoredColor(n: MindNode): boolean {
-  return [n, ...ancestors(n)].some(a => !!a.color);
-}
-// WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
-// standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
-// and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
-// writes can't become two different things.
-export const canvasOwner = (): MindNode | null => scopeRootNode();
-// The fill actually behind the cards right now — the one input both the background and the grid ink
-// are derived from. null = none, and the theme's own background shows through as before.
-//
-// An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
-// rather than to nothing: what's behind an uncoloured frame is whatever is behind IT. Standing inside a frame nobody coloured
-// used to discard the canvas colour the map itself was painted in — so
-// going in turned a teal board grey, and coming out turned it teal again.
-function canvasFill(): string | null {
-  const owner = canvasOwner();
-  if (!owner || !hasAuthoredColor(owner)) return colorFill(state.canvasColor);
-  const fill = colorFill(effectiveColor(owner));
-  return fill && paleFill(fill);
-}
-// The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
-// free edge's label plate is painted in — a label is a small
-// patch of the canvas laid over the line, so its ink is measured against exactly this.
-export function canvasSurface(): string { return canvasFill() ?? THEME_BG; }
-// The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
-// leaves it either invisible or harsh. So re-derive --grid-pat from the fill that's really behind it,
-// by the theme's own 55/45 recipe with the fill standing in for --grid and, for --text, the direction
-// that HAS contrast against that fill — inkFor, the same call a card's own ink goes through, so an
-// arbitrary picked colour needs no special case. Written on #stage, which is where the fill is set;
-// #grid is its child and declares --grid-ink from it, so one write covers both grid levels.
-export function syncCanvasBackground(): void {
-  const fill = canvasFill();
-  if (fill) {
-    stage.style.setProperty('--canvas-bg', fill);
-    stage.style.setProperty('--grid-pat', `color-mix(in srgb, ${fill} 55%, ${inkFor(fill)} 45%)`);
-  } else {
-    stage.style.removeProperty('--canvas-bg');
-    stage.style.removeProperty('--grid-pat');
-  }
-  markCanvasColorBtn();   // the button's own chip mirrors whatever it would edit
-  syncThemeColor(fill);
-}
-// The browser's theme colour (Safari's bars, an installed app's title bar) is the canvas you're standing
-// on, so the chrome around the board reads as part of it; the board's own grey when it has no colour. A
-// fill can be a palette VARIABLE, which a meta tag can't read, so it is resolved to rgb on a hidden probe
-// — not off #stage, whose background is mid-transition right after a change.
-const themeMeta = document.querySelector('meta[name="theme-color"]');
-let themeProbe: HTMLElement | null = null;
-function syncThemeColor(fill: string | null | undefined): void {
-  if (!themeMeta) return;
-  if (!themeProbe) { themeProbe = document.createElement('i'); themeProbe.hidden = true; document.body.append(themeProbe); }
-  themeProbe.style.color = fill || 'var(--bg)';
-  const rgb = getComputedStyle(themeProbe).color;
-  if (themeMeta.getAttribute('content') !== rgb) themeMeta.setAttribute('content', rgb);
-}
-function syncScopeChrome(): void {
-  renderCrumbs();
-  syncCanvasBackground();
-  if (!scope.pruned) return;
-  scope.pruned = false;
-  if (state.sel.size || state.selId) setSelectionSet([]);
-  focusScope();
-  const open = scopeRootNode();
-  setStatus(open ? `That frame is gone — back to “${nodeLabel(open)}”` : 'That frame is gone — back to the whole map');
-}
-// Keep the rect honest across a window resize. Nothing to re-lay-out — an open frame's contents sit
-// where they were put; what still reads the rect is the drop test (frameAt / containerBox), which a
-// stale rect would confine to the old window. Debounced, and a no-op when the size didn't really change.
-let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
-window.addEventListener('resize', () => {
-  if (!scopeActive()) return;
-  clearTimeout(scopeResizeTimer);
-  scopeResizeTimer = setTimeout(refreshScopeRect, 200);
-});
 
 // ---------- selection + editor ----------
 // Selection and the edit panel are decoupled: a node can stay selected while the

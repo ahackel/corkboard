@@ -23,11 +23,12 @@ import { revealPath } from '../data/lazy.js';
 import { state, setStatus } from '../core/state.js';
 import { store, currentMap, openMapRef } from '../data/persistence.js';
 import { readMaps, type MapKind } from '../store/index.js';
-import { selectNode, applyReadOnly, restoreScopeFromFile } from '../main.js';
+import { selectNode, applyReadOnly } from '../main.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
 import { searchQuery, setSearchQuery } from '../features/search.js';
 import { nodeLabel, nodeByFile } from '../utils/model.js';
+import { restoreScopeFromFile } from './frames.js';
 
 function slugify(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'map';
