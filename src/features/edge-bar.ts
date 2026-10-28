@@ -1,5 +1,5 @@
 // ============================================================
-// The selected EDGE's floating bar: colour ▾ · line style ▾ · ends ▾ · delete (label = double-click).
+// The selected EDGE's floating bar: colour ▾ · line style ▾ · ends ▾ (label = double-click; Delete/⌫ removes it).
 //
 // Its own bar rather than a mode of features/float-bar.ts. That one is keyed on `state.sel` and
 // anchored to a CARD from end to end (anchorNode, labelRect, the locked-selection collapse), and an
@@ -10,7 +10,7 @@
 // follow loop the card bar uses.
 // ============================================================
 import { state, type EdgeCap } from '../core/state.js';
-import { selectedEdges, leadEdge, deleteSelectedEdge } from './edge-tools.js';
+import { selectedEdges, leadEdge } from './edge-tools.js';
 import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { touchEdges, commitStep } from './history.js';
@@ -27,7 +27,6 @@ const colorDot = byId('ebColorDot');
 const dashBtn = byId<HTMLButtonElement>('ebDash');
 const arrowsBtn = byId<HTMLButtonElement>('ebArrows');
 
-const deleteBtn = byId<HTMLButtonElement>('ebDelete');
 const colorPop = byId('ebColorPop');
 const colorRow = byId('ebColors');
 const arrowPop = byId('ebArrowPop');
@@ -89,7 +88,6 @@ const CAP_CHOICES: Array<{ key: EdgeCap; label: string }> = [
   { key: 'arrow', label: 'Arrow' },
 ];
 const CAP_NAME: Record<EdgeCap, string> = { none: 'bare', dot: 'dot', arrow: 'arrow' };
-const ICON_TRASH = SVG('<path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M7 7l1 12h8l1-12"/>');
 
 let wired = false;
 function wire(): void {
@@ -97,7 +95,6 @@ function wire(): void {
     return;
   }
   wired = true;
-  deleteBtn.innerHTML = ICON_TRASH;
 
   // Every control acts on the WHOLE selection, and sets one VALUE across it rather than toggling
   // each edge's own — three lines where two are dashed become three dashed lines, not two solid and
@@ -139,7 +136,6 @@ function wire(): void {
     commit(); openArrowPop();
     commitStep();
   };
-  deleteBtn.onclick = () => { deleteSelectedEdge(); };
 
   colorBtn.onclick = (ev) => { ev.stopPropagation(); colorPop.classList.contains('open') ? closeColorPop() : openColorPop(); };
   colorRow.onclick = (ev) => {

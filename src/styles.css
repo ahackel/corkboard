@@ -1218,7 +1218,6 @@ body.readonly #canvasColorBtn { display:none; }
 }
 #edgeBar.open { opacity:1; pointer-events:auto; }
 #edgeBar.hide-interact { opacity:0; pointer-events:none; transition:none; }
-#edgeBar #ebDelete:hover { color:#e0564f; background:color-mix(in srgb, #e0564f 18%, transparent); }
 /* The in-place label editor: floats over the line's midpoint, sized to its own text. */
 /* `all:unset` FIRST: it resets every property declared before it, `display` included — putting it
    after the display:none below is what made the field show up on load. */
@@ -1227,7 +1226,6 @@ body.readonly #canvasColorBtn { display:none; }
   background:var(--panel); color:var(--text);
   border:1px solid var(--accent); box-shadow:0 4px 14px rgba(0,0,0,.35); }
 #ebLabelEdit.open { display:block; }
-#edgeBar #ebDelete:hover { background:rgba(224,86,79,.22); color:#e0564f; }
 /* The label a curve carries, drawn on the line itself (view/free-edges.ts). A plate behind the text
    so it stays readable where the curve runs under it. */
 svg#freeEdges .fe-label-plate { fill:var(--bg); stroke:none; }
