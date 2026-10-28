@@ -111,7 +111,7 @@ folder tree in Finder or Obsidian IS the board's grouping. What follows from tha
 — and every folder the board has never seen, which arrives as a folded pill. Only the frame's own `_index.md`
 is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts` holds the policy:
 - **Reading:** unfolding, opening, Expand all, delete, duplicate, copy/cut, export and a link into the folder
-  read it first (`afterReading` / `readAll` / `revealPath`; persistence.ts `readFolder` is the mechanism). A save
+  read it first (`afterReading` / `readAll` / `revealPath`; data/load.ts `readFolder` is the mechanism). A save
   that would MOVE a folded frame reads its whole folder first (`saveAll` phase 0) — it can't move notes it
   hasn't got. A frame that is open on the canvas with its notes unread (an undo unfolded it) reads them on the
   next paint (`readOpenUnread`, the safety net).
@@ -167,7 +167,7 @@ sit wherever they were put: there are no arrangements, no outliner, no checklist
   a create, a paste or an edit that leaves a card past its frame's edge, the frame widens outward (never
   shrinks, never moves a side that already clears). A frame clips (`overflow:hidden`), so the alternative is
   a card that is in the frame and out of sight.
-- **A card with children on disk is MIGRATED on load** (`data/persistence.ts foldCardsIntoFrames`): it
+- **A card with children on disk is MIGRATED on load** (`data/migrate.ts foldCardsIntoFrames`): it
   becomes a frame holding them (only `mm_type` changes), and each converted frame — plus any frame that was
   drawn as a row inside one — lays its cards out ONCE in a column in their old order (`kidOrder`) and sizes
   itself around them, deepest first. That needs measured heights, so affected nodes are unfolded and painted
@@ -242,7 +242,7 @@ the drop and a fold strands an empty `overflow:hidden` div at the box's old size
 ## Open frames (scope)
 
 **A frame can be OPENED, and then the canvas IS its interior** (`nav/scope.ts` for the model,
-`openFrame`/`exitScope`/`goToScopeDepth` in `main.ts` for the actions, `features/breadcrumbs.ts` for the
+`openFrame`/`exitScope`/`goToScopeDepth` in `nav/frames.ts` for the actions, `features/breadcrumbs.ts` for the
 path). While one is open, nothing but its contents is on the canvas, its own box/border/tab are not drawn,
 its interior is the whole viewport, and the crumb bar is the way back out. Nesting is allowed. Distinct from
 `focusNode`, which frames a card WITHIN the map; this replaces what the map is for as long as you're inside.
@@ -364,7 +364,7 @@ is all `isScopeRoot` means in the layout code.
 ## Sizing
 
 **`n.w` and `n.h` are always AUTHORED; a card's `n.h` is a MINIMUM.** Every kind gets the same 8 resize
-zones (`FRAME_DIRS`, `ensureResizeHandles` in `main.ts`), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
+zones (`FRAME_DIRS`, `ensureResizeHandles` in `features/resize.ts`), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
 dragged size and nothing else — never a value a layout pass computed. What the height MEANS splits:
 
 - `frame` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
@@ -396,7 +396,7 @@ other follows and the picture never distorts or crops. Four things follow:
   text), ⌥-merges into another note, sits in frames, and ⌥-drags out as its `.md`. That last one
   is what retired the old image-fold drag (`imageMerge`): an image card is UNTITLED, and `mergeCardsInto`
   already appends an untitled card's body alone, which for a picture is exactly its `![alt](src)` line.
-- **The mode is the note's text, so it ends when the text does.** `isImageBox` (`main.ts`) adds the two
+- **The mode is the note's text, so it ends when the text does.** `isImageBox` (`view/geometry.ts`) adds the two
   states where the card shows something else and so measures like any card: while its EDITOR is open (that's
   markdown, which wraps), and while FOLDED. Type a word into the note and the padding and the measured
   height come back on commit, and `mm_h` stops being written — nothing to migrate, the file says it.
@@ -520,7 +520,7 @@ frontmatter kept verbatim, CRLF/BOM notes, and the pure naming rules in `utils/f
 ## Interaction
 
 **There is no toolbar; the ⌘P PALETTE is the one list of every action** (`features/palette.ts`, button
-`#paletteBtn` for touch). The palette only displays; `paletteCommands` in `main.ts` builds the list, where
+`#paletteBtn` for touch). The palette only displays; `paletteCommands` in `features/commands.ts` builds the list, where
 every action function is in scope. A command's `when` HIDES it while it can't apply rather than listing it
 disabled. It is FigJam's QUICK ACTIONS — ⌘P, and the dock's Actions button, above which it opens at the
 bottom centre, pinned by its bottom with the input LAST, so the input stays put next to the dock while the
@@ -542,7 +542,7 @@ since that is the space its position lives in, and a multi-selection is correcte
 offset, so the group keeps its internal spacing and moves as one piece.
 
 Where it is applied, which is everywhere the USER decides a position — not just the drags. `snapPt`
-(main.ts, beside `gridSnap`) is the placement half: a new card at the pointer and everything that routes
+(view/geometry.ts, beside `gridSnap`) is the placement half: a new card at the pointer and everything that routes
 through `centredAt` (the canvas double-click, Space/N, both "New card here" menus, a dropped image, a
 dragged-out selection), a duplicate (whose offset is a MEASURED card height, so it landed off-grid), a
 paste (the anchor its payload lines up on), and an image pulled out of a note. What is deliberately left
@@ -615,7 +615,7 @@ floating panel, popover and context menu ends in — measures its margin from th
 **Collapse folds a card to a CHIP and a frame to its PILL — something small, and nothing else moves.**
 That's what the apps that do it well do (Heptabase folds a card to its title; Obsidian's Advanced Canvas
 folds a group to its header), and what FigJam's "hide contents" doesn't: a hidden section keeps its size.
-`canFold` (main.ts) is the one rule: every frame, a card with something below its first line, or an image
+`canFold` (view/geometry.ts) is the one rule: every frame, a card with something below its first line, or an image
 card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`toggleCollapseSelection`/
 `setCollapsedSelection`: the float bar's fold button (`fbFold`), `X`, the ⋯ menu, `←`/`→` (directional, not toggles), a
 double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘P's **Collapse all** / **Expand
@@ -830,7 +830,7 @@ delete, a break is a body edit plus a create.
   selection dragged back into its own note, a plain in-textarea move that must stay one (hence `destAt`
   returning null for the source card).
 
-**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `main.ts`):** `↑` opens the selected frame, `↓`
+**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `features/commands.ts`):** `↑` opens the selected frame, `↓`
 leaves the open one, `→` unfolds, `←` folds. All four are about DEPTH, in the two senses this map has — which
 folder you're standing in, and whether a frame or note is folded. **Walking between cards lost its keys to
 that**, deliberately: opening a frame is the primary way to move around a big map, and clicking covers the
@@ -864,7 +864,7 @@ the viewer WITHOUT also clearing the canvas selection. **SPACE opens and closes 
 image card the picture IS the card, so "look at this properly" is what the key can mean there (`openImageAt`,
 `main.ts`, shared with the magnifier button), and it sits ahead of the new-card branch, which only ever ran
 with nothing selected. Space is split across the two key events on purpose — the keydown is swallowed so
-`spaceHeld` can't latch the canvas into hand-pan, and the keyup does the closing, which also stops main.ts's
+`spaceHeld` can't latch the canvas into hand-pan, and the keyup does the closing, which also stops features/commands.ts's
 own Space keyup from re-opening the viewer on the card that is still selected. **Closing lands you on the
 card you were LOOKING at**, not the one you came in from: page three pictures along, close, and the third
 card is selected, so the next thing you do lands where your eyes already were. Selection only — the camera
@@ -879,7 +879,7 @@ everywhere, and a colour has exactly one ink. An uncoloured CARD falls back to `
 yellow — derived, never written, so the note on disk stays uncoloured — and an uncoloured FRAME to `white`.
 The keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
 
-**The colour picker is FigJam's: two rows of eleven** (`PICKER_ROWS`, main.ts) — the STRONG hues framed by
+**The colour picker is FigJam's: two rows of eleven** (`PICKER_ROWS`, view/color.ts) — the STRONG hues framed by
 black and white (`stone`, `bold-red` … `bold-pink`), then the pastels, the sticky colours, framed by two
 greys and ending in the custom chip; recently used custom colours wrap onto a third row. `PALETTE` is every
 key a note may carry (a superset: `slate` still paints but is no longer offered), and its `.c-<key>`
@@ -948,7 +948,7 @@ the smart guides line up with the edges you see). The pop stands down under redu
 
 **A card's text colour is DERIVED from its fill, never authored.** The palette hexes are the `--pal-*` custom
 properties in `styles.css` (one source of truth, read into JS as `SWATCH_BG`), but the **ink** each demands is
-computed: `utils/ink.ts` measures WCAG contrast and `main.ts`'s `deriveInk` injects a `--pal-ink-*` +
+computed: `utils/ink.ts` measures WCAG contrast and `view/color.ts`'s `deriveInk` injects a `--pal-ink-*` +
 `--pal-scrim-*` pair per key into a generated `<style>`. The `.c-*` classes hand those to a card as **`--ink`**
 (its text colour) and **`--scrim`** (what an in-place editor paints *behind* that ink). Four rules follow:
 
@@ -969,7 +969,7 @@ taking the higher contrast. With FigJam's pastels every palette colour falls bel
 
 **A colour VALUE is a palette key OR an authored `#rrggbb`.** `n.color` (and `effectiveColor`'s result) is `''`
 (inherit), `'none'`, a key, or a custom hex from the colour popover's spectrum chip — and **nothing branches on
-which**, because three resolvers in `main.ts` absorb it: `colorFill` (the hex JS tints with — edges,
+which**, because three resolvers in `view/color.ts` absorb it: `colorFill` (the hex JS tints with — edges,
 the canvas; `null` for none/inherit, which every caller already falls back to `--edge` for), `colorClass`
 (`c-<key>`, or `c-custom` — a hex can't be a class name) and `colorVars`/`applyColorVars` (that node's
 `--card`/`--ink`/`--scrim` written inline, since the set of custom colours is open-ended and only a class can

@@ -15,9 +15,11 @@ import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges, commitStep } from './history.js';
 import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
-import { paintAll, nodeW, nodeH, snapPt } from '../main.js';
+import { paintAll } from '../main.js';
 import { createNode } from './crud.js';
 import { SPACING } from '../utils/guides.js';
+import { trackPointer } from '../utils/dom.js';
+import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
@@ -31,8 +33,8 @@ export function leadEdge(): BoardEdge | null {
   return last ? state.edges.find(e => e.id === last) ?? null : null;
 }
 // Selecting an edge clears the card selection and vice versa — see AppState.selEdges. `add` is the
-// ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (main.ts selectNode).
-export function selectEdge(id: string | null, add = false): void {
+// ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (features/selection.ts selectNode).
+function selectEdge(id: string | null, add = false): void {
   if (id == null) state.selEdges.clear();
   else if (!add) { state.selEdges.clear(); state.selEdges.add(id); }
   else if (!state.selEdges.delete(id)) state.selEdges.add(id);
@@ -55,7 +57,7 @@ function edgeBetween(a: string, b: string, pa?: EdgeSide, pb?: EdgeSide): BoardE
                             || (e.from === b && e.to === a && e.fromPort === pb && e.toPort === pa));
 }
 // `fromPort`/`toPort` pin the ends to those faces (BoardEdge); left out, an end picks its face itself.
-export function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
+function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
   if (fromId === toId || !connectable(fromId) || !connectable(toId)) return null;
   const dup = edgeBetween(fromId, toId, fromPort, toPort);
   if (dup) { selectEdge(dup.id); return dup; }
@@ -177,16 +179,7 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
     const draw = ui.edgeDraw; ui.edgeDraw = null;
     if (draw) finishDraw(draw, screenToWorld(e.clientX, e.clientY));
   };
-  const stop = (): void => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    window.removeEventListener('pointercancel', abort);
-    window.removeEventListener('keydown', key);
-  };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
-  window.addEventListener('pointercancel', abort);
-  window.addEventListener('keydown', key);
+  const stop = trackPointer({ move, up, cancel: abort, key });
 }
 
 // How far the pointer must travel before a release lands anything — below it the gesture was a press.
@@ -248,7 +241,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   paintFreeEdges();
 }
 
-// Delete/Backspace with edges selected — handled before the card path in main.ts's key handler. All
+// Delete/Backspace with edges selected — handled before the card path in features/tag-tray.ts's key handler. All
 // of them go in ONE undo step: the selection was the unit the user acted on.
 export function deleteSelectedEdge(): boolean {
   const ids = [...state.selEdges];

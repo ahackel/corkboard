@@ -8,3 +8,8 @@ export function readStrings(key: string): string[] {
   const v = readJSON<unknown>(key, []);
   return Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
 }
+
+// Put `item` first in a stored recents list, dropping its older copy (compared by `same`) and keeping `max`.
+export function pushRecent(key: string, item: string, max: number, same: (s: string) => string = s => s): void {
+  writeJSON(key, [item, ...readStrings(key).filter(s => same(s) !== same(item))].slice(0, max));
+}

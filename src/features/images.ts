@@ -6,6 +6,7 @@
 // (relayout comes from main.js — a runtime-only cycle.)
 import { relayout } from '../main.js';
 import { store } from '../data/persistence.js';
+import { imageMimeFor } from '../utils/image-types.js';
 
 const imgUrlCache = new Map<string, string>();    // src path -> resolved URL (blob:… or the original remote/data URL)
 const imgInflight = new Map<string, Promise<string | null>>();    // src path -> in-flight read (de-dupes concurrent reads)
@@ -24,23 +25,20 @@ export function forgetImages(paths: Iterable<string>): void {
 }
 // Store blobs often come back untyped (OPFS getFile() has no MIME) — give them their real image
 // type from the extension, so the blob URL renders as an image when opened in its own tab too.
-const EXT_MIME: Record<string, string> = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif',
-  webp:'image/webp', svg:'image/svg+xml', avif:'image/avif', bmp:'image/bmp' };
 export function typedImageBlob(blob: Blob, path: string): Blob {
   if (blob.type && blob.type !== 'application/octet-stream') return blob;
-  const mime = EXT_MIME[(path.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase()];
+  const mime = imageMimeFor(path);
   return mime ? new Blob([blob], { type: mime }) : blob;
 }
 // A referenced path -> its resolved URL, through the shared cache: vault paths become blob URLs read
 // from the store (once), remote/data URLs map to themselves. Exported for the full-screen viewer,
 // which pages through images that may not be on screen — and so may not have been hydrated yet.
-export function imageUrl(path: string): Promise<string | null> { return loadImgUrl(path); }
-function loadImgUrl(path: string): Promise<string | null> {
+export function imageUrl(path: string): Promise<string | null> {
   if (imgUrlCache.has(path)) return Promise.resolve(imgUrlCache.get(path)!);
   if (/^(https?:|data:)/i.test(path)){ imgUrlCache.set(path, path); return Promise.resolve(path); }
   if (imgInflight.has(path)) return imgInflight.get(path)!;
   const p = (async () => {
-    const raw = store.readBlob ? await store.readBlob(path) : null;
+    const raw = await store.readBlob(path);
     const blob = raw ? typedImageBlob(raw, path) : null;
     const url = blob ? URL.createObjectURL(blob) : null;
     if (url) imgUrlCache.set(path, url);
@@ -73,7 +71,7 @@ export function hydrateImages(el: ParentNode): void {
     if (!path) return;
     img.removeAttribute('data-img-src');                 // claim it so repaints don't re-trigger
     if (imgUrlCache.has(path)){ img.src = imgUrlCache.get(path)!; return; }   // known → set, no relayout
-    loadImgUrl(path).then(url => {
+    imageUrl(path).then(url => {
       if (!url){ img.classList.add('md-img-missing'); img.alt = '⚠ ' + (img.alt || path); return; }
       img.addEventListener('load',  scheduleImgRelayout, { once:true });     // first real load reflows once
       img.addEventListener('error', () => img.classList.add('md-img-missing'), { once:true });

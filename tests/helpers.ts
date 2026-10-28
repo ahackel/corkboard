@@ -1,4 +1,4 @@
-// Build a MindNode from a parsed note the way data/persistence.ts loadFromDir does, minus geometry.
+// Build a MindNode from a parsed note the way data/load.ts loadFromDir does, minus geometry.
 import { parseMd } from '../src/utils/frontmatter.js';
 import { state, type MindNode } from '../src/core/state.js';
 

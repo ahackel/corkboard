@@ -4,22 +4,25 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf } from '../utils/model.js';
-import { stripImageRef } from '../utils/markdown.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
+import { stripImageRef, appendMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
-import { splitHeading } from '../utils/frontmatter.js';
+import { splitHeading, setNoteText } from '../utils/frontmatter.js';
 import { frameInterior, holderOf, frameAt } from '../view/layout.js';
-import { screenToWorld } from '../view/camera.js';
+import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
-import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
-import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
+import { paintAll, relayout, remeasure } from '../main.js';
+import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
-import { SPACING } from '../utils/guides.js';
+import { SPACING, slidePast } from '../utils/guides.js';
+import { boxOf } from './guides.js';
 import { growFramesToHold } from './float-bar.js';
 import { settleFrames } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
+import { nodeH, nodeW, snapPt, NODE_W, FRAME_W, FRAME_H } from '../view/geometry.js';
+import { selectNode, setSelectionSet, applySelection, selectedIds } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -38,13 +41,13 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
 }
 // The height a FRESH card lays out at, before it has an element to measure (layoutH's own fallback is
 // the same number). Only useful as half of the centring below — a card's real height is measured.
-export const NEW_CARD_H = 64;
+const NEW_CARD_H = 64;
 // Centre a fresh card on a world point — the ONE spelling of it. Every "new card HERE" gesture (the
 // canvas double-click, the canvas ⋯ menu, Space, a dropped file, a card double-clicked into a
 // container) lands the card under the pointer rather than hanging down-right of it, so the default
 // card's size is written once instead of once per gesture.
 // Where a card goes when it is placed AT a point — the pointer, usually. Centred on that point and then
-// put on the grid (main.ts snapPt), which is the one funnel every interactive create runs through: the
+// put on the grid (view/geometry.ts snapPt), which is the one funnel every interactive create runs through: the
 // canvas double-click, Space/N, both "New card here" menus, a dropped image, a dragged-out selection. A
 // card the user positions is on the grid whether it was placed or dragged there.
 export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }); }
@@ -72,7 +75,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     const p = state.nodes.get(parentId);
     if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return; }
   }
-  const c = centredAt(screenToWorld(window.innerWidth/2, window.innerHeight/2));
+  const c = centredAt(worldAtOrCentre());
   const n = mkNode({
     x: opts.x ?? c.x, y: opts.y ?? c.y,
     parent: parentId,
@@ -183,14 +186,7 @@ function copyNext(s: MindNode): MindNode {
   const left = sibs.filter(o => inRow(o, s.y) && o.x + nodeW(o) <= s.x)
     .sort((a, b) => (b.x + nodeW(b)) - (a.x + nodeW(a)))[0];
   const gap = left ? s.x - (left.x + nodeW(left)) : LIST_GAP;
-  let x = s.x + w + gap;
-  for (let moved = true; moved;) {
-    moved = false;
-    for (const o of sibs) {
-      if (!inRow(o, s.y) || o.x >= x + w || o.x + nodeW(o) <= x) continue;
-      x = o.x + nodeW(o) + gap; moved = true;
-    }
-  }
+  const { x } = slidePast({ x: s.x + w + gap, y: s.y, w, h }, sibs.map(o => boxOf(o)), 'x', gap);
   const at = snapPt({ x, y: s.y });
   const c = cloneNodeAt(s, at.x, at.y);
   if (c.title.trim()) c.title = advanceTitle(c.title);
@@ -271,16 +267,8 @@ export function createSibling(refId: string){
   const ref = state.nodes.get(refId); if (!ref) return;
   const parent = parentOf(ref);
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t add a card here'); return; }
-  const w = nodeW(ref);
-  let y = ref.y + nodeH(ref) + LIST_GAP;
-  for (let moved = true; moved;) {
-    moved = false;
-    for (const o of childrenOf(ref.parent)) {
-      const oh = nodeH(o);
-      if (o === ref || o.x >= ref.x + w || o.x + nodeW(o) <= ref.x || o.y >= y + NEW_CARD_H || o.y + oh <= y) continue;
-      y = o.y + oh + LIST_GAP; moved = true;
-    }
-  }
+  const others = childrenOf(ref.parent).filter(o => o !== ref).map(o => boxOf(o));
+  const { y } = slidePast({ x: ref.x, y: ref.y + nodeH(ref) + LIST_GAP, w: nodeW(ref), h: NEW_CARD_H }, others, 'y', LIST_GAP);
   createNode({ x: ref.x, y, parent: ref.parent });
 }
 
@@ -304,8 +292,7 @@ function cutCardText(n: MindNode, start: number, end: number, value: string): st
   touch(n.id);   // usually already touched by startCardEdit — idempotent
   const text = value.slice(start, end);
   const rest = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
-  const split = splitHeading(rest);
-  n.title = split.title; n.body = split.body; n.titleGap = split.gap;
+  setNoteText(n, rest);
   n.dirty = true;
   dropBodyEdit();   // see inline-edit.ts — the editor still shows the pre-cut text
   return text;
@@ -315,10 +302,12 @@ function cutCardText(n: MindNode, start: number, end: number, value: string): st
 // editor that happens to be open on the target, which is easy to forget and leaves the next commit
 // writing the pre-merge text straight back over it.
 function appendToBody(t: MindNode, md: string): void {
-  if (!md) return;
-  t.body = (t.body && t.body.trim()) ? t.body.replace(/\s*$/, '') + '\n\n' + md : md;
+  if (!md) {
+    return;
+  }
+  t.body = appendMd(t.body, md);
   t.dirty = true;
-  if (ui.bodyEdit && ui.bodyEdit.id === t.id) ui.bodyEdit.ta.value = t.body;
+  syncOpenEditor(t);
 }
 // Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
 // drop it into a fresh card right beside it, in the same place the source lives.
@@ -336,8 +325,6 @@ export function extractToCard(): void {
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
   setStatus(`Extracted “${nodeLabel(card)}”`);
 }
-const nodeOrNull = (id: string | null | undefined): MindNode | null =>
-  (id ? state.nodes.get(id) ?? null : null);
 // WHICH TEXT is being dragged: a range of the card's one editor (features/text-drag.ts captures this
 // at dragstart; the offsets are into that editor's live text, which is why the drop re-reads it rather
 // than trusting n.title/n.body). It used to carry a `part: 'title' | 'body'` too, with a contenteditable
@@ -376,7 +363,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   }
   // WHERE THE NEW CARD BELONGS: the frame it was dropped in (text-drag.ts resolves it with the same
   // frameAt every drop uses), else the top level — the open frame while there is one.
-  const parent = dest.container ?? nodeOrNull(detachParentId());
+  const parent = dest.container ?? state.nodes.get(detachParentId() ?? '') ?? null;
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
   const { title, body } = splitHeading(text);
@@ -512,22 +499,44 @@ function canPromoteDelete(id: string): boolean {
 // (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
 // position, so nothing needs doing here. Shared by ⌥Delete/⌥Backspace and the ⋯ menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = selectedIds().filter(canPromoteDelete);
-  if (!ids.length) { setStatus('Locked — can’t delete'); return; }
-  if (afterReading(ids, deleteSelectionKeepChildren, false)) return;   // the children it keeps must exist
+  if (!ids.length) {
+    setStatus('Locked — can’t delete');
+    return;
+  }
+  if (afterReading(ids, deleteSelectionKeepChildren, false)) {
+    return;   // the children it keeps must exist
+  }
   const promoted = new Set<string>();
   record([], () => {
     for (const id of ids) {
-      const n = state.nodes.get(id); if (!n) continue;
+      const n = state.nodes.get(id);
+      if (!n) {
+        continue;
+      }
       const kids = childrenOf(id);
       touch(id, ...kids.map(k => k.id));
-      for (const k of kids) { k.parent = n.parent; k.dirty = true; promoted.add(k.id); }
-      state.nodes.delete(id); n.el?.remove();
-      if (n.file) state.toDelete.push(n.file);
+      for (const k of kids) {
+        k.parent = n.parent;
+        k.dirty = true;
+        promoted.add(k.id);
+      }
+
+      // the kept cards sit in the wrapper, and the next paint moves them out of it
+      state.nodes.delete(id);
+      n.el?.remove();
+      n.frameContentEl?.remove();
+      if (n.file) {
+        state.toDelete.push(n.file);
+      }
     }
   });
-  for (const id of ids) promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
+  for (const id of ids) {
+    promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
+  }
   relayout();
   setSelectionSet(promoted);
   scheduleSave();
@@ -539,30 +548,38 @@ export function deleteSelectionKeepChildren(): void {
 // mutates and commits it (image extraction is its own gesture, not nested in a live drag).
 export function extractImage(sourceId: string, path: string, alt: string,
     target: { toCardId: string } | { x: number; y: number; w: number; h: number }): void {
-  if (state.readOnly || !path) return;
-  const source = state.nodes.get(sourceId); if (!source) return;
+  if (state.readOnly || !path) {
+    return;
+  }
+  const source = state.nodes.get(sourceId);
+  if (!source) {
+    return;
+  }
   touch(sourceId);
   source.body = stripImageRef(source.body, path);
   source.dirty = true;
-  if (ui.bodyEdit && ui.bodyEdit.id === sourceId) ui.bodyEdit.ta.value = source.body;
+  syncOpenEditor(source);
   const md = `![${alt}](${path})`;
   if ('toCardId' in target){
     const tgt = state.nodes.get(target.toCardId);
     if (tgt){
       touch(tgt.id);
-      tgt.body = (tgt.body && tgt.body.trim()) ? tgt.body.replace(/\s*$/, '') + '\n\n' + md : md;
-      tgt.dirty = true;
-      if (ui.bodyEdit && ui.bodyEdit.id === tgt.id) ui.bodyEdit.ta.value = tgt.body;
+      appendToBody(tgt, md);
     }
     setStatus('Image moved');
   } else {
     // untitled: the note is the picture and nothing else, which is what makes it render as one
     // (core/state.ts isImageCard). The alt rides along in the markdown and names the file.
-    const n = mkNode({ x: target.x, y: target.y, parent: null, title: '',
+    const into = frameAt(target.x + target.w / 2, target.y + target.h / 2, new Set());
+    const n = mkNode({ x: target.x, y: target.y, parent: into?.id ?? detachParentId(), title: '',
       body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
+    relayout();
+    growFramesToHold([n.id]);
     setStatus('Image extracted');
   }
-  relayout(); scheduleSave(); commitStep();
+  relayout();
+  scheduleSave();
+  commitStep();
 }

@@ -9,7 +9,7 @@
 import { state, world } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { renderBodyHTML } from '../utils/markdown.js';
-import { joinHeading } from '../utils/frontmatter.js';
+import { cardMarkdown } from '../utils/frontmatter.js';
 import { placeInViewport } from '../utils/dom.js';
 import { hydrateImages } from './images.js';
 
@@ -27,7 +27,7 @@ let showing: string | null = null;   // the card id the panel is for
 let timer: number | null = null;
 
 function cancel(): void { if (timer != null) { clearTimeout(timer); timer = null; } }
-export function hidePeek(): void {
+function hidePeek(): void {
   cancel();
   showing = null;
   panel.classList.remove('open');
@@ -54,7 +54,7 @@ function show(cardEl: HTMLElement): void {
     const val = cardEl.style.getPropertyValue(v);
     if (val) panel.style.setProperty(v, val); else panel.style.removeProperty(v);
   }
-  panelBody.innerHTML = renderBodyHTML(joinHeading(n.title, n.body, n.titleGap !== false));
+  panelBody.innerHTML = renderBodyHTML(cardMarkdown(n));
   hydrateImages(panelBody);
   panel.scrollTop = 0;
   // beside the card — to its right, or its left when the right has no room

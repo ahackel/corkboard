@@ -4,11 +4,11 @@
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
+import { nodeW, nodeH } from './geometry.js';
 
 // Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
 // chip, the lock badge, the tags on its top edge — is a handful of unreadable pixels
@@ -16,7 +16,7 @@ import { clamp } from '../utils/num.js';
 // (styles.css), which also takes their layout and paint work out of every frame of a pinch/pan at the
 // zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's
 // own geometry depends on it, so crossing the line needs no repaint of the canvas.
-export const FAR_ZOOM = 0.5;
+const FAR_ZOOM = 0.5;
 
 // #world carries `will-change:transform` (styles.css) so a pan/pinch is a compositor-only move and
 // never repaints the cards. The cost is that Chrome then PINS that layer's raster scale: it keeps
@@ -103,6 +103,11 @@ export function animateViewTo(tx: number, ty: number, tk: number = state.view.k)
 export function screenToWorld(sx: number, sy: number): { x: number; y: number } {
   const r = stage.getBoundingClientRect();
   return { x:(sx - r.left - state.view.x)/state.view.k, y:(sy - r.top - state.view.y)/state.view.k };
+}
+
+// The world point under screen (sx, sy) — or under the middle of the screen when there is no point.
+export function worldAtOrCentre(sx?: number | null, sy?: number | null): { x: number; y: number } {
+  return sx != null && sy != null ? screenToWorld(sx, sy) : screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
 }
 
 // zoom toward a screen point (mx,my are relative to the stage) by a multiplier

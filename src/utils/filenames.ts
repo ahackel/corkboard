@@ -1,6 +1,6 @@
 // ============================================================
 // A note's FILENAME: the slug its text gives it, the collision rule, and the [[wikilink]] fixup a
-// rename drags along. Pure — no state, no store — so data/persistence.ts saveAll can lean on it and
+// rename drags along. Pure — no state, no store — so data/save.ts saveAll can lean on it and
 // the tests (tests/filenames.test.ts) can pin it down without a DOM.
 // ============================================================
 import type { MindNode } from '../core/state.js';
@@ -118,4 +118,22 @@ export function retargetLinks(body: string, renames: Map<string, string>): strin
     const into = to.get(dropMd(target.trim()).toLowerCase());
     return into ? `[[${into}${alias ?? ''}]]` : m;
   });
+}
+
+// The folders to try removing after notes left `emptied` folders: each of those and every folder above
+// it, deepest first (emptying `A/B/` can empty `A/`), but never one that still holds a note in `held`.
+export function prunableDirs(emptied: Iterable<string>, held: Iterable<string | null>): string[] {
+  const live = new Set<string>();
+  for (const f of held) {
+    for (let d = f ? dirOf(f) : ''; d; d = dirOf(d.slice(0, -1))) {
+      live.add(d);
+    }
+  }
+  const dirs = new Set<string>();
+  for (const d0 of emptied) {
+    for (let d = d0; d; d = dirOf(d.slice(0, -1))) {
+      dirs.add(d);
+    }
+  }
+  return [...dirs].filter(d => !live.has(d)).sort((a, b) => b.length - a.length);
 }

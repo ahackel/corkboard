@@ -4,14 +4,15 @@
 // applies the answer as ONE undo step with the reflow glide, and lets frames grow to show the result.
 // Nothing here runs on its own: the float bar's tidy menu, ⌘P and the ⌥ shortcuts are the only ways in.
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
-import { isLockedEffective, nodesOf, outermost } from '../utils/model.js';
+import { isLockedEffective, nodesOf, outermost, subtreeIds } from '../utils/model.js';
 import { moveSubtreeTo, frameLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
 import { record } from './history.js';
 import { growFramesToHold } from './float-bar.js';
-import { scheduleSave } from '../data/persistence.js';
-import { nodeW, nodeH, snapPt, subtreeIds, relayout, remeasure, animateLayout } from '../main.js';
+import { relayout, remeasure, animateLayout } from '../main.js';
+import { nodeW, nodeH, snapPt } from '../view/geometry.js';
+import { scheduleSave } from '../data/save.js';
 
 // What a tidy acts on: the selected nodes that aren't inside another selected one (a frame carries its
 // own cards along) and aren't locked.
@@ -46,19 +47,19 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
   setStatus(what);
 }
 
-export function tidyUp(): void {
+function tidyUp(): void {
   // from the selection's top-left, on the grid, with the house spacing — the same one guides pull to
   apply('Tidied up', boxes => tidyGrid(boxes, SPACING,
     snapPt({ x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)) })));
 }
 const ALIGN_NAME: Record<AlignEdge, string> = { left: 'left', center: 'centres', right: 'right', top: 'top', middle: 'middles', bottom: 'bottom' };
-export function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edge]}`, boxes => align(boxes, edge)); }
-export function distributeSelection(axis: 'x' | 'y'): void {
+function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edge]}`, boxes => align(boxes, edge)); }
+function distributeSelection(axis: 'x' | 'y'): void {
   apply(axis === 'x' ? 'Spaced evenly across' : 'Spaced evenly down', boxes => distribute(boxes, axis), 3);
 }
 // Same width: every selected plain CARD takes the widest one's width (frames and pictures size
 // themselves; a card's text re-wraps, so its height is re-measured).
-export function sameWidth(): void {
+function sameWidth(): void {
   if (state.readOnly) return;
   const cards = targets().filter(n => n.type !== 'frame' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }

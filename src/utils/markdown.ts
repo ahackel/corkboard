@@ -72,6 +72,11 @@ export function soleImage(body: string | null | undefined): SoleImage | null {
 export function* bodyImages(body: string | null | undefined): Generator<SoleImage> {
   for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) yield { alt: m[1].trim(), src: m[2] };
 }
+// A note with `md` added at its end, a blank line between.
+export function appendMd(body: string, md: string): string {
+  return body.trim() ? body.replace(/\s*$/, '') + '\n\n' + md : md;
+}
+
 export const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A note with one picture's reference taken out (its line too, if that was all the line held).
 export function stripImageRef(body: string, src: string): string {
@@ -79,19 +84,49 @@ export function stripImageRef(body: string, src: string): string {
   return body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-// ---------- how far a checklist has got ----------
-// The tasks in a note and how many are ticked — the "3/5" a card wears (paintNode). The same lines
-// renderList draws as checkboxes: a BULLET followed by `[ ]`/`[x]` and text; a numbered `1. [ ]` isn't one.
-// Fenced code is skipped, so a markdown sample in a code block isn't counted as the note's own list.
-export function taskProgress(md: string | null | undefined): { done: number; total: number } {
-  let done = 0, total = 0, fence = '';
-  for (const line of (md ?? '').split('\n')){
+// ---------- the tasks in a note ----------
+// The lines renderList draws as checkboxes, in body order: a BULLET, `[ ]`/`[x]`, then text. A numbered
+// `1. [ ]` isn't one, and fenced code is skipped, so a markdown sample in a code block isn't counted.
+const TASK_LINE = /^(\s*[-*+]\s+\[)([ xX])\]\s+\S/;
+
+function* taskLines(lines: string[]): Generator<{ i: number; mark: string; markAt: number }> {
+  let fence = '';
+  for (const [i, line] of lines.entries()) {
     const f = line.match(/^(```|~~~)/);
-    if (f){ fence = fence ? (line.startsWith(fence) ? '' : fence) : f[1]; continue; }
-    const m = !fence && line.match(/^\s*[-*+]\s+\[([ xX])\]\s+\S/);
-    if (m){ total++; if (m[1] !== ' ') done++; }
+    if (f) {
+      fence = fence ? (line.startsWith(fence) ? '' : fence) : f[1];
+      continue;
+    }
+    const m = fence ? null : line.match(TASK_LINE);
+    if (m) {
+      yield { i, mark: m[2], markAt: m[1].length };
+    }
+  }
+}
+
+export function taskProgress(md: string | null | undefined): { done: number; total: number } {
+  let done = 0, total = 0;
+  for (const t of taskLines((md ?? '').split('\n'))) {
+    total++;
+    if (t.mark !== ' ') {
+      done++;
+    }
   }
   return { done, total };
+}
+
+// The note with its idx-th task ticked or unticked — idx as the card numbers its checkboxes (`data-ti`).
+export function toggleTaskAt(md: string, idx: number): string {
+  const lines = md.split('\n');
+  let n = 0;
+  for (const t of taskLines(lines)) {
+    if (n++ === idx) {
+      const line = lines[t.i];
+      lines[t.i] = line.slice(0, t.markAt) + (t.mark === ' ' ? 'x' : ' ') + line.slice(t.markAt + 1);
+      break;
+    }
+  }
+  return lines.join('\n');
 }
 
 // ---------- writing a link, rather than rendering one ----------
@@ -243,7 +278,7 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
   const opener = (tag: 'ul' | 'ol', marker: string): string =>
     tag === 'ol' && parseInt(marker, 10) !== 1 ? `<ol start="${parseInt(marker, 10)}">` : `<${tag}>`;
   const li = (body: string, tag: 'ul' | 'ol'): string => {
-    const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(.*)$/);
+    const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(\S.*)$/);
     if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
                  + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}><span class="task-text">${mdInline(tm[2])}</span>`;
     return `<li>${mdInline(body)}`;

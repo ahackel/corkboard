@@ -7,10 +7,11 @@
 // drop point (a canvas drop); pointercancel or a no-move press leaves the card untouched.
 import { state, isImageCard, type MindNode } from '../core/state.js';
 import { isFrame } from '../view/layout.js';
-import { isLockedEffective } from '../utils/model.js';
+import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
 import { extractImage } from './crud.js';
-import { IMAGE_W, IMAGE_H, snapPt } from '../main.js';
+import { classMarker, trackPointer } from '../utils/dom.js';
+import { IMAGE_W, IMAGE_H, snapPt } from '../view/geometry.js';
 
 // True while an image-extract gesture is live. A card is natively `draggable` (⌥-drag exports it
 // as a .md file, see clipboard.ts bindCardFileDrag) — that native dragstart would otherwise hijack
@@ -18,13 +19,7 @@ import { IMAGE_W, IMAGE_H, snapPt } from '../main.js';
 let extracting = false;
 export function imageExtractInProgress(): boolean { return extracting; }
 
-let hoverEl: Element | null = null;
-function setHover(el: Element | null): void {
-  if (hoverEl === el) return;
-  hoverEl?.classList.remove('drop-merge');
-  hoverEl = el;
-  hoverEl?.classList.add('drop-merge');
-}
+const setHover = classMarker('drop-merge');
 // The card under a screen point that this image can MOVE into: a plain body card, never the source,
 // an image card or a frame. The floating preview is hidden for the hit-test so it
 // never shadows the card beneath it.
@@ -32,12 +27,11 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   preview.style.display = 'none';
   const under = document.elementFromPoint(x, y) as HTMLElement | null;
   preview.style.display = '';
-  const cardEl = under?.closest('#world [data-id]') as HTMLElement | null;
-  const id = cardEl?.dataset.id;
-  if (!cardEl || !id || id === sourceId) return null;
-  const node = state.nodes.get(id);
-  if (!node || isImageCard(node) || isFrame(node) || isLockedEffective(node)) return null;
-  return { el: cardEl, id };
+  const node = nodeAtTarget(under);
+  if (!node?.el || node.id === sourceId || isImageCard(node) || isFrame(node) || isLockedEffective(node)) {
+    return null;
+  }
+  return { el: node.el, id: node.id };
 }
 export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, sx: number, sy: number): void {
   if (state.readOnly) return;
@@ -59,10 +53,7 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
   document.body.classList.add('grabbing');
   let moved = false;
   const cleanup = (): void => {
-    window.removeEventListener('pointermove', onMove);
-    window.removeEventListener('pointerup', onUp);
-    window.removeEventListener('pointercancel', onCancel);
-    window.removeEventListener('keydown', onKey);
+    stop();
     setHover(null); preview.remove();
     document.body.classList.remove('grabbing');
     extracting = false;
@@ -83,10 +74,11 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
       extractImage(source.id, path, alt, { x: at.x, y: at.y, w: cardW, h: cardH });
     }
   };
-  const onCancel = (): void => { cleanup(); };            // interrupted (tab switch, etc.): leave the card as-is
-  const onKey = (ev: KeyboardEvent): void => { if (ev.key === 'Escape') cleanup(); };
-  window.addEventListener('pointermove', onMove);
-  window.addEventListener('pointerup', onUp);
-  window.addEventListener('pointercancel', onCancel);
-  window.addEventListener('keydown', onKey);
+  const onKey = (ev: KeyboardEvent): void => {
+    if (ev.key === 'Escape') {
+      cleanup();
+    }
+  };
+  // an interrupted gesture (tab switch, etc.) leaves the card as it is
+  const stop = trackPointer({ move: onMove, up: onUp, cancel: cleanup, key: onKey });
 }

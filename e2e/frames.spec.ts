@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openBoard, seedBoard, note, frame, card, clickAway, reload, watchErrors } from './helpers';
+import { openBoard, seedBoard, note, frame, card, clickAway, reload, watchErrors, palette } from './helpers';
 
 const BOARD = {
   'Todo.md': note('# Todo', { 'mm_type': 'frame' }),
@@ -132,4 +132,60 @@ test('zoomed out, a frame name keeps its screen size while the box shrinks', asy
   expect(Math.abs(lb.y + lb.height + 7 - fb.y)).toBeLessThan(2);
   expect(Math.abs(lb.x - fb.x)).toBeLessThan(2);
   expect(lb.width).toBeLessThanOrEqual(fb.width + 1);
+});
+
+// A frame holding one card, opened so the canvas is its interior.
+async function openBox(page: Page, box: Record<string, string>, card: string): Promise<void> {
+  await seedBoard(page, {
+    'Box/_index.md': note('# Box', box),
+    'Box/Inside.md': note(card),
+    'board.json': JSON.stringify({ version: 1, model: 2, settings: {}, nodes: {
+      'Box/_index.md': { x: 0, y: 0, w: 500, h: 400 }, 'Box/Inside.md': { x: 40, y: 60 } } }),
+  });
+  await frame(page, 'Box').locator(':scope > .title-row').click();
+  await palette(page, 'Open');
+}
+
+test('ungrouping a frame keeps its cards and leaves no empty wrapper behind', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await frame(page, 'Todo').locator(':scope > .title-row').click();
+  await page.keyboard.press('Alt+Backspace');
+  await expect(page.locator('#world .node.frame', { hasText: 'Todo' })).toHaveCount(0);
+  expect(await hostOf(page, 'Buy milk')).toBe('top');
+  await expect(page.locator('#world .frame-content')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('an image ⌥-dragged out of a card inside an open frame stays in that frame', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="red"/></svg>');
+  await openBox(page, { 'mm_type': 'frame' }, `Photo\n\n![pic](data:image/svg+xml;base64,${svg.toString('base64')})`);
+  const img = card(page, 'Photo').locator('img.md-img');
+  await expect(img).toBeVisible();
+  const b = (await img.boundingBox())!;
+  await page.keyboard.down('Alt');
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + 300, b.y + 150, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await expect(page.locator('#world .node img.md-img')).toHaveCount(1);
+  await expect(card(page, 'Photo').locator('img.md-img')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('copied cards are not pasted into an open locked frame', async ({ page }) => {
+  await openBoard(page);
+  await openBox(page, { 'mm_type': 'frame', 'mm_locked': 'true' }, 'Kept as is');
+  await expect(card(page, 'Kept as is')).toBeVisible();
+  await page.evaluate(() => {
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text/plain', '<!-- corkboard-card: Pasted.md -->\n# Pasted');
+    document.dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true }));
+  });
+  await expect(page.locator('#status')).toContainText('Locked');
+  await expect(page.locator('#world .node', { hasText: 'Pasted' })).toHaveCount(0);
 });

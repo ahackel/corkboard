@@ -17,7 +17,7 @@
 // (features/attachments.ts).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { nodesOf, outermost } from '../utils/model.js';
+import { nodesOf, outermost, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
@@ -27,10 +27,12 @@ import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
-import { screenToWorld } from '../view/camera.js';
-import { scheduleSave } from '../data/persistence.js';
+import { worldAtOrCentre } from '../view/camera.js';
 import { readAll, afterReading } from '../data/lazy.js';
-import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
+import { remeasure } from '../main.js';
+import { snapPt } from '../view/geometry.js';
+import { setSelectionSet, selectedIds } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or
@@ -64,7 +66,7 @@ const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
 
 // The given cards INCLUDING their subtrees as one .md file per card, parent refs payload-local.
 // Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
-export function filesFor(ids: string[]): CardFile[] {
+function filesFor(ids: string[]): CardFile[] {
   // dedupe: a card inside another given card's subtree is already covered
   const roots = outermost(nodesOf(ids)).map(n => n.id);
   const all = roots.flatMap(id => subtreeIds(id));   // preorder per root → parents precede kids
@@ -75,7 +77,7 @@ export function filesFor(ids: string[]): CardFile[] {
     return { name: payloadName(n), text: withParentRef(serializeMd(n), p ? payloadName(p) : null) };
   });
 }
-export function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
+function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
 // Files → the marker-separated text payload tryPasteCards understands. Also used by the
 // .md-file drop importer (a dropped note IS one of these chunks).
 export const cardsToPayload = (files: CardFile[]): string =>
@@ -127,17 +129,21 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const byName = new Map(cards.map(c => [c.name, c]));
   const isPayloadRoot = (c: { p: ParsedNote }): boolean => !c.p.mm.parent || !byName.has(c.p.mm.parent);
   // anchor the payload roots' top-left at the target point (+ a nudge off the source)
-  // On the grid (main.ts snapPt), like every other card the user places: the payload keeps its own
+  // On the grid (view/geometry.ts snapPt), like every other card the user places: the payload keeps its own
   // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
-  const target = snapPt((at.sx != null && at.sy != null)
-    ? screenToWorld(at.sx, at.sy)
-    : screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
+  const target = snapPt(worldAtOrCentre(at.sx, at.sy));
   let ax = Infinity, ay = Infinity;
   for (const c of cards) if (isPayloadRoot(c) && c.p.mm.x != null && c.p.mm.y != null){
     ax = Math.min(ax, c.p.mm.x); ay = Math.min(ay, c.p.mm.y);
   }
   const dx = target.x - (ax === Infinity ? target.x : ax) + 16;
   const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
+  const dest = holderOf(at.parent) ?? detachParentId();
+  const destNode = dest ? state.nodes.get(dest) : undefined;
+  if (destNode && isLockedEffective(destNode)) {
+    setStatus('Locked — can’t add a child');
+    return true;
+  }
   const rootIds: string[] = [];
   record([], () => {
     const holder = holderOf(at.parent);

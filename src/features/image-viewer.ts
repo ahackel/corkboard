@@ -8,10 +8,10 @@
 // from the NOTES rather than the rendered DOM, so a folded sibling's images are in the run too, and
 // wrapping at both ends, since a handful of pictures read as a loop rather than a strip with ends.
 import { state } from '../core/state.js';
-import { selectNode } from '../main.js';
 import { imageUrl } from './images.js';
 import { childrenOf } from '../utils/model.js';
 import { bodyImages } from '../utils/markdown.js';
+import { selectNode } from './selection.js';
 
 let overlay: HTMLElement | null = null;
 let imgEl: HTMLImageElement | null = null;
@@ -52,11 +52,11 @@ function build(): void {
   });
   document.body.appendChild(overlay);
 }
-// Escape closes; the arrows page; SPACE closes too (it's what opened the viewer — main.ts's Space tap).
+// Escape closes; the arrows page; SPACE closes too (it's what opened the viewer — features/commands.ts's Space tap).
 // Registered in CAPTURE, and everything handled is stopped, so the canvas underneath never sees these
 // keys: ←/→ mean fold/unfold there (navArrow), Escape would clear the selection on top of closing, and
 // Space would fall through to the hand-pan/new-card gesture.
-// Space is split across the two events on purpose: the KEYDOWN is swallowed (so main.ts can't latch
+// Space is split across the two events on purpose: the KEYDOWN is swallowed (so features/commands.ts can't latch
 // `spaceHeld` and leave the canvas in hand-pan mode) and the KEYUP does the closing — which also keeps
 // main.ts's own Space keyup, the one that would re-open the viewer on the still-selected card, from
 // ever running.
@@ -104,7 +104,7 @@ export function openImageViewer(src: string, alt = '', from?: { nodeId: string; 
   window.addEventListener('keydown', onKey, true);
   window.addEventListener('keyup', onKeyUp, true);
 }
-export function closeImageViewer(): void {
+function closeImageViewer(): void {
   if (!overlay) return;
   overlay.classList.remove('open');
   if (imgEl) imgEl.removeAttribute('src');

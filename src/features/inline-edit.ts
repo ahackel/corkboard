@@ -13,23 +13,28 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { joinHeading, splitHeading, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
+import { cardMarkdown, setNoteText, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
-import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, relayout, remeasure, paintNode } from '../main.js';
+import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { extractToCard, discardNewCard } from './crud.js';
 import { growFramesToHold, syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
+import { selectNode } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
-// The text the editor holds: the note with its title back on the front as a heading — exactly the
-// file's own body (utils/frontmatter.ts joinHeading), which is what makes the editor a view of the
-// note rather than a form over two fields. `titleGap` rides along for the same reason: delete the
-// blank line under a heading and the editor must not put it back on the next open.
-const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.titleGap !== false);
+// The text the editor holds is the note with its title back on the front as a heading — exactly the
+// file's own body (utils/frontmatter.ts cardMarkdown), which makes the editor a view of the note rather
+// than a form over two fields.
+
+export function syncOpenEditor(n: MindNode): void {
+  if (ui.bodyEdit?.id === n.id) {
+    ui.bodyEdit.ta.value = cardMarkdown(n);
+  }
+}
 
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
@@ -67,7 +72,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
   // text for the duration. Otherwise the editor would show `Name` where the file says `# Name`, and
   // committing would write the rendered text back and silently strip the heading away.
-  const own = cardEditText(n);
+  const own = cardMarkdown(n);
   const raw = own.trim() ? own : seed ? '# ' + seed : own;
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
@@ -76,7 +81,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // in the tab: the next paint sees a matching key and skips the re-render. Same reason startCardEdit
   // clears the body's.
   delete titleEl.dataset.md;
-  // An UNNAMED frame draws no tab (main.ts frameLabelled) — reveal the row for the duration, or the
+  // An UNNAMED frame draws no tab (view/layout.ts frameLabelled) — reveal the row for the duration, or the
   // editor would open on a display:none element and swallow every keystroke. paintNode keeps it revealed
   // while ui.titleEdit points here, and hides it again after the commit if nothing was typed.
   n.el.classList.remove('no-title');
@@ -94,7 +99,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
 // mouse can't select text inside a contenteditable while it holds. (A <textarea> is the exception — a
 // text control with a selection outranks the ancestor — which is why the CARD editor needs none of
 // this.) Every teardown path puts it back; exporting a frame mid-rename isn't a gesture anyone is making.
-export function setCardDraggable(n: MindNode | undefined, on: boolean): void {
+function setCardDraggable(n: MindNode | undefined, on: boolean): void {
   if (n?.el) n.el.draggable = on;
 }
 // Live: reflow as the label grows. n.title is untouched (layout uses the live DOM), so a half-typed
@@ -135,9 +140,8 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     discardNewCard(n.id, 'Cancelled new card');
     return;
   }
-  if (!cancel){
-    const { title, body, gap } = splitHeading(val);
-    n.title = title; n.body = body; n.titleGap = gap;
+  if (!cancel) {
+    setNoteText(n, val);
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow
@@ -161,7 +165,7 @@ export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 
 // nothing but the textarea and then dispatches `input`, so each editor's own live path runs — the
 // card's reflow, the outline's write-through — and none of them needs to know this happened.
 // Returns whether it handled the event, so an image paste still gets its turn.
-export function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
+function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   if (state.readOnly) return false;
   const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
   if (!r) return false;
@@ -211,7 +215,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   // name writes markdown the user didn't type, and it had to be swept up again at commit when they
   // didn't want it. F2 on an untitled card puts the caret at the very start instead (caretIn), which is
   // where a `# ` would go if that's what they meant.
-  const text = cardEditText(n);
+  const text = cardMarkdown(n);
   // A double-click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
   const clicked = typeof caret === 'object' ? clickedOffset(bodyEl, text, caret) : null;
   ta.className = 'body-edit'; ta.spellcheck = false; ta.value = text;
@@ -388,8 +392,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   if (changed){
     // No sweeping-up of a bare `# ` first line here either: nothing puts one there but the user now,
     // and deleting what somebody typed is worse than leaving an empty heading in their note.
-    const { title, body, gap } = splitHeading(be.ta.value);
-    n.title = title; n.body = body; n.titleGap = gap;
+    setNoteText(n, be.ta.value);
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change

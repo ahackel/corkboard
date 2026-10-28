@@ -8,19 +8,21 @@
 import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
 import { phoneMode } from './core/ui-state.js';
-import { isRoot, descendantCount } from './utils/model.js';
-import { store, currentMap, useStore, loadFromDir, exportZip, settleSave, switchToDeviceMap, updateMapTitle, openImportPicker } from './data/persistence.js';
+import { isRoot, descendantCount, subtreeIds } from './utils/model.js';
+import { store, currentMap, loadFolder, switchToDeviceMap, updateMapTitle } from './data/persistence.js';
 import {
   fsaStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
   readMaps, getLastMap, ensureMapRegistry, createDeviceMap, deleteDeviceMap, renameDeviceMap,
   type MapRef, type MapKind,
 } from './store/index.js';
 import { esc } from './utils/markdown.js';
-import { subtreeIds } from './main.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';
 import { byId } from './utils/dom.js';
+import { settleSave } from './data/save.js';
+import { exportZip, openImportPicker } from './data/zip-io.js';
+import { loadFromDir } from './data/load.js';
 
 // Chrome/Edge offer opening a real local folder (FSA); iPad/Firefox/Safari use on-device +
 // import/export. ?nofsa hides the folder option for testing the no-FSA layout on desktop.
@@ -43,8 +45,7 @@ async function openFolderMap(key: string): Promise<boolean> {
   }
   if (r === 'denied') { alert('Write permission was denied for this folder.'); return false; }
   if (r !== 'ok') return false;
-  useStore(fsaStore, { kind: 'folder', id: fsaStore.currentKey! });   // openRecent re-remembers under a fresh key
-  await loadFromDir();
+  await loadFolder(fsaStore.currentKey!);   // openRecent re-remembers under a fresh key
   return true;
 }
 // Pick a NEW local folder (Chrome/Edge only) and open it right away.
@@ -54,8 +55,7 @@ async function pickFolder(): Promise<void> {
   if (r === 'unsupported') { setStatus('This browser can’t open a local folder — use Chrome or Edge.'); return; }
   if (r === 'denied') { setStatus('Folder permission denied.'); alert('Write permission was denied.\nReopen the folder and choose “Edit”/“Allow”.'); return; }
   if (r !== 'ok') { if (r === 'error') setStatus('Could not open folder.'); return; }
-  useStore(fsaStore, { kind: 'folder', id: fsaStore.currentKey! });
-  await loadFromDir();
+  await loadFolder(fsaStore.currentKey!);
   hideStart();
 }
 
@@ -240,16 +240,11 @@ export async function boot(): Promise<void> {
   if (!readMaps().length) await ensureMapRegistry(await resolveOnDeviceStore());
   // resume a local folder only if we can do it silently (permission still granted); else on-device
   const last = getLastMap();
-  if (HAS_FSA && last?.kind === 'folder'){
-    if (fsaStore.resume && await fsaStore.resume(last.id)){
-      useStore(fsaStore, { kind: 'folder', id: last.id });
-      await loadFromDir();
-      orientForPhone();
-      await applyUrlFromHash();
-      return;
-    }
+  if (HAS_FSA && last?.kind === 'folder' && await fsaStore.resume(last.id)) {
+    await loadFolder(last.id);
+  } else {
+    await commitDevice();   // the last / most recent on-device map (fresh "My map" on first run)
   }
-  await commitDevice();   // the last / most recent on-device map (fresh "My map" on first run)
   orientForPhone();
   await applyUrlFromHash();
 }

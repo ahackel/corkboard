@@ -7,8 +7,8 @@
 // how you come back out. Nesting is allowed, so the crumbs can be several levels deep.
 //
 // This module is the MODEL only — the ephemeral holder, the predicates, the level stack as data.
-// The ACTIONS (open/exit/goToScopeDepth, the camera glides, the repaint) live in main.ts beside
-// focusNode, which is their template; the crumb DOM lives in features/breadcrumbs.ts.
+// The ACTIONS (open/exit/goToScopeDepth, the camera glides, the repaint) live in nav/frames.ts, built
+// on focusNode (nav/focus.ts); the crumb DOM lives in features/breadcrumbs.ts.
 //
 // Deliberately NOT part of `state` (core/state.ts): `state` is the MAP — every field in it is
 // either the notes themselves or something mirrored to disk/localStorage and restored on load. A
@@ -65,7 +65,7 @@ export function outOfScope(n: MindNode): boolean {
 
 // The open frame's bounds: a SNAPSHOT of the viewport, taken when the level was pushed (and
 // refreshed on a window resize). Read through containerBox/frameInterior, which is what makes the
-// contents fill the window instead of a box on the canvas. See refreshScopeRect in main.ts for why
+// contents fill the window instead of a box on the canvas. See refreshScopeRect in nav/frames.ts for why
 // it's a snapshot at k = 1 and not the live camera.
 export function scopeRect(): { x: number; y: number; w: number; h: number } {
   const top = scope.stack[scope.stack.length - 1];

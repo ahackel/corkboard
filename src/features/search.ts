@@ -17,13 +17,14 @@ import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible, ancestors
 import { allTags, hasTag, tagKey, cleanTag, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { outOfScope } from '../nav/scope.js';
-import { paintAll, focusNode } from '../main.js';
+import { paintAll } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { byId } from '../utils/dom.js';
 import { tagText, tagChipHTML } from './tags.js';
 import { boardTags } from './tag-picker.js';
+import { focusNode } from '../nav/focus.js';
 
-export const searchBox = byId<HTMLInputElement>('searchBox');
+const searchBox = byId<HTMLInputElement>('searchBox');
 const searchWrap = byId('searchWrap');
 const searchResults = byId('searchResults');
 const searchClear = byId<HTMLButtonElement>('searchClear');
@@ -121,7 +122,7 @@ function matches(n: MindNode, text: string): boolean {
 }
 
 // The query changed: recompute, and rebuild the dropdown (when the field has the focus).
-export function runSearch(showList = true): void {
+function runSearch(showList = true): void {
   const { text, typing } = parts();
   if (!searchActive()) { clearResults(); paintAll(); scheduleUrlSync(); return; }
   paintAll();   // → refreshSearch

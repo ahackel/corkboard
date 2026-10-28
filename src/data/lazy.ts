@@ -4,24 +4,25 @@
 // frame carries only how many there are (MindNode.lazy). This module is the POLICY around that:
 //   · what has to READ a folder first — unfolding, opening, deleting, copying, exporting, a link into it
 //     (afterReading / readAll / revealPath); a save that moves a folded frame reads it itself
-//     (persistence.ts saveAll, phase 0);
+//     (data/save.ts saveAll, phase 0);
 //   · and when a folded frame LETS GO of what it read again (releaseFolded): once every note under it
 //     is safely on disk and nothing — the selection, the undo history, a search result, the frame
 //     you are standing in — can still reach one of them.
-// The mechanism (turning a listing into nodes) is persistence.ts readFolder's.
+// The mechanism (turning a listing into nodes) is data/load.ts readFolder's.
 // ============================================================
 import { state, type MindNode } from '../core/state.js';
-import { store, readFolder } from './persistence.js';
+import { store } from './persistence.js';
 import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
-import { subtreeIds, remeasure } from '../main.js';
-import { isHidden, nodeByFile } from '../utils/model.js';
+import { remeasure } from '../main.js';
+import { isHidden, nodeByFile, subtreeIds } from '../utils/model.js';
 import { bodyImages } from '../utils/markdown.js';
 import { historyRefs } from '../features/history.js';
 import { searchHolds } from '../features/search.js';
 import { forgetImages } from '../features/images.js';
 import { scope } from '../nav/scope.js';
 import { dirOf } from '../utils/filenames.js';
+import { readFolder } from './load.js';
 
 // The folded frames still holding unread notes among `ids` and everything inside them.
 function unreadIn(ids: Iterable<string>): MindNode[] {
@@ -52,13 +53,28 @@ export function afterReading(ids: Iterable<string>, fn: () => void, deep = true)
   })();
   return true;
 }
+// The innermost UNREAD frame whose folder holds `path`.
+export function unreadFrameHolding(path: string): MindNode | null {
+  let best: MindNode | null = null;
+  for (const n of state.nodes.values()) {
+    if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) {
+      best = n;
+    }
+  }
+  return best;
+}
+
 // A path you were sent to (a link, the URL): read the folded frames on the way to it, outermost first,
 // until it is in memory or there is nothing left on the way to read.
 export async function revealPath(path: string): Promise<void> {
   for (let guard = 0; guard < 64; guard++) {
-    if (nodeByFile(path)) return;
-    const f = [...state.nodes.values()].find(n => n.lazy != null && n.file && path.startsWith(dirOf(n.file)));
-    if (!f) return;
+    if (nodeByFile(path)) {
+      return;
+    }
+    const f = unreadFrameHolding(path);
+    if (!f) {
+      return;
+    }
     await readFolder(f, false);
   }
 }

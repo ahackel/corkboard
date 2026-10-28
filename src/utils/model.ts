@@ -102,7 +102,7 @@ export function subtreeHasLocked(id: string): boolean {
 // and on the canvas that's the point: it shows its text and no title row. But a LIST row can't be blank,
 // so it falls back to its first line, and past that to a NUMBER (below).
 // Purely for display: n.title stays '' throughout and nothing here is written. Nothing MATCHES on this
-// either — a [[wikilink]] resolves against n.title and the filename (main.ts focusByTitle), so a
+// either — a [[wikilink]] resolves against n.title and the filename (nav/focus.ts focusByTitle), so a
 // generated label can never be a link target that stops working when the numbering shifts.
 export function nodeLabel(n: MindNode): string {
   return n.title.trim() || firstLineLabel(n.body) || namelessLabel(n);
@@ -159,7 +159,7 @@ export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
 // ---------- what a [[wikilink]] names ----------
 // The PATH form first (the node's file, with `.md` optional — the one name guaranteed unique), else
 // every card whose TITLE matches; in map order, so the first hit is the one a click goes to. Two
-// callers share it, and that is the point: main.ts's jump, and the link lines a selected card draws
+// callers share it, and that is the point: nav/focus.ts's jump, and the link lines a selected card draws
 // (view/free-edges.ts). A line that pointed somewhere the click doesn't go would be a lie.
 export function resolveWikilink(name: string): MindNode[] {
   const t = name.trim().toLowerCase();
@@ -170,4 +170,17 @@ export function resolveWikilink(name: string): MindNode[] {
     return f === t || f === t + '.md';
   });
   return byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
+}
+
+// The node whose card on the canvas holds `t` (an event target, or what is under a point).
+export function nodeAtTarget(t: EventTarget | null | undefined): MindNode | null {
+  const el = t instanceof Element ? t.closest<HTMLElement>('#world [data-id]') : null;
+  return el ? state.nodes.get(el.dataset.id ?? '') ?? null : null;
+}
+
+// `id` and every node inside it.
+export function subtreeIds(id: string): string[] {
+  const out = [id];
+  for (const ch of childrenOf(id)) out.push(...subtreeIds(ch.id));
+  return out;
 }
