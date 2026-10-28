@@ -127,15 +127,19 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
       // change, so the drag feels proportionate regardless of which corner is grabbed.
       const w0 = right0 - left0, h0 = bottom0 - top0;
       const hasX = east || west, hasY = north || south;
-      let w = w0, h = h0;
-      const wDragged = Math.max(minW, round(w0 + (east ? lastDx : -lastDx)));
-      const hDragged = Math.max(minH, round(h0 + (south ? lastDy : -lastDy)));
-      const byWidth = hasX && (!hasY || Math.abs(wDragged - w0) * h0 >= Math.abs(hDragged - h0) * w0);
+      const wRaw = w0 + (east ? lastDx : -lastDx), hRaw = h0 + (south ? lastDy : -lastDy);
+      const byWidth = hasX && (!hasY || Math.abs(wRaw - w0) * h0 >= Math.abs(hRaw - h0) * w0);
+
+      // Smart guides pull the DRIVING edge only (the other follows the aspect) and win over the grid.
+      const rw = byWidth ? wRaw : hRaw * aspect, rh = byWidth ? wRaw / aspect : hRaw;
+      const pull = guideResize(n, { x: west ? right0 - rw : left0, y: north ? bottom0 - rh : top0, w: rw, h: rh },
+                               byWidth ? { x: west ? 'lo' : 'hi' } : { y: north ? 'lo' : 'hi' });
+      let w: number, h: number;
       if (byWidth) {
-        w = wDragged;
+        w = Math.max(minW, pull.x != null ? wRaw + (east ? pull.x : -pull.x) : round(wRaw));
         h = Math.max(minH, w / aspect);
-      } else if (hasY) {
-        h = hDragged;
+      } else {
+        h = Math.max(minH, pull.y != null ? hRaw + (south ? pull.y : -pull.y) : round(hRaw));
         w = Math.max(minW, h * aspect);
       }
       left = west ? right0 - w : left0;  right = left + w;
