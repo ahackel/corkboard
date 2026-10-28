@@ -1288,9 +1288,8 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
 #dock .floating-btn.fb-dd { width:auto; gap:0; padding:0 8px 0 7px; }
 .fb-dd > svg, .fb-dd > .ic:not(.fb-chev) svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 #floatBar .fb-dd .fb-swatch, #edgeBar .fb-dd .fb-swatch { pointer-events:none; margin-right:0; }
-.fb-chev { margin-left:6px; opacity:.6; }
-.fb-dd:hover .fb-chev { opacity:1; }
-.fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
+.fb-dd:hover .fb-chev svg { opacity:1; }
+.fb-chev svg { width:10px; height:10px; display:block; margin-left:6px; opacity:.6; transform:rotate(90deg); }   /* .ic is display:contents: spacing goes on the svg */
 /* the fold button shows what a click would DO: chevrons closing while anything is open, opening once
    everything is folded (float-bar.ts markOpen) */
 #fbFold .ic-unfold, #fbFold.expand .ic-fold { display:none; }
