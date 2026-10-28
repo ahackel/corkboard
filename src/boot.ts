@@ -8,7 +8,7 @@
 import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
 import { phoneMode } from './core/ui-state.js';
-import { isRoot, descendantCount } from './utils/model.js';
+import { isRoot, descendantCount, subtreeIds } from './utils/model.js';
 import { store, currentMap, loadFromDir, loadFolder, exportZip, settleSave, switchToDeviceMap, updateMapTitle, openImportPicker } from './data/persistence.js';
 import {
   fsaStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
@@ -16,7 +16,6 @@ import {
   type MapRef, type MapKind,
 } from './store/index.js';
 import { esc } from './utils/markdown.js';
-import { subtreeIds } from './main.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';

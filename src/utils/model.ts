@@ -177,3 +177,10 @@ export function nodeAtTarget(t: EventTarget | null | undefined): MindNode | null
   const el = t instanceof Element ? t.closest<HTMLElement>('#world [data-id]') : null;
   return el ? state.nodes.get(el.dataset.id ?? '') ?? null : null;
 }
+
+// `id` and every node inside it.
+export function subtreeIds(id: string): string[] {
+  const out = [id];
+  for (const ch of childrenOf(id)) out.push(...subtreeIds(ch.id));
+  return out;
+}

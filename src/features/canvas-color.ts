@@ -22,8 +22,9 @@ import { scheduleSaveBoard } from '../data/board.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { paintAll, colorFill, canvasOwner, syncCanvasBackground, canvasSurface } from '../main.js';
+import { paintAll, canvasOwner, syncCanvasBackground, canvasSurface } from '../main.js';
 import { placeInViewport } from '../utils/dom.js';
+import { colorFill } from '../view/color.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
 const pop = document.getElementById('canvasColorPop');

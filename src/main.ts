@@ -14,8 +14,8 @@ import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStor
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
-import { inkFor, scrimFor, isHexColor, paleFill } from './utils/ink.js';
-import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount, nodesOf, nodeByFile } from './utils/model.js';
+import { inkFor, paleFill } from './utils/ink.js';
+import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount, nodesOf, nodeByFile, subtreeIds } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
 import { setupGrid, openGridMenu } from './view/grid.js';
 import { mountIcons } from './view/icons.js';
@@ -56,17 +56,14 @@ import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from '
 import { byId, trackPointer } from './utils/dom.js';
 import { snapTo } from './utils/num.js';
 import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
+import { applyColorVars, colorClass, colorFill, THEME_BG } from './view/color.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();
 // Wiring only — it must not READ anything back out of main. Everything down here runs while main's
-// own body is still evaluating, so main's top-level consts below (SWATCH_BG, PALETTE, …) are still in
-// their temporal dead zone; touching one from a feature's setup is a TDZ crash that takes the whole
-// boot with it, blank canvas and all. Same reason float-bar defers createProperties to first use.
+// own body is still evaluating, so main's top-level consts below are still in their temporal dead
+// zone; touching one from a feature's setup is a TDZ crash that takes the whole boot with it.
 setupCanvasColor();
-
-
-
 
 // ---------- rendering ----------
 // small closed-padlock badge shown at a locked card's upper-left corner; exported for the
@@ -1353,12 +1350,6 @@ function toggleTask(n: MindNode, idx: number): void {
 }
 
 // ---------- node dragging + reparent-by-drop live in features/drag.ts ----------
-export function subtreeIds(id: string): string[] {
-  // id + every descendant
-  const out = [id];
-  for (const ch of childrenOf(id)) out.push(...subtreeIds(ch.id));
-  return out;
-}
 // ---------- pan / zoom / marquee-select gestures live in features/gestures.ts ----------
 
 
@@ -1691,79 +1682,6 @@ window.addEventListener('resize', () => {
 // Selection and the edit panel are decoupled: a node can stay selected while the
 // panel is closed (press Esc). That closed-but-selected state is when Delete works.
 
-// colour palette (keys match the .c-* CSS classes); 'grey' is the old neutral "none" look.
-// The hexes themselves live in ONE place — the --pal-* custom properties in styles.css's
-// :root — so CSS (.c-*, #ghostCard) and JS (edges/backgrounds fills, swatch dots below) can never
-// drift apart.
-// Every key a note may carry. `slate` predates FigJam's palette: it still paints, but the picker no
-// longer offers it.
-const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black',
-  'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink'];
-// …and what the picker OFFERS, FigJam's two rows of eleven: the strong hues framed by black and white,
-// then the pastels — the sticky colours — framed by two greys (the custom chip ends that row).
-export const PICKER_ROWS: string[][] = [
-  ['black','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink','white'],
-  ['silver','grey','red','orange','amber','green','teal','blue','violet','pink'],
-];
-const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
-export const SWATCH_BG: Record<string, string> = Object.fromEntries(PALETTE.map(c => [c, pal(c)]));
-// The canvas's own THEME fill, read and cached exactly like the palette above. It's canvasSurface's last
-// resort, when the map has no colour of its own. Cached rather than read live because it runs on every
-// edge paint.
-const themeBg = (): string => getComputedStyle(document.body).getPropertyValue('--bg').trim();
-const THEME_BG = themeBg();
-// ---------- ink: the text colour each palette fill demands ----------
-// Ink is COMPUTED from the fill (utils/ink.ts — WCAG contrast, biased toward the map's default
-// light ink), never authored, which is the point: the old scheme spelled out per-colour text
-// exceptions ("white is too bright for white text; in the light theme everything except grey and
-// black flips to black") and had to repeat that list on every surface that wears a .c-* class —
-// four copies to keep in step, and no answer at all for a colour outside the palette.
-// The computed values reach CSS as --pal-ink-*/--pal-scrim-* custom properties on :root, injected
-// here rather than written in styles.css because only JS can measure a colour; the .c-* rules there
-// hand them to each card as --ink/--scrim, so ONE `color: var(--ink)` per surface now covers every
-// colour in both themes. Injecting a <style> (not a per-node inline style) keeps this off the paint
-// path entirely — it's 11 rules written twice per session, not per card per frame.
-const inkStyle = document.createElement('style');
-document.head.appendChild(inkStyle);
-// …and the `.c-<key>` class each key is worn by, generated here beside its ink rather than listed by
-// hand in styles.css, so adding a key to PALETTE (and its --pal-* hex) is the whole job.
-function deriveInk(): void {
-  inkStyle.textContent = ':root{' + PALETTE.map(c => {
-    const bg = SWATCH_BG[c] ?? '';
-    return `--pal-ink-${c}:${inkFor(bg)};--pal-scrim-${c}:${scrimFor(bg)};`;
-  }).join('') + '}' + PALETTE.map(c =>
-    `.c-${c}{--card:var(--pal-${c});--ink:var(--pal-ink-${c});--scrim:var(--pal-scrim-${c})}`).join('');
-}
-deriveInk();
-// ---------- a colour VALUE: a palette key, or an authored hex ----------
-// `n.color` (and so effectiveColor's result) is one of: '' (inherit), 'none', a PALETTE KEY, or a
-// custom '#rrggbb' picked from the colour popover. These three resolve any of them, and every
-// consumer goes through them so "custom" never needs a branch of its own:
-//   colorFill  — the hex it paints as, for the things JS tints itself (edges, the canvas).
-//                null for 'none'/inherit/unknown, which callers already fall back to --edge for.
-//   colorClass — the CSS class to hang on the element. A hex can't be a class name (and there'd be
-//                nowhere to put its hexes), so a custom colour gets .c-custom + inline variables…
-//   applyColorVars — …which are those variables: the same --card/--ink/--scrim triple a .c-* class
-//                provides, just computed per node instead of once per palette key. Everything
-//                downstream keys off the variables alone, so a custom colour behaves exactly like a
-//                palette one — including the :not(.c-none) tests.
-// One inline declaration per coloured node is affordable where a generated stylesheet isn't: the set
-// of custom colours in a map is open-ended, and a node's own style attribute is already written on
-// every paint.
-export function colorFill(c: string): string | null { return SWATCH_BG[c] ?? (isHexColor(c) ? c : null); }
-export function colorClass(c: string): string { return isHexColor(c) ? 'c-custom' : 'c-' + c; }
-// SET for a custom colour, REMOVED otherwise. Removing matters —
-// recolouring a custom card back to a palette key has to drop the inline triple, or it would keep
-// overriding the .c-* class that now owns the colour (an inline custom property beats any selector).
-export function applyColorVars(el: HTMLElement, c: string): void {
-  if (isHexColor(c)) {
-    el.style.setProperty('--card', c);
-    el.style.setProperty('--ink', inkFor(c));
-    el.style.setProperty('--scrim', scrimFor(c));
-  } else {
-    for (const prop of ['--card', '--ink', '--scrim']) el.style.removeProperty(prop);
-  }
-}
 // Select everything ON THE CANVAS — which, inside an open frame, is that frame's contents and nothing
 // else. It needs no scope test of its own: isHidden already means "on the canvas right now", covering
 // both the open frame and folded branches, and setSelectionSet drops whatever isn't selectable (a

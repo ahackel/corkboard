@@ -13,10 +13,10 @@
 import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { dirOf } from '../utils/filenames.js';
 import { store } from './persistence.js';
-import { colorFill } from '../main.js';
 import { commitRel } from '../view/layout.js';
 import { flattenJunctions } from '../utils/edge-graph.js';
 import { saveFailed, saveSucceeded } from './save-alert.js';
+import { colorFill } from '../view/color.js';
 
 export const BOARD_FILE = 'board.json';
 // The MODEL the board was last written by, which is how the flatten migration knows a map predates

@@ -4,7 +4,7 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
 import { stripImageRef, appendMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading, setNoteText } from '../utils/frontmatter.js';
@@ -12,7 +12,7 @@ import { frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING, slidePast } from '../utils/guides.js';

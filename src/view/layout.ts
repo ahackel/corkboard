@@ -7,9 +7,9 @@
 //
 // nodeH/nodeW/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
 import { state, type MindNode } from '../core/state.js';
-import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective } from '../utils/model.js';
+import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
-import { subtreeIds, layoutH, nodeH, nodeW, FRAME_BORDER } from '../main.js';
+import { layoutH, nodeH, nodeW, FRAME_BORDER } from '../main.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the drag engine

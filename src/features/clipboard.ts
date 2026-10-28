@@ -17,7 +17,7 @@
 // (features/attachments.ts).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { nodesOf, outermost, isLockedEffective } from '../utils/model.js';
+import { nodesOf, outermost, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
@@ -30,7 +30,7 @@ import { downloadBlob } from '../utils/download.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { readAll, afterReading } from '../data/lazy.js';
-import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
+import { setSelectionSet, selectedIds, snapPt, remeasure } from '../main.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or

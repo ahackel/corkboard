@@ -17,10 +17,10 @@ import { touchEdges, commitStep } from './history.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { byId } from '../utils/dom.js';
 import { isInteracting } from './float-bar.js';
-import { colorFill } from '../main.js';
 import { paletteChipsHTML } from './properties.js';
 import { safeInsets } from '../utils/dom.js';
 import { chevron } from '../view/icons.js';
+import { colorFill } from '../view/color.js';
 
 const bar = byId('edgeBar');
 const colorBtn = byId<HTMLButtonElement>('ebColor');

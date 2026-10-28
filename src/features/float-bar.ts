@@ -11,7 +11,7 @@ import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { scheduleSave } from '../data/persistence.js';
 import { subtreesBox } from '../view/layout.js';
-import { createProperties, type PropertyControls } from './properties.js';
+import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
 import { settleFrames } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode } from './crud.js';
@@ -39,13 +39,7 @@ const colorPop = byId('fbColorPop');
 const edColors = byId('edColors');
 
 // colour wiring lives in features/properties.ts. Tags are omitted: no room in the bar.
-// Deferred to first use: createProperties() eagerly builds
-// the swatch row from main.js's PALETTE/SWATCH_BG, which aren't initialized yet while this module
-// is still being imported at main.ts's top — see the main↔features import cycle note in CLAUDE.md.
-let _props: PropertyControls | null = null;
-function props(): PropertyControls {
-  return _props ??= createProperties({ colors: edColors }, () => selectedIds());
-}
+const props = createProperties({ colors: edColors }, () => selectedIds());
 
 // Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
@@ -209,7 +203,7 @@ fbLock.addEventListener('click', (e) => {
 });
 
 function syncControls(): void {
-  props().sync();
+  props.sync();
   markOpen();
   markColorTrigger();
   markLock();
