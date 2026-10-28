@@ -12,6 +12,10 @@ import type { FoldTest } from './tree.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 import type { DeviceStore, PickResult } from './types.js';
 
+// OPFS can't change underneath us — except from ANOTHER TAB on the same map. Each write tells the other
+// tabs which map it touched, so a tab still showing the old board reloads instead of writing it back.
+const otherTabs = new BroadcastChannel('corkboard-opfs');
+
 export const opfsStore = {
   _dir: null as FileSystemDirectoryHandle | null,
   _opened: false,
@@ -84,9 +88,18 @@ export const opfsStore = {
   async pick(): Promise<PickResult> { try { await this._root(); this._opened = true; return 'ok'; } catch { return 'error'; } },
   async listTree(under: string, fold: FoldTest){ return listTree(await this._root(), under, fold); },
   async removeDir(dir: string){ return removeEmptyDir(await this._root(), dir); },
-  async write(path: string, data: string | Blob){ return writeFile(await this._root(), path, data); },
-  async remove(path: string){ return removeFile(await this._root(), path); },
+  async write(path: string, data: string | Blob){ await writeFile(await this._root(), path, data); otherTabs.postMessage(this._mapId); },
+  async remove(path: string){ await removeFile(await this._root(), path); otherTabs.postMessage(this._mapId); },
   async readBlob(path: string){ return readFileBlob(await this._root(), path); },
-  watch(){ /* OPFS can't change underneath us */ },
+  // A save is a burst of writes: reload once it has settled.
+  watch(cb: () => void){
+    let wait: number | undefined;
+    otherTabs.onmessage = e => {
+      if (e.data === this._mapId && this._opened) {
+        clearTimeout(wait);
+        wait = window.setTimeout(cb, 300);
+      }
+    };
+  },
 };
 opfsStore satisfies DeviceStore;   // compile-time contract check (extra _dir/_opened/_root allowed on a reference)

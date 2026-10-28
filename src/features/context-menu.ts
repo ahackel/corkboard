@@ -85,9 +85,8 @@ export function copyFilePath(n: MindNode): void {
 // and is shared verbatim with the kebab menu so the two never drift apart.
 
 // ---------- image entries (right-click on an <img> inside a card body) ----------
-// Remove the image's markdown reference from the card body; if that was the last reference to a
-// vault-local attachment anywhere in the map, queue the file itself for deletion on the next save
-// (same mechanism deleting a whole card uses for its file).
+// Remove the image's markdown reference from the card body. The file itself stays: a note inside a
+// folded frame (not in memory) may still show it, and an undo has to find it there.
 function removeImage(n: MindNode, path: string): void {
   if (state.readOnly || !path) {
     return;
@@ -97,9 +96,6 @@ function removeImage(n: MindNode, path: string): void {
     n.dirty = true;
   });
   syncOpenEditor(n);
-  if (path.startsWith('attachments/') && ![...state.nodes.values()].some(m => m.body.includes(path))) {
-    state.toDelete.push(path);
-  }
   relayout(); scheduleSave();
   setStatus('Image removed');
 }

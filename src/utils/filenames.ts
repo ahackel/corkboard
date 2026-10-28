@@ -110,7 +110,11 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
   while (taken(s)) {
     s = stem + ' ' + (i++);
   }
-  return pathFor(s);
+
+  // A rename that only changes CASE keeps the old name: on macOS/Windows `Notes.md` and `notes.md` are
+  // one file, so saveAll would write the new name and then delete the old one, which is the same file.
+  const path = pathFor(s);
+  return n.file && path.toLowerCase() === n.file.toLowerCase() ? n.file : path;
 }
 
 // Re-point the PATH-form [[wikilinks]] in one body that name a file a save just renamed, so a link

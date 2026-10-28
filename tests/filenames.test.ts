@@ -40,6 +40,9 @@ describe('desiredFileFor', () => {
   it('does not collide with itself', () => {
     expect(desiredFileFor(node('Notes', '', 'Notes.md'), new Map([['notes.md', 'me']]))).toBe('Notes.md');
   });
+  it('keeps the old name when only the case changed', () => {
+    expect(desiredFileFor(node('Notes', '', 'notes.md'), new Map([['notes.md', 'me']]))).toBe('notes.md');
+  });
   it('keeps the name of a note with nothing to be named off', () => {
     expect(desiredFileFor(node('', '', 'Something.md'), new Map())).toBe('Something.md');
     expect(desiredFileFor(node(''), new Map())).toBe('Untitled.md');
