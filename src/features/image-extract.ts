@@ -10,8 +10,8 @@ import { isFrame } from '../view/layout.js';
 import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
 import { extractImage } from './crud.js';
-import { IMAGE_W, IMAGE_H, snapPt } from '../main.js';
 import { classMarker, trackPointer } from '../utils/dom.js';
+import { IMAGE_W, IMAGE_H, snapPt } from '../view/geometry.js';
 
 // True while an image-extract gesture is live. A card is natively `draggable` (⌥-drag exports it
 // as a .md file, see clipboard.ts bindCardFileDrag) — that native dragstart would otherwise hijack

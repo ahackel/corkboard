@@ -8,7 +8,7 @@ import { ui, isTypingInField } from '../core/ui-state.js';
 import { store, scheduleSave } from '../data/persistence.js';
 import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
 import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
-import { selectNode, IMAGE_W, IMAGE_H, relayout, remeasure } from '../main.js';
+import { selectNode, relayout, remeasure } from '../main.js';
 import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
@@ -19,6 +19,7 @@ import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
 import { isFrame, frameAt } from '../view/layout.js';
 import { classMarker } from '../utils/dom.js';
+import { IMAGE_W, IMAGE_H } from '../view/geometry.js';
 
 function imgExt(file: File): string {
   const m = (file.name || '').match(/\.[a-z0-9]+$/i);

@@ -6,7 +6,7 @@ import { state, world, type MindNode } from '../core/state.js';
 import { isHidden, parentOf } from '../utils/model.js';
 import { snapBox, snapEdges, type Box, type Snap, type Side } from '../utils/guides.js';
 import { screenToWorld } from '../view/camera.js';
-import { nodeW, nodeH } from '../main.js';
+import { nodeW, nodeH } from '../view/geometry.js';
 
 const TOL = 6;   // screen px: close enough to pull
 

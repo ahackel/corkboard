@@ -4,11 +4,11 @@
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { nodeW, nodeH } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
+import { nodeW, nodeH } from './geometry.js';
 
 // Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
 // chip, the lock badge, the tags on its top edge — is a handful of unreadable pixels

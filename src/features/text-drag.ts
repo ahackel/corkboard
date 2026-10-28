@@ -23,9 +23,10 @@ import { screenToWorld } from '../view/camera.js';
 import { centredAt, dropCardText, cardText, canMerge,
          type TextSource } from './crud.js';
 import { firstLineSplit } from '../utils/frontmatter.js';
-import { effectiveColor, NODE_W } from '../main.js';
+import { effectiveColor } from '../main.js';
 import { classMarker } from '../utils/dom.js';
 import { colorClass, applyColorVars } from '../view/color.js';
+import { NODE_W } from '../view/geometry.js';
 
 // The selection as it stood when the drag began (crud.ts TextSource — which card, which half of it,
 // which range). Captured here because it's read at DROP time, by when the editor may have lost the

@@ -12,7 +12,7 @@ import { frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
+import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING, slidePast } from '../utils/guides.js';
@@ -21,6 +21,7 @@ import { growFramesToHold } from './float-bar.js';
 import { settleFrames } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
+import { nodeH, nodeW, snapPt, NODE_W, FRAME_W, FRAME_H } from '../view/geometry.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in

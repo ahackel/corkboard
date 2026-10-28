@@ -13,7 +13,7 @@
 import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
-import { joinHeading, firstTextLine } from './utils/frontmatter.js';
+import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
 import { inkFor, paleFill } from './utils/ink.js';
 import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount, nodesOf, nodeByFile, subtreeIds } from './utils/model.js';
 import { state, world, dragLayer, stage, setStatus, isImageCard } from './core/state.js';
@@ -57,6 +57,7 @@ import { byId, trackPointer } from './utils/dom.js';
 import { snapTo } from './utils/num.js';
 import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
 import { applyColorVars, colorClass, colorFill, THEME_BG } from './view/color.js';
+import { snapPt, FRAME_W, FRAME_H, canFold, isFrameFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W, IMAGE_FOLD, IMAGE_W, IMAGE_H, gridSnap, canToggleFold } from './view/geometry.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();
@@ -550,70 +551,6 @@ export function paintNode(n: MindNode): void {
 function clipHeight(n: MindNode, editing: boolean): number | null {
   return n.clip && n.h != null && !n.collapsed && !editing && !heightIsDeclared(n) ? n.h : null;
 }
-// The markdown a node RENDERS — its whole note, title included.
-//
-// For a plain card that's `joinHeading(title, body)`: the title is the leading `# ` line of the text, and
-// putting it back means renderBodyHTML makes it an H1 the same way it makes `- item` a bullet. There is no
-// title element on a card any more, so this is the only place its name is drawn, and a card can't end up
-// showing its name in one typeface in the row and another in the note.
-// (An image card needs no arm of its own — it is untitled by definition, so joinHeading hands back the
-// picture markdown unchanged.)
-function cardMarkdown(n: MindNode): string {
-  return joinHeading(n.title, n.body, n.titleGap !== false);
-}
-// …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
-// follows it. Still MARKDOWN, fed to the same renderer, which is the whole point — `# Name` folds to a
-// heading, `- milk` to a bullet, plain text to plain text, nothing restyled and nothing made bold.
-//
-// The `…` has to be put here rather than left to CSS, and the reason is a hard limit rather than a
-// preference: `text-overflow` and `-webkit-line-clamp` can only ellipsise WITHIN one element. The text
-// that a fold hides usually isn't in the same element — a heading followed by a paragraph, or several
-// short lines that markdown makes into separate `<p>`s, are SIBLING blocks, and hiding a sibling
-// truncates nothing the browser will mark. So CSS showed an ellipsis only when a single line happened to
-// be too wide, which is the one case that needed it least. CSS still handles exactly that case (see
-// styles.css) — this handles "there is more".
-function collapsedMarkdown(n: MindNode): string {
-  const lines = cardMarkdown(n).split('\n');
-  const i = firstTextLine(lines);
-  return i < 0 ? '' : lines[i];
-}
-// How many non-blank lines a fold tucks away below the first one — the "N more lines" under it.
-function hiddenLineCount(n: MindNode): number {
-  const lines = cardMarkdown(n).split('\n');
-  const i = firstTextLine(lines);
-  return i < 0 ? 0 : lines.slice(i + 1).filter(l => l.trim()).length;
-}
-export const NODE_W = 200;
-// world-px grid dragged positions AND frame/image-card sizes snap to — tracks the visible grid's
-// own cell size (state.gridSize, view/grid.ts); 0 (grid off) disables snapping rather than
-// collapsing every position to the origin.
-export function gridSnap(): number { return state.gridSize || 1; }
-// A POINT on the grid — the same rounding a dragged card gets, for the places that PLACE a card rather
-// than drag it: a new card at the pointer, a duplicate, a paste, an image dropped or pulled out of a
-// note. Anything the user positions ends up on the grid, however it got there.
-export function snapPt(p: Pt): Pt { const g = gridSnap(); return { x: snapTo(p.x, g), y: snapTo(p.y, g) }; }
-export const FRAME_BORDER = 2;   // must match .node.frame's CSS `border` width (styles.css)
-// A frame's label is not part of its geometry at all: it hangs ABOVE the box, outside the frame's
-// bounds (styles.css `.node.frame > .title-row`), the way a FigJam section's name does — so naming,
-// renaming or un-naming a frame never moves its box or the cards in it, and n.y/n.h are the box itself.
-// Default frame container size (world px).
-export const FRAME_W = 360, FRAME_H = 260;
-export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
-// A FOLDED frame renders as nothing but its label — a pill at the box's top-left
-// corner (n.x, n.y), its cards hidden (utils/model.ts isHidden). Its element shrink-wraps the label,
-// so its width is measured (nodeW) and its height is the FRAME_TAB_H constant.
-function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.collapsed; }
-// Height of a folded frame's pill (styles.css .frame-folded: 20px line + 9px padding + 1px border, top
-// and bottom). A constant, so the pill is one ellipsised line and never measured.
-const FRAME_TAB_H = 40;
-// What CAN fold: every FRAME (to its label pill), a card with something below its first line to tuck
-// away (to a one-line chip), or an image card (to a 40px icon of itself). The one rule the arrow, X,
-// ←/→, the menus and ⌘P's Collapse all ask.
-export function canFold(n: MindNode): boolean {
-  return n.type === 'frame' || isImageCard(n) || hiddenLineCount(n) > 0;
-}
-// …and may be folded or unfolded by the user right now: not locked, and not the open frame (it's the canvas).
-export const canToggleFold = (n: MindNode): boolean => canFold(n) && !isLockedEffective(n) && !isScopeRoot(n);
 // Whether `n` currently holds its children in a content wrapper of its own (frameContentEl) — the two
 // case paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from it: an
 // expanded frame BOX.
@@ -629,61 +566,6 @@ function hostsContent(n: MindNode): boolean {
 export function labelEl(n: MindNode): HTMLElement | null {
   if (!n.el) return null;
   return isFrameFold(n) ? n.el : (n.el.querySelector(':scope > .title-row') as HTMLElement | null);
-}
-// An image card rendering AS its picture: no padding, both axes authored, aspect-locked resize.
-// isImageCard (core/state.ts) is the content test — untitled, and the whole note is one `![](…)`;
-// this adds the two states where the card shows something ELSE and so goes back to being an ordinary
-// card: FOLDED (it's the 40px icon below) and while its editor is open (it's the markdown, which has
-// to wrap and measure like any text). Both are transient, and neither touches what's on disk.
-// …and the one state where an image card is NOT drawn as its picture: its own editor is open, where
-// the card holds markdown text that has to wrap and measure like any note's. Both halves below read
-// this, so the class, the sizing and the resize handles can't disagree about what's on screen.
-function imageLook(n: MindNode): boolean { return isImageCard(n) && ui.bodyEdit?.id !== n.id; }
-function isImageBox(n: MindNode): boolean { return imageLook(n) && !n.collapsed; }
-// …and folded, an image card is a small square of the picture itself — the icon a folded card with no
-// title would otherwise have nothing to show.
-const IMAGE_FOLD = 40;
-function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed; }
-// Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
-// below.
-function isBoxNode(n: MindNode): boolean { return isFrame(n) || isImageBox(n); }
-
-// Every kind whose height is set rather than measured: a box, and anything folded to a fixed size.
-function heightIsDeclared(n: MindNode): boolean {
-  return isBoxNode(n) || isImageFold(n) || isFrameFold(n);
-}
-
-function boxDefaultW(n: MindNode): number { return isImageBox(n) ? IMAGE_W : FRAME_W; }
-function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRAME_H; }
-// A node's footprint WIDTH. `n.w` is the AUTHORED width — dragged with a resize handle, persisted as
-// mm_w — and every kind can carry one: a frame/image card sizes its whole box with it, while a card
-// authors only this axis (its height comes from its content). A folded frame's tab shrink-wraps its
-// title instead.
-export function nodeW(n: MindNode): number {
-  if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
-  if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
-  if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the pill shrink-wraps its label
-  if (n.collapsed && n.el && n.el.offsetWidth) return n.el.offsetWidth;   // a folded card's chip, likewise
-  return n.w ?? NODE_W;
-}
-// live height (falls back pre-render). An expanded frame/image card's height is its box (n.h).
-export function nodeH(n: MindNode): number {
-  if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
-  if (isImageFold(n)) return IMAGE_FOLD;
-  if (isFrameFold(n)) return FRAME_TAB_H;   // just the pill — one fixed line, never measured
-  return (n.el && n.el.offsetHeight) || 64;
-}
-// Height used for LAYOUT geometry. Identical to nodeH for every kind whose height is DECLARED
-// (box / folded frame / folded image), so it defers to it rather than restating the ladder — a new kind
-// added to nodeH must not have to be remembered here too. The two differ only for a MEASURED card:
-// nodeH treats a zero-height element as unrendered and falls back to 64, while layout wants the real
-// 0 (the tags on the top edge are absolutely positioned and
-// overhang, so they never inflate the measurement either way).
-export function layoutH(n: MindNode): number {
-  if (heightIsDeclared(n)) {
-    return nodeH(n);
-  }
-  return n.el ? n.el.offsetHeight : 64;
 }
 // ---------- frame content containment (real CSS clipping, not per-card math) ----------
 // A card living inside a frame must never visually spill past its box — dragging near a border, or

@@ -15,10 +15,11 @@ import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges, commitStep } from './history.js';
 import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
-import { paintAll, nodeW, nodeH, snapPt } from '../main.js';
+import { paintAll } from '../main.js';
 import { createNode } from './crud.js';
 import { SPACING } from '../utils/guides.js';
 import { trackPointer } from '../utils/dom.js';
+import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {

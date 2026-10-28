@@ -30,7 +30,8 @@ import { downloadBlob } from '../utils/download.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { scheduleSave } from '../data/persistence.js';
 import { readAll, afterReading } from '../data/lazy.js';
-import { setSelectionSet, selectedIds, snapPt, remeasure } from '../main.js';
+import { setSelectionSet, selectedIds, remeasure } from '../main.js';
+import { snapPt } from '../view/geometry.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or
