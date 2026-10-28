@@ -37,7 +37,7 @@ export function tagChipHTML(t: ShownTag): string {
 }
 
 // ---- the one path that changes tags: each change adds or removes a tag on one card, all of them ONE
-// undo step (a move is a remove plus adds). Skips locked cards and frames (a frame wears no tags), like
+// undo step (a move is a remove plus adds). Skips locked cards and sections (a section wears no tags), like
 // every other per-card mutation. Case is ignored: `Idea` is `idea`. Returns whether anything changed. ----
 export interface TagChange { id: string; tag: string; on: boolean; }
 export function retag(changes: TagChange[]): boolean {

@@ -1,9 +1,8 @@
 // ---------- floating selection bar ----------
 // Replaces the old #editor right-hand sidebar: a compact row of icon buttons anchored right
 // next to the selected card (Miro/Figma-style), instead of a persistent docked panel. Colour
-// collapses to one trigger button that opens a small popover with the full picker; a trailing
-// kebab button opens the card's actions in the generic context menu (openMenu,
-// features/context-menu.ts).
+// collapses to one trigger button that opens a small popover with the full picker. No kebab, as in
+// FigJam: the card's full action list is the right-click menu (features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
@@ -11,9 +10,9 @@ import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
 import { subtreesBox } from '../view/layout.js';
 import { createProperties } from './properties.js';
-import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
-import { settleFrames } from './drag.js';
-import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode } from './crud.js';
+import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
+import { settleSections } from './drag.js';
+import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode, nextSectionTitle } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries } from './tidy.js';
@@ -22,10 +21,10 @@ import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf } fr
 import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
 import { labelEl, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets } from '../utils/dom.js';
-import { canFold, canToggleFold, gridSnap, FRAME_W, FRAME_H } from '../view/geometry.js';
-import { MIN_FRAME_W, MIN_FRAME_H } from './resize.js';
+import { canFold, canToggleFold, gridSnap, SECTION_W, SECTION_H } from '../view/geometry.js';
+import { MIN_SECTION_W, MIN_SECTION_H } from './resize.js';
 import { toggleCollapse, toggleCollapseSelection } from './fold.js';
-import { openFrame } from '../nav/frames.js';
+import { openSection } from '../nav/sections.js';
 import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
 import { selectedIds, selectNode } from './selection.js';
 import { setLockedSelection, anyLocked } from './lock.js';
@@ -41,54 +40,55 @@ const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbFit = byId<HTMLButtonElement>('fbFit');
 const fbFold = byId<HTMLButtonElement>('fbFold');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
-const fbMore = byId<HTMLButtonElement>('fbMore');
+const fbWrap = byId<HTMLButtonElement>('fbWrap');
+const fbUngroup = byId<HTMLButtonElement>('fbUngroup');
 const colorPop = byId('fbColorPop');
 const edColors = byId('edColors');
 
 // colour wiring lives in features/properties.ts. Tags are omitted: no room in the bar.
 const props = createProperties({ colors: edColors }, () => selectedIds());
 
-// Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
+// Fit a section's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
 // no children it's left as-is, or given the default size when `orDefault`. Shared by the Auto-size
-// action and the load migration that turns a card's old children into a frame's
+// action and the load migration that turns a card's old children into a section's
 // (data/persistence.ts).
-// The frame's label hangs outside the box (above it), so the margin is the same on all four sides.
-const FRAME_FIT_PAD = 16;
-function fitFrameToContent(n: MindNode, orDefault = false): void {
+// The section's label hangs outside the box (above it), so the margin is the same on all four sides.
+const SECTION_FIT_PAD = 16;
+function fitSectionToContent(n: MindNode, orDefault = false): void {
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
   const { x0, y0, x1, y1 } = subtreesBox(childrenOf(n.id));
-  if (!isFinite(x0)) { if (orDefault) { n.w = FRAME_W; n.h = FRAME_H; } return; }
-  n.x = snap(x0 - FRAME_FIT_PAD);
-  n.y = snap(y0 - FRAME_FIT_PAD);
-  n.w = Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - n.x));
-  n.h = Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - n.y));
+  if (!isFinite(x0)) { if (orDefault) { n.w = SECTION_W; n.h = SECTION_H; } return; }
+  n.x = snap(x0 - SECTION_FIT_PAD);
+  n.y = snap(y0 - SECTION_FIT_PAD);
+  n.w = Math.max(MIN_SECTION_W, snap(x1 + SECTION_FIT_PAD - n.x));
+  n.h = Math.max(MIN_SECTION_H, snap(y1 + SECTION_FIT_PAD - n.y));
 }
-// GROW a frame until it holds what's in it — only outward, never shrinking or moving a side that
-// already clears its contents. A frame clips (overflow:hidden), so a card dropped, pasted, created or
-// typed past its edge would otherwise be in the frame and out of sight. Not the open frame: its box is
-// the window. Each grown frame is touched, so it rides the caller's undo step.
-export function growFramesToHold(ids: Iterable<string>): boolean {
+// GROW a section until it holds what's in it — only outward, never shrinking or moving a side that
+// already clears its contents. A section clips (overflow:hidden), so a card dropped, pasted, created or
+// typed past its edge would otherwise be in the section and out of sight. Not the open section: its box is
+// the window. Each grown section is touched, so it rides the caller's undo step.
+export function growSectionsToHold(ids: Iterable<string>): boolean {
   let grew = false;
-  const frames = new Set<MindNode>();
+  const sections = new Set<MindNode>();
   for (const id of ids) {
     const n = state.nodes.get(id); const p = n ? parentOf(n) : null;
-    if (p && p.type === 'frame' && !p.collapsed && !isScopeRoot(p) && !isLockedEffective(p)) {
-      frames.add(p);
+    if (p && p.type === 'section' && !p.collapsed && !isScopeRoot(p) && !isLockedEffective(p)) {
+      sections.add(p);
     }
   }
   const snapStep = gridSnap();
   const up = (v: number): number => Math.ceil(v / snapStep) * snapStep;
   const down = (v: number): number => Math.floor(v / snapStep) * snapStep;
-  for (const f of frames) {
+  for (const f of sections) {
     const { x0, y0, x1, y1 } = subtreesBox(childrenOf(f.id));
     if (!isFinite(x0)) {
       continue;
     }
-    const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - FRAME_FIT_PAD));
-    const R = Math.max(f.x + (f.w ?? FRAME_W), up(x1 + FRAME_FIT_PAD)), B = Math.max(f.y + (f.h ?? FRAME_H), up(y1 + FRAME_FIT_PAD));
-    if (L === f.x && T === f.y && R === f.x + (f.w ?? FRAME_W) && B === f.y + (f.h ?? FRAME_H)) {
+    const L = Math.min(f.x, down(x0 - SECTION_FIT_PAD)), T = Math.min(f.y, down(y0 - SECTION_FIT_PAD));
+    const R = Math.max(f.x + (f.w ?? SECTION_W), up(x1 + SECTION_FIT_PAD)), B = Math.max(f.y + (f.h ?? SECTION_H), up(y1 + SECTION_FIT_PAD));
+    if (L === f.x && T === f.y && R === f.x + (f.w ?? SECTION_W) && B === f.y + (f.h ?? SECTION_H)) {
       continue;
     }
     touch(f.id);
@@ -98,14 +98,14 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
   }
   return grew;
 }
-// FIT — the float bar's ↔, ⇧A and the menu's "Fit to contents": every selected frame hugs its cards
-// (fitFrameToContent), every selected card drops its authored height — a minimum it was dragged out to,
+// FIT — the float bar's ↔, ⇧A and the menu's "Fit to contents": every selected section hugs its cards
+// (fitSectionToContent), every selected card drops its authored height — a minimum it was dragged out to,
 // or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
 function canFit(n: MindNode): boolean {
   if (isLockedEffective(n)) {
     return false;
   }
-  return n.type === 'frame' || (n.h != null && !isImageCard(n));
+  return n.type === 'section' || (n.h != null && !isImageCard(n));
 }
 export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
@@ -119,8 +119,8 @@ export function autoSizeSelection(): void {
       if (!n) {
         continue;
       }
-      if (n.type === 'frame') {
-        fitFrameToContent(n);
+      if (n.type === 'section') {
+        fitSectionToContent(n);
       } else {
         n.h = undefined;
         n.clip = undefined;
@@ -130,13 +130,13 @@ export function autoSizeSelection(): void {
   }));
   scheduleSave();
 }
-// Wrap the selected cards in a fresh frame: the frame lands as a child of the nearest
+// Wrap the selected cards in a fresh section: the section lands as a child of the nearest
 // NON-selected ancestor of the first selected card (walking up past any selected ancestor —
 // grouping a parent together with its own child would otherwise reparent the parent under the
-// frame while the frame sits under that same parent, a cycle), sized to enclose the selection's
-// current positions (same fit math as fitFrameToContent). Every selected card is reparented
-// under the new frame, which ends up selected. Shared by the 'G' shortcut and the context menu.
-export function groupSelectionIntoFrame(): void {
+// section while the section sits under that same parent, a cycle), sized to enclose the selection's
+// current positions (same fit math as fitSectionToContent). Every selected card is reparented
+// under the new section, which ends up selected. Shared by the 'G' shortcut and the context menu.
+export function groupSelectionIntoSection(): void {
   if (state.readOnly) {
     return;
   }
@@ -151,28 +151,28 @@ export function groupSelectionIntoFrame(): void {
   const parent = parentId ? state.nodes.get(parentId) : null;
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t group here'); return; }
 
-  let frameId = '';
+  let sectionId = '';
   record([], () => {
     const { x0, y0, x1, y1 } = subtreesBox(nodes);
     const snapStep = gridSnap();
     const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
-    const fx = isFinite(x0) ? snap(x0 - FRAME_FIT_PAD) : 0;
-    const fy = isFinite(y0) ? snap(y0 - FRAME_FIT_PAD) : 0;
-    const fw = isFinite(x1) ? Math.max(MIN_FRAME_W, snap(x1 + FRAME_FIT_PAD - fx)) : FRAME_W;
-    const fh = isFinite(y1) ? Math.max(MIN_FRAME_H, snap(y1 + FRAME_FIT_PAD - fy)) : FRAME_H;
-    const frame = mkNode({
+    const fx = isFinite(x0) ? snap(x0 - SECTION_FIT_PAD) : 0;
+    const fy = isFinite(y0) ? snap(y0 - SECTION_FIT_PAD) : 0;
+    const fw = isFinite(x1) ? Math.max(MIN_SECTION_W, snap(x1 + SECTION_FIT_PAD - fx)) : SECTION_W;
+    const fh = isFinite(y1) ? Math.max(MIN_SECTION_H, snap(y1 + SECTION_FIT_PAD - fy)) : SECTION_H;
+    const section = mkNode({
       x: fx, y: fy, w: fw, h: fh, parent: parentId,
-      // A frame is one kind that keeps a required title: its folder tab is the only thing you can
-      // grab it by, and a blank tab reads as broken. No dedupe — the FILE takes the suffix now.
-      title: 'Frame', type: 'frame',
+      // A section is one kind that keeps a required title: its folder tab is the only thing you can
+      // grab it by, and a blank tab reads as broken.
+      title: nextSectionTitle(), type: 'section',
     });
-    frameId = frame.id;
-    state.nodes.set(frameId, frame);
-    for (const n of nodes) { touch(n.id); n.parent = frameId; n.dirty = true; }
-    settleFrames([frameId]);   // …and whatever else its box now covers
+    sectionId = section.id;
+    state.nodes.set(sectionId, section);
+    for (const n of nodes) { touch(n.id); n.parent = sectionId; n.dirty = true; }
+    settleSections([sectionId]);   // …and whatever else its box now covers
   });
-  relayout(); selectNode(frameId); scheduleSave();
-  setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a frame`);
+  relayout(); selectNode(sectionId); scheduleSave();
+  setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a section`);
 }
 // Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
 function markOpen(): void {
@@ -188,18 +188,22 @@ function markOpen(): void {
   fbFold.setAttribute('aria-label', expand ? 'Expand' : 'Collapse');
   fbTidy.style.display = canTidy() ? '' : 'none';
   const n = anchorNode();
-  const oneFrame = state.sel.size === 1 && n?.type === 'frame';
-  fbTitle.style.display = oneFrame ? '' : 'none';
+  const oneSection = state.sel.size === 1 && n?.type === 'section';
+  fbTitle.style.display = oneSection ? '' : 'none';
+  fbWrap.style.display = !state.readOnly && state.sel.size > 1 ? '' : 'none';
+  fbUngroup.style.display = !state.readOnly && nodesOf(selectedIds()).some(k => k.type === 'section') ? '' : 'none';
 }
-// T — a frame's TITLE. An untitled frame shows no label at all (its text was deleted, FigJam-style),
-// so this is how one comes back: it seeds a name and selects it, ready to type over. A named frame just
+fbWrap.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); groupSelectionIntoSection(); });
+fbUngroup.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); deleteSelectionKeepChildren(); });
+// T — a section's TITLE. An untitled section shows no label at all (its text was deleted, FigJam-style),
+// so this is how one comes back: it seeds a name and selects it, ready to type over. A named section just
 // opens its label with the name selected — the same editor F2 and a double-click on the label open.
 fbTitle.addEventListener('click', (e) => {
   e.stopPropagation();
   closePopovers();
   const n = anchorNode();
-  if (n?.type === 'frame') {
-    editFrameTitle(n);
+  if (n?.type === 'section') {
+    editSectionTitle(n);
   }
 });
 
@@ -291,11 +295,11 @@ closeOnOutside(colorPop, fbColor, closePopovers);
 export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] {
   // FigJam's order: the clipboard, Delete, what you can DO with it, where it goes outside the map, and
   // the lock last. Only actions with no other easy home are here — a new card next to this one is the
-  // port's ⊕, a new card inside a frame is a double-click in it, zooming is F.
+  // port's ⊕, a new card inside a section is a double-click in it, zooming is F.
   const multi = state.sel.has(n.id) && state.sel.size > 1;
   const targetIds = multi ? [...state.sel] : [n.id];
-  const anyFrame = targetIds.some(id => state.nodes.get(id)?.type === 'frame');
-  const isFrame = n.type === 'frame';
+  const anySection = targetIds.some(id => state.nodes.get(id)?.type === 'section');
+  const isSection = n.type === 'section';
   // group actions (Duplicate/Cut/Copy/Export/Share/Auto-size) act on state.sel via selectedIds();
   // when the target isn't already part of the selection, select it first so they act on IT.
   const selectTargetFirst = () => {
@@ -311,31 +315,31 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
   if (!ro){
     entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
-    // on a frame, what's pasted lands INSIDE it; on a card, beside it at the pointer
-    entries.push({ label: isFrame && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
-      run: () => { void pasteFromClipboard(sx, sy, isFrame && !multi ? n.id : null); }, disabled: isFrame && locked });
+    // on a section, what's pasted lands INSIDE it; on a card, beside it at the pointer
+    entries.push({ label: isSection && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
+      run: () => { void pasteFromClipboard(sx, sy, isSection && !multi ? n.id : null); }, disabled: isSection && locked });
     entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
     entries.push({ label:'Duplicate as the next one', shortcut:'⇧D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
     entries.push('sep');
     entries.push({ label:'Delete', shortcut:'⌫', run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
-    if (anyFrame) {
-      entries.push({ label:'Delete frame, keep cards', shortcut:'⌥⌫',
+    if (anySection) {
+      entries.push({ label:'Ungroup', shortcut:'⌘⌫',
         run: () => { selectTargetFirst(); deleteSelectionKeepChildren(); }, disabled: someLocked });
     }
   }
   entries.push('sep');
   if (!ro && !multi) {
-    entries.push(isFrame ? { label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked }
+    entries.push(isSection ? { label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked }
                          : { label:'Edit', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
   }
   if (!multi && canOpen(n)) {
-    entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
+    entries.push({ label:'Open', shortcut:'↑', run: () => openSection(n) });
   }
   if (!multi && canFold(n)) {
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
   }
   if (!ro){
-    entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: someLocked });
+    entries.push({ label:'Wrap in new section', shortcut:'⌘S', run: () => { selectTargetFirst(); groupSelectionIntoSection(); }, disabled: someLocked });
     if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); })) {
       entries.push({ label: 'Fit to contents', shortcut:'⇧A',
         run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
@@ -361,16 +365,6 @@ fbTidy.addEventListener('click', (e) => {
   const r = fbTidy.getBoundingClientRect();
   openMenu(tidyMenuEntries(), r.left, r.bottom + 8);
 });
-fbMore.addEventListener('click', (e) => {
-  e.stopPropagation();
-  const id = state.selId; const n = id ? state.nodes.get(id) : undefined;
-  if (!n) {
-    return;
-  }
-  const r = fbMore.getBoundingClientRect();
-  const entries = buildCardMenu(n, r.left, r.bottom);
-  openMenu(entries, r.left, r.bottom + 4);
-});
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
@@ -378,15 +372,15 @@ const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its �
 // Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
 // desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (features/commands.ts navArrow): you can only stand
 // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
-// kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
-fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
+// kinds with no interior and for the card you are already inside, both of which openSection would refuse.
+fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openSection(anchorNode()); });
 fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
 fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;
 }
-// What the bar centres itself over HORIZONTALLY: the node's TITLE, not its box. A frame's box can be
+// What the bar centres itself over HORIZONTALLY: the node's TITLE, not its box. A section's box can be
 // many times wider than its label, and the bar belongs over the thing you selected and are about to
 // rename/recolour — centred on a wide box it drifts far from the tab it acts on. labelEl (main.ts) owns
 // WHICH element that is, so the folded case needs no second spelling here; an image card renders its
@@ -441,7 +435,7 @@ function positionBar(): boolean {
   }
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   const left = lr.left + lr.width / 2 - bw / 2;
-  // Over whichever is higher, the box or its label: a frame's label hangs ABOVE its box (outside its
+  // Over whichever is higher, the box or its label: a section's label hangs ABOVE its box (outside its
   // bounds), and the bar mustn't sit on top of the name it's about to edit.
   let top = Math.min(r.top, lr.top) - bh - GAP;
   // …flipping below the card when there isn't room above it. Measured from the SAFE top edge, not
@@ -479,7 +473,7 @@ export function isInteracting(): boolean {
   return !!(ui.drag || ui.pan || ui.pinch || ui.marquee) || inPlaceEditActive() || wheelBusy;
 }
 // ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
-// here, so it can never paint a frame sitting in the screen corner with nothing behind it. Reports
+// here, so it can never paint a section sitting in the screen corner with nothing behind it. Reports
 // whether it's anchored, for the popovers that hang off it (they'd float alone otherwise).
 function placeBar(): boolean {
   const placed = positionBar();

@@ -67,7 +67,7 @@ const tagPickerOpen = (): boolean => pop.classList.contains('open');
 const row = (act: Act | null, tag: string, meta = '', ticked = false, name = tagText(tag)): Row => ({ act, tag, name, meta, ticked });
 const plural = (n: number): string => `${n} card${n === 1 ? '' : 's'}`;
 
-function sections(): Section[] {
+function tagGroups(): Section[] {
   const q = input.value.trim().replace(/^#+/, '');
   const qk = q.toLowerCase();
   const board = boardTags();
@@ -116,7 +116,7 @@ function sections(): Section[] {
 }
 
 function render(): void {
-  const secs = sections();
+  const secs = tagGroups();
   rows = [];
   let html = '';
   for (const s of secs) {
@@ -199,7 +199,7 @@ export function openTagPicker(): void {
     return;
   }
   const ids = taggableSelection();
-  if (!ids.length) { setStatus(state.sel.size ? 'Tags go on cards, not frames' : 'Select a card to tag'); return; }
+  if (!ids.length) { setStatus(state.sel.size ? 'Tags go on cards, not sections' : 'Select a card to tag'); return; }
   const editable = ids.filter(id => !isLockedEffective(state.nodes.get(id)!));
   if (!editable.length) { setStatus('Locked — can’t change its tags'); return; }
   targets = editable;

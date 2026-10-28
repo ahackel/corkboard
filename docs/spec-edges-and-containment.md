@@ -32,22 +32,22 @@ and edges affect nothing.
 ## Containment
 
 **A card with children IS an outline; the `stack` kind goes away.** Today `mm_type: stack` names a card
-whose children are laid out as outline rows, and `isContainer` is `isFrame(n) || isStack(n)`. After this
+whose children are laid out as outline rows, and `isContainer` is `isSection(n) || isStack(n)`. After this
 change a plain card that has children renders exactly that way, so the kind carries no information the
-child list doesn't already carry. `isContainer` becomes "has children". Remaining kinds: **card, frame,
+child list doesn't already carry. `isContainer` becomes "has children". Remaining kinds: **card, section,
 annotation, query**.
 
 **A child is always within its parent's bounds.** This is the containment rule, and it is what replaces
 the branch line: you can see what belongs to what because it is inside it. Three consequences:
 
 - A container's height is DERIVED from its contents and can never be authored. `mm_h` stays what it is
-  today — frame, query, and an image card — and `mm_w` stays authored everywhere.
+  today — section, query, and an image card — and `mm_w` stays authored everywhere.
 - **Dragging a child out of the parent's bounds detaches it**, dropping it on the canvas at that
   position. Without this, nesting is a one-way door.
 - Depth costs nothing. A card's children are outline rows, so nesting is indentation, not boxes inside
-  boxes. "Open this as a canvas" therefore stays a FRAME feature and is not needed for cards.
+  boxes. "Open this as a canvas" therefore stays a SECTION feature and is not needed for cards.
 
-**A frame stays a distinct kind** — the container whose children are placed spatially rather than
+**A section stays a distinct kind** — the container whose children are placed spatially rather than
 outlined. `mm_layout` still selects its arrangement (free / grid / tabs), it can still be opened as a
 canvas with breadcrumbs, and it is still the answer to "group these cards without ordering them".
 
@@ -244,8 +244,8 @@ are absent from the list are appended, sorted by filename. The list therefore ca
 — at worst it is incomplete, and incomplete degrades gracefully.
 
 **Two splits are arguable and were left where they are:** `mm_collapsed` (arrangement by the rule, but
-per-note state a reader might expect in the note) and `mm_layout` on a frame (kept in the note because
-it defines what kind of frame it is, not where the frame sits).
+per-note state a reader might expect in the note) and `mm_layout` on a section (kept in the note because
+it defines what kind of section it is, not where the section sits).
 
 **Open risk — `board.json` is a hot file.** Every change touches it, so two devices editing over iCloud
 or Dropbox conflict on the whole board where today they conflict on one note. Per-note frontmatter was
@@ -264,7 +264,7 @@ chains, which this change outlaws. On load:
 1. Every card whose parent is a plain card becomes top-level, at the ABSOLUTE position it renders at
    today (`mm_position_x`/`_y` are parent-relative — resolve them before flattening).
 2. Each former branch becomes a drawn edge.
-3. Children of frames are untouched. `mm_type: stack` nodes become plain cards with children.
+3. Children of sections are untouched. `mm_type: stack` nodes become plain cards with children.
 4. `mm_side` is read and discarded.
 
 Nothing moves on screen; the tree quietly becomes a graph. What this costs is collapse on those groups,
@@ -342,7 +342,7 @@ can never both be open (selecting either clears the other).
 
 The label is drawn on the curve on a background-coloured plate so the line doesn't strike the text
 through, and its width is ESTIMATED from the character count rather than measured — the SVG is rebuilt
-on every paint, and a real measurement would cost a layout flush per edge per frame.
+on every paint, and a real measurement would cost a layout flush per edge per section.
 
 One bug this surfaced and fixed: `serializeEdge` omits each field that equals a fresh edge's default,
 but `dashed` defaults to TRUE, so omitting `dashed: false` read back as dashed and a SOLID edge could
@@ -381,7 +381,7 @@ Done and verified in the app:
 - **A card with children is the outliner.** `isStack` / `insideStack` (view/layout.ts) key on *having
   children* instead of on `mm_type: stack`, plus `hasRows` so an annotation-only child doesn't make a
   container. The whole existing outline machinery then applies to every card, unchanged.
-- **The `stack` KIND is gone.** `NodeType` is card | frame | annotation | query; `foldTypeLayout`
+- **The `stack` KIND is gone.** `NodeType` is card | section | annotation | query; `foldTypeLayout`
   folds the legacy `mm_type: stack` and the older `mm_layout: stack` to a plain card. The float bar
   drops the Stack chip, and a card now offers NO arrangement chips at all — `line`/`fan`/`free` placed
   children beside the parent, which this model has no room for.
@@ -396,11 +396,11 @@ Done and verified in the app:
 **The flatten migration is DONE** (`flattenLegacyBranches`, data/persistence.ts). A map is legacy when
 `board.json` is missing or its `model` is below `BOARD_MODEL` (2) — the marker turned out not to need
 the geometry move at all, so it landed early. It runs once, after the top-down pass has settled every
-node's absolute x/y, and re-anchors each flattened card against its nearest FRAME (or the world),
+node's absolute x/y, and re-anchors each flattened card against its nearest SECTION (or the world),
 recomputing `rx`/`ry` so the note writes back exactly where it renders.
 
 The four exclusions, each verified against a fixture holding one of them: a legacy STACK's children
-stay nested; a FRAME's children stay put; anything under a COLLAPSED ancestor stays nested (making it
+stay nested; a SECTION's children stay put; anything under a COLLAPSED ancestor stays nested (making it
 top-level would pop a hidden subtree onto the canvas — left alone, a folded branch looks untouched and
 expands into the new outline); an ANNOTATION keeps its parent.
 
@@ -450,7 +450,7 @@ decision, not a deletion:
   shortcut to take — it always simulates and lets the outliner say where the row lands. The subtlety:
   the governor is often still CHILDLESS at that instant and only becomes a container once the dry run
   hands it the dragged card, which is exactly why the estimate can't be made before the simulation.
-- **`kidsByPosition`'s fallback** (a free frame's children — the one branch the side buckets really
+- **`kidsByPosition`'s fallback** (a free section's children — the one branch the side buckets really
   served) is now reading order off the subtree-box midpoint: top to bottom, then left to right.
 - **`view/edges.ts` is down to annotation tethers.** The parent→child connector geometry, all three
   edge styles, the side sockets and the reparent-preview ghost edge were all reachable only through
@@ -526,7 +526,7 @@ Two bugs found while testing these, both in code written earlier the same day:
   that selects the existing one instead. Direction is part of the identity: A.right→B.left and
   B.left→A.right are the same physical line.
 - **Edges track their cards live.** `paintEdges` now paints the tethers AND the free edges, because
-  every one of its dozen callers wants both — the drag frame loop, the auto-pan loop, the layout
+  every one of its dozen callers wants both — the drag section loop, the auto-pan loop, the layout
   animation. Pairing them at the single definition is what stops the next repaint site forgetting the
   second call.
 - **Dragging the LINE re-routes it**: the half you take hold of is the end that comes loose, and
@@ -612,7 +612,7 @@ Two bugs found while testing these, both in code written earlier the same day:
   control does what it looks like it will do. Endpoint handles show only for a selection of one: on
   several they are identical dots with no way to tell which line each belongs to, and the gesture they
   offer is single-edge by nature.
-- **A frame's ports sit on its BOX, not its bounds.** A frame's bounds include the title tab hanging
+- **A section's ports sit on its BOX, not its bounds.** A section's bounds include the title tab hanging
   above the box, so a port on the bounds' top edge landed up on the tab — or in the empty gap beside
   it. `portRect` is the one place the port geometry is spelled (`elTop`, the same shift the annotation
   tethers already used), so a port, its ring and the side a drop picks cannot disagree.
@@ -638,10 +638,10 @@ Two bugs found while testing these, both in code written earlier the same day:
     questions. It stays open after a pick, since setting both otherwise means reopening the same menu.
     Each chip is a small picture of the result: the cap drawn at its own end of a short line, with the
     shaft shortened to make room exactly as the real edge does it.
-- **A label's ink is DERIVED from the canvas fill**, black or white, by the same `inkFor` a frame's
+- **A label's ink is DERIVED from the canvas fill**, black or white, by the same `inkFor` a section's
   title goes through (`canvasSurface`, the end of `behindFill`'s walk). The theme's own `--fg` was
   right only while the canvas wore the theme's own `--bg`; on a coloured map, or inside a coloured
-  open frame, it was ink chosen against a surface that isn't there. The plate is painted in that same
+  open section, it was ink chosen against a surface that isn't there. The plate is painted in that same
   fill, so the label reads as a small patch of canvas laid over the line.
 - **Recolouring the MAP now repaints the free edges too.** It used to touch nothing but the background
   — that stopped being true the moment a label's ink came from the fill. Still not `paintAll`: the

@@ -54,7 +54,7 @@ export function byId<T extends Element = HTMLElement>(id: string): T { return do
 // raw window edge parks it under the hardware. styles.css names the four values as --sa-t/r/b/l, but
 // getComputedStyle hands a custom property holding an `env()` back UNRESOLVED, so this measures
 // `.safe-probe` instead: a hidden zero-size element whose PADDING is those variables, and computed
-// padding is always resolved px. Cached, because the float bar re-places itself every frame while
+// padding is always resolved px. Cached, because the float bar re-places itself every section while
 // it's open; only a rotation or a resize can change an inset, and both drop the cache.
 export interface Insets { top: number; right: number; bottom: number; left: number }
 let insets: Insets | null = null;

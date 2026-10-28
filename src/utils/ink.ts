@@ -48,16 +48,16 @@ function parseHex(c: string): [number, number, number] | null {
   }
   return null;
 }
-// A frame's PALE fill: its colour washed most of the way to white — what styles.css paints the box in
-// (`.node.frame`'s color-mix, same 32%), spelled here for the one place JS needs it: the canvas while
-// that frame is open (features/canvas-color.ts canvasFill). A fill it can't read comes back unchanged.
-export const FRAME_WASH = 0.32;
+// A section's PALE fill: its colour washed most of the way to white — what styles.css paints the box in
+// (`.node.section`'s color-mix, same 32%), spelled here for the one place JS needs it: the canvas while
+// that section is open (features/canvas-color.ts canvasFill). A fill it can't read comes back unchanged.
+export const SECTION_WASH = 0.32;
 export function paleFill(c: string): string {
   const rgb = parseHex(c);
   if (!rgb) {
     return c;
   }
-  return '#' + rgb.map(v => Math.round(255 - (255 - v) * FRAME_WASH).toString(16).padStart(2, '0')).join('');
+  return '#' + rgb.map(v => Math.round(255 - (255 - v) * SECTION_WASH).toString(16).padStart(2, '0')).join('');
 }
 // WCAG 2.1 relative luminance: gamma-expand each channel, then weight them by the eye's
 // sensitivity. Not the same thing as "brightness" — green counts for 7× what blue does, which is

@@ -98,12 +98,12 @@ describe('parseMd / serializeMd round-trip', () => {
   it('folds legacy kinds', () => {
     expect(parseMd('---\nmm_type: image\n---\nx').mm.type).toBe('card');
     expect(parseMd('---\nmm_layout: stack\n---\nx').mm).toMatchObject({ type: 'card', wasStack: true });
-    expect(parseMd('---\nmm_layout: frame-v\n---\nx').mm.type).toBe('frame');
+    expect(parseMd('---\nmm_layout: frame-v\n---\nx').mm.type).toBe('section');
   });
 
   it('drops the cut arrangement and checklist keys on the next write', () => {
     const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_checklist: true\nmm_done: true\nmm_type: frame\nmm_layout: horizontal\n---\n\n# Box\n');
-    expect(n.type).toBe('frame');
+    expect(n.type).toBe('section');
     expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\nmm_type: frame\n---\n\n# Box\n');
   });
 
@@ -117,8 +117,8 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(parseMd('---\nmm_type: annotation\nmm_parent: Card.md\n---\n\nremark').mm).toMatchObject({ type: 'card', parent: 'Card.md' });
   });
 
-  it('opens a retired tab group as a plain frame', () => {
-    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm.type).toBe('frame');
+  it('opens a retired tab group as a plain section', () => {
+    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm.type).toBe('section');
   });
 
   it('reads frontmatter from a file with Windows line endings', () => {

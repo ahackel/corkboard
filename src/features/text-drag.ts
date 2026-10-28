@@ -18,7 +18,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
-import { isFrame } from '../view/layout.js';
+import { isSection } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { centredAt, dropCardText, cardText, canMerge,
          type TextSource } from './crud.js';
@@ -38,8 +38,8 @@ let pending: TextSource | null = null;
 // the selection back into its own note must stay a plain in-textarea move.
 type Dest = { into: MindNode } | { container: MindNode | null };
 function destAt(t: EventTarget | null, sourceId: string): Dest | null {
-  // A card's own element is what a drop hits: .frame-content is pointer-events:none, so the empty
-  // interior of a frame resolves to the FRAME, and a card inside it to that card.
+  // A card's own element is what a drop hits: .section-content is pointer-events:none, so the empty
+  // interior of a section resolves to the SECTION, and a card inside it to that card.
   const n = nodeAtTarget(t);
   if (n?.id === sourceId) {
     return null;                   // its own card (editor or not): a native move
@@ -53,23 +53,23 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
   if (canMerge(n)) {
     return { into: n };                    // a card swallows the text
   }
-  if (isFrame(n)) {
-    return { container: n };               // a frame takes a card of its own
+  if (isSection(n)) {
+    return { container: n };               // a section takes a card of its own
   }
-  // Anything else under the cursor (an image card or a folded frame) has no
+  // Anything else under the cursor (an image card or a folded section) has no
   // note to take the text and no interior to hold a card, so it counts as canvas — the new card
   // simply lands over it.
   return { container: null };
 }
 
 // The drop hint: the same dashed outline the ⌥ card merge uses when the text lands IN a card, and
-// the frame-drop outline when it lands inside a frame.
+// the section-drop outline when it lands inside a section.
 const markMerge = classMarker('drop-merge');
-const markFrame = classMarker('drop-target');
+const markSection = classMarker('drop-target');
 
 function showHint(dest: Dest | null): void {
   markMerge(dest && 'into' in dest ? dest.into.el ?? null : null);
-  markFrame(dest && 'container' in dest ? dest.container?.el ?? null : null);
+  markSection(dest && 'container' in dest ? dest.container?.el ?? null : null);
 }
 
 // What a native drag beginning on `target` is dragging, if it's THIS gesture: a range of the open

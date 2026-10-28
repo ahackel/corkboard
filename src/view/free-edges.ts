@@ -33,7 +33,7 @@ const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
 const SOCKET_OUT = 18;
 
 // The rectangle a line meets: the node's bounds, grown by half the selection ring (so a line ends ON
-// the rim the user reads as the card's edge). A frame's label hangs outside its bounds, so a line meets
+// the rim the user reads as the card's edge). A section's label hangs outside its bounds, so a line meets
 // the box it points at, not the label above it.
 const RING_MID = 1;
 interface Rect { x: number; y: number; w: number; h: number }
@@ -256,8 +256,8 @@ function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | u
 }
 // The ONE place an edge's geometry is computed, so the painter, the label, the bar and the inline
 // editor can never disagree about where the line is.
-// A line to a card tucked inside a FOLDED frame attaches to that frame's pill instead (firstVisible), and
-// its pinned port there is dropped — the pill's faces aren't the card's. Ends the open frame hides map to null.
+// A line to a card tucked inside a FOLDED section attaches to that section's pill instead (firstVisible), and
+// its pinned port there is dropped — the pill's faces aren't the card's. Ends the open section hides map to null.
 function edgeEnd(id: string): MindNode | null {
   const n = state.nodes.get(id);
   if (!n) {
@@ -313,8 +313,8 @@ function endCap(cap: EdgeCap, at: Pt, dir: Pt, ink: string): string {
 export function connectable(id: string): boolean {
   return state.nodes.has(id);
 }
-// An edge is drawn when both ENDS are on the canvas — a card itself, or the folded frame standing in for
-// it (edgeEnd) — and they aren't the same pill: a line between two cards of one folded frame goes with them.
+// An edge is drawn when both ENDS are on the canvas — a card itself, or the folded section standing in for
+// it (edgeEnd) — and they aren't the same pill: a line between two cards of one folded section goes with them.
 export function edgeVisible(e: BoardEdge): boolean {
   const a = edgeEnd(e.from), b = edgeEnd(e.to);
   return !!a && !!b && a !== b;
@@ -385,7 +385,7 @@ export function paintFreeEdges(): void {
     svg += endCap(e.toCap, g.b, g.tipTan, ink) + endCap(e.fromCap, g.a, g.tailTan, ink);
     // The label sits ON the line at its midpoint, on a plate so the line doesn't strike it through.
     // Width is estimated from the character count: a real measurement would cost a layout flush per
-    // edge per frame.
+    // edge per section.
     if (e.label) {
       const w = e.label.length * 8 + 12, h = 19;
       svg += `<rect class="fe-label-plate" style="fill:${plate}" x="${g.mid.x - w/2}" y="${g.mid.y - h/2}" width="${w}" height="${h}" rx="4"/>`

@@ -1,13 +1,13 @@
 // ============================================================
-// OPENING a frame — the scope model.
+// OPENING a section — the scope model.
 //
-// A frame is "a box with a folder tab on it" (CLAUDE.md), and this is the other half of that
-// metaphor: you can OPEN one. While a frame is open the canvas shows nothing but its contents, its
+// A section is "a box with a folder tab on it" (CLAUDE.md), and this is the other half of that
+// metaphor: you can OPEN one. While a section is open the canvas shows nothing but its contents, its
 // own box/border/tab are not drawn at all, its interior IS the viewport, and a breadcrumb bar is
 // how you come back out. Nesting is allowed, so the crumbs can be several levels deep.
 //
 // This module is the MODEL only — the ephemeral holder, the predicates, the level stack as data.
-// The ACTIONS (open/exit/goToScopeDepth, the camera glides, the repaint) live in nav/frames.ts, built
+// The ACTIONS (open/exit/goToScopeDepth, the camera glides, the repaint) live in nav/sections.ts, built
 // on focusNode (nav/focus.ts); the crumb DOM lives in features/breadcrumbs.ts.
 //
 // Deliberately NOT part of `state` (core/state.ts): `state` is the MAP — every field in it is
@@ -21,11 +21,11 @@ import { state, type MindNode, type View } from '../core/state.js';
 
 export interface ScopeBack { view: View; sel: string[]; selId: string | null; }
 export interface ScopeLevel {
-  rootId: string;                                        // the frame open at this level
+  rootId: string;                                        // the section open at this level
   file: string | null;                                   // its identity across a reload (see resolveScopeAfterLoad)
   rect: { x: number; y: number; w: number; h: number };   // the frozen viewport rect, world coords
   // What to restore when this level is left. null = a SYNTHESIZED level: one the user never
-  // personally stepped through (rebuilt from the URL, or an ancestor of a frame opened straight
+  // personally stepped through (rebuilt from the URL, or an ancestor of a section opened straight
   // from the ⋯ menu). Leaving it re-FITS rather than gliding to a camera nobody ever set.
   back: ScopeBack | null;
 }
@@ -42,18 +42,18 @@ export function scopeRootNode(): MindNode | null {
 export function isScopeRoot(n: MindNode): boolean { return n.id === scope.rootId; }
 export function scopeRootFile(): string | null { return scopeRootNode()?.file ?? null; }
 
-// The ONE kind test for "can this be opened": a FRAME, and only a frame — a card has no inside to stand
-// in (its note is read where it sits, or in Obsidian). Raw `type` rather than isFrame, deliberately — a
-// COLLAPSED frame is openable, and stays folded while you stand in it.
+// The ONE kind test for "can this be opened": a SECTION, and only a section — a card has no inside to stand
+// in (its note is read where it sits, or in Obsidian). Raw `type` rather than isSection, deliberately — a
+// COLLAPSED section is openable, and stays folded while you stand in it.
 export function canOpen(n: MindNode | null | undefined): boolean {
-  return n?.type === 'frame';
+  return n?.type === 'section';
 }
-// …and can be opened from where you stand: not the frame you are already in. (canOpen itself stays
-// true for that one — the scope stack below checks the frames on the path, the open one included.)
+// …and can be opened from where you stand: not the section you are already in. (canOpen itself stays
+// true for that one — the scope stack below checks the sections on the path, the open one included.)
 export const canEnter = (n: MindNode | null | undefined): boolean => canOpen(n) && !isScopeRoot(n!);
 
 // The scope term of isHidden, on its own — for the few callers that must tell "folded away" from
-// "not in the frame I'm standing in" (isSelectable, the cross-scope jumps in main.ts). isHidden
+// "not in the section I'm standing in" (isSelectable, the cross-scope jumps in main.ts). isHidden
 // fuses this with the collapse walk so the paint path only walks the ancestors once.
 export function outOfScope(n: MindNode): boolean {
   const id = scope.rootId;
@@ -65,26 +65,26 @@ export function outOfScope(n: MindNode): boolean {
       return false;
     }
   }
-  return true;   // never reached the open frame
+  return true;   // never reached the open section
 }
 
-// The open frame's bounds: a SNAPSHOT of the viewport, taken when the level was pushed (and
-// refreshed on a window resize). Read through containerBox/frameInterior, which is what makes the
-// contents fill the window instead of a box on the canvas. See refreshScopeRect in nav/frames.ts for why
+// The open section's bounds: a SNAPSHOT of the viewport, taken when the level was pushed (and
+// refreshed on a window resize). Read through containerBox/sectionInterior, which is what makes the
+// contents fill the window instead of a box on the canvas. See refreshScopeRect in nav/sections.ts for why
 // it's a snapshot at k = 1 and not the live camera.
 export function scopeRect(): { x: number; y: number; w: number; h: number } {
   const top = scope.stack[scope.stack.length - 1];
   return top ? top.rect : { x: 0, y: 0, w: 0, h: 0 };
 }
 
-// What "no parent" MEANS right now: null at the top level, the OPEN FRAME while one is open. A card
-// that gets created — or ripped out of a nested frame — has to land somewhere visible, and while a
-// frame is open its interior IS the screen, so a genuine root would simply vanish. The single
+// What "no parent" MEANS right now: null at the top level, the OPEN SECTION while one is open. A card
+// that gets created — or ripped out of a nested section — has to land somewhere visible, and while a
+// section is open its interior IS the screen, so a genuine root would simply vanish. The single
 // spelling of that, shared by every create/detach path (crud, clipboard, drag, the outline).
 export function detachParentId(): string | null { return scope.rootId; }
 
 // The openable ancestors of `t`, outermost first, EXCLUDING t itself — i.e. its folder path.
-// The crumb path IS this, which is why opening a deep frame
+// The crumb path IS this, which is why opening a deep section
 // from the ⋯ menu still shows `Map › A › B › C` rather than `Map › C`.
 export function openPathTo(t: MindNode): MindNode[] {
   const out: MindNode[] = [];
@@ -99,11 +99,11 @@ export function openPathTo(t: MindNode): MindNode[] {
 // A reload, a map switch or leaving read-only all re-mint every id (data/persistence.ts's
 // loadFromDir), so the stack's rootIds go stale. Re-resolve each level by its FILE — the real,
 // stable identity — and truncate at the first one that can't be found. On a DIFFERENT map that's
-// level 0, so the stack empties with no "did the map change?" test to get wrong; a level whose frame
+// level 0, so the stack empties with no "did the map change?" test to get wrong; a level whose section
 // was never saved (file null) truncates the same way. The remembered cameras don't survive (their
 // selections are stale ids), so leaving re-fits instead of gliding.
 // Deliberately NOT cleared outright the way the undo history is: a background refocus reload must not
-// kick you out of the frame you're working in.
+// kick you out of the section you're working in.
 export function resolveScopeAfterLoad(): void {
   if (!scope.stack.length) {
     return;
@@ -126,7 +126,7 @@ export function resolveScopeAfterLoad(): void {
   scope.rootId = next[next.length - 1]?.rootId ?? null;
 }
 
-// Drop any level whose frame is gone (undone away, removed on disk) or
+// Drop any level whose section is gone (undone away, removed on disk) or
 // is no longer openable (retyped to a card), truncating the stack at the first casualty. Called
 // from applyLayouts — which runs after every structural change — because
 // that is ~20 callers' one funnel. Truncation ONLY; the camera recovery belongs

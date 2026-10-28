@@ -58,7 +58,7 @@ async function importFiles(files: File[]): Promise<void> {
   await switchToDeviceMap(ref);
   // strip a single common top-level folder (e.g. a zip of "MyNotes/…") from notes AND attachments,
   // so the relative ![](attachments/…) links still resolve after import — unless that folder is a
-  // FRAME of a zip this app wrote (its board.json at the root says so): then it is part of the map.
+  // SECTION of a zip this app wrote (its board.json at the root says so): then it is part of the map.
   const slash = md[0].name.indexOf('/');
   const top = slash >= 0 ? md[0].name.slice(0, slash + 1) : '';
   if (top && md.every(e => e.name.startsWith(top)) && !entries.some(e => e.name === BOARD_FILE)){
@@ -83,7 +83,7 @@ async function importFiles(files: File[]): Promise<void> {
 
 // download every current note (plus the image attachments they reference) packed into a .zip
 export async function exportZip(): Promise<void> {
-  await readAll();   // the zip is the WHOLE map, folded frames' notes included
+  await readAll();   // the zip is the WHOLE map, folded sections' notes included
   const nodes = [...state.nodes.values()];
   if (!nodes.length){ setStatus('Nothing to export yet.'); return; }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first

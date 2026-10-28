@@ -2,23 +2,23 @@
 import { state, type MindNode } from '../core/state.js';
 import { childrenOf, ancestors, parentOf } from '../utils/model.js';
 import { makeEdge } from './board.js';
-import { arrangeFrames } from './load.js';
+import { arrangeSections } from './load.js';
 
-// ---------- cards that hold cards become frames (runs on every load; a no-op once done) ----------
+// ---------- cards that hold cards become sections (runs on every load; a no-op once done) ----------
 // A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
-// ticks. That model is gone (docs/PRODUCT.md: cards are flat, frames are the only container), so a
-// card that still has children on disk opens as a FRAME holding them: its title is the frame's tab,
-// its note the frame's description, its children cards inside it. Nothing is lost or re-parented —
+// ticks. That model is gone (docs/PRODUCT.md: cards are flat, sections are the only container), so a
+// card that still has children on disk opens as a SECTION holding them: its title is the section's tab,
+// its note the section's description, its children cards inside it. Nothing is lost or re-parented —
 // only `mm_type` changes, on the card itself.
 // Where its children SIT has to be decided, though: their saved positions were the outliner's rows,
-// laid out by the app, and a frame shows its children where they are. So each converted frame — and
-// any frame that was itself drawn as a row inside one — lays its cards out ONCE, in a column in their
+// laid out by the app, and a section shows its children where they are. So each converted section — and
+// any section that was itself drawn as a row inside one — lays its cards out ONCE, in a column in their
 // old order (kidOrder), with the house spacing, and sizes itself around them. Deepest first, so an
-// inner frame has its final size before its parent stacks it. That needs MEASURED heights, so every
+// inner section has its final size before its parent stacks it. That needs MEASURED heights, so every
 // affected node is unfolded and painted for the duration (scope set aside too: on a reload its ids
 // are still the previous load's, and it would hide everything), then folded back exactly as it was.
 // Pure function of what's on disk, so a failed save simply migrates again next time.
-export function foldCardsIntoFrames(): number {
+export function foldCardsIntoSections(): number {
   const cards = [...state.nodes.values()].filter(n => n.type === 'card' && childrenOf(n.id).length);
   if (!cards.length) {
     return 0;
@@ -26,8 +26,8 @@ export function foldCardsIntoFrames(): number {
   const was = new Set(cards.map(n => n.id));
   const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
     && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
-  for (const n of cards) { n.type = 'frame'; n.dirty = true; n.dirtyLayout = true; }
-  arrangeFrames(arrange);
+  for (const n of cards) { n.type = 'section'; n.dirty = true; n.dirtyLayout = true; }
+  arrangeSections(arrange);
   return cards.length;
 }
 // ---------- the containment migration (runs once per map) ----------
@@ -43,8 +43,8 @@ export function foldCardsIntoFrames(): number {
 //
 // Four things are deliberately NOT flattened, each because flattening it would CHANGE what you see:
 //   · a child of a legacy STACK (or of anything inside one) — it was already drawn inside its parent.
-//   · a child of a FRAME — the frame is a container in both models, and pulling its contents out
-//     would empty the box. A card flattened out of a branch INSIDE a frame re-anchors to that frame,
+//   · a child of a SECTION — the section is a container in both models, and pulling its contents out
+//     would empty the box. A card flattened out of a branch INSIDE a section re-anchors to that section,
 //     not to the world, for the same reason.
 //   · anything under a COLLAPSED ancestor — those children are invisible right now, and making them
 //     top-level would pop the whole hidden subtree onto the canvas. Left nested, a collapsed branch
@@ -59,7 +59,7 @@ export function flattenLegacyBranches(wasStack: Set<string>): number {
       if (wasStack.has(p.id)) {
         return true;
       }
-      if (p.type !== 'card' && p.type !== 'frame') {
+      if (p.type !== 'card' && p.type !== 'section') {
         return false;
       }
     }
@@ -78,11 +78,11 @@ export function flattenLegacyBranches(wasStack: Set<string>): number {
     }
     return false;
   };
-  // The container this card should belong to once its branch is cut: the nearest FRAME above it, or
+  // The container this card should belong to once its branch is cut: the nearest SECTION above it, or
   // the world. Never a card — that is the whole point of the migration.
   const containerAbove = (n: MindNode): MindNode | null => {
     for (let p = parentOf(n); p; p = parentOf(p)) {
-      if (p.type === 'frame') {
+      if (p.type === 'section') {
         return p;
       }
     }
@@ -92,7 +92,7 @@ export function flattenLegacyBranches(wasStack: Set<string>): number {
   for (const n of [...state.nodes.values()]) {
     const p = parentOf(n);
     if (!p || p.type !== 'card') {
-      continue;          // roots, and frame children, stay as they are
+      continue;          // roots, and section children, stay as they are
     }
     if (outlined.has(n.id) || collapsedAbove(n)) {
       continue;

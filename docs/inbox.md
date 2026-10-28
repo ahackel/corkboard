@@ -1,6 +1,6 @@
 # The phone inbox — setup with iCloud Drive
 
-Jot a thought on your iPhone; it's waiting on the board, in the **Inbox** frame, when you're back at the
+Jot a thought on your iPhone; it's waiting on the board, in the **Inbox** section, when you're back at the
 Mac. The phone writes a small Markdown file into the map's `Inbox/` folder, iCloud carries it to the Mac,
 and the board picks it up the next time its window comes to the front.
 
@@ -13,7 +13,7 @@ that folder to live in **iCloud Drive**. A map in the browser's own storage can'
 2. Right-click the folder → **Keep Downloaded**. Otherwise macOS may keep a new note in the cloud until
    something opens it, and it can show up on the board one switch-back late.
 3. In Corkboard: Home → *Local folder* → *Open folder…* → pick the folder in iCloud Drive.
-4. Press **⌘P** and run **Inbox**. It makes the Inbox frame (and its `Inbox/` folder) beside your board.
+4. Press **⌘P** and run **Inbox**. It makes the Inbox section (and its `Inbox/` folder) beside your board.
    Run it again any time to jump there.
 
 ## 2. On the iPhone: a Shortcut that saves to the Inbox
@@ -48,7 +48,7 @@ after its text, like every other card.
 
 ## 4. At the desk
 
-Switch to the Corkboard window. New notes appear in the Inbox frame, in a column beside whatever is
+Switch to the Corkboard window. New notes appear in the Inbox section, in a column beside whatever is
 already there, and **pulse** blue for a moment. If the Inbox is folded, its pill pulses and its count goes
 up. Drag each card to where it belongs — that moves its file out of the `Inbox/` folder too, so the inbox
 empties as you sort.

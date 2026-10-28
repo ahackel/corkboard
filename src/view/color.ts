@@ -32,7 +32,7 @@ export const THEME_BG = themeBg();
 // here rather than written in styles.css because only JS can measure a colour; the .c-* rules there
 // hand them to each card as --ink/--scrim, so ONE `color: var(--ink)` per surface now covers every
 // colour in both themes. Injecting a <style> (not a per-node inline style) keeps this off the paint
-// path entirely — it's 11 rules written twice per session, not per card per frame.
+// path entirely — it's 11 rules written twice per session, not per card per section.
 const inkStyle = document.createElement('style');
 document.head.appendChild(inkStyle);
 // …and the `.c-<key>` class each key is worn by, generated here beside its ink rather than listed by

@@ -1,10 +1,10 @@
 // ---------- the canvas colour button (#canvasColorBtn, bottom-right beside the grid controls) ----------
 // ONE button meaning "the colour of the canvas I'm standing on". What that IS depends on where you
 // are, and features/canvas-color.ts's canvasOwner is the single place that decides:
-//   · at the TOP level there's no frame, so it edits the MAP's own colour — state.canvasColor,
+//   · at the TOP level there's no section, so it edits the MAP's own colour — state.canvasColor,
 //     per-map in settings.json beside the grid, so it travels with the vault rather than the browser.
-//   · inside an OPEN frame the canvas already IS that frame's interior and wears its fill, so the
-//     button edits that FRAME's colour — the same `n.color` the float bar would write if the frame
+//   · inside an OPEN section the canvas already IS that section's interior and wears its fill, so the
+//     button edits that SECTION's colour — the same `n.color` the float bar would write if the section
 //     were selected. Nothing new is introduced for the case; the existing paint just follows.
 // Reading the same resolver the paint reads is what makes the button honest: the chip on it always
 // shows the value it would overwrite.
@@ -33,8 +33,8 @@ const pop = document.getElementById('canvasColorPop');
 const colors = document.getElementById('canvasColors');
 let built = false;
 
-// The value the button would overwrite: the open frame's own authored colour, or the map's.
-// Deliberately the AUTHORED value, not the effective one — an inheriting frame should show the
+// The value the button would overwrite: the open section's own authored colour, or the map's.
+// Deliberately the AUTHORED value, not the effective one — an inheriting section should show the
 // stripes, exactly as it does in the float bar, rather than pretending it owns its parent's colour.
 function currentColor(): string {
   const owner = canvasOwner();
@@ -46,7 +46,7 @@ function locked(): boolean {
 }
 
 // ---------- writing ----------
-// Two targets, two kinds of undo entry, one gesture. A frame is an ordinary node edit (`record`); the
+// Two targets, two kinds of undo entry, one gesture. A section is an ordinary node edit (`record`); the
 // map's canvas colour isn't a node at all, so it goes through history's touchCanvas/commitStep pair —
 // the same shape the edge list uses. Both land in the one timeline, so ⌘Z after
 // a pick puts the colour back wherever you were standing (see history.ts's Step).
@@ -59,7 +59,7 @@ function applyColor(color: string): void {
     state.canvasColor = color;
   }
 }
-// Repainting a frame means repainting the cards that INHERIT from it, so the whole scope. The map's
+// Repainting a section means repainting the cards that INHERIT from it, so the whole scope. The map's
 // own colour reaches the background — and the free edges' LABELS, whose ink is derived from the fill
 // they sit on (view/free-edges.ts, features/canvas-color.ts canvasSurface), so a label left unpainted keeps ink chosen
 // against the colour the canvas used to be. Still not paintAll: those two are the whole of what a map
@@ -114,11 +114,11 @@ export function markCanvasColorBtn(): void {
     chip.style.setProperty('--sw', fill ?? canvasSurface());
   }
   const owner = canvasOwner();
-  btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the frame you’re in` : 'Canvas colour of this map';
+  btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the section you’re in` : 'Canvas colour of this map';
 }
 
 // ---------- the popover ----------
-// Rebuilt on every open rather than once: the FIRST chip depends on where you're standing (a frame
+// Rebuilt on every open rather than once: the FIRST chip depends on where you're standing (a section
 // inherits from its parent, the map falls back to the theme — see properties.ts's FirstChip), and the
 // recents row is derived from the open map, which may have changed since the last time it was shown.
 function build(): void {
@@ -209,24 +209,24 @@ export function setupCanvasColor(): void {
   // (syncCanvasBackground).
 }
 
-// While a frame is OPEN the canvas IS its interior, so the canvas takes the frame's own fill — the
+// While a section is OPEN the canvas IS its interior, so the canvas takes the section's own fill — the
 // very colour its box was wearing a moment before, through the same resolver its box used
-// (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no frame and the
+// (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no section and the
 // canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
 // #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
 // the grid still draws over it.
-// A FRAME's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
+// A SECTION's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
 // the cards in it, which take its full colour, read on it the same as they did inside the box.
-// …and, for a frame, only when that colour is AUTHORED somewhere up the chain. effectiveColor
-// deliberately falls back to the theme's neutral card fill for a frame nobody has coloured, and
+// …and, for a section, only when that colour is AUTHORED somewhere up the chain. effectiveColor
+// deliberately falls back to the theme's neutral card fill for a section nobody has coloured, and
 // painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
 // the light theme, where the near-white fill swallows the floating chrome sitting on the canvas — the
-// ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
+// ghost-card pill, the status line. The test is authorship, not the hex, so a section explicitly
 // coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
 function hasAuthoredColor(n: MindNode): boolean {
   return [n, ...ancestors(n)].some(a => !!a.color);
 }
-// WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
+// WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the section you're
 // standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
 // and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
 // writes can't become two different things.
@@ -235,7 +235,7 @@ export const canvasOwner = (): MindNode | null => scopeRootNode();
 // are derived from. null = none, and the theme's own background shows through as before.
 //
 // An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
-// rather than to nothing: what's behind an uncoloured frame is whatever is behind IT. Standing inside a frame nobody coloured
+// rather than to nothing: what's behind an uncoloured section is whatever is behind IT. Standing inside a section nobody coloured
 // used to discard the canvas colour the map itself was painted in — so
 // going in turned a teal board grey, and coming out turned it teal again.
 function canvasFill(): string | null {

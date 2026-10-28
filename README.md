@@ -43,7 +43,7 @@ layout on desktop.
 ## Features
 
 - Cards rendered from a hand-rolled Markdown subset — headings, links, emphasis, task lists, tables
-- Free placement, nesting (a card with children is an outline), frames to group cards
+- Free placement, nesting (a card with children is an outline), sections to group cards
 - Colours and emoji tags; straight lines between cards with arrows, dots and labels
 - Collapse / focus / find, an outline view, read-only mode
 - Undo / redo, image paste & drop

@@ -49,7 +49,7 @@ export async function listTree(root: FileSystemDirectoryHandle, under: string, f
   await Promise.all(Array.from({ length: Math.min(READS_AT_ONCE, plan.read.length) }, worker));
   return { files, lazy: plan.lazy, foreign: plan.foreign };
 }
-// Remove a folder if it is EMPTY — a frame's old folder after its notes moved out. Never recursive:
+// Remove a folder if it is EMPTY — a section's old folder after its notes moved out. Never recursive:
 // whatever else is still in there (a file another app put there) keeps the folder alive.
 export async function removeEmptyDir(root: FileSystemDirectoryHandle, dir: string): Promise<void> {
   try {

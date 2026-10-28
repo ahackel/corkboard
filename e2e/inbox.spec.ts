@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openBoard, frame, card, palette, watchErrors } from './helpers';
+import { openBoard, section, card, palette, watchErrors } from './helpers';
 
 // A "folder on disk" for the File System Access store: the picker is stubbed to hand back a folder in
 // the browser's private storage — the same directory-handle API a real folder has — so the board runs
@@ -51,9 +51,9 @@ test('a note saved into the Inbox folder from elsewhere shows up beside its card
   await expect(arrived).toBeVisible();
   await expect(arrived).toHaveClass(/arrived/);
   const old = (await card(page, 'Old note').boundingBox())!, a = (await arrived.boundingBox())!;
-  const box = (await frame(page, 'Inbox').boundingBox())!;
+  const box = (await section(page, 'Inbox').boundingBox())!;
   expect(a.x).toBeGreaterThan(old.x + old.width);          // beside the card already there, not on it
-  expect(a.x + a.width).toBeLessThanOrEqual(box.x + box.width);   // and inside the frame, which grew
+  expect(a.x + a.width).toBeLessThanOrEqual(box.x + box.width);   // and inside the section, which grew
   expect(a.y + a.height).toBeLessThanOrEqual(box.y + box.height);
   await expect(arrived).not.toHaveClass(/arrived/, { timeout: 4000 });   // the pulse ends
   expect(errors).toEqual([]);
@@ -68,12 +68,12 @@ test('a note that lands in a FOLDED Inbox pulses its pill, which counts it', asy
       'Inbox/_index.md': { x: 0, y: 0, w: 400, h: 300, collapsed: true } } }),
   });
   await openFolder(page);
-  const pill = page.locator('#world .node.frame-folded', { hasText: 'Inbox' });
-  await expect(pill.locator('.frame-count')).toHaveText('1');
+  const pill = page.locator('#world .node.section-folded', { hasText: 'Inbox' });
+  await expect(pill.locator('.section-count')).toHaveText('1');
   await seedFolder(page, { 'Inbox/Two.md': 'Two\n' });
   await page.waitForTimeout(700);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(pill.locator('.frame-count')).toHaveText('2');
+  await expect(pill.locator('.section-count')).toHaveText('2');
   await expect(pill).toHaveClass(/arrived/);
   // the palette's Inbox reads it and opens it up
   await palette(page, 'Inbox');
@@ -81,13 +81,13 @@ test('a note that lands in a FOLDED Inbox pulses its pill, which counts it', asy
   await expect(card(page, 'One')).toBeVisible();
 });
 
-test('the palette’s Inbox makes the Inbox frame beside the board, then goes to it', async ({ page }) => {
+test('the palette’s Inbox makes the Inbox section beside the board, then goes to it', async ({ page }) => {
   await openBoard(page);
   await seedFolder(page, { 'Loose.md': 'A loose card\n',
     'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: { 'Loose.md': { x: 0, y: 0 } } }) });
   await openFolder(page);
   await palette(page, 'Inbox');
-  const inbox = frame(page, 'Inbox');
+  const inbox = section(page, 'Inbox');
   await expect(inbox).toBeVisible();
   const f = (await inbox.boundingBox())!, c = (await card(page, 'A loose card').boundingBox())!;
   expect(f.x + f.width).toBeLessThan(c.x);   // to the left of what's there, on nothing
@@ -98,5 +98,5 @@ test('the palette’s Inbox makes the Inbox frame beside the board, then goes to
   })).toBe(true);
   // a second time just goes there
   await palette(page, 'Inbox');
-  await expect(page.locator('#world .node.frame', { hasText: 'Inbox' })).toHaveCount(1);
+  await expect(page.locator('#world .node.section', { hasText: 'Inbox' })).toHaveCount(1);
 });

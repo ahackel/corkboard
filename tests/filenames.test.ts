@@ -1,7 +1,7 @@
 // A note's filename tracks its text, never collides (case-insensitively), and a rename carries
 // the [[wikilinks]] that point at it.
 import { describe, expect, it } from 'vitest';
-import { safeName, slugStem, desiredFileFor, retargetLinks, parentFileOf, isFrameNote, prunableDirs } from '../src/utils/filenames.js';
+import { safeName, slugStem, desiredFileFor, retargetLinks, parentFileOf, isSectionNote, prunableDirs } from '../src/utils/filenames.js';
 
 const node = (title: string, body = '', file: string | null = null, id = 'me') => ({ id, file, title, body });
 
@@ -61,27 +61,27 @@ describe('retargetLinks', () => {
   });
 });
 
-describe('a frame is a folder', () => {
-  const frame = (title: string, file: string | null = null, id = 'f') => ({ ...node(title, '', file, id), type: 'frame' as const });
+describe('a section is a folder', () => {
+  const section = (title: string, file: string | null = null, id = 'f') => ({ ...node(title, '', file, id), type: 'section' as const });
   it('reads a parent off the folder', () => {
     expect(parentFileOf('Card.md')).toBe(null);
     expect(parentFileOf('Ideas/Card.md')).toBe('Ideas/_index.md');
     expect(parentFileOf('Ideas/_index.md')).toBe(null);
     expect(parentFileOf('Ideas/Sub/_index.md')).toBe('Ideas/_index.md');
     expect(parentFileOf('Ideas/Sub/Card.md')).toBe('Ideas/Sub/_index.md');
-    expect(isFrameNote('A/_INDEX.md')).toBe(true);
+    expect(isSectionNote('A/_INDEX.md')).toBe(true);
   });
-  it('puts a frame in a folder of its own and a card in its frame\'s folder', () => {
-    expect(desiredFileFor(frame('Ideas'), new Map(), '')).toBe('Ideas/_index.md');
-    expect(desiredFileFor(frame('Sub', 'Old/_index.md'), new Map(), 'Ideas/')).toBe('Ideas/Sub/_index.md');
+  it('puts a section in a folder of its own and a card in its section\'s folder', () => {
+    expect(desiredFileFor(section('Ideas'), new Map(), '')).toBe('Ideas/_index.md');
+    expect(desiredFileFor(section('Sub', 'Old/_index.md'), new Map(), 'Ideas/')).toBe('Ideas/Sub/_index.md');
     expect(desiredFileFor(node('Milk', '', 'Milk.md'), new Map(), 'Todo/')).toBe('Todo/Milk.md');
   });
-  it('suffixes a frame folder that collides, and never takes a folder that is something else\'s', () => {
-    expect(desiredFileFor(frame('Ideas'), new Map([['ideas/_index.md', 'other']]), '')).toBe('Ideas 2/_index.md');
-    expect(desiredFileFor(frame('Attachments'), new Map(), '', new Set(['attachments/']))).toBe('Attachments 2/_index.md');
+  it('suffixes a section folder that collides, and never takes a folder that is something else\'s', () => {
+    expect(desiredFileFor(section('Ideas'), new Map([['ideas/_index.md', 'other']]), '')).toBe('Ideas 2/_index.md');
+    expect(desiredFileFor(section('Attachments'), new Map(), '', new Set(['attachments/']))).toBe('Attachments 2/_index.md');
   });
-  it('keeps a nameless frame\'s folder name as it moves', () => {
-    expect(desiredFileFor(frame('', 'Box 3/_index.md'), new Map(), 'Ideas/')).toBe('Ideas/Box 3/_index.md');
+  it('keeps a nameless section\'s folder name as it moves', () => {
+    expect(desiredFileFor(section('', 'Box 3/_index.md'), new Map(), 'Ideas/')).toBe('Ideas/Box 3/_index.md');
   });
   it('never names a card _index', () => {
     expect(desiredFileFor(node('_index'), new Map(), 'A/')).toBe('A/_index 2.md');

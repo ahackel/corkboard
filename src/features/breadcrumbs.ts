@@ -1,6 +1,6 @@
-// ---------- the open-frame path ----------
-// The one way back out of an open frame (see nav/scope.ts), and the only thing on screen that says
-// which one you're in — an open frame draws no box, no border and no tab. Owns the segments inside
+// ---------- the open-section path ----------
+// The one way back out of an open section (see nav/scope.ts), and the only thing on screen that says
+// which one you're in — an open section draws no box, no border and no tab. Owns the segments inside
 // #homeBar and its one delegated listener, the way features/search.ts owns #searchWrap; the actions
 // themselves live in main.ts.
 //
@@ -8,7 +8,7 @@
 // borderless items that highlight only on hover — and it's what Finder, VS Code, Explorer and Notion
 // all do with a path. #homeBar IS that pill (styles.css); the home button and every segment sit
 // inside it, so the map name reads as the first segment of the path rather than as loose text beside
-// it, and going into a frame just adds segments instead of swapping one kind of chrome for another.
+// it, and going into a section just adds segments instead of swapping one kind of chrome for another.
 // The pill matters rather than being decoration: the canvas can now be any colour (syncCanvasBackground),
 // so a path drawn straight onto it would have no dependable contrast.
 //
@@ -23,19 +23,19 @@ import { scope, scopeActive } from '../nav/scope.js';
 import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';
 import { byId } from '../utils/dom.js';
-import { goToScopeDepth } from '../nav/frames.js';
+import { goToScopeDepth } from '../nav/sections.js';
 
 const homeBar = byId('homeBar');
 const mapCrumb = byId('folderName');
 const bar = byId('scopeBar');
 
-// How many frame levels are spelled out in full. Beyond this the middle folds into `…`, keeping the
+// How many section levels are spelled out in full. Beyond this the middle folds into `…`, keeping the
 // deepest TAIL — where you are and what you're about to step back into is worth more than the top of
 // the path, which the map segment already stands in for.
 const TAIL = 2;
 
 // A level's own segment: the name alone, no folder glyph — the `›` separators already say this is a
-// path, and every segment but the map is a frame, so an icon on each of them is repeated with no
+// path, and every segment but the map is a section, so an icon on each of them is repeated with no
 // information in it. `depth` is what goToScopeDepth takes: the crumb for scope.stack[i] carries i + 1,
 // i.e. "leave the level below me", which lands you IN this one.
 // The CURRENT level is inert — you are already there, so there is nothing for a click to do and a
@@ -57,7 +57,7 @@ const foldedLevels = (): number[] =>
 // Driven from paintAll — the same argument renderOutline makes there: every mutation path (a rename, a
 // delete, an undo, a reload) keeps the path in step with no extra wiring. Which is also why it needs
 // the signature guard: paintAll runs once per animation FRAME for the length of a resize drag, and
-// rebuilding this innerHTML per frame would be pure waste (cf. queryKey in main.ts).
+// rebuilding this innerHTML per section would be pure waste (cf. queryKey in main.ts).
 export function renderCrumbs(): void {
   const sig = !scopeActive() ? store.name
     : store.name + '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i)).join('/');
@@ -85,7 +85,7 @@ export function renderCrumbs(): void {
 }
 
 // One listener for the whole pill, so the map segment (#folderName, a sibling of #scopeBar) and the
-// frame segments share it.
+// section segments share it.
 homeBar.addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('.sc-crumb');
   if (!btn) {

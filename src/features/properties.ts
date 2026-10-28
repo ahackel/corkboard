@@ -49,7 +49,7 @@ export function swatchRowHTML(first: FirstChip): string {
   // and covers the chip (styles.css), so the chip keeps the round-bubble look its neighbours have.
   html += `<label class="swatch custom" title="custom colour — any colour you like">`
     + `<input type="color" value="${CUSTOM_FALLBACK}" aria-label="Custom colour"></label>`;
-  // No "inherit" or "none" chips, as in FigJam: a card nobody coloured still follows its frame (or is
+  // No "inherit" or "none" chips, as in FigJam: a card nobody coloured still follows its section (or is
   // the default yellow), and the picker rings the colour it SHOWS (markSwatch). The custom colours used
   // recently wrap onto a third row (renderRecentChips). The MAP's canvas alone gets a reset chip in
   // the board's own grey, ahead of them, since there is no other way back to "no canvas colour".

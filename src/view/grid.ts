@@ -28,7 +28,7 @@
 //    the fine step you actually snap to.
 //  - `line` — lines at both levels, the classic graph paper, told apart by SUB_MAX alone.
 //
-// Cost per pan/zoom frame is one transform write plus one opacity write, both compositor-only;
+// Cost per pan/zoom section is one transform write plus one opacity write, both compositor-only;
 // the gradients are rebuilt only when the level actually changes.
 // Persisted per-map in settings.json (data/persistence.ts) — not localStorage, since it's a
 // property of the map/vault, and should travel with it.
@@ -124,7 +124,7 @@ export function paintGrid(): void {
   // faded sub-grid is exactly the major/minor distinction it doesn't want. Its two levels are then
   // one indistinguishable dot field (they share the radius, the ink and this opacity, and the major
   // dots land on sub dots), at the price of the level step being a visible change in DENSITY rather
-  // than a crossfade: the dots go from MIN_PX apart to SUBDIVS× that in one frame. It only bites at
+  // than a crossfade: the dots go from MIN_PX apart to SUBDIVS× that in one section. It only bites at
   // the far end of a zoom-out, where the fade would have been a fine texture dissolving anyway.
   const subAlpha = state.gridStyle === 'dot' ? 1 : clamp(log(sub / MIN_PX), 0, 1) * SUB_MAX;
 

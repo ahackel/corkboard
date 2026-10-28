@@ -7,17 +7,17 @@
 import { byId } from '../utils/dom.js';
 import { soleImage } from '../utils/markdown.js';
 
-// A node's KIND — the whole of it (docs/PRODUCT.md, "cards are flat, frames are the only container"):
+// A node's KIND — the whole of it (docs/PRODUCT.md, "cards are flat, sections are the only container"):
 //   · card  — a note. It never has children: structure inside a thought is written into the note.
-//   · frame — a resizable box (mm_w/mm_h) with a title and a description; the cards dropped inside it
-//             are its children, and they sit wherever they were put. Frames nest.
+//   · section — a resizable box (mm_w/mm_h) with a title and a description; the cards dropped inside it
+//             are its children, and they sit wherever they were put. Sections nest.
 // Persisted as `mm_type` (omitted for the `card` default).
-export type NodeType = 'card' | 'frame';
+export type NodeType = 'card' | 'section';
 // Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
-// sizing from title/body content — a frame. An IMAGE card authors a height too, but
+// sizing from title/body content — a section. An IMAGE card authors a height too, but
 // it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
 // reads this asks isImageCard beside it (utils/frontmatter.ts serializeMd).
-export const isBoxType = (t: NodeType): boolean => t === 'frame';
+export const isBoxType = (t: NodeType): boolean => t === 'section';
 export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
 export type GridSize = 0 | 20 | 40 | 80 | 160 | 320;
 // The grid button's cycle order (least ink → most) and the size picker's choices, kept here beside
@@ -47,7 +47,7 @@ export interface MindNode {
   rx: number;                      // persisted as mm_position_x/y
   ry: number;
   parent: string | null;           // parent node id (resolved from the file's FOLDER at load)
-  // A FOLDED frame whose notes are still on disk, unread (data/lazy.ts): how many there are, for its
+  // A FOLDED section whose notes are still on disk, unread (data/lazy.ts): how many there are, for its
   // pill. Undefined once they're in memory. Ephemeral — what's read is a property of this session.
   lazy?: number;
   _parentPath?: string;            // transient: the parent's path (its folder), resolved to `parent` post-load
@@ -57,8 +57,8 @@ export interface MindNode {
                                     // lock cascades to every descendant, which additionally can't
                                     // even be selected — see utils/model.ts hasLockedAncestor.
                                     // Persisted as mm_locked.
-  type: NodeType;                  // card | frame (persisted as mm_type)
-  // Resizable box size (world px). `w` is authored by every kind; `h` only by a frame (the box
+  type: NodeType;                  // card | section (persisted as mm_type)
+  // Resizable box size (world px). `w` is authored by every kind; `h` only by a section (the box
   // whose interior adopts cards dropped in) and an IMAGE card — a card holding nothing but one `![alt](src)`,
   // which is its picture and so owns both axes (isImageCard above). Persisted as mm_w/mm_h.
   w?: number;
@@ -86,8 +86,8 @@ export interface MindNode {
                                     // unknown ids and appends unlisted children: the stored list is a
                                     // sort HINT, never a record of membership — the folder is that.
   el?: HTMLElement | null;         // the rendered card (added during paint)
-  frameContentEl?: HTMLElement | null;   // this frame's overflow:hidden content wrapper (frames only)
-  hostFrameId?: string | null;     // which frame's content wrapper el/frameContentEl currently live
+  sectionContentEl?: HTMLElement | null;   // this section's overflow:hidden content wrapper (sections only)
+  hostSectionId?: string | null;     // which section's content wrapper el/sectionContentEl currently live
                                     // in, DOM-wise (null = directly under #world) — transient render
                                     // bookkeeping, settled outside gestures (see main.ts settledHost)
 }
@@ -95,7 +95,7 @@ export interface MindNode {
 // An IMAGE card is a card that IS its picture: untitled, and its whole note is one `![alt](src)`.
 // DERIVED from the note, not a kind of its own — there is no `mm_type: image` any more (the legacy
 // value folds to `card`, utils/frontmatter.ts foldType). So it's an ordinary card in every
-// other respect: it renames, merges, sits in frames. What it gets for being one is
+// other respect: it renames, merges, sits in sections. What it gets for being one is
 // the render (no padding, the picture flush to its corners), an authored HEIGHT as well as a width,
 // and an aspect-locked resize — see isImageBox in main.ts, which adds "…and isn't folded or open in
 // an editor", the two states where a card shows something other than its picture.
@@ -128,8 +128,8 @@ export interface BoardEdge {
   from: string;                    // node id (resolved from fromPath at load)
   to: string;
   fromPath?: string;               // the on-disk path, resolved to `from` post-load — and KEPT while
-                                    // that end is a note inside a folded frame nobody has read yet:
-                                    // `from` is then that frame (it stands in, the way a pill does),
+                                    // that end is a note inside a folded section nobody has read yet:
+                                    // `from` is then that section (it stands in, the way a pill does),
                                     // and the path is what goes back to disk (data/board.ts)
   toPath?: string;
   color: string;                   // palette key, an authored '#rrggbb', or '' for the default ink
@@ -154,7 +154,7 @@ export interface AppState {
   gridSize: GridSize;               // pattern cell size in world px — restored per-map from settings.json
   // The MAP's own canvas colour — a colour VALUE like a node's (a palette key or an authored hex,
   // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
-  // open frame the canvas wears that frame's fill instead. See features/canvas-color.ts's canvasFill, the one resolver.
+  // open section the canvas wears that section's fill instead. See features/canvas-color.ts's canvasFill, the one resolver.
   canvasColor: string;
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching

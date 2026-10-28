@@ -15,7 +15,7 @@ import { syncEdgeBar } from './edge-bar.js';
 import { isScopeRoot } from '../nav/scope.js';
 import { nodesOf } from '../utils/model.js';
 import { nodeW, nodeH } from '../view/geometry.js';
-import { popScopeFor } from '../nav/frames.js';
+import { popScopeFor } from '../nav/sections.js';
 import { setSelectionSet } from './selection.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -26,13 +26,13 @@ import { scheduleSave } from '../data/save.js';
 // snapshotted — without them a resize that only moves the east/south edge left x/y unchanged, so
 // sameSnap() saw no difference and commitStep() discarded the whole step (⌘Z then undid the
 // PREVIOUS action instead).
-type NodeSnap = Omit<MindNode, 'id' | 'el' | 'frameContentEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
+type NodeSnap = Omit<MindNode, 'id' | 'el' | 'sectionContentEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
 type Images = Map<string, NodeSnap | null>;      // null = the node does not exist
 // A step captures node before/after images and, where an op changed something that isn't a node:
 // the map's canvas colour (see touchCanvas) and the whole EDGE list (see touchEdges). One unified
 // timeline covers all three —
 // ⌘Z after recolouring the canvas has to put the colour back wherever you were standing, and inside
-// an open frame that same gesture edits a NODE, so the two halves of one button must land in the
+// an open section that same gesture edits a NODE, so the two halves of one button must land in the
 // same history. Deleting a CARD is the case that makes edges part of it rather than a timeline of
 // their own: it removes the card AND every edge touching it, and one ⌘Z has to bring back both.
 //
@@ -78,7 +78,7 @@ const sameSnap = (a: NodeSnap | null, b: NodeSnap | null): boolean =>
 export function historyRefs(): Set<string> {
   const out = new Set<string>();
   const graph = (g?: EdgeGraph): void => { for (const e of g?.edges ?? []) { out.add(e.from); out.add(e.to); } };
-  // …and the PARENT each image names: restoring a card into a frame that had been let go of would
+  // …and the PARENT each image names: restoring a card into a section that had been let go of would
   // otherwise hand it a parent id that no longer exists, and drop it at the top level.
   const images = (m: Images): void => { for (const [id, im] of m) {
     out.add(id);
@@ -247,14 +247,14 @@ function applyStep(images: Images, canvas: string | undefined,
   // paint first so resurrected cards have real DOM heights, then lay out, then commit
   remeasure();
   const ids = [...images.keys()].filter(id => state.nodes.has(id));
-  // An undo can resurrect (or move) a node that lives outside the frame you're standing in — come out
+  // An undo can resurrect (or move) a node that lives outside the section you're standing in — come out
   // of as many levels as it takes to show it, or setSelectionSet would silently drop it (isSelectable
   // refuses an out-of-scope id) and the step would look like it did nothing. See popScopeFor.
   // The one node that must NOT pop is the scope root itself. outOfScope deliberately reports it as
   // outside its own scope (that's what stops its box and tab being painted while you're inside it),
   // but it's the one node whose change you can always already see — the canvas IS it. Recolouring the
-  // open frame from the canvas-colour button records a step on exactly that node, so without this
-  // skip every ⌘Z would throw you out of the frame you were working in.
+  // open section from the canvas-colour button records a step on exactly that node, so without this
+  // skip every ⌘Z would throw you out of the section you were working in.
   const first = ids.map(id => state.nodes.get(id)).find((n): n is MindNode => !!n && !isScopeRoot(n));
   if (first) {
     popScopeFor(first);

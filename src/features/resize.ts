@@ -1,4 +1,4 @@
-// ---------- resize: the handles on a selected card or frame, and dragging them ----------
+// ---------- resize: the handles on a selected card or section, and dragging them ----------
 import { NODE_W, imageLook, IMAGE_FOLD, IMAGE_W, IMAGE_H, isBoxNode, nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { type MindNode, state } from '../core/state.js';
 import { isLockedEffective, subtreeIds } from '../utils/model.js';
@@ -8,18 +8,18 @@ import { snapTo } from '../utils/num.js';
 import { guideResize, hideGuides } from './guides.js';
 import { paintNode, relayout } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { settleFrames } from './drag.js';
-import { growFramesToHold, syncFloatBar } from './float-bar.js';
+import { settleSections } from './drag.js';
+import { growSectionsToHold, syncFloatBar } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
 
-// a frame is never narrower than a normal card
-export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;
+// a section is never narrower than a normal card
+export const MIN_SECTION_W = NODE_W, MIN_SECTION_H = 120;
 // An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
 // (startNodeResize below), so there is no smaller expanded size to clamp at.
 // A width-only kind can only ever get WIDER than the width it has by default — the whole point is
 // trading height for width on a card whose text wraps badly, so its natural size is the floor. That
-// floor is NODE_W for a plain card and a frame alike, so they share the one fall-through.
+// floor is NODE_W for a plain card and a section alike, so they share the one fall-through.
 function minWOf(n: MindNode): number {
   return imageLook(n) ? IMAGE_FOLD : NODE_W;
 }
@@ -27,19 +27,19 @@ function minWOf(n: MindNode): number {
 const CLIP_MIN_H = 44;
 
 function minHOf(n: MindNode): number {
-  return imageLook(n) ? IMAGE_FOLD : MIN_FRAME_H;
+  return imageLook(n) ? IMAGE_FOLD : MIN_SECTION_H;
 }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
-// which shifts the frame's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
-export const FRAME_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
-type FrameDir = typeof FRAME_DIRS[number];
+// which shifts the section's x/y (the opposite edge stays put); `e`/`s` just grow width/height.
+export const SECTION_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
+type SectionDir = typeof SECTION_DIRS[number];
 // Ensure the node has exactly the resize hit-zones its kind wants — one per edge/corner, added once
 // and reused. The corners of a lone selection draw FigJam's square handles (styles.css); the edges
 // have no grip, their resize cursor is the affordance.
 // `:scope >` throughout, NOT a descendant query: child cards are DOM-nested inside their parent
 // (see place/settledHost), so a plain card containing a nested image card would otherwise see the
 // CHILD's handles, conclude it already had its own, and never get any.
-export function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
+export function ensureResizeHandles(n: MindNode, dirs: readonly SectionDir[]): void {
   const el = n.el!;
   const key = dirs.join('');
   if (el.dataset.fhDirs === key) {
@@ -63,8 +63,8 @@ export function clearResizeHandles(el: HTMLElement): void {
 }
 // Drag an edge/corner to resize. Work in edge coordinates (left/top/right/bottom) so the edges NOT
 // being dragged stay fixed; the dragged edges snap to the grid and clamp to the min size. Top/left
-// edges moving means the frame's x/y move too. Children inside are free, so only the parent's own
-// layout reflows around the frame — done once on release, not every move.
+// edges moving means the section's x/y move too. Children inside are free, so only the parent's own
+// layout reflows around the section — done once on release, not every move.
 // An image card's aspect ratio (width/height): the actual loaded image if hydrateImages has
 // resolved it, else whatever the box currently shows (so an in-progress resize is stable even
 // before the blob URL loads).
@@ -76,7 +76,7 @@ function imageAspect(n: MindNode): number {
   const w = n.w ?? IMAGE_W, h = n.h ?? IMAGE_H;
   return w / (h || 1);
 }
-function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
+function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   if (state.readOnly || isLockedEffective(n)) {
     return;
   }
@@ -100,7 +100,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
   const natural0 = sizeH ? 0 : natural();
   const minH = sizeH ? minHOf(n) : Math.min(natural0, CLIP_MIN_H);
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
-  // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to FRAME_H for anything that
+  // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to SECTION_H for anything that
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
   const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
   const sx = e.clientX, sy = e.clientY;
@@ -184,14 +184,14 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     paintNode(n);
     paintFreeEdges();
     // A width-only kind re-wraps its text at the new width, which changes its measured HEIGHT — let
-    // everything that reads it (edges, the selection bar) settle as the drag goes, once per frame.
+    // everything that reads it (edges, the selection bar) settle as the drag goes, once per section.
     if (!sizeH && !subtreeRAF) {
       subtreeRAF = requestAnimationFrame(() => {
         subtreeRAF = null;
         relayout();
       });
     }
-    // A north/west resize shifts the frame's own x/y, which shifts its content wrapper's origin —
+    // A north/west resize shifts the section's own x/y, which shifts its content wrapper's origin —
     // repaint the whole subtree (not just direct children) so every hosted descendant's live,
     // wrapper-relative position compensates and stays put in absolute space as the box resizes
     // around it (an east/south-only resize doesn't move the origin, so this is skipped entirely).
@@ -239,12 +239,12 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     paintNode(n);
     // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
     // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
-    // A resized FRAME takes in what it now covers and lets go of what it no longer does
-    // (settleFrames). It isn't grown back around what it took in — the user just chose its size —
-    // but a card it let go of grows the frame it landed in, as any drop does.
-    if (n.type === 'frame') {
-      const released = settleFrames([n.id]).filter(id => state.nodes.get(id)?.parent !== n.id);
-      growFramesToHold(released);
+    // A resized SECTION takes in what it now covers and lets go of what it no longer does
+    // (settleSections). It isn't grown back around what it took in — the user just chose its size —
+    // but a card it let go of grows the section it landed in, as any drop does.
+    if (n.type === 'section') {
+      const released = settleSections([n.id]).filter(id => state.nodes.get(id)?.parent !== n.id);
+      growSectionsToHold(released);
     }
     relayout(); scheduleSave(); commitStep();
     syncFloatBar();   // a card that now has an authored height offers Fit (↔)

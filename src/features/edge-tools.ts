@@ -231,7 +231,7 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
     const dup = edgeBetween(other, target, otherPort, draw.overSide);
     if (target === other || (dup && dup !== existing)) { paintFreeEdges(); return; }
     touchEdges();
-    // …and the end lets go of the path it held into a folded frame's unread notes, if any (data/board.ts)
+    // …and the end lets go of the path it held into a folded section's unread notes, if any (data/board.ts)
     if (draw.end === 'to') { existing.to = target; existing.toPort = draw.overSide; delete existing.toPath; }
     else { existing.from = target; existing.fromPort = draw.overSide; delete existing.fromPath; }
     scheduleSaveBoard(); paintAll(); syncEdgeBar();
@@ -247,8 +247,8 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
 
 // FigJam's ⊕: click a port and a new card appears CONNECT_GAP away on that side — the same colour and
 // size as the card it came from, joined to it by a line, and open for typing. Click again and the
-// next one lands beside the last instead of on it. Its home is the source's: a card's frame, or for a
-// frame the place the frame itself sits. One undo step with the card (createNode's rename session
+// next one lands beside the last instead of on it. Its home is the source's: a card's section, or for a
+// section the place the section itself sits. One undo step with the card (createNode's rename session
 // commits it), so an abandoned empty card takes its line with it (crud.ts discardNewCard).
 const CONNECT_GAP = 80;
 function spawnConnected(srcId: string, side: EdgeSide): void {
@@ -256,7 +256,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   if (!src || state.readOnly) {
     return;
   }
-  const isCard = src.type !== 'frame';
+  const isCard = src.type !== 'section';
   const w = isCard ? nodeW(src) : 240, h = isCard ? nodeH(src) : 64;
   const sw = nodeW(src), sh = nodeH(src);
   const horiz = side === 'left' || side === 'right';

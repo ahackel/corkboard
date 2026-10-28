@@ -1,27 +1,27 @@
 // ---------- tidy-up of a selection: only when asked (docs/PRODUCT.md, principle 2) ----------
 // Tidy up (FigJam's grid), the six aligns, the two distributes and "same width", applied to the
-// selected cards and frames. The geometry is utils/tidy.ts; this module turns the selection into boxes,
-// applies the answer as ONE undo step with the reflow glide, and lets frames grow to show the result.
+// selected cards and sections. The geometry is utils/tidy.ts; this module turns the selection into boxes,
+// applies the answer as ONE undo step with the reflow glide, and lets sections grow to show the result.
 // Nothing here runs on its own: the float bar's tidy menu, ⌘P and the ⌥ shortcuts are the only ways in.
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { isLockedEffective, nodesOf, outermost, subtreeIds } from '../utils/model.js';
-import { moveSubtreeTo, frameLabelH } from '../view/layout.js';
+import { moveSubtreeTo, sectionLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
 import { record } from './history.js';
-import { growFramesToHold } from './float-bar.js';
+import { growSectionsToHold } from './float-bar.js';
 import { relayout, remeasure, animateLayout } from '../main.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 import { scheduleSave } from '../data/save.js';
 
-// What a tidy acts on: the selected nodes that aren't inside another selected one (a frame carries its
+// What a tidy acts on: the selected nodes that aren't inside another selected one (a section carries its
 // own cards along) and aren't locked.
 function targets(): MindNode[] {
   return outermost(nodesOf(state.sel)).filter(n => !isLockedEffective(n));
 }
-// A node's footprint: a frame's label hangs above its box, and it belongs to the frame's room.
+// A node's footprint: a section's label hangs above its box, and it belongs to the section's room.
 function boxOf(n: MindNode): Box {
-  const lh = n.type === 'frame' ? frameLabelH(n) : 0;
+  const lh = n.type === 'section' ? sectionLabelH(n) : 0;
   return { id: n.id, x: n.x, y: n.y - lh, w: nodeW(n), h: nodeH(n) + lh };
 }
 
@@ -42,10 +42,10 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
       if (!p) {
         continue;
       }
-      const lh = n.type === 'frame' ? frameLabelH(n) : 0;
+      const lh = n.type === 'section' ? sectionLabelH(n) : 0;
       moveSubtreeTo(n, p.x, p.y + lh);
     }
-    growFramesToHold(nodes.map(n => n.id));   // a frame holding them shows the new arrangement
+    growSectionsToHold(nodes.map(n => n.id));   // a section holding them shows the new arrangement
   }));
   relayout();
   scheduleSave();
@@ -62,13 +62,13 @@ function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edg
 function distributeSelection(axis: 'x' | 'y'): void {
   apply(axis === 'x' ? 'Spaced evenly across' : 'Spaced evenly down', boxes => distribute(boxes, axis), 3);
 }
-// Same width: every selected plain CARD takes the widest one's width (frames and pictures size
+// Same width: every selected plain CARD takes the widest one's width (sections and pictures size
 // themselves; a card's text re-wraps, so its height is re-measured).
 function sameWidth(): void {
   if (state.readOnly) {
     return;
   }
-  const cards = targets().filter(n => n.type !== 'frame' && !isImageCard(n));
+  const cards = targets().filter(n => n.type !== 'section' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }
   const w = Math.max(...cards.map(nodeW));
   record(cards.map(n => n.id), () => { for (const n of cards) { n.w = w; n.dirtyLayout = true; } });

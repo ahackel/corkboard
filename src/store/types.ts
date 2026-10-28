@@ -15,7 +15,7 @@ export interface Store {
   readonly name: string;
   pick(): Promise<PickResult>;
   // The notes under the folder `under` ('' = all), leaving unread every folder `fold` says is folded
-  // (store/tree.ts) — what the load and the unfold of a frame read through.
+  // (store/tree.ts) — what the load and the unfold of a section read through.
   listTree(under: string, fold: FoldTest): Promise<TreeListing>;
   removeDir(dir: string): Promise<void>;     // only if empty
   write(path: string, data: string | Blob): Promise<void>;

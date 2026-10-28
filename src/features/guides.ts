@@ -29,7 +29,7 @@ export function hideGuides(): void {
 export const boxOf = (n: MindNode, x = n.x, y = n.y): Box => ({ x, y, w: nodeW(n), h: nodeH(n) });
 
 // The cards a dragged one lines up against: its siblings in the same space (the top level, or the
-// same frame), on screen, and not part of the drag.
+// same section), on screen, and not part of the drag.
 function neighbours(act: MindNode, moving: Set<string>): Box[] {
   const space = parentOf(act);
   const a = screenToWorld(0, 0), z = screenToWorld(window.innerWidth, window.innerHeight);

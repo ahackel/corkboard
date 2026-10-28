@@ -80,7 +80,7 @@ test('a selected card in hand keeps its ring and casts no shadow; nothing of it 
   await page.mouse.up();
 });
 
-test('a card is never opened: only a frame has an inside', async ({ page }) => {
+test('a card is never opened: only a section has an inside', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 400, 300, '# Note\nsome text');
   await select(page, c);

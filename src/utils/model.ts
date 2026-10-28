@@ -54,17 +54,17 @@ export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.
 // THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both. A new term goes IN here,
 // never beside it.
 //
-//  1. FOLD (persisted, board.json `collapsed`): a FOLDED FRAME is its label pill and nothing else, so a
+//  1. FOLD (persisted, board.json `collapsed`): a FOLDED SECTION is its label pill and nothing else, so a
 //     node is hidden iff one of its ANCESTORS is folded. (A folded card only tucks away its own text —
-//     cards hold no cards — so in practice the ancestor is always a frame.)
-//  2. SCOPE (ephemeral, nav/scope.ts): while a frame is OPEN, only what's inside it is on the
-//     canvas. Reaching the open frame on the way up means we're inside it; running out of
+//     cards hold no cards — so in practice the ancestor is always a section.)
+//  2. SCOPE (ephemeral, nav/scope.ts): while a section is OPEN, only what's inside it is on the
+//     canvas. Reaching the open section on the way up means we're inside it; running out of
 //     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS
-//     the open frame, which is precisely what stops its box, border, tab and fill from being
+//     the open section, which is precisely what stops its box, border, tab and fill from being
 //     painted. No per-kind CSS, no second predicate.
 //
 // Nothing writes through this function: term 1 is backed by a saved flag while term 2 must never touch
-// disk. The open frame is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
+// disk. The open section is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
 // own collapsed flag nor anything above it can hide what's inside.
 export function isHidden(n: MindNode): boolean {
   const scopeId = scope.rootId;            // null in the overwhelmingly common case
@@ -78,11 +78,11 @@ export function isHidden(n: MindNode): boolean {
       return true;
     }
   }
-  // Nothing above n is the open frame, so n is outside it.
+  // Nothing above n is the open section, so n is outside it.
   return scopeId !== null;
 }
 // The visible card standing in for n: n itself when it's shown, otherwise its nearest
-// ancestor that is still visible: the folded frame a card is tucked inside. Search highlights it for a
+// ancestor that is still visible: the folded section a card is tucked inside. Search highlights it for a
 // match it hides, and a line to a hidden card attaches to it (view/free-edges.ts edgeEnd).
 export function firstVisible(n: MindNode): MindNode {
   if (!isHidden(n)) {
@@ -93,7 +93,7 @@ export function firstVisible(n: MindNode): MindNode {
       return p;
     }
   }
-  // A root is always visible, so the walk resolves — EXCEPT for a node outside the open frame,
+  // A root is always visible, so the walk resolves — EXCEPT for a node outside the open section,
   // whose ancestors are hidden all the way up. Search filters those out before it ever asks
   // (features/search.ts), so the fallback is only a backstop, not a case anyone relies on.
   return n;

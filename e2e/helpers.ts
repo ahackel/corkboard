@@ -15,8 +15,8 @@ export async function openBoard(page: Page): Promise<void> {
 export function card(page: Page, text: string): Locator {
   return page.locator('#world .node', { hasText: text }).first();
 }
-export function frame(page: Page, text: string): Locator {
-  return page.locator('#world .node.frame', { hasText: text }).first();
+export function section(page: Page, text: string): Locator {
+  return page.locator('#world .node.section', { hasText: text }).first();
 }
 
 export async function clickAway(page: Page): Promise<void> {
@@ -93,7 +93,7 @@ export async function reload(page: Page): Promise<void> {
 }
 
 // Write a whole map straight into the board's OPFS folder and reload onto it — for scenes (nested
-// frames, saved states) that would take a page of gestures to build by hand. A first card is made so
+// sections, saved states) that would take a page of gestures to build by hand. A first card is made so
 // the map's folder exists, then everything in it is replaced.
 export async function seedBoard(page: Page, files: Record<string, string>): Promise<void> {
   await makeCard(page, 300, 300, 'seed');
@@ -113,7 +113,7 @@ export async function seedBoard(page: Page, files: Record<string, string>): Prom
       return undefined;
     }
     const dir = (await find(await navigator.storage.getDirectory()))!;
-    // the map's notes, board and frame FOLDERS go; the map's own meta file stays
+    // the map's notes, board and section FOLDERS go; the map's own meta file stays
     for await (const [n, h] of (dir as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
       if (n.endsWith('.md') || n === 'board.json' || h.kind === 'directory') {
         await dir.removeEntry(n, { recursive: true });
@@ -156,7 +156,7 @@ export function watchErrors(page: Page): string[] {
   return errors;
 }
 
-// Every file of the open map on disk (OPFS), path → text — what a frame-as-folder test reads back.
+// Every file of the open map on disk (OPFS), path → text — what a section-as-folder test reads back.
 export async function diskFiles(page: Page): Promise<Record<string, string>> {
   await page.waitForTimeout(1200);   // the debounced autosave and board write
   return page.evaluate(async () => {

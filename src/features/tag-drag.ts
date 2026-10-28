@@ -25,7 +25,7 @@ function cardAt(x: number, y: number): string | null {
 // The bare board — not a card, not a bar or panel over it — where a tag dropped off its card goes away.
 function onCanvas(x: number, y: number): boolean {
   const el = document.elementFromPoint(x, y);
-  return !!el?.closest('#stage') && !el.closest('.node:not(.frame)');
+  return !!el?.closest('#stage') && !el.closest('.node:not(.section)');
 }
 
 export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fromCard: string | null,

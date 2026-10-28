@@ -6,7 +6,7 @@
 // adds or removes that chip.
 //
 // Every non-match FADES (state.searchMatch, applied in paintNode): matches stay lit, and so do the
-// frames holding them; a match tucked inside a FOLDED frame lights that frame, which says how many it
+// sections holding them; a match tucked inside a FOLDED section lights that section, which says how many it
 // holds (searchHitsIn). The match set is DERIVED on every paint (main.ts paintAll → refreshSearch), so
 // tagging a card while searching takes effect at once. The dropdown lists the matching cards; ↓/Enter
 // jump to one. The field stays while a query is in it — a filter you can work under — and goes with
@@ -36,7 +36,7 @@ let chips: string[] = [];                 // the tags of the query
 let cardHits: MindNode[] = [];            // the dropdown's cards
 let tagRows: string[] = [];               // …or, while a `#word` is being typed, its tag suggestions
 let active = -1;
-let hits = new Map<string, number>();     // a hidden match counted on the visible frame holding it
+let hits = new Map<string, number>();     // a hidden match counted on the visible section holding it
 
 // Does the open result list point at this node? Nothing a result points at may be let go of.
 export function searchHolds(id: string): boolean { return cardHits.some(h => h.id === id); }
@@ -119,7 +119,7 @@ export function refreshSearch(): void {
       held.set(rep.id, (held.get(rep.id) ?? 0) + 1);
     }
     for (const p of ancestors(rep)) {
-      lit.add(p.id);   // the frames around a match stay lit around it
+      lit.add(p.id);   // the sections around a match stay lit around it
     }
   }
   state.searchMatch = lit;

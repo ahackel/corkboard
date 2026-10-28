@@ -8,7 +8,7 @@ import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, i
 import { stripImageRef, appendMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading, setNoteText } from '../utils/frontmatter.js';
-import { frameInterior, holderOf, frameAt } from '../view/layout.js';
+import { sectionInterior, holderOf, sectionAt } from '../view/layout.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { paintAll, relayout, remeasure } from '../main.js';
@@ -16,11 +16,11 @@ import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js'
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING, slidePast } from '../utils/guides.js';
 import { boxOf } from './guides.js';
-import { growFramesToHold } from './float-bar.js';
-import { settleFrames } from './drag.js';
+import { growSectionsToHold } from './float-bar.js';
+import { settleSections } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
-import { nodeH, nodeW, snapPt, NODE_W, FRAME_W, FRAME_H } from '../view/geometry.js';
+import { nodeH, nodeW, snapPt, NODE_W, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { selectNode, setSelectionSet, applySelection, selectedIds } from './selection.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -68,7 +68,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   if (state.readOnly) {
     return;
   }
-  // No parent asked for means "the top level", and while a frame is OPEN its interior IS the top
+  // No parent asked for means "the top level", and while a section is OPEN its interior IS the top
   // level (detachParentId, nav/scope.ts) — a genuine root would land outside the scope and simply
   // vanish. That's what makes this ONE line cover every create path: the canvas double-click, Space,
   // both "New card here" menus, a paste, a dropped image.
@@ -94,8 +94,8 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout();
-  // a card made past its frame's edge is shown, not clipped; a new FRAME takes in what it covers
-  if (growFramesToHold([id, ...(n.type === 'frame' ? settleFrames([id]) : [])])) {
+  // a card made past its section's edge is shown, not clipped; a new SECTION takes in what it covers
+  if (growSectionsToHold([id, ...(n.type === 'section' ? settleSections([id]) : [])])) {
     relayout();
   }
   selectNode(id);
@@ -134,7 +134,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
     remeasure();
     let y = at.y;
     for (const n of made) { n.y = y; y += nodeH(n) + LIST_GAP; }
-    growFramesToHold(made.map(n => n.id));
+    growSectionsToHold(made.map(n => n.id));
     relayout();
     setSelectionSet(made.map(n => n.id));
     made.forEach(popIn);
@@ -149,7 +149,7 @@ export function createDetachedNode(x: number, y: number): MindNode | undefined {
   if (state.readOnly) {
     return;
   }
-  // …parented to the open frame while there is one, so the ghost card rides the ordinary frame-child
+  // …parented to the open section while there is one, so the ghost card rides the ordinary section-child
   // machinery instead of being dragged onto a canvas that can't show it.
   const n = mkNode({ x, y, parent: detachParentId() });
   state.nodes.set(n.id, n);
@@ -170,7 +170,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     color: s.color,
     tags: [...s.tags], body: s.body,
     type: s.type,
-    w: s.w, h: s.h, clip: s.clip,   // a frame/image card's own box size; a clipped card's exact height
+    w: s.w, h: s.h, clip: s.clip,   // a section/image card's own box size; a clipped card's exact height
     // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
     // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
     // visibly on an image card, whose fold is its icon). titleGap rides along with the body it
@@ -190,7 +190,7 @@ function copyNode(s: MindNode): MindNode {
 // The SMART duplicate (⇧D): the next card of a series — a daily log, sprints, versions. The copy's
 // title steps to its next value (utils/advance.ts: a date by a day with its weekday, else the last
 // number up) and it lands in the NEXT SLOT of its row: to the right, at the same gap the row already
-// keeps (from its left neighbour), past anything already there. Its frame grows to hold it, the way a
+// keeps (from its left neighbour), past anything already there. Its section grows to hold it, the way a
 // drop does. A card with no heading advances its first line instead.
 function copyNext(s: MindNode): MindNode {
   const w = nodeW(s), h = nodeH(s);
@@ -219,7 +219,7 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
     return;
   }
   const ids = selectedIds();
-  // A folded frame's notes may still be on disk: duplicating it copies them, so they're read first.
+  // A folded section's notes may still be on disk: duplicating it copies them, so they're read first.
   if (afterReading(ids, () => duplicateSelection({ next }))) {
     return;
   }
@@ -230,7 +230,7 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
   const copies = srcs.map(next ? copyNext : copyNode);
   // paint first so the new cards get real DOM heights, then settle and commit.
   remeasure();
-  if (next && growFramesToHold(copies.map(c => c.id))) {
+  if (next && growSectionsToHold(copies.map(c => c.id))) {
     relayout();
   }
   const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
@@ -254,20 +254,20 @@ export function leaveClone(s: MindNode, pos: Pt): MindNode {
   return copy;
 }
 
-// ---------- a new card inside a frame / after a card / a new frame ----------
-// A new card INSIDE a frame — Tab, the ⋯ menu, a double-click in its interior (main.ts activateNode,
-// which passes where the user pointed as `at`). Without a point it goes under whatever the frame
-// already holds, at the interior's left edge, so Tab-Tab-Tab fills a frame top to bottom.
-export function addCardInside(frameId: string, at?: Pt): void {
+// ---------- a new card inside a section / after a card / a new section ----------
+// A new card INSIDE a section — Tab, the ⋯ menu, a double-click in its interior (main.ts activateNode,
+// which passes where the user pointed as `at`). Without a point it goes under whatever the section
+// already holds, at the interior's left edge, so Tab-Tab-Tab fills a section top to bottom.
+export function addCardInside(sectionId: string, at?: Pt): void {
   if (state.readOnly) {
     return;
   }
-  const f = state.nodes.get(frameId);
-  if (!f || f.type !== 'frame') {
+  const f = state.nodes.get(sectionId);
+  if (!f || f.type !== 'section') {
     return;
   }
   if (isLockedEffective(f)) { setStatus('Locked — can’t add a card'); return; }
-  touch(frameId);   // the reveal below belongs to the create step
+  touch(sectionId);   // the reveal below belongs to the create step
   if (f.collapsed) {
     f.collapsed = false;
   }
@@ -275,23 +275,35 @@ export function addCardInside(frameId: string, at?: Pt): void {
   if (at) {
     pos = centredAt(at);
   } else {
-    const box = frameInterior(f);
-    const kids = childrenOf(frameId);
+    const box = sectionInterior(f);
+    const kids = childrenOf(sectionId);
     const bottom = kids.reduce((y, k) => Math.max(y, k.y + nodeH(k)), -Infinity);
     pos = snapPt({ x: box.x + LIST_GAP, y: kids.length ? bottom + LIST_GAP : box.y + LIST_GAP });
   }
-  createNode({ ...pos, parent: frameId });
+  createNode({ ...pos, parent: sectionId });
 }
-// A new, empty FRAME centred on a world point, its name editor open — the palette's "New frame".
-export function newFrameAt(p: Pt): void {
+// A new, empty SECTION centred on a world point, its name editor open — the palette's "New section".
+// FigJam's default name: "Section 1", or one past the highest number a section already carries.
+export function nextSectionTitle(): string {
+  let max = 0;
+  for (const n of state.nodes.values()) {
+    const m = n.type === 'section' ? /^Section (\d+)$/.exec(n.title) : null;
+    if (m) {
+      max = Math.max(max, Number(m[1]));
+    }
+  }
+  return `Section ${max + 1}`;
+}
+
+export function newSectionAt(p: Pt): void {
   if (state.readOnly) {
     return;
   }
-  const at = snapPt({ x: p.x - FRAME_W / 2, y: p.y - FRAME_H / 2 });
-  // in the frame under the pointer, if any — the same drop rule a card gets
-  createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, parent: frameAt(p.x, p.y, new Set())?.id });
+  const at = snapPt({ x: p.x - SECTION_W / 2, y: p.y - SECTION_H / 2 });
+  // in the section under the pointer, if any — the same drop rule a card gets
+  createNode({ ...at, type: 'section', w: SECTION_W, h: SECTION_H, title: nextSectionTitle(), parent: sectionAt(p.x, p.y, new Set())?.id });
 }
-// The next card after `refId`, in the same place it lives (the top level, or the same frame): just
+// The next card after `refId`, in the same place it lives (the top level, or the same section): just
 // below it, or below whatever already sits under it — Enter, Enter, Enter down a column of cards
 // appends to it rather than stacking on the card underneath.
 export function createSibling(refId: string){
@@ -415,8 +427,8 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
     setStatus(`Moved text into “${nodeLabel(t)}”`);
     return;
   }
-  // WHERE THE NEW CARD BELONGS: the frame it was dropped in (text-drag.ts resolves it with the same
-  // frameAt every drop uses), else the top level — the open frame while there is one.
+  // WHERE THE NEW CARD BELONGS: the section it was dropped in (text-drag.ts resolves it with the same
+  // sectionAt every drop uses), else the top level — the open section while there is one.
   const parent = dest.container ?? state.nodes.get(detachParentId() ?? '') ?? null;
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
@@ -433,7 +445,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
 
 // ---------- merging cards into one ----------
 // What can FUSE with another note, on EITHER side of the gesture: a plain card — the kind whose whole
-// content is a body (with a title above it). A frame is a box whose own shape is the point,
+// content is a body (with a title above it). A section is a box whose own shape is the point,
 // so folding it into a body would throw away exactly what it is. One predicate rather than a
 // source/target pair, because the answer really is the same question both ways round.
 export const canMerge = (n: MindNode): boolean =>
@@ -463,7 +475,7 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
   // note carries no `# ` line, and inventing a heading here (from its first line, say) would put words
   // in the note that nobody wrote. A titled card contributes `## Title` — one level under the `# ` line
   // that is now the target's own title, which is what makes the merged note a correctly nested document.
-  const section = (c: MindNode): string => {
+  const part = (c: MindNode): string => {
     const body = (c.body || '').trim();
     const title = c.title.trim();
     if (!title) {
@@ -471,7 +483,7 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
     }
     return body ? `## ${title}\n\n${body}` : `## ${title}`;
   };
-  appendToBody(target, cards.map(section).filter(Boolean).join('\n\n'));
+  appendToBody(target, cards.map(part).filter(Boolean).join('\n\n'));
   const tags = new Set(target.tags);
   for (const c of cards) {
     for (const t of c.tags) {
@@ -495,9 +507,9 @@ function deleteNodes(ids: Iterable<string>): void {
     if (!n) {
       continue;
     }
-    // …including its container wrapper: a frame's clipping wrapper is hung off the node, not marked
+    // …including its container wrapper: a section's clipping wrapper is hung off the node, not marked
     // with its data-id, so nothing else would ever reach it again.
-    state.nodes.delete(id); n.el?.remove(); n.frameContentEl?.remove();
+    state.nodes.delete(id); n.el?.remove(); n.sectionContentEl?.remove();
     if (n.file) {
       state.toDelete.push(n.file);
     }
@@ -521,7 +533,7 @@ export function deleteNode(id: string): void {
     return;
   }
   if (subtreeHasLocked(id)) { setStatus('Locked — can’t delete'); return; }
-  // Deleting a folded frame deletes the notes in its folder, so they're read first — that way they
+  // Deleting a folded section deletes the notes in its folder, so they're read first — that way they
   // go through the history like any other delete, and one ⌘Z brings them all back.
   if (afterReading([id], () => deleteNode(id))) {
     return;
@@ -555,7 +567,7 @@ export function deleteSelection(): void {
   const ids = [...state.sel].filter(id => !subtreeHasLocked(id));
   if (!ids.length) { setStatus('Locked — can’t delete'); return; }
   if (afterReading(ids, deleteSelection)) {
-    return;   // a folded frame's notes first (see deleteNode)
+    return;   // a folded section's notes first (see deleteNode)
   }
   record([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
@@ -581,13 +593,13 @@ function canPromoteDelete(id: string): boolean {
   }
   return childrenOf(id).every(k => !isLockedEffective(k));
 }
-// UNGROUP: delete every selected frame WITHOUT touching what it holds — its cards move up to ITS OWN
+// UNGROUP: delete every selected section WITHOUT touching what it holds — its cards move up to ITS OWN
 // parent, right where they sit. (A card has no children, so on a card this is a plain delete.) Cascades correctly when a selected node's parent is ALSO selected: children
 // are read live (childrenOf), so a child already promoted by an earlier pass in this loop is what a
 // later pass (deleting that now-former parent) sees and promotes again — any chain length just
 // works, in any processing order. New parents get no explicit kidOrder splice; orderedKids
 // (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
-// position, so nothing needs doing here. Shared by ⌥Delete/⌥Backspace and the ⋯ menu's Ungroup.
+// position, so nothing needs doing here. Shared by ⌘⌫/⌥⌫, the float bar's and the right-click menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
   if (state.readOnly) {
     return;
@@ -618,7 +630,7 @@ export function deleteSelectionKeepChildren(): void {
       // the kept cards sit in the wrapper, and the next paint moves them out of it
       state.nodes.delete(id);
       n.el?.remove();
-      n.frameContentEl?.remove();
+      n.sectionContentEl?.remove();
       if (n.file) {
         state.toDelete.push(n.file);
       }
@@ -630,7 +642,7 @@ export function deleteSelectionKeepChildren(): void {
   relayout();
   setSelectionSet(promoted);
   scheduleSave();
-  setStatus(`Ungrouped ${ids.length} frame${ids.length===1?'':'s'}`);
+  setStatus(`Ungrouped ${ids.length} section${ids.length===1?'':'s'}`);
 }
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
 // source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it
@@ -660,13 +672,13 @@ export function extractImage(sourceId: string, path: string, alt: string,
   } else {
     // untitled: the note is the picture and nothing else, which is what makes it render as one
     // (core/state.ts isImageCard). The alt rides along in the markdown and names the file.
-    const into = frameAt(target.x + target.w / 2, target.y + target.h / 2, new Set());
+    const into = sectionAt(target.x + target.w / 2, target.y + target.h / 2, new Set());
     const n = mkNode({ x: target.x, y: target.y, parent: into?.id ?? detachParentId(), title: '',
       body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
     relayout();
-    growFramesToHold([n.id]);
+    growSectionsToHold([n.id]);
     setStatus('Image extracted');
   }
   relayout();

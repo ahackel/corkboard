@@ -1,12 +1,12 @@
 // ============================================================
-// FOLDED frames are not read. A frame is a folder (utils/filenames.ts), and while it is folded its
+// FOLDED sections are not read. A section is a folder (utils/filenames.ts), and while it is folded its
 // pill is all the canvas shows of it — so the load leaves its notes on disk (store/tree.ts) and the
-// frame carries only how many there are (MindNode.lazy). This module is the POLICY around that:
+// section carries only how many there are (MindNode.lazy). This module is the POLICY around that:
 //   · what has to READ a folder first — unfolding, opening, deleting, copying, exporting, a link into it
-//     (afterReading / readAll / revealPath); a save that moves a folded frame reads it itself
+//     (afterReading / readAll / revealPath); a save that moves a folded section reads it itself
 //     (data/save.ts saveAll, phase 0);
-//   · and when a folded frame LETS GO of what it read again (releaseFolded): once every note under it
-//     is safely on disk and nothing — the selection, the undo history, a search result, the frame
+//   · and when a folded section LETS GO of what it read again (releaseFolded): once every note under it
+//     is safely on disk and nothing — the selection, the undo history, a search result, the section
 //     you are standing in — can still reach one of them.
 // The mechanism (turning a listing into nodes) is data/load.ts readFolder's.
 // ============================================================
@@ -24,7 +24,7 @@ import { scope } from '../nav/scope.js';
 import { dirOf } from '../utils/filenames.js';
 import { readFolder } from './load.js';
 
-// The folded frames still holding unread notes among `ids` and everything inside them.
+// The folded sections still holding unread notes among `ids` and everything inside them.
 function unreadIn(ids: Iterable<string>): MindNode[] {
   const out: MindNode[] = [];
   for (const id of ids) {
@@ -46,7 +46,7 @@ export async function readAll(ids: Iterable<string> = [...state.nodes.keys()]): 
     }
   }
 }
-// An action that needs the notes of the frames among `ids` (deep: everything under them too): if any
+// An action that needs the notes of the sections among `ids` (deep: everything under them too): if any
 // of them is still unread, read it and run `fn` afterwards, and say so — the caller returns at once.
 // Otherwise nothing to wait for: the caller carries on, synchronously, as it always has.
 export function afterReading(ids: Iterable<string>, fn: () => void, deep = true): boolean {
@@ -67,8 +67,8 @@ export function afterReading(ids: Iterable<string>, fn: () => void, deep = true)
   })();
   return true;
 }
-// The innermost UNREAD frame whose folder holds `path`.
-export function unreadFrameHolding(path: string): MindNode | null {
+// The innermost UNREAD section whose folder holds `path`.
+export function unreadSectionHolding(path: string): MindNode | null {
   let best: MindNode | null = null;
   for (const n of state.nodes.values()) {
     if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) {
@@ -78,14 +78,14 @@ export function unreadFrameHolding(path: string): MindNode | null {
   return best;
 }
 
-// A path you were sent to (a link, the URL): read the folded frames on the way to it, outermost first,
+// A path you were sent to (a link, the URL): read the folded sections on the way to it, outermost first,
 // until it is in memory or there is nothing left on the way to read.
 export async function revealPath(path: string): Promise<void> {
   for (let guard = 0; guard < 64; guard++) {
     if (nodeByFile(path)) {
       return;
     }
-    const f = unreadFrameHolding(path);
+    const f = unreadSectionHolding(path);
     if (!f) {
       return;
     }
@@ -93,7 +93,7 @@ export async function revealPath(path: string): Promise<void> {
   }
 }
 
-// The safety net: a frame that is OPEN on the canvas while its notes are still unread — an undo that
+// The safety net: a section that is OPEN on the canvas while its notes are still unread — an undo that
 // unfolded it after it let go of them, say — reads them now (main.ts paintAll asks, every paint; with
 // nothing unread that is one pass over the nodes). The canvas repaints once they're in.
 let readingOpen = false;
@@ -131,9 +131,9 @@ export function releaseFolded(): void {
   }
   let held: Set<string> | null = null;   // built lazily: most saves have nothing folded to let go of
   const scoped = new Set(scope.stack.map(l => l.rootId));
-  // Outermost first: a folded frame inside a folded frame goes with it.
+  // Outermost first: a folded section inside a folded section goes with it.
   for (const f of [...state.nodes.values()].sort((a, b) => ancestorDepth(a) - ancestorDepth(b))) {
-    if (f.type !== 'frame' || !f.collapsed || f.lazy != null || !f.file || !state.nodes.has(f.id)) {
+    if (f.type !== 'section' || !f.collapsed || f.lazy != null || !f.file || !state.nodes.has(f.id)) {
       continue;
     }
     const kids = subtreeIds(f.id).slice(1).map(id => state.nodes.get(id)!);
@@ -158,7 +158,7 @@ export function releaseFolded(): void {
         pics.add(src);
       }
     }
-    for (const n of kids) { n.el?.remove(); n.frameContentEl?.remove(); state.nodes.delete(n.id); }
+    for (const n of kids) { n.el?.remove(); n.sectionContentEl?.remove(); state.nodes.delete(n.id); }
     // …keeping any picture a note still in memory shows too.
     for (const n of state.nodes.values()) {
       for (const { src } of bodyImages(n.body)) {
@@ -166,7 +166,7 @@ export function releaseFolded(): void {
       }
     }
     forgetImages(pics);
-    f.lazy = kids.reduce((c, n) => c + 1 + (n.lazy ?? 0), 0);   // a folded frame inside counts its own
+    f.lazy = kids.reduce((c, n) => c + 1 + (n.lazy ?? 0), 0);   // a folded section inside counts its own
     f.kidOrder = undefined;
   }
 }

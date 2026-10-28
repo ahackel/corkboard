@@ -9,9 +9,9 @@ import { syncFloatBar } from './float-bar.js';
 import { syncUrl, updateDocumentTitle } from '../nav/url-state.js';
 import { outOfScope } from '../nav/scope.js';
 
-// Select everything ON THE CANVAS — which, inside an open frame, is that frame's contents and nothing
+// Select everything ON THE CANVAS — which, inside an open section, is that section's contents and nothing
 // else. It needs no scope test of its own: isHidden already means "on the canvas right now", covering
-// both the open frame and folded branches, and setSelectionSet drops whatever isn't selectable (a
+// both the open section and folded branches, and setSelectionSet drops whatever isn't selectable (a
 // locked card's descendants). Shared by ⌘A and the canvas context menu, so the two can't diverge.
 export function selectAll(): void {
   setSelectionSet([...state.nodes.values()].filter(n => !isHidden(n)).map(n => n.id));
@@ -19,7 +19,7 @@ export function selectAll(): void {
 }
 // the ids currently being edited (one or many) — colour and lock apply to all of them
 export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
-// …the ones of them that can wear tags (no frames).
+// …the ones of them that can wear tags (no sections).
 export const taggableSelection = (): string[] => selectedIds().filter(id => wearsTags(state.nodes.get(id)));
 // reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
 // Selecting a CARD ends any edge selection — the two never coexist (core/state.ts selEdges). Enforced
@@ -46,7 +46,7 @@ export function applySelection(): void {
   paintFreeEdges(); syncFloatBar(); syncUrl(); updateDocumentTitle();
 }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
-// (see utils/model.ts hasLockedAncestor). Nor can anything outside the frame you're standing in:
+// (see utils/model.ts hasLockedAncestor). Nor can anything outside the section you're standing in:
 // it isn't on the canvas, so a selection ring would be invisible and every action on it would look
 // dead. The deliberately unscoped jumps (wikilinks, query results, undo) come out of their scope
 // first — see popScopeFor. Shared by every selection entry point below.

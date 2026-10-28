@@ -18,8 +18,8 @@ export interface Drag {
   // Top-level roots of the drag (a single-node drag's [n.id], or a multi-selection's members
   // whose own parent isn't ALSO selected — descendants ride along with their selected ancestor).
   selRoots: string[];
-  // The parent the active card would have if released now — the frame its centre is in, or null for
-  // the top level (view/layout.ts frameAt). Read by effectiveColor to preview an inherited colour.
+  // The parent the active card would have if released now — the section its centre is in, or null for
+  // the top level (view/layout.ts sectionAt). Read by effectiveColor to preview an inherited colour.
   moved: boolean; dropTarget: string | null;
   alt: boolean; shift: boolean; cloned: boolean;
   meta: boolean; touch: boolean;
@@ -37,10 +37,10 @@ export interface Drag {
 // `holdH` is the card's height when the editor opened: held as its min-height until it closes, so a
 // card never jumps between its rendered and its raw size (main.ts paintNode).
 export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
-// A FRAME's label being renamed in place, on its tab.
+// A SECTION's label being renamed in place, on its tab.
 // A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
-// A frame can't do that, and the reason is structural rather than stylistic — its `.body` is
-// `display:none` (styles.css: a frame's box holds child cards, not its own note), and an editor inside a
+// A section can't do that, and the reason is structural rather than stylistic — its `.body` is
+// `display:none` (styles.css: a section's box holds child cards, not its own note), and an editor inside a
 // hidden element can't be focused or typed into. So its label is edited ON itself, one line, in a
 // contenteditable. Same contract as BodyEdit otherwise: while set, persistence freezes this node's
 // filename and skips the focus-reload.
@@ -49,8 +49,8 @@ export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLT
 export interface TitleEdit { id: string; el: HTMLElement; isNew?: boolean; }
 export interface PanState { sx: number; sy: number; ox: number; oy: number; }
 export interface Marquee { sx: number; sy: number; add: boolean; base: Set<string>; moved: boolean;
-  // When a marquee is started from an unselected FRAME (drag inside it rubber-band-selects its
-  // contents), a no-move click should SELECT that frame instead of deselecting — this holds its id.
+  // When a marquee is started from an unselected SECTION (drag inside it rubber-band-selects its
+  // contents), a no-move click should SELECT that section instead of deselecting — this holds its id.
   clickNode?: string | null; }
 export interface Pinch { dist: number; cx: number; cy: number; }
 // Safari-only pinch events (not in lib.dom): clientX/Y + a scale factor.
@@ -98,7 +98,7 @@ export const ui = {
 export const gPointers = new Map<number, Pt>();
 
 // ---- edit-session predicates ----
-// "Is an editor holding uncommitted text" — a card's one text field, or a frame's label. One source of
+// "Is an editor holding uncommitted text" — a card's one text field, or a section's label. One source of
 // truth for the save loop, the disk-reload guard, the render core, the float bar and a canvas tap,
 // rather than `ui.bodyEdit || ui.titleEdit` spelled out at each.
 export function inPlaceEditActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }

@@ -17,7 +17,7 @@ import { nodeLabel } from '../utils/model.js';
 import { autosizeBody, syncOpenEditor } from './inline-edit.js';
 import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
-import { isFrame, frameAt } from '../view/layout.js';
+import { isSection, sectionAt } from '../view/layout.js';
 import { classMarker } from '../utils/dom.js';
 import { IMAGE_W, IMAGE_H } from '../view/geometry.js';
 import { selectNode } from './selection.js';
@@ -214,7 +214,7 @@ export function pickImagesAt(sx: number | null, sy: number | null, parent: strin
 // ⌘V outside any text field (or the context menu's Paste) makes a card from the clipboard — text
 // (first non-empty line becomes the title, the rest the body) or image files. It lands at the
 // given screen point (⌘V: the mouse position, viewport centre before the mouse ever moved); with
-// a parent frame it goes inside it. Created as-is — no rename editor opens.
+// a parent section it goes inside it. Created as-is — no rename editor opens.
 function cardOptsAt(sx: number | null, sy: number | null, parent: string | null):
     { x?: number; y?: number; parent: string | null; edit: false } {
   const pn = parent ? state.nodes.get(parent) : undefined;
@@ -297,10 +297,10 @@ document.addEventListener('paste', (e) => {
   }
   e.preventDefault();
   // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card. Either
-  // way it lands where the pointer is — in the frame under it, like a drop (view/layout.ts frameAt).
+  // way it lands where the pointer is — in the section under it, like a drop (view/layout.ts sectionAt).
   const mx = ui.lastMouse?.x ?? null, my = ui.lastMouse?.y ?? null;
   const w = mx != null && my != null ? screenToWorld(mx, my) : null;
-  const into = w ? frameAt(w.x, w.y, new Set())?.id ?? null : null;
+  const into = w ? sectionAt(w.x, w.y, new Set())?.id ?? null : null;
   if (text && tryPasteCards(text, { sx: mx, sy: my, parent: into })) {
     return;
   }
@@ -365,11 +365,11 @@ document.addEventListener('drop', async (e) => {
   // an image card is a card that IS its picture (core/state.ts isImageCard): dropping notes or a
   // second image ONTO it would end that — so those land beside it, on the canvas, instead
   const cardIsImage = !!cardNode && isImageCard(cardNode);
-  const cardIsFrame = !!cardNode && isFrame(cardNode);
+  const cardIsSection = !!cardNode && isSection(cardNode);
   const cardIsLocked = !!cardNode && isLockedEffective(cardNode);
   setImgDropTarget(null);
   // dropped .md notes reconstruct as cards (parent links WITHIN the dropped set are kept);
-  // dropped on a frame (or a card in one) they go in that frame, on the canvas at the drop point — never
+  // dropped on a section (or a card in one) they go in that section, on the canvas at the drop point — never
   // into a locked one (createNode itself also refuses a locked parent, this just skips the attempt).
   const mds = [...e.dataTransfer!.files].filter(f => /\.md$/i.test(f.name));
   if (mds.length){
@@ -383,9 +383,9 @@ document.addEventListener('drop', async (e) => {
   if (onEditor && ui.bodyEdit) {
     await insertImagesAtCursor(imgs);
   }   // drop on the open editor → at the caret
-  // a frame is a container, not a text card — its body never renders, so dropped images become
-  // new image-card CHILDREN of the frame instead of (invisibly) appending to its hidden body
-  else if (cardEl && cardIsFrame && !cardIsLocked) {
+  // a section is a container, not a text card — its body never renders, so dropped images become
+  // new image-card CHILDREN of the section instead of (invisibly) appending to its hidden body
+  else if (cardEl && cardIsSection && !cardIsLocked) {
     selectNode(cardId);
     await createImageCards(imgs, e.clientX, e.clientY, cardId);
   } else if (cardEl && !cardIsImage && !cardIsLocked) {

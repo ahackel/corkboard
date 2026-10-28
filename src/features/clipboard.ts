@@ -90,7 +90,7 @@ export const cardsToPayload = (files: CardFile[]): string =>
 // Copy the selected cards INCLUDING their subtrees to the system clipboard. Allowed in
 // read-only mode (copying mutates nothing). Resolves true iff the clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
-  await readAll(selectedIds());   // a folded frame's notes are part of what's copied
+  await readAll(selectedIds());   // a folded section's notes are part of what's copied
   const files = selectionFiles();
   if (!files.length) {
     return false;
@@ -184,7 +184,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
     // resolve payload-internal parent links (by original names, before any title renaming)
     for (const c of cards){
       const n = state.nodes.get(newIds.get(c.name)!) as MindNode;
-      // …and a payload root with no paste target lands at the CURRENT top level — the open frame's
+      // …and a payload root with no paste target lands at the CURRENT top level — the open section's
       // interior while one is open (detachParentId, nav/scope.ts). This path mints via mkNode, so it
       // doesn't inherit createNode's own default.
       n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : newIds.get(c.p.mm.parent)!;

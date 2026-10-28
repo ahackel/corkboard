@@ -1,4 +1,4 @@
-// ---------- folding: a card to its chip, a frame to its pill ----------
+// ---------- folding: a card to its chip, a section to its pill ----------
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { isLockedEffective, isHidden, nodesOf, nodeLabel, subtreeIds } from '../utils/model.js';
 import { canFold, canToggleFold } from '../view/geometry.js';
@@ -26,7 +26,7 @@ export function toggleCollapse(id: string): void {
   }
 }
 
-// A frame folded around selected cards takes them off the canvas — and out of the selection, so no key
+// A section folded around selected cards takes them off the canvas — and out of the selection, so no key
 // or bar acts on cards you can't see.
 function dropHiddenFromSelection(): void {
   const shown = [...state.sel].filter(id => {
@@ -47,7 +47,7 @@ function foldableSelection(ids: Iterable<string>): MindNode[] {
 }
 
 // Apply one shared fold state to a whole set, as ONE undo step and one animated reflow. Unfolding a
-// frame whose notes are still on disk reads them first (data/lazy.ts).
+// section whose notes are still on disk reads them first (data/lazy.ts).
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) {
     return;
@@ -67,18 +67,18 @@ export function toggleCollapseSelection(ids: Iterable<string>): void {
   }
   applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
 }
-// What "Collapse/Expand all" (⌘P) act on: the selected frames and everything inside them when frames
-// are selected, else every frame and card in the place you're looking at (the open frame's interior, or
-// the map) — cards tucked inside a folded frame included, so Expand all brings back the whole lot. Never
+// What "Collapse/Expand all" (⌘P) act on: the selected sections and everything inside them when sections
+// are selected, else every section and card in the place you're looking at (the open section's interior, or
+// the map) — cards tucked inside a folded section included, so Expand all brings back the whole lot. Never
 // the open node itself: it's the canvas.
 export function foldScope(): MindNode[] {
-  const frames = nodesOf(state.sel).filter(n => n.type === 'frame');
-  const pool = frames.length
-    ? frames.flatMap(f => nodesOf(subtreeIds(f.id)))
+  const sections = nodesOf(state.sel).filter(n => n.type === 'section');
+  const pool = sections.length
+    ? sections.flatMap(f => nodesOf(subtreeIds(f.id)))
     : [...state.nodes.values()].filter(n => !outOfScope(n));
   return pool.filter(canToggleFold);
 }
-// Expand all brings back the WHOLE lot, so every folded frame in reach is read to the bottom first
+// Expand all brings back the WHOLE lot, so every folded section in reach is read to the bottom first
 // (data/lazy.ts) — and the set is taken again after, since what was read holds more to unfold.
 export function expandAll(): void {
   const go = (): void => setCollapsedSelection(foldScope().map(n => n.id), false);

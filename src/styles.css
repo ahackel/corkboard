@@ -70,7 +70,7 @@
 
   /* shared roundness scale — keep every surface on one of these steps */
   --r-card: 3px;   /* board cards (FigJam's near-square stickies), the ghost card, image cards */
-  --r-frame: 12px; /* a frame's box — rounder, like a FigJam section */
+  --r-section: 12px; /* a section's box — rounder, like a FigJam section */
   /* one step INSIDE a card — in-place editors. Anything sitting within a box wants an inner radius,
      not the outer one, or it bulges against the corners it's supposed to sit inside. */
   /* a sticky note at rest sits a hair off the board, on FigJam's soft shadow */
@@ -236,13 +236,13 @@ button:disabled { opacity:.45; cursor:default; }
 #homeBar #homeBtn { position:static; flex:none; background:transparent; box-shadow:none; }
 #homeBar #homeBtn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
 #folderName:empty { display:none; }   /* icon-only until a map is loaded */
-/* ---------- the open-frame path (features/breadcrumbs.ts) ----------
+/* ---------- the open-section path (features/breadcrumbs.ts) ----------
    Segments are like the corner buttons: no border, no fill, hover-highlight only, muted until they're the
-   level you're actually in. The map name is the first of them (#folderName), so going into a frame ADDS
+   level you're actually in. The map name is the first of them (#folderName), so going into a section ADDS
    segments rather than swapping loose text for pills.
    NOT touched by `zoom-far`: that rule drops PER-CARD badges, of which there is one per card on screen.
    This is a single piece of app chrome, and being zoomed out is exactly when you most need to know
-   which frame you're standing in. Nor does it hide under 480px the way the map name may — on a phone
+   which section you're standing in. Nor does it hide under 480px the way the map name may — on a phone
    the map name is expendable, a one-way door is not. */
 #scopeBar { display:none; align-items:center; gap:2px; min-width:0; }
 body.scoped #scopeBar { display:flex; }
@@ -363,11 +363,11 @@ input::placeholder { color:var(--muted); opacity:1; }
 /* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
 #stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
   /* The canvas's own fill — --canvas-bg, written inline by main.ts's syncCanvasBackground from
-     canvasFill, the ONE resolver: the MAP's own colour at the top level, and while a frame is OPEN
-     that frame's fill instead (the canvas IS its interior then), through the same effectiveColor its
+     canvasFill, the ONE resolver: the MAP's own colour at the top level, and while a section is OPEN
+     that section's fill instead (the canvas IS its interior then), through the same effectiveColor its
      box used. On #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child
      of this) so the grid still draws over it. Transitioned so going in and out reads as the canvas
-     taking the frame's colour rather than a hard cut; 500ms is animateReflow's card glide, so the two
+     taking the section's colour rather than a hard cut; 500ms is animateReflow's card glide, so the two
      land together. Unset → transparent, and the theme's background shows through as before. */
   background-color: var(--canvas-bg, transparent); transition: background-color 500ms ease; }
 /* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
@@ -378,7 +378,7 @@ body.scope-instant #stage { transition: none; }
 body.grabbing, body.grabbing *, body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
 /* will-change:transform keeps a pan/pinch compositor-only. It also pins the layer's raster scale,
    which would leave the cards blurry after a zoom — view/camera.ts's refreshRaster releases the
-   hint for two frames once the zoom settles, so this declaration is the RESTING value it comes
+   hint for two sections once the zoom settles, so this declaration is the RESTING value it comes
    back to (camera.ts clears the inline override rather than re-asserting the keyword here). */
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
@@ -404,11 +404,11 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
 /* ---------- THE LAYER LADDER inside #world — the one place it is spelled ----------
    Read it top to bottom before adding a z-index anywhere in this file; every rule below that carries
    one points back here rather than restating the ordering.
-     auto  a frame/stack BOX          — under the cards it holds (and not a stacking context, so the
-                                        parts of a frame that must lift can)
+     auto  a section/stack BOX          — under the cards it holds (and not a stacking context, so the
+                                        parts of a section that must lift can)
      2     every .node                — the cards themselves
      3     a card's own chrome        — tag row, add-note bubble, fold arrow, resize handles
-     4     a frame's TAB              — its title tab, lock badge: still the card
+     4     a section's TAB              — its title tab, lock badge: still the card
      6     EVERY LINE THE APP DRAWS   — free edges (#freeEdges)
      7     the port overlay (#toggles)— the ports a new line starts from, a selected line's end handles,
                                         the drop target's outline: above every card AND line, so a
@@ -487,12 +487,12 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
      fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
   /* Padding as a PAIR OF VARIABLES, not literals: a folded card and a checklist's bar change them, and
      everything that lines up with the content reads the same two. Kinds that own their whole interior
-     (.frame, image cards) set `padding` outright. */
+     (.section, image cards) set `padding` outright. */
   border-radius:var(--r-card); padding:var(--pad-y) var(--pad-x); cursor:default; color:var(--ink, #ffffff);
   user-select:none; -webkit-touch-callout:none; touch-action:none;
   /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
-     the selection ring must appear INSTANTLY, so that a frame's ring (on its box) and its title
-     tab's ring (styles.css .node.frame.sel > .title-row) land in the same frame instead of the box
+     the selection ring must appear INSTANTLY, so that a section's ring (on its box) and its title
+     tab's ring (styles.css .node.section.sel > .title-row) land in the same section instead of the box
      fading in behind an already-ringed tab. `scale` is the lift a card in hand gets (.dragging). */
   transition: opacity .2s ease, scale .12s ease;
 }
@@ -500,7 +500,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
    cards' stale spots and sizes until the glide ends */
 body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
-.frame-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
+.section-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease,
   left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts) */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
@@ -512,7 +512,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    ancestor's no-tags state. */
 .node.no-tags > .top-edge > .tag-row { display:none; }
 /* --h1-size is THE heading size, and every label in the app is one heading: a card's leading `# ` line,
-   a frame's folder tab. One variable so they cannot drift — they were
+   a section's folder tab. One variable so they cannot drift — they were
    three separate declarations that happened to agree, which is not the same thing as being the same, and
    the one time they stopped agreeing it took four rounds to find.
    It matches the BODY size: on a dense board a heading marks its line by WEIGHT (600 against the body's
@@ -557,40 +557,40 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.has-tasks { padding-top:calc(var(--pad-y) + 12px); }
 .node > .task-bar::after { content:''; position:absolute; left:0; right:0; top:5px; height:4px; border-radius:2px;
   background:linear-gradient(#2f9e5b, #2f9e5b) 0 0 / var(--done, 0%) 100% no-repeat, color-mix(in srgb, currentColor 13%, transparent); }
-/* ---------- frame: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
+/* ---------- section: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
 /* The element is the box and nothing else: n.x/n.y/w/h are the box (main.ts), and the label hangs
    outside it, above the top-left corner, the way a FigJam section's name does. So naming, renaming or
-   un-naming a frame never moves the box or the cards in it.
+   un-naming a section never moves the box or the cards in it.
    z-index:auto paints the box BELOW every line and below normal cards (z-index:2) — a positioned `auto`
    element paints in the same step as z-index:0, in tree order. Its children aren't DOM-descendants of
-   this box — they live in the sibling .frame-content wrapper — so lowering the box doesn't hide them.
-   `auto` rather than 0 deliberately: it keeps the frame from becoming a STACKING CONTEXT, which is what
+   this box — they live in the sibling .section-content wrapper — so lowering the box doesn't hide them.
+   `auto` rather than 0 deliberately: it keeps the section from becoming a STACKING CONTEXT, which is what
    lets its own label (below) lift above the edges/cards that would otherwise cover it.
-   The FILL is the frame's colour (--card, from its .c-* class) washed most of the way to white, and the
+   The FILL is the section's colour (--card, from its .c-* class) washed most of the way to white, and the
    2px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
-   colour, read clearly on it. Width 2px = FRAME_BORDER (main.ts). */
-.node.frame { z-index:auto; min-height:0; padding:0; border-radius:var(--r-frame);
+   colour, read clearly on it. Width 2px = SECTION_BORDER (main.ts). */
+.node.section { z-index:auto; min-height:0; padding:0; border-radius:var(--r-section);
   background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
   border:2px solid color-mix(in srgb, var(--card, #fff), #000 10%); }
-/* ---------- a frame's label: a pill above the box ---------- */
-/* FigJam's section name: a borderless pill a step darker than the frame's own colour (a white frame's
+/* ---------- a section's label: a pill above the box ---------- */
+/* FigJam's section name: a borderless pill a step darker than the section's own colour (a white section's
    is light grey), its text the ink that colour demands (--ink) like any card's. It grows UPWARD from 7px
-   above the box (FRAME_LABEL_GAP, view/layout.ts), so a description never moves anything.
-   Direct-child combinators throughout: a frame's own label only, never some descendant card's title.
+   above the box (SECTION_LABEL_GAP, view/layout.ts), so a description never moves anything.
+   Direct-child combinators throughout: a section's own label only, never some descendant card's title.
    An absolutely positioned child's containing block is the PADDING box, inside the 2px border, so the
    left offset adds it back to sit flush with the box's outer edge. */
 /* Zoomed out it is scaled up by --ls (1/zoom below 100%, view/camera.ts applyLabelScale) from its bottom-left
    corner, so the name keeps its screen size; the gap and the width cap are divided out so it still sits 7
    screen px above the box and never runs past the box's right edge. A transform, so nothing re-lays out. */
-.node.frame > .title-row {
+.node.section > .title-row {
   position:absolute; left:-2px; bottom:calc(100% + 7px * var(--ls, 1));
   z-index:4;                    /* over the box and over cards; see the ladder */
   transform:scale(var(--ls, 1)); transform-origin:0 100%;
   max-width:calc((100% + 4px) / var(--ls, 1)); align-items:center;
   padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
-.node.frame > .title-row > .title {
-  /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a frame whose
+.node.section > .title-row > .title {
+  /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a section whose
      text is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1
      rule below, exactly as a card does. */
   margin-bottom:0; padding-right:0; font-size:12px; font-weight:600; line-height:20px;
@@ -598,68 +598,68 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* The markdown a label renders has to become ONE line: every block markdown produces goes inline with its
    margins dropped, and anything after the first block is left off (a label shows a name, not a note — the
    text is still all there in the file and in the editor). */
-.node.frame > .title-row > .title > * { display:inline; margin:0; }
-.node.frame > .title-row > .title > :not(:first-child) { display:none; }
-.node.frame > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
+.node.section > .title-row > .title > * { display:inline; margin:0; }
+.node.section > .title-row > .title > :not(:first-child) { display:none; }
+.node.section > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
 /* the expanded label's NAME is bigger and bolder than a card's, as FigJam's section names are */
-.node.frame > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
-.node.frame > .title-row > .title h1 { font-size:16px; }
-/* …and under the name, the frame's DESCRIPTION (main.ts paintNode, view/layout.ts frameDescription): one
+.node.section > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
+.node.section > .title-row > .title h1 { font-size:16px; }
+/* …and under the name, the section's DESCRIPTION (main.ts paintNode, view/layout.ts sectionDescription): one
    muted, ellipsised line, its markdown flattened inline with a dot between blocks. */
-.node.frame > .title-row > .title > .frame-desc { display:block; font-size:11px; line-height:16px;
+.node.section > .title-row > .title > .section-desc { display:block; font-size:11px; line-height:16px;
   font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.frame-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
-.frame-desc > * + *::before, .frame-desc li + li::before { content:' · '; }
+.section-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
+.section-desc > * + *::before, .section-desc li + li::before { content:' · '; }
 /* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
-.node.frame > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+.node.section > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 /* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
-.node.frame > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
-/* real CSS containment for a frame's contents: a plain overflow:hidden box (main.ts frameContentEl)
-   sized to the frame's INTERIOR (inside its border — see FRAME_BORDER), holding every card (and
-   nested frame) it hosts as flat DOM children — same "everyone flat under one container" model the
-   app already uses for #world, just re-rooted here, so nested frames/grandchildren clip for free
+.node.section > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
+/* real CSS containment for a section's contents: a plain overflow:hidden box (main.ts sectionContentEl)
+   sized to the section's INTERIOR (inside its border — see SECTION_BORDER), holding every card (and
+   nested section) it hosts as flat DOM children — same "everyone flat under one container" model the
+   app already uses for #world, just re-rooted here, so nested sections/grandchildren clip for free
    too. No z-index (so it never creates its own stacking context — descendants still compete for
    z-order directly against everything outside it, e.g. a dragged card still floats above all via
-   .dragging's z-index:9); pointer-events:none so clicking the frame's empty interior still reaches
-   the frame's own element underneath instead of this invisible wrapper. */
+   .dragging's z-index:9); pointer-events:none so clicking the section's empty interior still reaches
+   the section's own element underneath instead of this invisible wrapper. */
 /* the box's radius less its 2px border, so the clip follows the INSIDE of the border */
-.frame-content { position:absolute; overflow:hidden; border-radius:calc(var(--r-frame) - 2px); pointer-events:none; }
-.frame-content > .node { pointer-events:auto; }
-/* a frame's note is drawn on its LABEL (name + description line), never in the box, which holds cards. */
-.node.frame > .body { display:none; }
-/* drop-into-a-frame preview: the box rings in the selection blue, so it reads as "the card lands in
+.section-content { position:absolute; overflow:hidden; border-radius:calc(var(--r-section) - 2px); pointer-events:none; }
+.section-content > .node { pointer-events:auto; }
+/* a section's note is drawn on its LABEL (name + description line), never in the box, which holds cards. */
+.node.section > .body { display:none; }
+/* drop-into-a-section preview: the box rings in the selection blue, so it reads as "the card lands in
    here" (see drag.ts updateDropTarget). */
-.node.frame.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }
-/* A frame with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
+.node.section.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }
+/* A section with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
    that case. The float bar's title button (T) brings one back. */
-.node.frame.no-title > .title-row { display:none; }
-/* ---------- a FOLDED frame: just its pill ---------- */
-/* Folding hides the box: the element IS the pill (no .frame class, so none of the box rules above apply),
+.node.section.no-title > .title-row { display:none; }
+/* ---------- a FOLDED section: just its pill ---------- */
+/* Folding hides the box: the element IS the pill (no .section class, so none of the box rules above apply),
    at the box's top-left corner. It shrink-wraps its one-line label — the ▸, the name, how many notes are
-   inside — so main.ts nodeW measures it, and nodeH reports the FRAME_TAB_H constant: nothing sets a height
+   inside — so main.ts nodeW measures it, and nodeH reports the SECTION_TAB_H constant: nothing sets a height
    here, so 20px of line + 9px padding + 1px border, top and bottom, MUST total 40. */
-.node.frame-folded {
+.node.section-folded {
   border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); min-height:0; padding:9px 12px 9px 8px;
   border-radius:10px; width:max-content; max-width:240px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
-.node.frame-folded > .title-row { align-items:center; min-height:0; margin:0; }
-.node.frame-folded > .title-row > .title { margin:0; padding:0; font-size:14px; font-weight:600; line-height:20px;
+.node.section-folded > .title-row { align-items:center; min-height:0; margin:0; }
+.node.section-folded > .title-row > .title { margin:0; padding:0; font-size:14px; font-weight:600; line-height:20px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.node.frame-folded > .title-row > .title > * { display:inline; margin:0; font-size:inherit; }
-.node.frame-folded > .title-row > .title > :not(:first-child) { display:none; }
-.node.frame-folded > .body { display:none; }
+.node.section-folded > .title-row > .title > * { display:inline; margin:0; font-size:inherit; }
+.node.section-folded > .title-row > .title > :not(:first-child) { display:none; }
+.node.section-folded > .body { display:none; }
 /* how many notes the pill holds — a small round count after the name */
-.node.frame-folded > .title-row > .title > .frame-count { display:inline-block; margin-left:8px; padding:0 6px;
+.node.section-folded > .title-row > .title > .section-count { display:inline-block; margin-left:8px; padding:0 6px;
   min-width:18px; box-sizing:border-box; border-radius:var(--r-full); text-align:center;
   font-size:11px; line-height:18px; font-weight:700; background:color-mix(in srgb, currentColor 14%, transparent); }
-.node.frame-folded > .title-row > .title > .frame-count:first-child { margin-left:0; }
+.node.section-folded > .title-row > .title > .section-count:first-child { margin-left:0; }
 /* …and while the tag filter is on, how many of them match (features/tag-filter.ts) — in the accent,
-   since it's the filter talking, not the frame */
-.node.frame-folded > .title-row > .title > .frame-hits { display:inline-block; margin-left:6px; padding:0 7px;
+   since it's the filter talking, not the section */
+.node.section-folded > .title-row > .title > .section-hits { display:inline-block; margin-left:6px; padding:0 7px;
   border-radius:var(--r-full); font-size:11px; line-height:18px; font-weight:700; background:var(--accent); color:#fff; }
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
-   box (frame / image card) gets all 8: 4 edge bands inset from the corners, plus 4
+   box (section / image card) gets all 8: 4 edge bands inset from the corners, plus 4
    corner squares at the very corners, which is what those insets leave un-contested. A width-only
    kind (a card) gets just fh-e/fh-w, restyled further down.
    `>` throughout, and no per-kind prefix: handles only exist on a node that was given them, and
@@ -667,11 +667,11 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    descendant QUERY would find — see ensureResizeHandles) a nested card's handles as if they were
    this card's own. */
 .node > .fh { position:absolute; z-index:2; touch-action:none; }
-/* …but a FRAME is not a stacking context (z-index:auto above), so a z-index:2 handle would escape
-   into #world's stacking order and start winning presses against cards that overlap the frame's
-   border. `auto` pins the handles back into the frame's own paint level — still above its fill (a
+/* …but a SECTION is not a stacking context (z-index:auto above), so a z-index:2 handle would escape
+   into #world's stacking order and start winning presses against cards that overlap the section's
+   border. `auto` pins the handles back into the section's own paint level — still above its fill (a
    positioned child paints after its parent's background), still below every card, as before. */
-.node.frame > .fh { z-index:auto; }
+.node.section > .fh { z-index:auto; }
 .node > .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
 .node > .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
 .node > .fh-e { right:-5px;  top:12px; bottom:12px; width:11px;  cursor:ew-resize; }
@@ -682,7 +682,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node > .fh-sw { bottom:-8px; left:-8px;   width:16px; height:16px; cursor:nesw-resize; }
 /* FigJam's selection handles: a small white square with a blue rim on each corner of a LONE selection,
    centred on the corner (the 16px zone above is centred there too). Drawn on the zone itself, so the
-   square is exactly what you grab. (The corner zones are `z-index:auto` on a frame, which is not a
+   square is exactly what you grab. (The corner zones are `z-index:auto` on a section, which is not a
    stacking context — the square still paints over its own fill.) */
 .node.solo > .fh-ne::after, .node.solo > .fh-nw::after,
 .node.solo > .fh-se::after, .node.solo > .fh-sw::after {
@@ -694,8 +694,8 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
      constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
    · a taller band (4px inset, not 12px): there are no corner squares here to leave room for, and on
      a one-line card a 12px inset either side would leave an 8px strip nobody can hit. */
-.node:not(.frame):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
-.node:not(.frame):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
+.node:not(.section):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
+.node:not(.section):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
 /* Nothing to grab while the card is being typed into (the zones would sit over the text caret's own
    edges) or while it's read-only/locked. */
 .node:has(.title.editing) > .fh, .node:has(.body.editing) > .fh,
@@ -708,8 +708,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    once an image loads it covers the whole box, so the colour never actually shows through except
    at transparent pixels or before the image resolves. `none` is truly transparent (.c-none above),
    so an image card with alpha shows whatever's behind the canvas, not a solid bg-coloured patch. */
-/* z-index:2 (same as any card) — NOT the frame's 1: an image card inside a frame must sit ABOVE
-   the frame's own element so clicks land on the image, not the frame beneath (which would tie at 1
+/* z-index:2 (same as any card) — NOT the section's 1: an image card inside a section must sit ABOVE
+   the section's own element so clicks land on the image, not the section beneath (which would tie at 1
    and win the hit-test, making the image unselectable — regular cards avoid this by being 2). */
 /* overflow:hidden lives on .body (below), NOT on the node itself — the tag row and the add-note
    float outside the card's own border (see .node .tag-row) and
@@ -790,11 +790,11 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
 /* Board nodes NEVER cast a shadow — at rest, selected or in hand. Selection is the ring alone. */
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
-/* While a frame's label is being renamed, drop the frame's ring so only the label's own outline shows.
+/* While a section's label is being renamed, drop the section's ring so only the label's own outline shows.
    While a CARD is being edited, the card itself is the field (FigJam): no box inside it, the ring goes
    to a DIMMED blue round the card's border, and the corner handles stand down. */
 .node.sel:has(.title.editing) { box-shadow:none; }
-.node.sel.card-editing:not(.frame):not(.image-card) {
+.node.sel.card-editing:not(.section):not(.image-card) {
   box-shadow:0 0 0 3px var(--edit-ring); }
 .node.card-editing > .fh::after { display:none; }
 /* the dragged card (and its subtree) floats above every other card, above every line, and above the
@@ -811,15 +811,15 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    with the edges you actually see; a selected card keeps its ring while it travels. */
 @media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
-   .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
+   .section-content wrapper at the ordinary card z-index:2 (see the .node.section comment above), so
    raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
    dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
    the rest of the canvas, because #dragLayer (below) is itself a z-index:9 stacking context. */
-.node.frame.dragging { z-index:auto; }
+.node.section.dragging { z-index:auto; }
 /* the drag layer: while dragging, main.ts moves the dragged cards in here, above everything. Opaque, as in
    FigJam — a card in hand is held over the board, not a ghost of itself; its shadow says it's lifted. */
 #dragLayer { position:absolute; top:0; left:0; z-index:9; pointer-events:none; }
-#dragLayer > .node, #dragLayer > .frame-content { pointer-events:auto; }
+#dragLayer > .node, #dragLayer > .section-content { pointer-events:auto; }
 /* The DRAG IMAGE for a body-text drag (features/text-drag.ts buildGhost): a card, so it's plain that
    a card is what the drop makes — not the browser's default snapshot of the dragged letters. It's in
    the document only for the tick the browser needs to snapshot it, which is why it's parked off to the
@@ -843,17 +843,17 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    anywhere further down the note), and the two must not drift — a card whose name is styled unlike the
    `# heading` it literally is reads as a separate field, which is exactly what this format stopped
    having. h2–h6 step down from it. `padding-right` is the fold chip's room and belongs to the title
-   alone; a frame's label pins its own font-size/line-height/weight, so nothing here can move it. */
+   alone; a section's label pins its own font-size/line-height/weight, so nothing here can move it. */
 .node .title, .node .body h1 { font-weight:750; font-size:var(--h1-size); }
 .node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
-/* Only a FRAME's label is ever `.editing` now — its tab (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
+/* Only a SECTION's label is ever `.editing` now — its tab (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
    is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
    `none` for the one element that IS text being edited. */
 .node .title.editing { outline:none; cursor:text; white-space:pre-wrap; overflow:visible;
   -webkit-user-select:text; user-select:text; }
 /* …and, as for a card, it's the PILL that shows the edit, not a box inside it: the same dimmed 3px blue
    ring (--edit-ring) round the label — or round the whole element when folded, since that IS the pill. */
-.node.frame > .title-row:has(> .title.editing) { box-shadow:0 0 0 3px var(--edit-ring); }
+.node.section > .title-row:has(> .title.editing) { box-shadow:0 0 0 3px var(--edit-ring); }
 /* A card's TAGS (features/tags.ts tagChipHTML), stuck on its top edge like things pinned to a corkboard:
    an EMOJI is a round white STAMP, a WORD a small paper LABEL, each at its own slight tilt (--tilt, from
    the tag itself). The first tag sits rightmost (row-reverse), so adding one never moves the others. A
@@ -911,7 +911,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #dock #trayBtn[aria-pressed="true"] { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
 /* No `opacity` here. It used to sit at .9, which de-emphasised the note against its title — but `--ink`
    is already the MINIMUM contrast this fill can carry (utils/ink.ts measures it against a 2.5 floor, and
-   a card inside a frame then steps its fill 93% toward that same ink), so trimming another 10% off
+   a card inside a section then steps its fill 93% toward that same ink), so trimming another 10% off
    came straight out of the thinnest margin in the app. */
 .node .body  { font-size:14px; color:inherit; line-height:1.4;
   overflow-wrap:anywhere; overflow:hidden; }
@@ -965,7 +965,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* h2–h6 only. h1 is deliberately NOT in this group: it's the card's own name (the leading `# ` line) and
    takes the shared heading metric instead — see the rule below. It USED to be listed here, and because
    this rule sits after the shared one with the same specificity, it silently won: every card's h1 came
-   out at 12px while a frame's tab rendered the same heading at --h1-size, which is exactly the "frame
+   out at 12px while a section's tab rendered the same heading at --h1-size, which is exactly the "section
    headers are bigger than card headers" that this pair of rules kept producing. */
 .node .body h2,.node .body h3,
 .node .body h4,.node .body h5,.node .body h6 { margin:.3em 0; font-size:14px; font-weight:700; }
@@ -1072,7 +1072,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
 /* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
    not any one card. Every badge that hangs off a card is a few pixels wide there: the lock padlock, the tag stamps and labels. All of
-   them go, which also keeps their layout + paint out of the frame budget at exactly the zoom level that
+   them go, which also keeps their layout + paint out of the section budget at exactly the zoom level that
    has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview. */
 body.zoom-far .node > .lock-badge,
 body.zoom-far .node > .top-edge { display:none; }
@@ -1112,7 +1112,7 @@ body.zoom-far .node > .top-edge { display:none; }
 /* A FOLDED card is a CHIP: one line in a row with its count, shrink-wrapped to its text (up to the width
    it has open — paintNode's inline max-width) with tighter padding, so a board of folded cards packs. */
 .node.collapsed:not(.image-card) { --pad-y:0px; display:flex; align-items:center; gap:8px; width:max-content;
-  height:40px; }   /* the height of a folded frame's pill (FRAME_TAB_H): one row, whichever kind folded */
+  height:40px; }   /* the height of a folded section's pill (SECTION_TAB_H): one row, whichever kind folded */
 .node.collapsed:not(.image-card) > .title-row { flex:none; }
 .node.collapsed:not(.image-card) > .body { flex:0 1 auto; min-width:0; }
 .node.collapsed:not(.image-card) > .body > :first-child { margin-top:0; }
@@ -1240,7 +1240,7 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
    selection whose card is HIDDEN under a fold, or carried over from before a reload so its node/element
    is gone. Both used to park the bar in the top-left corner of the screen (a zero rect clamps to the
    viewport margin; an un-placed bar keeps its static position) with no card under it at all. The follow
-   loop re-checks every frame, so it fades back in as soon as its card is measurable again. */
+   loop re-checks every section, so it fades back in as soon as its card is measurable again. */
 #floatBar.unanchored { opacity:0; pointer-events:none; transition:none; }
 /* shared sizing only — background/colour live on .fb-icon so they never fight .swatch's own
    background on the colour trigger (an ID+type rule here would otherwise beat a plain class).
@@ -1455,8 +1455,8 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
      border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
      touch, so the zone being generous is the only affordance there is. */
-  .node:not(.frame):not(.image-card) > .fh-e { right:-16px; width:16px; }
-  .node:not(.frame):not(.image-card) > .fh-w { left:-16px;  width:16px; }
+  .node:not(.section):not(.image-card) > .fh-e { right:-16px; width:16px; }
+  .node:not(.section):not(.image-card) > .fh-w { left:-16px;  width:16px; }
 }
 
 /* ---- narrow screens: the floating bar docks to the BOTTOM EDGE instead of floating next to

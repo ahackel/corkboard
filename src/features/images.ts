@@ -19,7 +19,7 @@ export function resetImageCache(): void {
   imgUrlCache.clear(); imgInflight.clear();
 }
 // Let go of the pictures only notes that are no longer in memory used (data/lazy.ts releaseFolded):
-// their blob URLs are the bulk of what a folded frame's notes cost to keep around.
+// their blob URLs are the bulk of what a folded section's notes cost to keep around.
 export function forgetImages(paths: Iterable<string>): void {
   for (const p of paths) {
     const url = imgUrlCache.get(p);

@@ -1,8 +1,8 @@
 // ---------- every action: the keyboard shortcuts, and the ⌘P palette's list (features/palette.ts shows it) ----------
-import { createNode, centredAt, newFrameAt, duplicateSelection, createSibling, addCardInside, deleteSelectionKeepChildren, deleteSelection } from './crud.js';
+import { createNode, centredAt, newSectionAt, duplicateSelection, createSibling, addCardInside, deleteSelectionKeepChildren, deleteSelection } from './crud.js';
 import { worldAtOrCentre, zoomAt } from '../view/camera.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
-import { exitScope, openFrame } from '../nav/frames.js';
+import { exitScope, openSection } from '../nav/sections.js';
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { setCollapsedSelection, toggleCollapseSelection, foldScope, expandAll } from './fold.js';
 import { selectedIds, selectAll, selectNode, taggableSelection } from './selection.js';
@@ -16,17 +16,18 @@ import { tidyShortcut, TIDY_ACTIONS } from './tidy.js';
 import { setReadOnly } from './read-only.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
-import { autoSizeSelection, groupSelectionIntoFrame } from './float-bar.js';
+import { autoSizeSelection, groupSelectionIntoSection } from './float-bar.js';
 import { copySelection, cutSelection } from './clipboard.js';
 import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { openImageAt } from '../main.js';
-import { inboxFrame, goToInbox } from './inbox.js';
+import { inboxSection, goToInbox } from './inbox.js';
 import { canEnter } from '../nav/scope.js';
 import { openGridMenu } from '../view/grid.js';
 import { byId } from '../utils/dom.js';
 import { showStart } from '../boot.js';
 import { flushSave } from '../data/save.js';
+import { nodesOf } from '../utils/model.js';
 import { exportZip } from '../data/zip-io.js';
 
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
@@ -35,21 +36,21 @@ function newCardAtPointer(): void {
   createNode(centredAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y)));
 }
 
-// …and an empty FRAME there, named on the spot — the palette's "New frame".
-function newFrameAtPointer(): void {
-  newFrameAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y));
+// …and an empty SECTION there, named on the spot — the palette's "New section".
+function newSectionAtPointer(): void {
+  newSectionAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y));
 }
 
 // Zoom about the middle of the screen — ⌘+/⌘− and the palette's Zoom in/out.
 function zoomStep(factor: number): void {
   zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
 }
-// ---------- arrow keys: go IN and OUT of frames, fold and unfold branches ----------
-//   ↑  open the selected frame (nav/scope.ts)        ↓  leave the open one
+// ---------- arrow keys: go IN and OUT of sections, fold and unfold branches ----------
+//   ↑  open the selected section (nav/scope.ts)        ↓  leave the open one
 //   →  unfold                                        ←  fold
 // The four keys are about DEPTH, in the two senses this map has: which folder you're standing in,
 // and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
-// that, deliberately — opening a frame is now the primary way to navigate a big map, and clicking
+// that, deliberately — opening a section is now the primary way to navigate a big map, and clicking
 // covers moving between siblings.
 // They were never geometric and still aren't — a child now lives INSIDE its parent, so there is no
 // direction from one to the other for an arrow key to mean.
@@ -65,8 +66,8 @@ function navArrow(key: string): void {
   const n = state.selId ? state.nodes.get(state.selId) : null;
   if (key === 'ArrowUp') {
     // ↑ stays single: you can only stand in one place, so it acts on the anchor.
-    if (!n) { setStatus('Select a frame to open it'); return; }
-    openFrame(n);          // reports its own refusal for the kinds that can't be opened
+    if (!n) { setStatus('Select a section to open it'); return; }
+    openSection(n);          // reports its own refusal for the kinds that can't be opened
     return;
   }
   if (!n) {
@@ -78,10 +79,10 @@ function navArrow(key: string): void {
 // keyboard:
 //  · N / ⌘N        → new node at the pointer   (Space: hand-pan; on an image card, open the picture)
 //  · Enter          → a new card below the selected one, in the same place
-//  · Tab            → a new card inside the selected frame
+//  · Tab            → a new card inside the selected section
 //  · F2             → rename the selected node in place (also: double-click its title)
 //  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
-//  · ← → ↑ ↓        → ↑/↓ open/leave a frame, →/← unfold/fold
+//  · ← → ↑ ↓        → ↑/↓ open/leave a section, →/← unfold/fold
 //  · E              → edit the selected node's note/body in place (also: double-click the body)
 //  · #              → tag the selected cards (features/tag-picker.ts), or with none find by tag
 //  · ⌘F or /        → find, by text and #tags (features/search.ts); Esc ends a standing search first
@@ -106,9 +107,14 @@ window.addEventListener('keydown', (e) => {
     if (key === '0')                { e.preventDefault(); focusOrFit(); return; }
     // ⌘F is FIND here, the way it is on every canvas app — not the browser's find-in-page
     if (key === 'f' && !e.shiftKey && !e.altKey) { e.preventDefault(); openSearch(); return; }
+    // ⌘S wraps the selection in a new section (FigJam); with nothing selected it still saves now.
     if (key === 's') {
       e.preventDefault();
-      flushSave();
+      if (state.sel.size && !isTypingInField()) {
+        groupSelectionIntoSection();
+      } else {
+        flushSave();
+      }
       return;
     }
 
@@ -184,8 +190,8 @@ window.addEventListener('keydown', (e) => {
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
   if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: the SMART duplicate (crud.ts copyNext)
-  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected frames and cards to their contents
-  if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
+  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected sections and cards to their contents
+  if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoSection(); return; }   // G: group selection into a section
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
   // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
   if (key === 'c' && mod && state.sel.size){ e.preventDefault(); void copySelection(); return; }
@@ -210,10 +216,10 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
-  // Tab puts a new card INSIDE the selected frame — the one thing that has an inside.
+  // Tab puts a new card INSIDE the selected section — the one thing that has an inside.
   if (key === 'Tab' && state.selId){
     e.preventDefault();
-    if (state.nodes.get(state.selId)?.type === 'frame') {
+    if (state.nodes.get(state.selId)?.type === 'section') {
       addCardInside(state.selId);
     }
     return;
@@ -223,8 +229,8 @@ window.addEventListener('keydown', (e) => {
   if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
   if (del && state.sel.size){
     e.preventDefault();
-    // ⌥Delete keeps the children, promoting them to the deleted card's parent.
-    if (e.altKey) {
+    // ⌘⌫ (FigJam's Ungroup) and ⌥⌫ keep a section's cards, promoting them to its parent.
+    if (e.altKey || (mod && nodesOf(selectedIds()).some(n => n.type === 'section'))) {
       deleteSelectionKeepChildren();
     } else {
       deleteSelection();
@@ -278,22 +284,23 @@ function paletteCommands(): Command[] {
         startBodyEdit(n);
       }
     } },
-    { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
-    { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
-    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || editable(), run: goToInbox },
+    { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'section', run: () => addCardInside(state.selId!) },
+    { label: 'New section', keywords: 'group box section', when: editable, run: newSectionAtPointer },
+    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || editable(), run: goToInbox },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
-    { label: 'Open', shortcut: '↑', keywords: 'enter frame', when: () => canEnter(oneSel()), run: () => openFrame(oneSel()) },
+    { label: 'Open', shortcut: '↑', keywords: 'enter section', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
-    { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
+    { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: hasSel, run: groupSelectionIntoSection },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
-    { label: 'Collapse all', keywords: 'fold every card frame', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
-    { label: 'Expand all', keywords: 'unfold every card frame', when: () => foldScope().some(n => n.collapsed), run: expandAll },
+    { label: 'Collapse all', keywords: 'fold every card section', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
+    { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
+    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && nodesOf(selectedIds()).some(n => n.type === 'section'), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },

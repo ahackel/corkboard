@@ -44,28 +44,28 @@ What it has been used for, and what it must stay good at:
 - **Its own home.** Corkboard keeps its own notes; the Markdown format keeps them safe and readable
   by Obsidian, which doubles as the reading/wiki view. Corkboard does not grow a document view.
 - **The phone is an inbox, not a second app.** Notes saved into the map's `Inbox/` folder from a phone
-  show up in the Inbox frame to sort at the desk ([inbox.md](inbox.md): a map folder in iCloud Drive plus
+  show up in the Inbox section to sort at the desk ([inbox.md](inbox.md): a map folder in iCloud Drive plus
   an iOS Shortcut). It needs a FOLDER map; one in the browser's own storage can't be reached from a phone.
   No mobile canvas work is a priority.
 
 ## Features
 
-**Core — keep, and make each feel great:** cards with Markdown, free placement, frames to group
+**Core — keep, and make each feel great:** cards with Markdown, free placement, sections to group
 cards, colour and tags, simple lines between cards, tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
 becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
-frame to work inside it, and the ⌘P command palette — every action, with its shortcut, in
+section to work inside it, and the ⌘P command palette — every action, with its shortcut, in
 one searchable list.
 
-**Two things, one rule.** There are cards and frames, nothing else:
+**Two things, one rule.** There are cards and sections, nothing else:
 - A **card** is a note. It never holds other cards — structure inside a thought is written into the
   note (lists, `- [ ]` tasks).
-- A **frame** is a FigJam-style section: a pale box with its name (and an optional one-line
+- A **section** is a FigJam-style section: a pale box with its name (and an optional one-line
   description) on a label above it. Delete the text and it's an untitled box; the toolbar's T brings
-  the name back. Cards sit in it wherever you put them, and frames nest. On disk a frame IS a
-  folder of its cards, so Finder and Obsidian see the same grouping; a folded frame isn't even read
+  the name back. Cards sit in it wherever you put them, and sections nest. On disk a section IS a
+  folder of its cards, so Finder and Obsidian see the same grouping; a folded section isn't even read
   until you open it, which keeps a big board quick.
-- **The rule:** a card is in the frame its centre is over — whether you drop the card there, or move,
-  resize or draw the frame over it. A frame grows to hold what you drop into it, so nothing is hidden
+- **The rule:** a card is in the section its centre is over — whether you drop the card there, or move,
+  resize or draw the section over it. A section grows to hold what you drop into it, so nothing is hidden
   past its edge.
 
 **Tags are for finding.** A tag is an Obsidian tag — a word, or an emoji as its shortest form — worn on
@@ -73,7 +73,7 @@ the card's top edge as a stamp or a label. `#` tags the selection, or drag a sti
 a card; drag a tag to another card to move it, off onto the board to remove it. One search (⌘F) finds by
 text and tags together, and a click on any tag puts it in the search.
 
-**To build, in order:** export a selection or board as PNG. (Done: frame names keep their screen size when
+**To build, in order:** export a selection or board as PNG. (Done: section names keep their screen size when
 zoomed out · the phone inbox.)
 
 **Cut — and why:**
@@ -86,15 +86,15 @@ zoomed out · the phone inbox.)
 - *The help map* — the palette lists every action with its shortcut; that is the reference.
 - *Outline view (and its phone editor)* — built for working on a phone; the phone is an inbox now,
   search finds things, and Obsidian is the reading view.
-- *Cards inside cards (the outliner), checklist mode, and frames that auto-arrange their cards* — two
+- *Cards inside cards (the outliner), checklist mode, and sections that auto-arrange their cards* — two
   kinds of container with different rules, and a drop could nest a card by accident. Old maps open
-  with those cards turned into frames.
+  with those cards turned into sections.
 
 ## Known friction to fix (from daily use)
 
 - **Layout fights me**: card sizes and overlaps need constant fixing. (Fixed so far: lines route as
   tidy elbows from card to card; dropping never nests a card by accident; guides line cards up while dragging.)
-- **Boards get messy** over weeks. First try a routine with existing features (a "This week" frame;
-  on Friday, write a summary card, fold the week's frame to its pill — the arrow on its
-  label, or X — and move on to next week's frame) before building anything for it. A dedicated daily-log
+- **Boards get messy** over weeks. First try a routine with existing features (a "This week" section;
+  on Friday, write a summary card, fold the week's section to its pill — the arrow on its
+  label, or X — and move on to next week's section) before building anything for it. A dedicated daily-log
   design (a checklist card per day, a done counter, a Today command) is sketched and parked.

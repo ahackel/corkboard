@@ -4,7 +4,7 @@
 // dark backdrop; closes on the × button, Escape, or a click on the backdrop outside the image.
 //
 // It also PAGES: ‹ / › (and ←/→) step through every image in the cards that share the opened card's
-// parent — the set you'd think of as "these ones", a frame's contents or a branch's siblings. Built
+// parent — the set you'd think of as "these ones", a section's contents or a branch's siblings. Built
 // from the NOTES rather than the rendered DOM, so a folded sibling's images are in the run too, and
 // wrapping at both ends, since a handful of pictures read as a loop rather than a strip with ends.
 import { state } from '../core/state.js';

@@ -2,17 +2,17 @@
 // (the handle-based ones list names cheaply and read only what this picks; the IndexedDB one has every
 // key in hand anyway) and pinned by tests/tree.test.ts.
 //
-// A frame is a folder (utils/filenames.ts FRAME_NOTE). A FOLDED frame's contents are not read at all:
+// A section is a folder (utils/filenames.ts SECTION_NOTE). A FOLDED section's contents are not read at all:
 // `fold` is asked once per folder, outermost first, and a folder it answers yes for is LAZY — only its
-// own frame note is read, and the notes under it are merely COUNTED, for the pill. Nothing below a lazy
+// own section note is read, and the notes under it are merely COUNTED, for the pill. Nothing below a lazy
 // folder is asked about, since nothing below it is read.
-import { FRAME_NOTE } from '../utils/filenames.js';
+import { SECTION_NOTE } from '../utils/filenames.js';
 
 export interface LazyFolder { count: number; hasIndex: boolean; }
 export interface TreePlan {
   read: string[];                      // the .md paths to read, in listing order
   lazy: Map<string, LazyFolder>;       // folder ('A/B/') -> its unread notes
-  foreign: Set<string>;                // lowercased folders holding no notes at all: not frames
+  foreign: Set<string>;                // lowercased folders holding no notes at all: not sections
 }
 export type FoldTest = (dir: string, hasIndex: boolean) => boolean;
 
@@ -20,7 +20,7 @@ export type FoldTest = (dir: string, hasIndex: boolean) => boolean;
 export function planTree(paths: string[], under: string, fold: FoldTest): TreePlan {
   const md = paths.filter(p => /\.md$/i.test(p));
   const mdCount = new Map<string, number>();   // folder -> .md files anywhere under it
-  const index = new Map<string, string>();     // folder -> the exact path of its frame note
+  const index = new Map<string, string>();     // folder -> the exact path of its section note
   const dirs = new Set<string>();
   const dirsOf = (p: string): string[] => {
     const out: string[] = [];
@@ -39,7 +39,7 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
       mdCount.set(d, (mdCount.get(d) ?? 0) + 1);
     }
     const slash = p.lastIndexOf('/');
-    if (slash >= under.length && p.slice(slash + 1).toLowerCase() === FRAME_NOTE) {
+    if (slash >= under.length && p.slice(slash + 1).toLowerCase() === SECTION_NOTE) {
       index.set(p.slice(0, slash + 1), p);
     }
   }
@@ -59,7 +59,7 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
   const lazyDirs = [...lazy.keys()];
   const read = md.filter(p => {
     const l = lazyDirs.find(d => p.startsWith(d));
-    return !l || index.get(l) === p;          // a lazy folder still gives up its own frame note
+    return !l || index.get(l) === p;          // a lazy folder still gives up its own section note
   });
   return { read, lazy, foreign };
 }

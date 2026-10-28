@@ -40,7 +40,7 @@ function retargetWikilinks(renames: Map<string, string>): string[] {
   }
   return touched;
 }
-// Where every node's file SHOULD be, settled top-down: a node's folder is its parent frame's folder, so
+// Where every node's file SHOULD be, settled top-down: a node's folder is its parent section's folder, so
 // a parent's final path has to be known before its children's (utils/filenames.ts desiredFileFor).
 // Pure — nothing is renamed here; saveAll adopts the result.
 function planPaths(): Map<string, string> {
@@ -67,8 +67,8 @@ async function saveAll(): Promise<void> {
     return;        // read-only mode never writes to disk
   }
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
-  // Phase 0 — a FOLDED frame whose notes were never read can't move them without reading them: one
-  // that is about to move (renamed, retyped, dropped into another frame, or inside one that is) reads
+  // Phase 0 — a FOLDED section whose notes were never read can't move them without reading them: one
+  // that is about to move (renamed, retyped, dropped into another section, or inside one that is) reads
   // its whole folder first, and one that somehow holds a note in memory reads its own level, so the
   // rest of the save sees a complete tree under every path it changes (data/lazy.ts).
   for (let guard = 0; guard < 16; guard++) {
@@ -101,8 +101,8 @@ async function saveAll(): Promise<void> {
     }
   }
 
-  // Phase 1 — settle every note's final path IN MEMORY first (planPaths). A frame is a folder, so a
-  // renamed or moved frame moves every note inside it: each one is a rename of its own here.
+  // Phase 1 — settle every note's final path IN MEMORY first (planPaths). A section is a folder, so a
+  // renamed or moved section moves every note inside it: each one is a rename of its own here.
   const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
   let pathsMoved = false;   // board.json is keyed by path, so a new or renamed note needs it rewritten
   const plan = planPaths();
@@ -143,7 +143,7 @@ async function saveAll(): Promise<void> {
     if (!held.has(old)) { await store.remove(old); emptied.add(dirOf(old)); }
     pendingRemovals.delete(old);
   }
-  // …and the FOLDERS they leave empty: a frame renamed, moved or deleted leaves its old folder behind.
+  // …and the FOLDERS they leave empty: a section renamed, moved or deleted leaves its old folder behind.
   // Deepest first, and up the chain, since emptying `A/B/` can empty `A/` too. removeDir only ever
   // removes an EMPTY folder, so one still holding anything — a live note, another app's file — stays.
   const dirs = prunableDirs(emptied, held);
@@ -162,7 +162,7 @@ async function saveAll(): Promise<void> {
   }
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
-  releaseFolded();   // a folded frame whose notes are all safely on disk can let go of them (data/lazy.ts)
+  releaseFolded();   // a folded section whose notes are all safely on disk can let go of them (data/lazy.ts)
 }
 
 // Old paths of renamed notes, still on disk until phase 3 removes them. Module-level so a failed save

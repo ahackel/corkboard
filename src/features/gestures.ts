@@ -12,7 +12,7 @@ import { createNode, centredAt } from './crud.js';
 import { endInPlaceEdit } from './inline-edit.js';
 import { clamp } from '../utils/num.js';
 import { nodeW, nodeH } from '../view/geometry.js';
-import { exitScope } from '../nav/frames.js';
+import { exitScope } from '../nav/sections.js';
 import { selectNode, setSelectionSet } from './selection.js';
 
 const marqueeEl = document.createElement('div');
@@ -66,13 +66,13 @@ stage.addEventListener('pointerdown', (e) => {
   marqueeEl.style.display = 'block';
 });
 // Double-click the empty canvas — one gesture, read against what the canvas currently IS:
-//   · inside an open frame, the canvas is that frame's interior, so double-clicking it LEAVES —
-//     the exact inverse of the double-click on a frame's interior that took you in (activateNode).
+//   · inside an open section, the canvas is that section's interior, so double-clicking it LEAVES —
+//     the exact inverse of the double-click on a section's interior that took you in (activateNode).
 //     Going in and coming out being the same gesture is what makes the whole thing feel like a folder.
 //   · at the top level there's nowhere to leave to, so it keeps its original meaning: a NEW CARD
 //     there, straight into its rename.
-// Making a card INSIDE an open frame therefore moved to Space, Tab and the canvas right-click, all of
-// which land it in that frame (detachParentId, nav/scope.ts).
+// Making a card INSIDE an open section therefore moved to Space, Tab and the canvas right-click, all of
+// which land it in that section (detachParentId, nav/scope.ts).
 // Mouse/trackpad only: a stray double-TAP while panning would strew cards across the map, and touch
 // already has the ⋯ canvas menu (features/context-menu.ts) for this.
 stage.addEventListener('dblclick', (e) => {
@@ -147,7 +147,7 @@ window.addEventListener('pointerup', (e) => {
   }
 });
 // Tear down the active marquee. A no-move, non-additive gesture resolves to a plain click: on empty
-// canvas that DESELECTS; started from an unselected frame (clickNode set) it SELECTS that frame.
+// canvas that DESELECTS; started from an unselected section (clickNode set) it SELECTS that section.
 function endMarquee(): void {
   const m = ui.marquee;
   if (!m) {
@@ -162,9 +162,9 @@ function endMarquee(): void {
 window.addEventListener('pointercancel', (e) => {
   endGesturePointer(e);
 });
-// Start a rubber-band select from a press that landed on `nodeId`'s element (an UNSELECTED frame),
+// Start a rubber-band select from a press that landed on `nodeId`'s element (an UNSELECTED section),
 // rather than on the empty canvas. Behaves exactly like a canvas marquee — the shared window
-// move/up handlers drive and finish it — except a no-move click selects the frame (see endMarquee).
+// move/up handlers drive and finish it — except a no-move click selects the section (see endMarquee).
 // Registering the touch pointer in gPointers lets a second finger still upgrade to pinch-zoom.
 export function beginMarqueeFromNode(e: PointerEvent, nodeId: string): void {
   cancelViewAnim();
@@ -199,7 +199,7 @@ function selectWithinMarquee(cx: number, cy: number): void {
     if (isHidden(n)) {
       continue;
     }
-    // A marquee started from inside a frame (clickNode) never selects that frame itself — dragging
+    // A marquee started from inside a section (clickNode) never selects that section itself — dragging
     // within its box would otherwise always enclose it. Only its CONTENTS get rubber-banded.
     if (n.id === marquee.clickNode) {
       continue;

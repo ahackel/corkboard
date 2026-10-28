@@ -7,7 +7,7 @@
 // settings.json), which are still READ so an older vault opens unchanged — but never written again.
 //
 // The split rule, in one line: frontmatter describes the NOTE, board.json describes the BOARD's
-// arrangement of it. Membership is neither: a frame is a FOLDER (docs/architecture.md), so which frame
+// arrangement of it. Membership is neither: a section is a FOLDER (docs/architecture.md), so which section
 // holds a note is where its file sits — which is what lets a folder stand on its own if this file is lost.
 // ============================================================
 import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
@@ -63,7 +63,7 @@ interface StoredEdge { id: string; from: string; to: string;
                     arrows?: 'none' | 'to' | 'both';   // legacy: ONE direction axis, read never written
                     label?: string }
 function serializeEdge(e: BoardEdge): StoredEdge | null {
-  // An end held by a PATH is a note inside a folded frame nobody has read (resolveEdges): the frame
+  // An end held by a PATH is a note inside a folded section nobody has read (resolveEdges): the section
   // stands in for it on the canvas, but the path is still where the line goes.
   const from = e.fromPath ?? state.nodes.get(e.from)?.file, to = e.toPath ?? state.nodes.get(e.to)?.file;
   if (!from || !to) {
@@ -108,7 +108,7 @@ let geom = new Map<string, StoredGeom>();
 export function boardGeom(path: string | null): StoredGeom | undefined {
   return path ? geom.get(path) : undefined;
 }
-// The folders of the folded frames whose notes are still unread (MindNode.lazy).
+// The folders of the folded sections whose notes are still unread (MindNode.lazy).
 function lazyFolders(): string[] {
   return [...state.nodes.values()].filter(n => n.lazy != null && n.file).map(n => dirOf(n.file!));
 }
@@ -129,7 +129,7 @@ function collectGeom(): Record<string, StoredGeom> {
       continue;                       // never saved yet: it has no key to be stored under
     }
     const g: StoredGeom = { x: Math.round(n.rx), y: Math.round(n.ry) };
-    // The AUTHORED size — every kind can carry both axes. A frame's and an IMAGE card's h is its box;
+    // The AUTHORED size — every kind can carry both axes. A section's and an IMAGE card's h is its box;
     // a plain card's is a MINIMUM its text can still grow past (main.ts paintNode).
     if (n.w != null) {
       g.w = Math.round(n.w);
@@ -318,8 +318,8 @@ export async function loadBoard(): Promise<void> {
 // Turn each edge's stored PATHS into live node ids. Called by loadFromDir once every note is in
 // state.nodes and the path index exists. An endpoint that doesn't resolve — a note deleted in
 // Finder, a renamed file — drops the whole edge silently: a board degrades, it never corrupts.
-// …EXCEPT an end inside a folded frame whose notes weren't read (data/lazy.ts): `standIn` names that
-// frame, which holds the end on the canvas the way a folded pill always has, and the path is KEPT —
+// …EXCEPT an end inside a folded section whose notes weren't read (data/lazy.ts): `standIn` names that
+// section, which holds the end on the canvas the way a folded pill always has, and the path is KEPT —
 // it is what serializeEdge writes back, and what resolves once the folder is read (unparkEdges).
 export function resolveEdges(byPath: Map<string | null, string>, standIn: (path: string) => string | null = () => null): void {
   state.edges = state.edges.filter(e => {
@@ -365,7 +365,7 @@ export function unparkEdges(byPath: Map<string | null, string>): void {
 // Nodes are being let go of: every end on one of them goes back to its PATH, held by `standIn`.
 export function parkEdges(gone: Map<string, string>, standIn: string): void {
   for (const e of state.edges) {
-    // An end already held by a path (it was on a folded frame inside this one) keeps that path.
+    // An end already held by a path (it was on a folded section inside this one) keeps that path.
     const f = gone.get(e.from); if (f) { e.fromPath ??= f; e.from = standIn; }
     const t = gone.get(e.to); if (t) { e.toPath ??= t; e.to = standIn; }
   }

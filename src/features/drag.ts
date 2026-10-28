@@ -1,16 +1,16 @@
 // ---------- node dragging & reparent-by-drop ----------
 // Per-node pointer gestures: drag moves the whole subtree (or the multi-selection, as one group);
 // Shift clones while dragging, ⌥-dropping onto a card merges into it, and on release every true root
-// of the drag (see selRoots/trueRoots) belongs to the frame its centre is in — or the top level. That
-// is the whole drop rule (view/layout.ts frameAt), so a multi-selected group moves in and out of
-// frames together in one gesture. Edge
+// of the drag (see selRoots/trueRoots) belongs to the section its centre is in — or the top level. That
+// is the whole drop rule (view/layout.ts sectionAt), so a multi-selected group moves in and out of
+// sections together in one gesture. Edge
 // auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
-import { isFrame, collectsCards, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
+import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
 import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
@@ -23,7 +23,7 @@ import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
 import { guidePull, hideGuides } from './guides.js';
-import { growFramesToHold } from './float-bar.js';
+import { growSectionsToHold } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { selectNode, setSelectionSet, toggleSel } from './selection.js';
@@ -45,7 +45,7 @@ const outsideWindow = (x: number, y: number): boolean =>
 
 // The drag delta with the GRID applied (utils/num.ts snapTo): the ANCHOR card's own position is what
 // lands on the grid, and the correction it needs is applied to every card in the drag — so a
-// multi-selection keeps its internal spacing exactly and moves as one piece. A card inside a frame
+// multi-selection keeps its internal spacing exactly and moves as one piece. A card inside a section
 // snaps relative to that box's own corner, because that is the coordinate space its position
 // lives in. Live, every move: the card is always ON a grid position and steps to the next as the
 // pointer crosses the halfway line, so what you are looking at is always what a release would keep.
@@ -60,7 +60,7 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
     return { x: dx, y: dy };
   }
   const fp = parentOf(act);
-  const inBox = !!(fp && isFrame(fp));
+  const inBox = !!(fp && isSection(fp));
   const ax = inBox ? fp!.x : 0, ay = inBox ? fp!.y : 0;
   const g = gridSnap();
   const grid = { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
@@ -93,21 +93,21 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
     if (m.el) {
       const orig = drag.origins.get(id);
       if (orig) {
-        // A node hosted inside a frame that's ALSO part of this drag is already carried visually
-        // by that frame's frameContentEl transform below (its left/top sit inside that container,
+        // A node hosted inside a section that's ALSO part of this drag is already carried visually
+        // by that section's sectionContentEl transform below (its left/top sit inside that container,
         // which itself is about to move) — giving it its own transform too would add the same
         // shift twice. Only "roots" of the dragged subtree(s) — no host, or a host that isn't
         // moving in this same gesture — need an explicit transform of their own.
-        const carried = m.hostFrameId != null && drag.targets.has(m.hostFrameId);
+        const carried = m.hostSectionId != null && drag.targets.has(m.hostSectionId);
         const t = carried ? '' : `translate(${m.x-orig.x}px,${m.y-orig.y}px)`;
         m.el.style.transform = t;
-        // An expanded frame's overflow:hidden content wrapper (frameContentEl) is a second,
+        // An expanded section's overflow:hidden content wrapper (sectionContentEl) is a second,
         // separately-positioned element (left/top only re-synced by a full paintNode) — mirror
-        // the same compositor transform onto it (only when this frame itself is a root — a
-        // carried frame's wrapper is already moving with its own host's transform) so the clip
-        // window slides with the frame instead of staying stranded at its pre-drag position.
-        if (m.frameContentEl) {
-          m.frameContentEl.style.transform = t;
+        // the same compositor transform onto it (only when this section itself is a root — a
+        // carried section's wrapper is already moving with its own host's transform) so the clip
+        // window slides with the section instead of staying stranded at its pre-drag position.
+        if (m.sectionContentEl) {
+          m.sectionContentEl.style.transform = t;
         }
       }
     }
@@ -146,7 +146,7 @@ function autoPanStep(): void {
   // the cursor slips BEHIND the outline drawer to the true window edge.
   const r = stage.getBoundingClientRect();
   const right = r.right;
-  const M = 56, MAX = 16;   // edge band (px) and max pan speed (px/frame)
+  const M = 56, MAX = 16;   // edge band (px) and max pan speed (px/section)
   let vx = 0, vy = 0;
   const x = drag.cx, y = drag.cy;
   // Pan only while the pointer is still INSIDE the browser window: once it crosses out
@@ -173,18 +173,18 @@ function autoPanStep(): void {
     for (const s of drag.targets.values()){ s.x += wdx; s.y += wdy; }
     applyDragTransform(drag, (drag.cx - drag.sx) / state.view.k, (drag.cy - drag.sy) / state.view.k);
     updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
-    paintFreeEdges();   // redraw edges every auto-pan frame so they follow the moving nodes
+    paintFreeEdges();   // redraw edges every auto-pan section so they follow the moving nodes
   }
   ui.autoPanRAF = requestAnimationFrame(autoPanStep);
 }
-// The INNERMOST (deepest-nested) expanded frame whose box contains the given screen point, or null.
-// Nested frames overlap and stack by DOM order, so a press can't rely on the browser picking the
-// innermost — this resolves it geometrically. Collapsed frames (rendered as cards) don't count.
-function innermostFrameAt(clientX: number, clientY: number): MindNode | null {
+// The INNERMOST (deepest-nested) expanded section whose box contains the given screen point, or null.
+// Nested sections overlap and stack by DOM order, so a press can't rely on the browser picking the
+// innermost — this resolves it geometrically. Collapsed sections (rendered as cards) don't count.
+function innermostSectionAt(clientX: number, clientY: number): MindNode | null {
   const wx = (clientX - state.view.x) / state.view.k, wy = (clientY - state.view.y) / state.view.k;
   let best: MindNode | null = null, bestDepth = -1;
   for (const m of state.nodes.values()) {
-    if (!isFrame(m) || isHidden(m)) {
+    if (!isSection(m) || isHidden(m)) {
       continue;
     }
     if (wx < m.x || wx > m.x + nodeW(m) || wy < m.y || wy > m.y + nodeH(m)) {
@@ -253,16 +253,16 @@ export function bindNodeDrag(n: MindNode): void {
     // itself (checked further below) remains reachable this way.
     if (hasLockedAncestor(n)) { e.stopPropagation(); return; }
     const tgt = e.target as HTMLElement;
-    // A frame's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
-    // A press there is a press on the frame ITSELF: it must take the ordinary card path below —
-    // click selects, a double-click renames, a drag moves the frame — so both frame-specific
-    // intercepts further down exempt it. `.node` scoping keeps it to this frame's OWN tab.
+    // A section's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
+    // A press there is a press on the section ITSELF: it must take the ordinary card path below —
+    // click selects, a double-click renames, a drag moves the section — so both section-specific
+    // intercepts further down exempt it. `.node` scoping keeps it to this section's OWN tab.
     const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
     if (tgt.closest('input.taskbox') && isLockedEffective(n)) { e.stopPropagation(); e.preventDefault(); return; }  // locked: no task toggling
     if (tgt.closest('a.lk, input.taskbox, .img-zoom')) { e.stopPropagation(); return; }  // let links/checkboxes/zoom click, not drag
     // Alt-press over an inline body image (on a plain card) rips THAT image out — extraction rides
     // its own preview (features/image-extract.ts), not the card drag. Image-only cards drag whole.
-    if (e.altKey && e.button === 0 && !state.readOnly && !isImageCard(n) && !isFrame(n) && !isLockedEffective(n)) {
+    if (e.altKey && e.button === 0 && !state.readOnly && !isImageCard(n) && !isSection(n) && !isLockedEffective(n)) {
       const img = bodyImageAt(el, e.clientX, e.clientY);
       if (img && img.dataset.path) {
         e.stopPropagation();
@@ -271,15 +271,15 @@ export function bindNodeDrag(n: MindNode): void {
         return;
       }
     }
-    // Nested frames overlap and stack by DOM order (not nesting), so the frame that received this
-    // press may be an OUTER one. Prefer the INNERMOST frame under the pointer: hand the gesture off
+    // Nested sections overlap and stack by DOM order (not nesting), so the section that received this
+    // press may be an OUTER one. Prefer the INNERMOST section under the pointer: hand the gesture off
     // to it by re-firing the press on its element (its own handler then finds itself innermost and
-    // proceeds). Only when the pressed node is an (expanded) frame — a card on top, or a collapsed
-    // frame (which is just a card), is always taken as-is — and so is a press on this frame's own
-    // title tab, which hangs outside its box (so innermostFrameAt, a pure box hit-test, would
-    // otherwise hand every nested frame's tab press to the parent frame the tab overlaps).
-    if (isFrame(n) && !onOwnTitle) {
-      const inner = innermostFrameAt(e.clientX, e.clientY);
+    // proceeds). Only when the pressed node is an (expanded) section — a card on top, or a collapsed
+    // section (which is just a card), is always taken as-is — and so is a press on this section's own
+    // title tab, which hangs outside its box (so innermostSectionAt, a pure box hit-test, would
+    // otherwise hand every nested section's tab press to the parent section the tab overlaps).
+    if (isSection(n) && !onOwnTitle) {
+      const inner = innermostSectionAt(e.clientX, e.clientY);
       if (inner && inner !== n && inner.el) {
         e.stopPropagation();
         inner.el.dispatchEvent(new PointerEvent('pointerdown', {
@@ -298,13 +298,13 @@ export function bindNodeDrag(n: MindNode): void {
     }
     // while this node is being edited, let clicks place the caret — don't start a drag
     if (inPlaceEditOn(n.id)) { e.stopPropagation(); return; }
-    // A drag inside an UNSELECTED (expanded) frame rubber-band-selects the cards INSIDE it rather
-    // than moving the frame — you move the frame from its interior only once it's selected. A
-    // no-move click selects the frame (endMarquee). ⌘/Ctrl-click still falls through to the normal
-    // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the frame's
+    // A drag inside an UNSELECTED (expanded) section rubber-band-selects the cards INSIDE it rather
+    // than moving the section — you move the section from its interior only once it's selected. A
+    // no-move click selects the section (endMarquee). ⌘/Ctrl-click still falls through to the normal
+    // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the section's
     // own handle, so pressing it always takes the card path — a press there selects and drags the
-    // frame itself, the way a card's title does, rather than rubber-banding its contents.
-    if (isFrame(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
+    // section itself, the way a card's title does, rather than rubber-banding its contents.
+    if (isSection(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
       e.stopPropagation();
       beginMarqueeFromNode(e, n.id);
       return;
@@ -342,7 +342,7 @@ export function bindNodeDrag(n: MindNode): void {
     // Continue/commit this drag on `window`, not `el` — pointer capture (above) is still requested
     // best-effort so the dragged card's own hover/other handlers stay quiet, but capture can be
     // lost across a mid-drag re-render (paintAll runs while dragging). A lost capture hands pointerup to whatever's actually under the cursor instead —
-    // e.g. the frame it's dropped in — whose own pointerdown-scoped listener has nothing to do with
+    // e.g. the section it's dropped in — whose own pointerdown-scoped listener has nothing to do with
     // THIS gesture, so the event used to vanish, leaving the (Shift-cloned or moved) card invisible. `pointercancel` (tab switch, interrupted
     // touch) commits in place too, for the same reliability reason. Listeners are added/removed per
     // gesture (not left permanently on window) so they can't double-fire alongside the ghost-card
@@ -386,9 +386,9 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   const dx = (e.clientX - drag.sx)/state.view.k, dy = (e.clientY - drag.sy)/state.view.k;
   const wasMoved = drag.moved;
   if (Math.abs(dx)+Math.abs(dy) > (drag.touch ? 8 : 2)){ drag.moved = true; document.body.classList.add('grabbing'); }
-  // The instant a drag begins, repaint the dragged cards so any frame child lifts OUT of its
-  // frame's overflow:hidden wrapper into #world (see paintNode) — otherwise it stays clipped to
-  // the frame bounds until the next drop-target change, masking it while it's dragged out.
+  // The instant a drag begins, repaint the dragged cards so any section child lifts OUT of its
+  // section's overflow:hidden wrapper into #world (see paintNode) — otherwise it stays clipped to
+  // the section bounds until the next drop-target change, masking it while it's dragged out.
   if (drag.moved && !wasMoved) {
     for (const id of drag.targets.keys()) {
       const m = state.nodes.get(id);
@@ -407,7 +407,7 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   }
   applyDragClone();   // Shift held -> leave a clone & drag the copy; Shift released -> undo it
   // Update world-space positions immediately (cheap) — visual render is deferred to rAF so that
-  // multiple pointermove events arriving within one display frame collapse into a single paint.
+  // multiple pointermove events arriving within one display section collapse into a single paint.
   // (applyDragClone may have swapped drag.targets/origins for the clones — re-read via ui.drag.)
   applyDragTransform(ui.drag!, dx, dy);
   if (!ui.dragRAF) {
@@ -427,8 +427,8 @@ function dragPointerUp(): void {
       for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
         const m2 = state.nodes.get(id);
         if (m2?.el){ m2.el.style.transform = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging'); }
-        if (m2?.frameContentEl) {
-          m2.frameContentEl.style.transform = '';
+        if (m2?.sectionContentEl) {
+          m2.sectionContentEl.style.transform = '';
         }
       }
       const act = drag.active;
@@ -455,8 +455,8 @@ function dragPointerUp(): void {
         // activateNode) — the slow-second-click rename this used to schedule was a 260ms timer racing
         // that double-click, and every fresh interaction had to remember to cancel it.
       } else {
-        // ⌥ over a card merges into it; otherwise every dragged root belongs to the frame its
-        // centre is in, else the top level (frameAt — the same test the preview ran).
+        // ⌥ over a card merges into it; otherwise every dragged root belongs to the section its
+        // centre is in, else the top level (sectionAt — the same test the preview ran).
         const { cloned, targets, clones, selRoots, cardMerge } = drag;
         clearDropTarget();
         // Null drag NOW so every paint in the commit phase sees no active drag and draws all edges.
@@ -478,7 +478,7 @@ function dragPointerUp(): void {
             return;
           }
         }
-        // THE drop rule. Per root, from its own centre, so a group straddling a frame's edge splits
+        // THE drop rule. Per root, from its own centre, so a group straddling a section's edge splits
         // the way it looks. Positions stay exactly where they were dropped — snappedDelta already put
         // them on the grid (or on a guide) on every move, so a release changes nothing about WHERE.
         const moving = new Set(targets.keys());
@@ -487,18 +487,18 @@ function dragPointerUp(): void {
           if (!r) {
             continue;
           }
-          const f = frameAt(r.x + nodeW(r) / 2, r.y + nodeH(r) / 2, moving);
+          const f = sectionAt(r.x + nodeW(r) / 2, r.y + nodeH(r) / 2, moving);
           const np = f?.id ?? detachParentId();
           if (np !== r.parent) {
             reparentOnly(rootId, np);
           }
         }
-        // Paint first so freshly-created clone cards have real DOM heights, then let each frame that
+        // Paint first so freshly-created clone cards have real DOM heights, then let each section that
         // now holds a dropped card grow to show all of it (it clips, so part of it would be lost).
-        // A dropped FRAME also collects whatever it now covers (settleFrames).
+        // A dropped SECTION also collects whatever it now covers (settleSections).
         remeasure();
-        const settled = settleFrames(selRoots.filter(id => state.nodes.get(id)?.type === 'frame'));
-        if (growFramesToHold([...selRoots, ...settled]) || settled.length) {
+        const settled = settleSections(selRoots.filter(id => state.nodes.get(id)?.type === 'section'));
+        if (growSectionsToHold([...selRoots, ...settled]) || settled.length) {
           relayout();
         }
         // select the new clone(s) you just dragged out
@@ -551,8 +551,8 @@ export function abortDrag(): void {
   for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
     const m = state.nodes.get(id);
     if (m?.el){ m.el.style.transform = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }
-    if (m?.frameContentEl) {
-      m.frameContentEl.style.transform = '';
+    if (m?.sectionContentEl) {
+      m.sectionContentEl.style.transform = '';
     }
   }
   ui.drag = null;
@@ -591,7 +591,7 @@ function applyDragClone(): void {
       const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = false; }
       // revert their compositor transforms — `drag.active` is about to switch to the clone
       if (m?.el) { m.el.style.transform = ''; }
-      if (m?.frameContentEl) { m.frameContentEl.style.transform = ''; }
+      if (m?.sectionContentEl) { m.sectionContentEl.style.transform = ''; }
     }
     // clone each dragged ROOT (just the card, not its subtree) at its own start spot
     const rootIds = drag.selRoots;
@@ -605,7 +605,7 @@ function applyDragClone(): void {
   } else if (!drag.shift && drag.cloned){
     for (const clone of (drag.clones || [])){
       if (clone.el){ clone.el.style.transform = ''; clone.el.style.willChange = ''; }
-      if (clone.frameContentEl){ clone.frameContentEl.style.transform = ''; }
+      if (clone.sectionContentEl){ clone.sectionContentEl.style.transform = ''; }
       state.nodes.delete(clone.id); clone.el?.remove();   // drop the clones we made
     }
     drag.clones = null;
@@ -666,8 +666,8 @@ window.addEventListener('keyup',   (e) => {
 
 // ---------- the drop preview ----------
 // What a release right now would do, shown while it's still a choice: with ⌥ held over a plain card,
-// a MERGE into it (a dashed outline on that card); otherwise the frame the dragged card would land in
-// lights up — only when that's a change, i.e. the card is about to go INTO a frame it isn't in yet.
+// a MERGE into it (a dashed outline on that card); otherwise the section the dragged card would land in
+// lights up — only when that's a change, i.e. the card is about to go INTO a section it isn't in yet.
 // `drag.dropTarget` records the resolved new parent (null = the top level) for effectiveColor, so an
 // inheriting card previews the colour it's about to take.
 function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: number }): void {
@@ -681,7 +681,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const mergeDrag = drag.alt && drag.selRoots.length > 0
     && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
   if (mergeDrag) {
-    // the CARD under the pointer (frames never take a merge — canMerge), first hit wins
+    // the CARD under the pointer (sections never take a merge — canMerge), first hit wins
     const wx = (e.clientX - state.view.x) / state.view.k, wy = (e.clientY - state.view.y) / state.view.k;
     for (const [id, m] of state.nodes) {
       if (sub.has(id) || isHidden(m) || m.type !== 'card') {
@@ -695,7 +695,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       }
     }
   }
-  const f = fuse ? null : frameAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
+  const f = fuse ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
   const target = fuse ? dragged.parent : (f?.id ?? detachParentId());
   const changed = drag.dropTarget !== target;
   drag.dropTarget = target; drag.cardMerge = fuse;
@@ -717,17 +717,17 @@ function clearDropTarget(): void {
   document.querySelectorAll('.node.drop-target, .node.drop-merge')
     .forEach(el => el.classList.remove('drop-target', 'drop-merge'));
 }
-// A frame COLLECTS what it covers — the drop rule run from the frame's side, FigJam-style. After a frame
-// is moved, resized or made, every card whose centre is now in it belongs to it (frameAt: the
-// innermost frame wins, so a card sitting in a smaller frame inside it stays there), and every card of
+// A section COLLECTS what it covers — the drop rule run from the section's side, FigJam-style. After a section
+// is moved, resized or made, every card whose centre is now in it belongs to it (sectionAt: the
+// innermost section wins, so a card sitting in a smaller section inside it stays there), and every card of
 // its own whose centre is now OUTSIDE it goes to whatever it's over instead (a shrink lets go of what
-// it no longer covers, rather than hiding it under the clip). A FRAME is collected only when its whole
-// box is inside — by its centre alone, a big frame could be swallowed by a small one laid across it.
+// it no longer covers, rather than hiding it under the clip). A SECTION is collected only when its whole
+// box is inside — by its centre alone, a big section could be swallowed by a small one laid across it.
 // Locked and hidden things stay where they are. Returns the ids it reparented, for the caller to grow
-// their new frames by (growFramesToHold) — or not, on a resize, where the user is setting the size.
-export function settleFrames(frameIds: Iterable<string>): string[] {
+// their new sections by (growSectionsToHold) — or not, on a resize, where the user is setting the size.
+export function settleSections(sectionIds: Iterable<string>): string[] {
   const moved: string[] = [];
-  for (const id of frameIds) {
+  for (const id of sectionIds) {
     const f = state.nodes.get(id);
     if (!f || !collectsCards(f)) {
       continue;
@@ -736,10 +736,10 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
     const inside = (m: MindNode): boolean => m.x >= b.x && m.y >= b.y && m.x + nodeW(m) <= b.x + b.w && m.y + nodeH(m) <= b.y + b.h;
     // let go of its own cards that left it…
     for (const k of childrenOf(f.id)) {
-      if (isHidden(k) || isLockedEffective(k) || centreInFrame(k, f)) {
+      if (isHidden(k) || isLockedEffective(k) || centreInSection(k, f)) {
         continue;
       }
-      const to = frameAt(k.x + nodeW(k) / 2, k.y + nodeH(k) / 2, new Set(subtreeIds(k.id)));
+      const to = sectionAt(k.x + nodeW(k) / 2, k.y + nodeH(k) / 2, new Set(subtreeIds(k.id)));
       if (reparentOnly(k.id, to?.id ?? detachParentId())) {
         moved.push(k.id);
       }
@@ -750,12 +750,12 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
         continue;
       }
       if (isAncestor(n.id, f.id) || isAncestor(f.id, n.id)) {
-        continue;   // its own frames, or inside it already
+        continue;   // its own sections, or inside it already
       }
-      if (n.type === 'frame' ? !inside(n) : !centreInFrame(n, f)) {
+      if (n.type === 'section' ? !inside(n) : !centreInSection(n, f)) {
         continue;
       }
-      if (frameAt(n.x + nodeW(n) / 2, n.y + nodeH(n) / 2, new Set(subtreeIds(n.id))) !== f) {
+      if (sectionAt(n.x + nodeW(n) / 2, n.y + nodeH(n) / 2, new Set(subtreeIds(n.id))) !== f) {
         continue;
       }
       if (reparentOnly(n.id, f.id)) {
@@ -765,9 +765,9 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
   }
   return moved;
 }
-// Move one card into a frame, or out to the top level (null). Mutates the parent only — no paint or
+// Move one card into a section, or out to the top level (null). Mutates the parent only — no paint or
 // status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or
-// frame, and a frame into its own contents. Returns whether it moved.
+// section, and a section into its own contents. Returns whether it moved.
 function reparentOnly(childId: string, newParentId: string | null): boolean {
   if (state.readOnly) {
     return false;

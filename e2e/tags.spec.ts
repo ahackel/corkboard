@@ -191,7 +191,7 @@ test('the tray makes an emoji sticker from its name; a sticker dragged off delet
   expect(errors).toEqual([]);
 });
 
-test('a folded frame says how many of its cards match the search', async ({ page }) => {
+test('a folded section says how many of its cards match the search', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, {
     'Loose.md': note('# Loose', { tags: '[🔥]' }),
@@ -203,11 +203,11 @@ test('a folded frame says how many of its cards match the search', async ({ page
       'Box/A.md': { x: 20, y: 40 }, 'Box/B.md': { x: 20, y: 140 } } }),
   });
   // read while unfolded, then folded
-  await page.locator('#world .node.frame', { hasText: 'Box' }).locator(':scope > .title-row').click();
+  await page.locator('#world .node.section', { hasText: 'Box' }).locator(':scope > .title-row').click();
   await page.keyboard.press('x');
   await card(page, 'Loose').locator('.tag').click();
-  await expect(page.locator('#world .node.frame-folded .frame-hits')).toHaveText('1 match');
-  await expect(page.locator('#world .node.frame-folded')).not.toHaveClass(/search-dim/);
+  await expect(page.locator('#world .node.section-folded .section-hits')).toHaveText('1 match');
+  await expect(page.locator('#world .node.section-folded')).not.toHaveClass(/search-dim/);
 });
 
 // Carry a sticker up off the tray onto the bare board, and let go.

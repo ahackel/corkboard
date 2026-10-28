@@ -187,20 +187,21 @@ function fmRemove(entries: FmEntry[], key: string): void {
   }
 }
 
-// Resolve a note's kind from frontmatter, folding legacy tokens. There are TWO kinds, card and frame,
-// and nothing else to choose: a card is a note, a frame is a box that holds cards (docs/PRODUCT.md).
-// `mm_type` (card|frame, default card) is the current field. Everything older folds onto those two:
+// Resolve a note's kind from frontmatter, folding legacy tokens. There are TWO kinds, card and section,
+// and nothing else to choose: a card is a note, a section is a box that holds cards (docs/PRODUCT.md).
+// `mm_type` (card|frame, default card) is the current field; on disk a section is still `frame`, the
+// file format's word from before the rename, so old and new maps read the same. Everything older folds onto those two:
 //  · `image`, `stack`, `query`, `annotation` → card. Each was a kind once and was cut or derived away;
-//    an old note simply opens as a card. A stack's children are turned into a frame's on load
-//    (data/migrate.ts foldCardsIntoFrames), like any card's.
+//    an old note simply opens as a card. A stack's children are turned into a section's on load
+//    (data/migrate.ts foldCardsIntoSections), like any card's.
 //  · LEGACY notes with no mm_type: a single `mm_layout` token conflated kind and arrangement —
-//    `frame`/`frame-h`/`frame-v` → frame, anything else → card.
-// `mm_layout` is no longer READ for anything else: a frame's children sit where you put them (the
+//    `frame`/`frame-h`/`frame-v` → section, anything else → card.
+// `mm_layout` is no longer READ for anything else: a section's children sit where you put them (the
 // flows, tabs, line and fan arrangements are all cut), and the stale key is dropped on the next write.
 function foldType(entries: FmEntry[]): { type: NodeType; wasStack: boolean } {
   const t = fmValue(entries, 'mm_type'), v = fmValue(entries, 'mm_layout');
   if (t === 'frame' || (!t && (v === 'frame' || v === 'frame-h' || v === 'frame-v'))) {
-    return { type: 'frame', wasStack: false };
+    return { type: 'section', wasStack: false };
   }
   return { type: 'card', wasStack: t === 'stack' || (!t && v === 'stack') };
 }
@@ -267,8 +268,8 @@ export function serializeMd(n: MindNode): string {
   // (data/board.ts), which is what "frontmatter describes the NOTE, board.json describes the BOARD's
   // arrangement of it" means in practice. mm_position_x/y, mm_w/mm_h and mm_collapsed are still READ
   // (parseMd) so an older vault opens unchanged, and the stale-mm_* sweep at the top drops them from
-  // each note the first time it is rewritten. Neither is the PARENT written any more: a frame is a
-  // folder, so where the file sits says which frame holds it (utils/filenames.ts parentFileOf), and
+  // each note the first time it is rewritten. Neither is the PARENT written any more: a section is a
+  // folder, so where the file sits says which section holds it (utils/filenames.ts parentFileOf), and
   // the old `mm_parent` is swept with the rest.
   if (n.locked) {
     entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
@@ -285,7 +286,7 @@ export function serializeMd(n: MindNode): string {
     entries.push({ key:'mm_blank', lines:['mm_blank: true'] });
   }
   if (n.type !== 'card') {
-    entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
+    entries.push({ key:'mm_type', lines:['mm_type: frame'] });   // card is the default; the only other kind is a section
   }
   const fm = entries.flatMap(e => e.lines).join('\n');
   // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse

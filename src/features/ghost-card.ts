@@ -8,7 +8,7 @@ import { startInlineEdit, endInPlaceEdit } from './inline-edit.js';
 import { screenToWorld } from '../view/camera.js';
 
 // Ghost-card drag: grab the corner card to spawn a new note that rides the cursor through the same
-// move/drop machinery as dragging an existing card — so the guides and the drop-into-a-frame rule
+// move/drop machinery as dragging an existing card — so the guides and the drop-into-a-section rule
 // behave identically. Releasing back on the ghost cancels.
 const ghost = byId('ghostCard');
 let newNode: MindNode | null = null;

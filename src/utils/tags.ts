@@ -91,7 +91,7 @@ export function noteTags(n: Tagged): ShownTag[] {
   return [...n.tags.map(tag => ({ tag, inText: false })),
     ...c.tags.filter(t => !own.has(tagKey(t))).map(tag => ({ tag, inText: true }))];
 }
-// A FRAME wears no tags — they go on cards. The one test every tag surface asks.
-export const wearsTags = (n: { type: string } | undefined): boolean => !!n && n.type !== 'frame';
+// A SECTION wears no tags — they go on cards. The one test every tag surface asks.
+export const wearsTags = (n: { type: string } | undefined): boolean => !!n && n.type !== 'section';
 // …and the bare names, for matching.
 export const allTags = (n: Tagged): string[] => noteTags(n).map(t => t.tag);

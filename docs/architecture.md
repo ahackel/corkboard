@@ -8,8 +8,8 @@ Known room for improvement (speed, structure) is listed in [possible-improvement
 
 ## Identity, titles, frontmatter
 
-**One `.md` file per node; the file's PATH is the node's identity** — it says which frame holds the node
-(its folder: see "A frame IS a folder") and it is what the hash and `board.json` encode. No database, no sidecar. In-memory `id`s are minted fresh on every load; never
+**One `.md` file per node; the file's PATH is the node's identity** — it says which section holds the node
+(its folder: see "A section IS a folder") and it is what the hash and `board.json` encode. No database, no sidecar. In-memory `id`s are minted fresh on every load; never
 persist them.
 
 **A node's TITLE is the leading `# ` line of its body, and nothing else is** (`splitHeading`/`joinHeading`,
@@ -31,7 +31,7 @@ filename. Three things follow:
   ORDINARY card: every card is born empty and the autosave 400ms later names it off nothing, so it got
   `safeName('')` — `Untitled.md`, `Untitled 2.md`, … from the collision suffix — and the text typed a
   second later never reached the filename. A vault filled up with `Untitled 47.md`.
-- **Tracking is paid for in renames, and everything holding a path follows one.** A renamed FRAME renames
+- **Tracking is paid for in renames, and everything holding a path follows one.** A renamed SECTION renames
   its folder, which moves every note inside it (`saveAll` phase 1, `planPaths`, which settles every path
   top-down before anything is serialized), and a rename re-points the inbound PATH-form `[[wikilinks]]` (phase 1b, `retargetWikilinks`, alias
   half kept verbatim). Title-form links need no fixup: re-slugging a file never changes a title.
@@ -80,51 +80,51 @@ is precisely the name that card must no longer be called — and a container nob
 `Untitled.md` on disk anyway. `N` counts nameless nodes in map order, so it renumbers when one is added or
 filled in; that is safe because nothing stores or matches on this string (a `[[wikilink]]` resolves against
 `n.title` and the filename, `focusByTitle`). `disambiguatedLabel` appends the parent for FLAT lists only
-(search hits). On the canvas only a FRAME falls back to `nodeLabel`: a card showing nothing is the point, but a frame's tab is the
+(search hits). On the canvas only a SECTION falls back to `nodeLabel`: a card showing nothing is the point, but a section's tab is the
 only thing you can grab the box by.
 
 **`desiredFileFor`'s collision test is case-INSENSITIVE**, and must stay that way: macOS and Windows collide
 `Notes.md` with `notes.md`, so an exact test would hand two nodes "their own" filename and let the second
 write eat the first.
 
-**A frame IS a folder.** A frame `Ideas` is the folder `Ideas/`: its own note is `Ideas/_index.md`
-(`FRAME_NOTE`), and every card and frame inside it lives in that folder — `Ideas/Milk.md`, `Ideas/Sub/_index.md`.
+**A section IS a folder.** A section `Ideas` is the folder `Ideas/`: its own note is `Ideas/_index.md`
+(`SECTION_NOTE`), and every card and section inside it lives in that folder — `Ideas/Milk.md`, `Ideas/Sub/_index.md`.
 So a node's PARENT is never written down: it is read off the path (`utils/filenames.ts parentFileOf`), and the
 folder tree in Finder or Obsidian IS the board's grouping. What follows from that:
 
-- **Moving a card into or out of a frame MOVES ITS FILE**, and renaming or moving a frame moves its whole
+- **Moving a card into or out of a section MOVES ITS FILE**, and renaming or moving a section moves its whole
   folder. `saveAll` settles every node's path top-down (`planPaths` — a node's folder is its parent's folder)
   before writing anything, writes the new files, deletes the old ones, then prunes the folders that left
   empty (`store.removeDir`, which only ever removes an EMPTY folder — another app's file keeps one alive).
   `board.json` is keyed by path, so after a move it is written AWAITED, before anything else can reload.
-- **A card can't be called `_index`** (it would be its folder's frame note), and a frame never takes a folder
+- **A card can't be called `_index`** (it would be its folder's section note), and a section never takes a folder
   that is something else's (`foreignDirs`: `attachments/`, or any folder holding no notes).
-- **A folder with notes but no `_index.md`** — made in Finder, or a phone's inbox — is a frame all the same,
-  named after the folder (`folderFrame`); the next save writes its `_index.md`. A frame whose notes have no
-  saved positions lays them out once, in a column (`arrangeFrames`).
+- **A folder with notes but no `_index.md`** — made in Finder, or a phone's inbox — is a section all the same,
+  named after the folder (`folderSection`); the next save writes its `_index.md`. A section whose notes have no
+  saved positions lays them out once, in a column (`arrangeSections`).
 - **An old flat map migrates on load**: a top-level note with `mm_parent` takes that parent (and is marked
-  dirty), so the first save moves every card into its frame's folder and the key is swept.
+  dirty), so the first save moves every card into its section's folder and the key is swept.
 - Dot-folders (`.obsidian`, `.trash`) are another app's and are never walked.
 
-**A FOLDED frame is not read.** The load asks the store for the tree (`store.listTree` →
-`store/tree.ts planTree`, pure and tested) and leaves UNREAD every folder whose frame `board.json` says is folded
-— and every folder the board has never seen, which arrives as a folded pill. Only the frame's own `_index.md`
+**A FOLDED section is not read.** The load asks the store for the tree (`store.listTree` →
+`store/tree.ts planTree`, pure and tested) and leaves UNREAD every folder whose section `board.json` says is folded
+— and every folder the board has never seen, which arrives as a folded pill. Only the section's own `_index.md`
 is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts` holds the policy:
 - **Reading:** unfolding, opening, Expand all, delete, duplicate, copy/cut, export and a link into the folder
   read it first (`afterReading` / `readAll` / `revealPath`; data/load.ts `readFolder` is the mechanism). A save
-  that would MOVE a folded frame reads its whole folder first (`saveAll` phase 0) — it can't move notes it
-  hasn't got. A frame that is open on the canvas with its notes unread (an undo unfolded it) reads them on the
+  that would MOVE a folded section reads its whole folder first (`saveAll` phase 0) — it can't move notes it
+  hasn't got. A section that is open on the canvas with its notes unread (an undo unfolded it) reads them on the
   next paint (`readOpenUnread`, the safety net).
-- **Letting go:** after every save, a folded frame drops its notes from memory again (`releaseFolded`) — but
+- **Letting go:** after every save, a folded section drops its notes from memory again (`releaseFolded`) — but
   only when all of them are saved and nothing can still reach one: the selection, the undo/redo history
-  (`historyRefs`), a search result, the frame you stand in. Their geometry is remembered in `board.json`
-  (`rememberGeom`), their lines PARK on the frame (an end keeps its path, `fromPath`/`toPath`, and the frame
+  (`historyRefs`), a search result, the section you stand in. Their geometry is remembered in `board.json`
+  (`rememberGeom`), their lines PARK on the section (an end keeps its path, `fromPath`/`toPath`, and the section
   stands in for it the way a pill always did — `parkEdges` / `unparkEdges`), their pictures' blob URLs are
   revoked (`forgetImages`). Demo and read-only mode never let go.
 - **What doesn't see unread notes:** search, and `[[wikilink]]` resolution and fix-up — a path-form link
   INSIDE an unread note isn't re-pointed when its target is renamed.
 
-**A LINE is something the user drew.** A card sits INSIDE the frame that is its parent, so no line is ever
+**A LINE is something the user drew.** A card sits INSIDE the section that is its parent, so no line is ever
 derived from the tree. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
 caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `route` → `polyline`, behind
 `edgeGeometry`, the one place the geometry is computed): along the axis the two cards are further apart
@@ -151,224 +151,224 @@ mean something on load (a legacy `mm_layout: frame`), dropped on a note's next w
 app-owned keys (`tags`, `color`, `mm_*`) and preserves every other frontmatter field and the body verbatim —
 keep that property when touching `parseFM`/`fmSet`/`fmRemove`.
 
-**Cards are flat; a FRAME is the only container** (docs/PRODUCT.md). A node's kind is `mm_type`: `card`
-(default, omitted) or `frame`, resolved by `foldType`, which folds every retired kind (`stack`, `image`,
-`annotation`, `query`) to `card` and a legacy `mm_layout: frame*` to `frame`. A card never has children —
-structure inside a thought is written into the note (`- [ ]` tasks tick in place) — and a frame's children
+**Cards are flat; a SECTION is the only container** (docs/PRODUCT.md). A node's kind is `mm_type`: `card`
+(default, omitted) or `section`, resolved by `foldType`, which folds every retired kind (`stack`, `image`,
+`annotation`, `query`) to `card` and a legacy `mm_layout: frame*` to `section`. A card never has children —
+structure inside a thought is written into the note (`- [ ]` tasks tick in place) — and a section's children
 sit wherever they were put: there are no arrangements, no outliner, no checklist mode. Four rules hold it:
-- **One drop rule** (`view/layout.ts frameAt`): on release, each dragged root belongs to the INNERMOST
-  expanded, unlocked frame its centre is in, else the top level (the open frame while one is open). The
-  preview lights that frame (`.drop-target`) and `drag.dropTarget` carries it so `effectiveColor` can preview
+- **One drop rule** (`view/layout.ts sectionAt`): on release, each dragged root belongs to the INNERMOST
+  expanded, unlocked section its centre is in, else the top level (the open section while one is open). The
+  preview lights that section (`.drop-target`) and `drag.dropTarget` carries it so `effectiveColor` can preview
   the inherited colour. ⌥ over a plain card is the one exception: a MERGE into its note. Text dragged out of
   an editor and ⌘V land by the same test (paste goes where the POINTER is, not into the selection).
 - **Cards can't hold cards, however it's asked** — `holderOf(id)` turns any "create in X" request into X's
-  frame (X itself if it is one), and every create/paste path goes through it.
-- **A frame GROWS to hold what's put in it** (`growFramesToHold`, `features/float-bar.ts`): after a drop,
-  a create, a paste or an edit that leaves a card past its frame's edge, the frame widens outward (never
-  shrinks, never moves a side that already clears). A frame clips (`overflow:hidden`), so the alternative is
-  a card that is in the frame and out of sight.
-- **A card with children on disk is MIGRATED on load** (`data/migrate.ts foldCardsIntoFrames`): it
-  becomes a frame holding them (only `mm_type` changes), and each converted frame — plus any frame that was
+  section (X itself if it is one), and every create/paste path goes through it.
+- **A section GROWS to hold what's put in it** (`growSectionsToHold`, `features/float-bar.ts`): after a drop,
+  a create, a paste or an edit that leaves a card past its section's edge, the section widens outward (never
+  shrinks, never moves a side that already clears). A section clips (`overflow:hidden`), so the alternative is
+  a card that is in the section and out of sight.
+- **A card with children on disk is MIGRATED on load** (`data/migrate.ts foldCardsIntoSections`): it
+  becomes a section holding them (only `mm_type` changes), and each converted section — plus any section that was
   drawn as a row inside one — lays its cards out ONCE in a column in their old order (`kidOrder`) and sizes
   itself around them, deepest first. That needs measured heights, so affected nodes are unfolded and painted
   with the scope set aside, then folded back. Every load runs it; a migrated map has nothing left to convert.
 
-**A frame wears only its OWN colour** (`effectiveColor`): an uncoloured one is the neutral white surface.
-Inheriting made a frame nested in a blue frame blue, and so invisible. Cards still inherit from the frame
+**A section wears only its OWN colour** (`effectiveColor`): an uncoloured one is the neutral white surface.
+Inheriting made a section nested in a blue section blue, and so invisible. Cards still inherit from the section
 they sit in, in its FULL colour — which reads because the box wears a PALE wash of it (below).
 
-**A frame COLLECTS what it covers** (`settleFrames`, features/drag.ts) — the drop rule run from the frame's
-side, the way a FigJam section behaves. After a frame is moved, resized or made (createNode, Group), every
-card whose centre is now in it is reparented to it (`frameAt`, so the innermost frame still wins), and every
+**A section COLLECTS what it covers** (`settleSections`, features/drag.ts) — the drop rule run from the section's
+side, the way a FigJam section behaves. After a section is moved, resized or made (createNode, Group), every
+card whose centre is now in it is reparented to it (`sectionAt`, so the innermost section still wins), and every
 card of its own whose centre is now outside goes to whatever it is over — a shrink lets go of a card rather
-than hiding it under the clip. A FRAME is only collected when its whole box is inside: by its centre alone a
-big frame could be swallowed by a small one laid across it. Locked and hidden things stay put. A move or a
-create then grows frames around what they took in (`growFramesToHold`); a resize doesn't — the user just
-chose that size — but a card it let go of grows the frame it landed in.
+than hiding it under the clip. A SECTION is only collected when its whole box is inside: by its centre alone a
+big section could be swallowed by a small one laid across it. Locked and hidden things stay put. A move or a
+create then grows sections around what they took in (`growSectionsToHold`); a resize doesn't — the user just
+chose that size — but a card it let go of grows the section it landed in.
 
-## Frames
+## Sections
 
-**A frame looks like a FigJam SECTION: a pale box, its name on a pill ABOVE it.** The box is the frame's
-colour washed 68% toward white (`color-mix`, `FRAME_WASH`/`paleFill` in `utils/ink.ts` for the one JS reader,
-the open frame's canvas) with a 1px rim a step darker than the colour (`FRAME_BORDER` = 1). The label is a
-pill filled with the frame's full colour, so its text takes that colour's own `--ink` like any card.
+**A section looks like a FigJam SECTION: a pale box, its name on a pill ABOVE it.** The box is the section's
+colour washed 68% toward white (`color-mix`, `SECTION_WASH`/`paleFill` in `utils/ink.ts` for the one JS reader,
+the open section's canvas) with a 1px rim a step darker than the colour (`SECTION_BORDER` = 1). The label is a
+pill filled with the section's full colour, so its text takes that colour's own `--ink` like any card.
 
-**A frame's BOUNDS are its box; the label hangs OUTSIDE them.** `n.x/n.y/w/h` are the box, and the pill sits
-7px above its top-left corner (`.node.frame > .title-row`, `bottom:calc(100% + 7px)`), growing upward. So
-naming, renaming, describing or un-naming a frame never moves the box or anything in it, and nothing in
+**A section's BOUNDS are its box; the label hangs OUTSIDE them.** `n.x/n.y/w/h` are the box, and the pill sits
+7px above its top-left corner (`.node.section > .title-row`, `bottom:calc(100% + 7px)`), growing upward. So
+naming, renaming, describing or un-naming a section never moves the box or anything in it, and nothing in
 the geometry (interior, drops, lines) has to know about the label. What does: anything
-that FITS a box around frames — `subtreeBox` counts `frameLabelH` (the pill's measured height + its gap)
-above an expanded labelled frame, so Auto-size, grow-to-hold, Group and the load migration's column leave
-a nested frame's name room instead of clipping it. **A frame FOLDS to its label pill** (`isFrameFold`,
-`.frame-folded`): see "Collapse folds a card to a CHIP and a frame to its PILL" below.
+that FITS a box around sections — `subtreeBox` counts `sectionLabelH` (the pill's measured height + its gap)
+above an expanded labelled section, so Auto-size, grow-to-hold, Group and the load migration's column leave
+a nested section's name room instead of clipping it. **A section FOLDS to its label pill** (`isSectionFold`,
+`.section-folded`): see "Collapse folds a card to a CHIP and a section to its PILL" below.
 
-**A frame's note is drawn on its LABEL: the name, and its DESCRIPTION under it.** The `# ` heading is the
-name; the rest of the note is the description (`frameDescription`), one muted ellipsised line under the
-name (`.frame-desc`). Each stays one line (hence the hover tooltip in `paintNode`). The frame's editor is the
+**A section's note is drawn on its LABEL: the name, and its DESCRIPTION under it.** The `# ` heading is the
+name; the rest of the note is the description (`sectionDescription`), one muted ellipsised line under the
+name (`.section-desc`). Each stays one line (hence the hover tooltip in `paintNode`). The section's editor is the
 label itself: Enter finishes, ⇧Enter adds a line, and line breaks are kept (read while the editor is still
 pre-wrap).
 
-**A frame with nothing written on it shows NO LABEL** (`frameLabelled`) — delete its text and it's an
+**A section with nothing written on it shows NO LABEL** (`sectionLabelled`) — delete its text and it's an
 untitled box, like an untitled FigJam section. Three ways back to writing on it:
-- **The toolbar's title button (T)** (`editFrameTitle`): on an untitled frame it seeds `# Frame` and selects
+- **The toolbar's title button (T)** (`editSectionTitle`): on an untitled section it seeds `# Section N` (`nextSectionTitle`) and selects
   the word, so typing replaces it and keeps the heading; on a named one it opens the label with the text
-  selected. Esc on a seeded name leaves the frame untitled.
-- **The RIM.** Double-clicking its border — measured geometrically (`onFrameRim`), since the content
-  wrapper is click-through and a hit anywhere inside comes back as the frame's own element — opens its
+  selected. Esc on a seeded name leaves the section untitled.
+- **The RIM.** Double-clicking its border — measured geometrically (`onSectionRim`), since the content
+  wrapper is click-through and a hit anywhere inside comes back as the section's own element — opens its
   text editor, named or not. The band includes the resize zones lying over that border, which is why this
   is the one gesture allowed past the `NODE_CONTROLS` bail — a double-click means nothing on a handle.
 - **F2 / Rename** in the menu.
-FOLDED, an untitled frame is a bare stub — and the CHIP is what keeps it usable. The row goes invisible
-rather than `display:none`: `.hidden-count` lives inside it, and hiding it would leave a nameless frame with
+FOLDED, an untitled section is a bare stub — and the CHIP is what keeps it usable. The row goes invisible
+rather than `display:none`: `.hidden-count` lives inside it, and hiding it would leave a nameless section with
 no way to open again. Expanded, that invisible row collapses onto the BOX's top edge, so the chip hangs off
-the corner the way a card's does. The stub asserts its 40px (`min-height`, `--frame-tab-h`). While its editor
+the corner the way a card's does. The stub asserts its 40px (`min-height`, `--section-tab-h`). While its editor
 is open the row is revealed regardless (`ui.titleEdit`), or the editor would open on an invisible element.
 
-**`isFrame` means an EXPANDED frame** (`view/layout.ts` tests `!collapsed`), and so does every question built
-on it; a rule that must also reach the folded pill keys on the raw `n.type === 'frame'`.
+**`isSection` means an EXPANDED section** (`view/layout.ts` tests `!collapsed`), and so does every question built
+on it; a rule that must also reach the folded pill keys on the raw `n.type === 'section'`.
 
 **Anything that writes a node's `left`/`top` must go through `placeSelf`**, not a bare `place()` — that is
 what `paintNode`'s final branch uses, and the relayout ANIMATION (`placeNodeEl`/`setNodeElXY`) writes left/top
 too, since interpolating them IS the animation; `placeSelf` keeps a hosted card in its container's wrapper.
 
-**A frame's content wrapper is LIFECYCLE-managed, not just created:** `frameContentEl` exists iff
-`hostsContent(n)` (an expanded frame box) — `paintNode` drops it the moment that stops
+**A section's content wrapper is LIFECYCLE-managed, not just created:** `sectionContentEl` exists iff
+`hostsContent(n)` (an expanded section box) — `paintNode` drops it the moment that stops
 holding. Being HIDDEN counts
 as holding nothing (`hostsContent` is false for it), which lets the whole lifecycle be ONE drop placed ahead
 of `paintNode`'s `isHidden` early return rather than repeated inside it. It is created lazily, so a fold/reopen round-trips through the same
 code; a folded container's children ride along detached and are re-placed by `place()` when it opens. Skip
 the drop and a fold strands an empty `overflow:hidden` div at the box's old size.
 
-## Open frames (scope)
+## Open sections (scope)
 
-**A frame can be OPENED, and then the canvas IS its interior** (`nav/scope.ts` for the model,
-`openFrame`/`exitScope`/`goToScopeDepth` in `nav/frames.ts` for the actions, `features/breadcrumbs.ts` for the
+**A section can be OPENED, and then the canvas IS its interior** (`nav/scope.ts` for the model,
+`openSection`/`exitScope`/`goToScopeDepth` in `nav/sections.ts` for the actions, `features/breadcrumbs.ts` for the
 path). While one is open, nothing but its contents is on the canvas, its own box/border/tab are not drawn,
 its interior is the whole viewport, and the crumb bar is the way back out. Nesting is allowed. Distinct from
-`focusNode`, which frames a card WITHIN the map; this replaces what the map is for as long as you're inside.
+`focusNode`, which sections a card WITHIN the map; this replaces what the map is for as long as you're inside.
 
 - **The scope is a second TERM in `isHidden`, not a second predicate** — one ancestor walk answers both "is a
-  parent folded" and "is this outside the frame I'm in". That scopes the paint, the camera, the edges, the
+  parent folded" and "is this outside the section I'm in". That scopes the paint, the camera, the edges, the
   marquee, drag's hit-tests, the layout pass and the float bar in ONE edit. The scope root counts as outside
   its own scope, and *that* is why its chrome isn't painted: no per-kind rule, no CSS.
-- **Nothing writes through that gate, and `applyLayouts` confines itself to the open frame.** A fold is
+- **Nothing writes through that gate, and `applyLayouts` confines itself to the open section.** A fold is
   persisted `mm_collapsed`, a scope is ephemeral, so the scope must never reach disk. Nothing flows cards, so
   opening and leaving move NOTHING and a visit writes nothing to disk.
-- **The box becomes the VIEWPORT through `containerBox`/`frameInterior`**, as a DERIVED override. Hard
-  invariant: the frame's own `n.w`/`n.h` are neither read there nor written, which lets it come back out at
-  its authored size. `frameInterior` needs the guard too (it doesn't route through
-  `containerBox`), and `frameContentTop` needs it because an open frame draws no tab to drop below — fixed
-  there and NOT by making `isFrame` false for it, which feeds `nodeH` and would measure a `display:none`
-  element and report a 64px frame. What still READS that rect is the drop test (`frameAt` skips the open
-  frame, so a card on its canvas belongs to it via `detachParentId`).
+- **The box becomes the VIEWPORT through `containerBox`/`sectionInterior`**, as a DERIVED override. Hard
+  invariant: the section's own `n.w`/`n.h` are neither read there nor written, which lets it come back out at
+  its authored size. `sectionInterior` needs the guard too (it doesn't route through
+  `containerBox`), and `sectionContentTop` needs it because an open section draws no tab to drop below — fixed
+  there and NOT by making `isSection` false for it, which feeds `nodeH` and would measure a `display:none`
+  element and report a 64px section. What still READS that rect is the drop test (`sectionAt` skips the open
+  section, so a card on its canvas belongs to it via `detachParentId`).
 - **That rect is a SNAPSHOT at k = 1, refreshed only on a window resize** (`scopeRect`/`refreshScopeRect`). At
   k = 1 — the app's canonical 1 world px = 1 screen px — rather than the live zoom, because opening then fits
   the camera, which would make a live reading circular; a snapshot rather than a live rect so it can't change
   under a pan. `bottomInset()` is excluded (it tracks the SELECTION via the docked float bar, so folding it in
   would move the rect on every click), as is the crumb bar, floating chrome like `#toolbar`. It's anchored at
-  the frame's own content origin, so the coordinates its contents already have stay meaningful.
+  the section's own content origin, so the coordinates its contents already have stay meaningful.
 - **Double-click is still the way OUT, but no longer the way IN.** The empty canvas — which, once you're
   inside, is that same interior — leaves it (`features/gestures.ts`); at the top level there's nowhere to
   leave to, so the canvas keeps its "new card here". Going in is ⌥-double-click / two-finger double-tap, `↑`,
   the float bar's Open (`→]`) or `⋯ → Open`. The crumb path and `↓` are the other ways out.
 - **Leaving pops every SYNTHESIZED level under you, not one crumb at a time.** A level with no `back` is
   one nobody stepped through (`setScopeStack` records a back only on the level you newly enter), so opening
-  something three frames deep pushes those frames as crumbs — and leaving one at a time would walk you out
+  something three sections deep pushes those sections as crumbs — and leaving one at a time would walk you out
   through folders you were never in. `exitScope` therefore walks down past them, and `goToScopeDepth`
   restores the back of the outermost level being left or, when that one was synthesized, the innermost that
   recorded one: the state the user was actually in before the whole excursion. `open A → open B → leave`
   still lands in A, because A kept its own back and stops the walk.
 - **The path is ONE pill, and the map name is its first segment** (`features/breadcrumbs.ts` + `#homeBar`) —
-  `#toolbar`'s pattern, one `--panel` capsule of borderless items, so going into a frame ADDS segments rather
+  `#toolbar`'s pattern, one `--panel` capsule of borderless items, so going into a section ADDS segments rather
   than swapping loose text for chrome. Segments carry no folder glyph (the `›` separators already say it's a
   path) and the CURRENT one is inert. A deep path folds its middle into one `…` menu — the only thing that
   keeps it clear of the CENTRED `#toolbar`, since capping the pill's width can't (the separators are
   `flex:none` and simply overflow it).
-- **The CANVAS wears the open frame's fill** (`syncCanvasBackground` → `--canvas-bg` on `#stage`, under
+- **The CANVAS wears the open section's fill** (`syncCanvasBackground` → `--canvas-bg` on `#stage`, under
   `#grid`; `<body>`'s `--bg` is untouched so the theme is). Same resolver the box used — `effectiveColor` →
   `colorFill` — so the canvas can't disagree with the colour the box was showing, transitioned over
   `animateReflow`'s 320ms so going in reads as the canvas taking the colour rather than a cut — **except when
   the scope came from the URL** (`withoutScopeFade` → `body.scope-instant`, killing the transition for two
-  frames): on a reload there's nothing to transition FROM, so the fade reads as flashing the wrong background,
+  sections): on a reload there's nothing to transition FROM, so the fade reads as flashing the wrong background,
   and on a back/forward step the camera and selection jump too. Only when the colour is **authored** somewhere
-  up the chain (`hasAuthoredColor`): `effectiveColor` falls back to the theme's neutral card fill for a frame
+  up the chain (`hasAuthoredColor`): `effectiveColor` falls back to the theme's neutral card fill for a section
   nobody coloured, and painting the whole canvas *that* is a lie, and a near-white that swallows the chrome
-  floating on it. Authorship, not the hex — a frame explicitly coloured white still tints. A FRAME's canvas is
+  floating on it. Authorship, not the hex — a section explicitly coloured white still tints. A SECTION's canvas is
   its PALE fill (`paleFill`), the same wash its box wears, so the full-colour cards it holds read on it.
 - **At the TOP level that same variable carries the MAP's own colour** — `state.canvasColor`, per-map in
   `settings.json` beside the grid, so it travels with the vault rather than the browser. One resolver answers
-  both, `canvasFill`, off `canvasOwner`: the open frame, or `null` for "the map". The
-  `hasAuthoredColor` test applies only to the frame half — `canvasColor` is authored by definition, and `''`
+  both, `canvasFill`, off `canvasOwner`: the open section, or `null` for "the map". The
+  `hasAuthoredColor` test applies only to the section half — `canvasColor` is authored by definition, and `''`
   means the theme's background.
 - **The canvas-colour BUTTON edits whichever of those two you're standing on** (`#canvasColorBtn`, one slot
   left of `#gridBtn`; `features/canvas-color.ts`). At the top level it writes `state.canvasColor`; inside
-  an open frame it writes that FRAME's `n.color` — the same field the float bar would write if the frame were
+  an open section it writes that SECTION's `n.color` — the same field the float bar would write if the section were
   selected, so nothing new exists for the case. It reads `canvasOwner` too, so the chip on its face shows the
   value it would overwrite. Four things to respect: the chips are `properties.ts`'s row, not a copy
   (`swatchRowHTML`/`markSwatchRow`/`renderRecentChips` were split out of `createProperties` for exactly this —
   what can't be shared is that factory itself, being defined over node ids); the one difference is
   `FirstChip` — the map's own canvas gets a reset chip in the board's grey, since nothing else gets it back
-  to "no colour"; both halves are undoable in the one timeline (a frame is an ordinary `record`, the map's colour
+  to "no colour"; both halves are undoable in the one timeline (a section is an ordinary `record`, the map's colour
   goes through `touchCanvas`/`commitStep` and `Step`'s optional `canvas` field, as `state.strokes` already
   does); and the GRID INK is re-derived from whatever fill is behind it (`--grid-pat` on `#stage`, which
   `#grid` declares `--grid-ink` from — the theme's recipe with the canvas fill standing in for `--grid` and
   `inkFor(fill)` for `--text`, so an arbitrary picked colour needs no special case; without it a strong canvas
   colour either swallows the grid or turns it harsh).
-- **`hostFrame` stops at the scope root**, which hosts nothing; `containerHost` (layout.ts) is the same walk
+- **`hostSection` stops at the scope root**, which hosts nothing; `containerHost` (layout.ts) is the same walk
   without that exception.
-- **`hostFrame` stopping at the scope root** is what makes "the box isn't there" true of the DOM and not only
-  of the paint: its children are placed straight under `#world`, unclipped. The `.frame-content` wrapper is
+- **`hostSection` stopping at the scope root** is what makes "the box isn't there" true of the DOM and not only
+  of the paint: its children are placed straight under `#world`, unclipped. The `.section-content` wrapper is
   dropped by the existing ONE drop in `paintNode` (it's `isHidden`, so `hostsContent` goes false), and
-  `edges.ts` shares the walk so connectors unclip in step. The `hostFrameId` cache must be cleared on every
+  `edges.ts` shares the walk so connectors unclip in step. The `hostSectionId` cache must be cleared on every
   scope change, or elements keep being placed into a wrapper that's about to go.
-- **Leaving GROWS the frame to hold what you put in it** (`growFramesToHold`), and only when something really
+- **Leaving GROWS the section to hold what you put in it** (`growSectionsToHold`), and only when something really
   sticks out: inside, the whole viewport was fair game, so a card can end up outside the box it goes back to
   being, where `overflow:hidden` would clip it into invisibility.
-- **The stack IS the crumb path** (`openPathTo`), not just what you clicked through, so opening a deep frame
-  from the ⋯ menu still reads `Map › A › B › C`. Levels you really stepped through remember their camera and
+- **The stack IS the crumb path** (`openPathTo`), not just what you clicked through, so opening a deep section
+  from the right-click menu still reads `Map › A › B › C`. Levels you really stepped through remember their camera and
   selection, so leaving one glides back to it; levels rebuilt from a URL don't (their ids are gone) and re-fit
   instead. The stack is session-only; the hash carries only the innermost level.
 - **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no node field.
-  A FOLDED frame stays folded: while you stand in it its interior is the canvas whatever its fold says
-  (`isHidden` asks about the open frame before the fold; `containerHost` and paintNode's nesting treat it as
+  A FOLDED section stays folded: while you stand in it its interior is the canvas whatever its fold says
+  (`isHidden` asks about the open section before the fold; `containerHost` and paintNode's nesting treat it as
   the canvas too), and leaving lands you back at the same pill. The one thing that IS recorded is the
-  grow-to-fit on the way out — measured against the BOX a folded frame unfolds to, never its pill, so a
+  grow-to-fit on the way out — measured against the BOX a folded section unfolds to, never its pill, so a
   visit that moved nothing moves nothing — and ⌘Z un-grows it without teleporting you between scopes. Allowed in
-  read-only and on a LOCKED frame (`activateTab`'s exemption: looking inside the box isn't changing it) —
+  read-only and on a LOCKED section (`activateTab`'s exemption: looking inside the box isn't changing it) —
   though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
-  `↑` and the ⋯ menu as the ways in.
-- **"No parent" means the OPEN FRAME** (`detachParentId`) — for `createNode`, `createDetachedNode`, a paste's
-  payload roots, and a card dropped outside every frame. A real root would land outside the scope and vanish.
-- **You can't drag a card out of the frame you're in**: its interior is the whole canvas, so there's nowhere
-  visible to drop it to. Leave the frame before moving a card out.
+  `↑`, the float bar's Open and the right-click menu as the ways in.
+- **"No parent" means the OPEN SECTION** (`detachParentId`) — for `createNode`, `createDetachedNode`, a paste's
+  payload roots, and a card dropped outside every section. A real root would land outside the scope and vanish.
+- **You can't drag a card out of the section you're in**: its interior is the whole canvas, so there's nowhere
+  visible to drop it to. Leave the section before moving a card out.
 - **Search is scoped; wikilinks and undo are not.** Search finds what's on the canvas, so every hit can be
   shown and selected. The map-wide
   jumps come OUT of as many levels as it takes first (`popScopeFor`), because `isSelectable` refuses an
   out-of-scope id and the step would otherwise look dead.
-- **The open frame is never folded, and never missing.** `applyLayouts` repairs the first
+- **The open section is never folded, and never missing.** `applyLayouts` repairs the first
   (a reload or an undo can re-collapse it — a blank canvas being the worst failure here, so `isHidden` checks scope-root identity BEFORE the fold as a third
   layer). `pruneScope` handles the second in the same pass, truncating the stack to what survives; the camera
   half of that recovery lives in `syncScopeChrome`. A reload re-mints every id, so `resolveScopeAfterLoad`
   re-points the stack by FILE before the first layout — deliberately not cleared like the undo history, since a
-  background refocus reload must not kick you out of the frame you're working in.
-- **Only a FRAME opens** (`canOpen`, the one kind test — never widen it at a call site). A card has no inside:
+  background refocus reload must not kick you out of the section you're working in.
+- **Only a SECTION opens** (`canOpen`, the one kind test — never widen it at a call site). A card has no inside:
   it is read where it sits (or peeked, or in Obsidian). `↑`, the float bar's Open and `⋯ → Open` refuse a
   card, and `⌥`-double-click on one is a plain double-click, i.e. it edits.
 
 **A CARD is never opened.** There used to be a reading view — a card opened as a 680px page, its own
 camera clamp and scope-root exception (`isReadingRoot`) — and it was cut: a long note belongs in Obsidian,
 which is the reading view (docs/PRODUCT.md), and a second way to be "inside" something cost every geometry
-helper an exception. The open scope root is therefore always a frame whose box became the viewport, which
+helper an exception. The open scope root is therefore always a section whose box became the viewport, which
 is all `isScopeRoot` means in the layout code.
 
 ## Sizing
 
 **`n.w` and `n.h` are always AUTHORED; a card's `n.h` is a MINIMUM.** Every kind gets the same 8 resize
-zones (`FRAME_DIRS`, `ensureResizeHandles` in `features/resize.ts`), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
+zones (`SECTION_DIRS`, `ensureResizeHandles` in `features/resize.ts`), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
 dragged size and nothing else — never a value a layout pass computed. What the height MEANS splits:
 
-- `frame` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
-  `isBoxType`). For a **frame** these are its box; its label hangs outside, above it.
+- `section` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
+  `isBoxType`). For a **section** these are its box; its label hangs outside, above it.
 - An **IMAGE card** is the third, and the one that isn't a kind: see below.
 - `card` — its `n.h` is painted as `min-height`, never `height`: drag a card taller and it stays that
   tall, but its text can always make it taller still, and `nodeH` still MEASURES it (`offsetHeight`).
@@ -382,7 +382,7 @@ dragged size and nothing else — never a value a layout pass computed. What the
   rest is simply cut (a fade was tried and read as a smudge on a short card). No scrolling — it's a sticky note, not a
   viewport. Folded, opened as a page or open in the editor it doesn't clip (the editor shows the whole
   note). **Fit** (`autoSizeSelection`: the float bar's ↔, `⇧A`, "Fit to contents") drops a card's `h` and
-  `clip` — and fits a frame to its cards, as before; `canFit` says which selections offer it.
+  `clip` — and fits a section to its cards, as before; `canFit` says which selections offer it.
 
 **A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
 in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
@@ -393,7 +393,7 @@ authored HEIGHT as well as a width (the one card `serializeMd` writes `mm_h` for
 **aspect-locked** resize — `imageAspect` reads the loaded image's own ratio, so whichever axis you drag the
 other follows and the picture never distorts or crops. Four things follow:
 - **It's an ordinary card in every other respect** — it renames (which ends image mode: a heading is
-  text), ⌥-merges into another note, sits in frames, and ⌥-drags out as its `.md`. That last one
+  text), ⌥-merges into another note, sits in sections, and ⌥-drags out as its `.md`. That last one
   is what retired the old image-fold drag (`imageMerge`): an image card is UNTITLED, and `mergeCardsInto`
   already appends an untitled card's body alone, which for a picture is exactly its `![alt](src)` line.
 - **The mode is the note's text, so it ends when the text does.** `isImageBox` (`view/geometry.ts`) adds the two
@@ -472,18 +472,18 @@ own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`set
 reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
 it used to read over an edit made just before switching away (it cancelled the queued save instead).
 
-**The phone INBOX is a folder** — `Inbox/` at the top of a FOLDER map, i.e. an ordinary frame (the user
+**The phone INBOX is a folder** — `Inbox/` at the top of a FOLDER map, i.e. an ordinary section (the user
 guide is [inbox.md](inbox.md): iCloud Drive plus an iOS Shortcut that saves a dated `.md` there). Nothing
 about it is special-cased in the model; three small pieces make it work. (1) A note that arrives with no
-position in a frame that already holds placed cards is stacked in a column of its own just RIGHT of them,
-top-aligned, and the frame only grows (`arrangeFrames` with `fresh`, `data/persistence.ts`) — the old rule
-arranged a frame only when ALL its notes were new, so one new note fell to the top-level grid fallback and
+position in a section that already holds placed cards is stacked in a column of its own just RIGHT of them,
+top-aligned, and the section only grows (`arrangeSections` with `fresh`, `data/persistence.ts`) — the old rule
+arranged a section only when ALL its notes were new, so one new note fell to the top-level grid fallback and
 landed on whatever was there. Placed cards never move (principle 2). (2) `reloadFromDisk` diffs PATHS (ids
-are minted per load) and each folded frame's unread count before and after, and `flashArrived` (`main.ts`)
+are minted per load) and each folded section's unread count before and after, and `flashArrived` (`main.ts`)
 pulses what is new — itself, or the outermost folded pill it hides in (`.arrived`, a class paintNode owns).
-(3) The palette's **Inbox** (`goToInbox`) goes to the top-level frame whose file is `Inbox/_index.md`
+(3) The palette's **Inbox** (`goToInbox`) goes to the top-level section whose file is `Inbox/_index.md`
 (any case), reading and unfolding it; with none it makes one, left of the top-level content, at the top
-level (it leaves any open frame first: an inbox inside a frame would be a different folder). A map in the
+level (it leaves any open section first: an inbox inside a section would be a different folder). A map in the
 browser's own storage has no inbox: nothing outside the browser can write to it.
 
 **A pasted LIST is many cards; capture never throws typing away.** `splitPastedList`
@@ -534,10 +534,10 @@ pans, two fingers pinch-zoom + pan); node drag/reparent uses the per-node pointe
 `#stage`/`.node` set `touch-action:none`.
 
 **The grid QUANTISES, and it is one rule for everything the pointer moves.** `snapTo` (utils/num.ts) is
-the whole of it: a dragged card and a resized frame or image card are rounded to
+the whole of it: a dragged card and a resized section or image card are rounded to
 the nearest grid multiple on EVERY move, so each of them is always sitting exactly on a grid position and
 steps to the next as the pointer crosses the halfway line. Nothing is corrected at release, because
-nothing is ever off the grid to correct. A card in a frame snaps relative to THAT box's corner,
+nothing is ever off the grid to correct. A card in a section snaps relative to THAT box's corner,
 since that is the space its position lives in, and a multi-selection is corrected by the anchor's own
 offset, so the group keeps its internal spacing and moves as one piece.
 
@@ -612,29 +612,29 @@ cached (the float bar re-places itself every frame while it's open) and dropped 
 floating panel, popover and context menu ends in — measures its margin from the safe edge rather than
 `window.innerWidth/Height`, which under `cover` now includes the hardware.
 
-**Collapse folds a card to a CHIP and a frame to its PILL — something small, and nothing else moves.**
+**Collapse folds a card to a CHIP and a section to its PILL — something small, and nothing else moves.**
 That's what the apps that do it well do (Heptabase folds a card to its title; Obsidian's Advanced Canvas
 folds a group to its header), and what FigJam's "hide contents" doesn't: a hidden section keeps its size.
-`canFold` (view/geometry.ts) is the one rule: every frame, a card with something below its first line, or an image
+`canFold` (view/geometry.ts) is the one rule: every section, a card with something below its first line, or an image
 card (which folds to a 40px icon). Entry points, all through `toggleCollapse`/`toggleCollapseSelection`/
-`setCollapsedSelection`: the float bar's fold button (`fbFold`), `X`, the ⋯ menu, `←`/`→` (directional, not toggles), a
+`setCollapsedSelection`: the float bar's fold button (`fbFold`), `X`, the right-click menu, `←`/`→` (directional, not toggles), a
 double-click ON a folded card or pill (it unfolds — `activateNode`), and ⌘P's **Collapse all** / **Expand
-all** (`foldScope`: the selected frames and everything in them, else every frame and card in the place
+all** (`foldScope`: the selected sections and everything in them, else every section and card in the place
 you're looking at — hidden ones included, so Expand all brings everything back). Folding drops anything
 it hid from the selection (`dropHiddenFromSelection`). It ANIMATES (`animateLayout`): positions glide
 (`animateReflow`) and every box whose size changed plays from its old size to its new one (`animateSizes`,
-Web Animations on width/height with the content clipped, a frame's content wrapper with it). Fit
+Web Animations on width/height with the content clipped, a section's content wrapper with it). Fit
 (`autoSizeSelection`) goes through the same path (`animateLayout`).
 
-- **A folded FRAME** is its label pill at the box's top-left corner: its name, a round count of the
-  notes inside (`.frame-count`, `descendantCount`). `nodeH` = `FRAME_TAB_H` (40px: 20px line + 9px padding
+- **A folded SECTION** is its label pill at the box's top-left corner: its name, a round count of the
+  notes inside (`.section-count`, `descendantCount`). `nodeH` = `SECTION_TAB_H` (40px: 20px line + 9px padding
   + 1px border, top and bottom — pinned in CSS, since `nodeH` asserts it rather than measuring); `nodeW`
   measures the pill. Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
-  when the pill is dragged (`moveSubtreeTo`'s `insideFrame`). It takes no drops (`isFrame` is false while
+  when the pill is dragged (`moveSubtreeTo`'s `insideSection`). It takes no drops (`isSection` is false while
   folded) and has no resize handles. Anything ADDED inside one — a paste, a new card, a dropped file or
-  text — unfolds it first; `focusNode` (search, links) unfolds the frames above its target.
-- **A line to a card inside a folded frame ends on the pill** (`edgeEnd` in view/free-edges.ts:
-  `firstVisible`, its pinned port dropped); a line between two cards of the same folded frame is hidden.
+  text — unfolds it first; `focusNode` (search, links) unfolds the sections above its target.
+- **A line to a card inside a folded section ends on the pill** (`edgeEnd` in view/free-edges.ts:
+  `firstVisible`, its pinned port dropped); a line between two cards of the same folded section is hidden.
 
 - **The fold button lives on the float bar, not on the card** (`fbFold`, float-bar.ts `markOpen`). A ▾ in
   each card's padding was tried and was too small to hit and invisible until hovered. The bar's button
@@ -644,7 +644,7 @@ Web Animations on width/height with the content clipped, a frame's content wrapp
 - **A folded card is a CHIP**: one row — its first line (`collapsedMarkdown`, greyed when the card is
   untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: "+N"
   (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
-  more lines"). It shrink-wraps (`width:max-content`, 40px tall like a folded frame's pill, `FRAME_TAB_H`) up to the width it has open (an inline
+  more lines"). It shrink-wraps (`width:max-content`, 40px tall like a folded section's pill, `SECTION_TAB_H`) up to the width it has open (an inline
   `max-width`), so `nodeW` measures a folded card. Its authored `n.h` is NOT applied while folded (no `min-height`), so a card
   dragged taller still folds to the 40px chip and unfolds back to that height.
 - **While a card is resized its tags step aside** (`.resizing`, set from `resizingId` in paintNode's class
@@ -658,42 +658,42 @@ Web Animations on width/height with the content clipped, a frame's content wrapp
   beside it, in its colour. Nothing changes — no fold state, layout or save. Mouse only; any press, key or
   wheel puts it away. The panel is a `.node > .body` outside `#world`, so card text styles apply and nothing
   that walks the canvas sees it. Tapping a folded card's badge (`peekCard`) opens it on any device — the touch
-  way in, since touch has no hover. Cards only: a folded frame's pill is a count, not a note.
+  way in, since touch has no hover. Cards only: a folded section's pill is a count, not a note.
 
 **A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — no plain
 double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the
 gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
 the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
-and only a frame opens: on a card ⌥-double-click is a plain double-click. Its touch spelling is a TWO-FINGER
+and only a section opens: on a card ⌥-double-click is a plain double-click. Its touch spelling is a TWO-FINGER
 double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `↑`, the float bar's
 Open and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
-the exemption `openFrame` itself takes: looking inside something isn't changing it.
+the exemption `openSection` itself takes: looking inside something isn't changing it.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
-`.title-row` (a card's title row, a frame's folder tab) renames via
-`startInlineEdit` — the single rename funnel, so the FRAME
+`.title-row` (a card's title row, a section's folder tab) renames via
+`startInlineEdit` — the single rename funnel, so the SECTION
 hand-off and the lock refusal come for free; anything else
 on a card edits its note (on a card those two are the same editor with the caret in a different place). A
-FRAME's interior gets a new card WHERE YOU POINTED (`addCardInside`, which refuses a locked frame and
+SECTION's interior gets a new card WHERE YOU POINTED (`addCardInside`, which refuses a locked section and
 reveals a folded one) — a 2D box is exactly the container where "here" means something.
 The same gesture on empty canvas creates a root card (`stage`'s
-`dblclick` in `features/gestures.ts`) — **or, while a frame is open, LEAVES it**, since the canvas then IS
-that frame's interior. Going in and coming out being one gesture is most of what makes a frame feel like a
-folder; making a card inside an open frame is `Space`, `Tab` and the canvas right-click, which all land it in
-that frame (`detachParentId`). Four things hold it together:
+`dblclick` in `features/gestures.ts`) — **or, while a section is open, LEAVES it**, since the canvas then IS
+that section's interior. Going in and coming out being one gesture is most of what makes a section feel like a
+folder; making a card inside an open section is `Space`, `Tab` and the canvas right-click, which all land it in
+that section (`detachParentId`). Four things hold it together:
 
 - **The INNERMOST node owns the gesture, including the ones it declines.** Child cards are DOM-nested, so both
   handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/drag.ts`) `stopPropagation` BEFORE their
   bails, not after — otherwise a gesture this card refuses bubbles to its host card, which reads it as a
   double-click on itself, opening the HOST's editor and sending the rest of the typing into the parent's note.
   On touch it's worse, since each ancestor keeps its OWN tap counter. A container's children are exempt by
-  construction — they live in its sibling `.frame-content` wrapper, not inside its element.
+  construction — they live in its sibling `.section-content` wrapper, not inside its element.
 - **`NODE_CONTROLS`** (`main.ts`) is the one list of things that act on a SINGLE click — chip, checkboxes,
   links and `#tags`, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
   counter bail on it, or the second click would fire the button AND open the card.
 - **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on it
   renames — otherwise a double-click would open an editor inside a hidden `.body`.
 - **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows). The short-circuit sits
-  ahead of everything, so a read-only double-click on a frame FOLDS it rather than opening it — `↑` and the ⋯
+  ahead of everything, so a read-only double-click on a section FOLDS it rather than opening it — `↑` and the ⋯
   menu are the routes in.
 
 **A click now only ever SELECTS.** Don't reintroduce a slow-second-click rename timer: it can only race the
@@ -751,7 +751,7 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
 (`utils/advance.ts advanceTitle`, tested — a `YYYY-MM-DD` date by one day with any weekday name beside it,
 else the last number up, keeping its padding; a card with no heading advances its first line), and it lands in
 the next slot of its ROW — to the right, at the gap the row already keeps from its left neighbour, past
-anything already there — with its frame grown to hold it. Plain D stays an EXACT copy, just below: the two
+anything already there — with its section grown to hold it. Plain D stays an EXACT copy, just below: the two
 are different jobs, so neither guesses which one you meant.
 
 **A TAG is an OBSIDIAN tag, and its job is FINDING cards** (`utils/tags.ts`, tested). Any word, nested with `/`;
@@ -775,11 +775,11 @@ moved or rewritten: the note's, not ours). Matching ignores case and a parent ma
   `/` kept): its query is tag CHIPS plus text. A tag clicked anywhere toggles its chip; typing `#` suggests
   the board's tags (and its emoji by name) and Enter or a space makes the chip; Backspace on an empty field
   takes the last one back. Non-matches fade; the match set is DERIVED every paint (`paintAll` →
-  `refreshSearch`), so tagging under a search shows at once, and it lights the frames around a match, a FOLDED
-  one saying "2 matches". A folded frame never read (`data/lazy.ts`) knows no tags and just fades. A field with
+  `refreshSearch`), so tagging under a search shows at once, and it lights the sections around a match, a FOLDED
+  one saying "2 matches". A folded section never read (`data/lazy.ts`) knows no tags and just fades. A field with
   a query in it STAYS when you click away — a filter to work under — and Esc or × ends it. So a click is never
   a delete, and there is no second filter mode to keep in step.
-- Frames wear no tags: a frame is a place, and a search lights it by what it holds.
+- Sections wear no tags: a section is a place, and a search lights it by what it holds.
 
 **MERGING notes and BREAKING them apart are two DRAGS, not two commands** — where Scrivener and Ulysses put
 list commands on a multi-selection, a canvas has a place to point at. No menu entry, no shortcut for either;
@@ -791,21 +791,21 @@ delete, a break is a body edit plus a create.
   and each dragged note folds into its body as `## Title` then its text, in selection order. Tags are unioned
   in. `canMerge` is the ONE kind test and answers for both sides: a plain card. Every other kind
   is a box whose shape is the point.
-- **⌥ is free for it** — a plain drag moves (in and out of frames), ⇧ clones, ⌘ toggles the selection. One
+- **⌥ is free for it** — a plain drag moves (in and out of sections), ⇧ clones, ⌘ toggles the selection. One
   knock-on: `paintDetachPreview` (⌥
   pressed mid-drag) goes through `dragFollow`, so the target's outline appears on the KEYPRESS rather than the
   next mouse jiggle.
 - **Dragging a card's selected text OUT of its editor BREAKS it apart** (`features/text-drag.ts` →
   `dropCardText`), after Heptabase's whiteboard gesture: drop it on empty canvas and it becomes a card of its
-  own, in a frame and it becomes a card THERE, on another card and it's appended to that
+  own, in a section and it becomes a card THERE, on another card and it's appended to that
   note. Always a MOVE — the text leaves the source, whose editor is DROPPED rather than ended, since
   `endBodyEdit` would write the editor's stale value back over what was just cut. `TextSource`
   (`{id, start, end}`) is the range, captured at `dragstart` and read back live at the drop (`liveText`), since
   the offsets are into what the EDITOR shows, not into `n.title`/`n.body`. **Dragging a card's NAME out is the
   same gesture and needs no second arm**, the name being the `# ` line inside that very field: `cutCardText`
   re-SPLITS whatever is left, so cutting the heading away just leaves the card untitled.
-- **Where the new card belongs is the drop rule**: dropped in a frame, it's that frame's card; on the open
-  canvas, the top level (`detachParentId`) — dropping on the canvas is how a note comes OUT of a frame. Splitting the dragged lump is `splitHeading`
+- **Where the new card belongs is the drop rule**: dropped in a section, it's that section's card; on the open
+  canvas, the top level (`detachParentId`) — dropping on the canvas is how a note comes OUT of a section. Splitting the dragged lump is `splitHeading`
   itself — a leading `# ` line becomes the new card's title, and without one the card is untitled and the whole
   lump is its body. Shared with `⌘⇧E`.
 - **What rides the cursor is a CARD** (`buildGhost` → `setDragImage`, `.node.drag-ghost`), not the browser's
@@ -822,7 +822,7 @@ delete, a break is a body edit plus a create.
   ANCESTOR is decisive about what a drag begun inside it drags, so a selection can never come out of a
   contenteditable while it holds; a `<textarea>` is the exception (a text control holding a selection outranks
   the ancestor), so now that a card is ONE textarea the problem is structurally absent — it survives only for a
-  CONTAINER's label editor, still a contenteditable (`ui.titleEdit`), since a frame's `.body` is `display:none`
+  CONTAINER's label editor, still a contenteditable (`ui.titleEdit`), since a section's `.body` is `display:none`
   and its tab can't host the card field. That same `dragstart` handler also cancels every native drag it doesn't
   own, so it must stand aside for this one: `cardTextDrag` is the shared resolver, and it tests the CARD the
   drag began on, not just "some editor is open", or an editor left open elsewhere would make that card's export
@@ -830,10 +830,10 @@ delete, a break is a body edit plus a create.
   selection dragged back into its own note, a plain in-textarea move that must stay one (hence `destAt`
   returning null for the source card).
 
-**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `features/commands.ts`):** `↑` opens the selected frame, `↓`
+**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `features/commands.ts`):** `↑` opens the selected section, `↓`
 leaves the open one, `→` unfolds, `←` folds. All four are about DEPTH, in the two senses this map has — which
-folder you're standing in, and whether a frame or note is folded. **Walking between cards lost its keys to
-that**, deliberately: opening a frame is the primary way to move around a big map, and clicking covers the
+folder you're standing in, and whether a section or note is folded. **Walking between cards lost its keys to
+that**, deliberately: opening a section is the primary way to move around a big map, and clicking covers the
 rest. The keys no longer pan — `↑` re-frames via
 `frameBox`, `↓` glides back to a remembered camera, `→`/`←` don't move the camera at all (`revealInView`
 survives for its other callers). Two details: `←`/`→` are
@@ -841,18 +841,18 @@ DIRECTIONAL rather than toggles (pressing `→` twice can't fold what it just un
 lands on one state in a single press). They act on the WHOLE selection via the directional sibling of `toggleCollapseSelection`,
 both filtering through one shared foldable-selection helper so the chip, `X` and the arrows can't disagree about
 what counts — a keyboard fold has no business reaching fewer cards than a click does. `↑` stays single, since
-you can only stand in one frame. Because the directional form skips cards already in the target state, its undo
+you can only stand in one section. Because the directional form skips cards already in the target state, its undo
 step covers exactly what it changed. `↓` reads the SCOPE, not the selection, so it still works right after
 clicking empty space to deselect — which is exactly when you want to go up; it's silently inert at the top
 level, since a status line there would nag on every repeat.
 
-**`⌘A` selects everything ON THE CANVAS** — which, inside an open frame, is that frame's contents and nothing
+**`⌘A` selects everything ON THE CANVAS** — which, inside an open section, is that section's contents and nothing
 else. It needs no scope test of its own: `isHidden` already means "on the canvas right now", and
 `setSelectionSet` drops whatever isn't selectable. Guarded by `isTypingInField`, since in a field `⌘A` belongs
 to the field.
 
 **The full-screen viewer PAGES through a card's neighbours** (`features/image-viewer.ts`): ‹ / › and ←/→
-step across every image in the notes that share the opened card's parent — a frame's contents, a branch's
+step across every image in the notes that share the opened card's parent — a section's contents, a branch's
 siblings — in canvas reading order (top-to-bottom, then left-to-right, then each note's own order), wrapping
 at both ends. The run is built from the NOTES, not the rendered DOM, so a FOLDED sibling's pictures are in
 it too (they're no less part of the set for being tucked away), and each path resolves through the same
@@ -876,7 +876,7 @@ stays put.
 white chrome on a soft shadow (`--shadow-ui`), Figma blue (#0d99ff) for selection, and DARK islands for the
 object toolbar, its popovers and the context menu (`--bar-*`). One theme means a map looks the same
 everywhere, and a colour has exactly one ink. An uncoloured CARD falls back to `amber`, the sticky
-yellow — derived, never written, so the note on disk stays uncoloured — and an uncoloured FRAME to `white`.
+yellow — derived, never written, so the note on disk stays uncoloured — and an uncoloured SECTION to `white`.
 The keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
 
 **The colour picker is FigJam's: two rows of eleven** (`PICKER_ROWS`, view/color.ts) — the STRONG hues framed by
@@ -884,7 +884,7 @@ black and white (`stone`, `bold-red` … `bold-pink`), then the pastels, the sti
 greys and ending in the custom chip; recently used custom colours wrap onto a third row. `PALETTE` is every
 key a note may carry (a superset: `slate` still paints but is no longer offered), and its `.c-<key>`
 classes are GENERATED beside their ink (`deriveInk`), so a new key is its `--pal-*` hex plus one array
-entry. There are no "inherit" or "none" chips: a card nobody coloured keeps following its frame, and the
+entry. There are no "inherit" or "none" chips: a card nobody coloured keeps following its section, and the
 picker rings the colour it SHOWS (`effectiveColor`) — the selected chip wears FigJam's violet ring. A line's
 default ink IS `stone`, so the line picker needs no "default" chip either.
 
@@ -897,7 +897,7 @@ open for typing — stepping past cards already there so repeated clicks fan out
 the card, so an abandoned empty card takes its line with it (`discardNewCard` → `deleteNodes`). While a card is
 being EDITED the card itself is the field: the textarea is bare (no box, no scrim), the ring turns a dimmed
 3px blue (`--edit-ring`) round the card's border and the corner handles stand down
-(`.node.sel.card-editing`); a frame's label being renamed rings its PILL the same way. The card never
+(`.node.sel.card-editing`); a section's label being renamed rings its PILL the same way. The card never
 changes size as editing starts: the textarea is one row (`rows = 1`) and the card holds the height it
 had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — it only grows if you type
 past it. While a line end is dragged, the target card shows its ports; the one within `PORT_SNAP` fills. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
@@ -908,10 +908,11 @@ line's toolbar (`#edgeBar`) never covers the line: it sits above the route's who
 untrimmed ends included), or below when there's no room, and its pickers open on the side away from it.
 
 **The context menu is FigJam's** (`#ctxMenu`, `features/context-menu.ts`; a card's entries are
-`buildCardMenu` in float-bar.ts, shared with the bar's ⋯). Groups, in FigJam's order: the clipboard
-(Copy/Cut/Paste/Duplicate), Delete, what you can do with it (Edit or Rename, Open, Collapse, Group,
+`buildCardMenu` in float-bar.ts). The float bar has NO kebab, as in FigJam: it shows "Wrap in new section"
+(⌘S) when several are selected and "Ungroup" (⌘⌫) when a section is. Groups, in FigJam's order: the clipboard
+(Copy/Cut/Paste/Duplicate), Delete/Ungroup, what you can do with it (Edit or Rename, Open, Collapse, Wrap,
 Fit to contents), where it goes outside the map (file path, download, share), and Lock last. Only actions with
-no easier home: a new card beside one is the port ⊕, a card inside a frame is a double-click, zooming is
+no easier home: a new card beside one is the port ⊕, a card inside a section is a double-click, zooming is
 F. Rows are 24px, text 16px from the edges, the shortcut grey at the right, the hover a rounded blue row
 inset 8px, and no red Delete.
 
@@ -926,11 +927,11 @@ the edge bar's line style (a Solid/Dashed popover, `ebDashPop`) and ends, the do
 or more selected), ⌘P, and FigJam's shortcuts (`⌃⌥T` tidy, `⌥A/H/D/W/V/S` align, `⌃⌥H/V` space evenly —
 matched by `e.code`, since ⌥ rewrites letters on a Mac and Alt+D still reads `d` elsewhere). The geometry is
 pure (`utils/tidy.ts`, pinned by tests/tidy.test.ts); `features/tidy.ts` applies it to the top-level
-selected nodes (a frame carries its cards) as one undo step with the reflow glide. **Tidy up** reads the rows
+selected nodes (a section carries its cards) as one undo step with the reflow glide. **Tidy up** reads the rows
 the selection already forms (`rowsOf`: a box joins the row above when it overlaps it vertically at all and
 shares no column with a box in it — so a messy column stays a column, a drifting row a row) and lays them
 out as a grid: columns as wide as their widest box, `SPACING` gaps, from the selection's snapped top-left,
-order kept. A frame's box counts its label. With several selected, the float bar sits above the whole
+order kept. A section's box counts its label. With several selected, the float bar sits above the whole
 selection, not over one card of it.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
@@ -1015,13 +1016,13 @@ vault data: no frontmatter key, no map-level palette. Four things to keep right:
 `<body>` and `styles.css` hides the lock badge and the top edge (tags): a few
 unreadable pixels each at that scale, times every card on screen. Purely a CSS mode (no node geometry depends on
 it, so crossing the line needs no repaint). Add any new card-corner badge to that rule. Page CHROME is out of scope and must not be added: `#scopeBar`'s crumbs stay legible at every zoom, since
-being zoomed out is when you most need to know which frame you're standing in.
+being zoomed out is when you most need to know which section you're standing in.
 
-**Zoomed out, a frame's NAME keeps its screen size** — below 100% its label is scaled by `1/k` (`labelScale`,
-`view/camera.ts`), the way FigJam's section titles are, so an overview of weeks of frames reads as a list of
-names. The factor is `--ls` on each FRAME element, never on `#world`: a custom property there would restyle
+**Zoomed out, a section's NAME keeps its screen size** — below 100% its label is scaled by `1/k` (`labelScale`,
+`view/camera.ts`), the way FigJam's section titles are, so an overview of weeks of sections reads as a list of
+names. The factor is `--ls` on each SECTION element, never on `#world`: a custom property there would restyle
 every card on every zoom frame. The label scales from its bottom-left corner by a `transform` (no re-layout),
-with its 7px gap and its box-width cap divided back out. A folded frame's pill is NOT scaled: it is a node with
+with its 7px gap and its box-width cap divided back out. A folded section's pill is NOT scaled: it is a node with
 world geometry that guides, drops and lines measure, and a visual scale would cover its neighbours.
 
 ## State and naming
@@ -1029,7 +1030,7 @@ world geometry that guides, drops and lines measure, and a visual scale would co
 **The mutable `state` (`core/state.ts`) is the MAP:** `nodes` (id → node), `view` (`{x,y,k}`), selection (`selId`
 + `sel` Set), `readOnly`, `canvasColor`, the grid settings, … Every field is either the notes
 themselves or something mirrored to disk/localStorage and restored on load. The render pipeline is `paintNode` /
-`paintEdges` / `paintAll`; DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG. The open-frame
+`paintEdges` / `paintAll`; DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG. The open-section
 scope is deliberately **not** in here (it lives in `nav/scope.ts`): a scope is where you're STANDING, never
 reaches frontmatter, is mirrored only into the hash, and its camera stack is session-only.
 

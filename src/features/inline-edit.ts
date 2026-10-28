@@ -20,8 +20,8 @@ import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines
 import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { extractToCard, discardNewCard } from './crud.js';
-import { growFramesToHold, syncFloatBar } from './float-bar.js';
+import { extractToCard, discardNewCard, nextSectionTitle } from './crud.js';
+import { growSectionsToHold, syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 import { selectNode } from './selection.js';
 import { scheduleSave } from '../data/save.js';
@@ -45,23 +45,23 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
     return;
   }
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
-  // A FRAME's label can't live in the card editor — it's a folder TAB of fixed height, and the frame's own
+  // A SECTION's label can't live in the card editor — it's a folder TAB of fixed height, and the section's own
   // `.body` is display:none, so a textarea in there couldn't be focused (see ui-state.ts TitleEdit). Its
   // tab is renamed on itself instead.
-  if (n.type === 'frame') { startTitleEdit(n, { isNew }); return; }
+  if (n.type === 'section') { startTitleEdit(n, { isNew }); return; }
   startCardEdit(n, { caret: 'title', isNew });
 }
 
-// ---------- a frame's label, renamed in place (on its tab) ----------
-// The float bar's title button (T): open the label with its NAME selected — and on an untitled frame,
+// ---------- a section's label, renamed in place (on its tab) ----------
+// The float bar's title button (T): open the label with its NAME selected — and on an untitled section,
 // which shows no label at all, seed one first, so the label comes back with a name ready to type over.
-// Esc on a seeded name leaves the frame untitled, as it was.
-export function editFrameTitle(n: MindNode): void {
+// Esc on a seeded name leaves the section untitled, as it was.
+export function editSectionTitle(n: MindNode): void {
   if (state.readOnly) {
     return;
   }
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
-  startTitleEdit(n, { seed: 'Frame' });
+  startTitleEdit(n, { seed: nextSectionTitle() });
 }
 function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boolean; seed?: string } = {}): void {
   if (!n.el) {
@@ -73,12 +73,12 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   if (ui.titleEdit) {
     endTitleEdit();                                // …or any other label editor
   }
-  touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh frame, incl. its creation)
+  touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh section, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) {
     selectNode(n.id);
   }
-  // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded frame
-  // included, and a frame's child cards may be DOM-nested inside it — so an unscoped
+  // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded section
+  // included, and a section's child cards may be DOM-nested inside it — so an unscoped
   // `.title` lookup could pick a child card's title instead of this node's own.
   const titleEl = n.el.querySelector(':scope > .title-row > .title') as HTMLElement;
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
@@ -93,7 +93,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // in the tab: the next paint sees a matching key and skips the re-render. Same reason startCardEdit
   // clears the body's.
   delete titleEl.dataset.md;
-  // An UNNAMED frame draws no tab (view/layout.ts frameLabelled) — reveal the row for the duration, or the
+  // An UNNAMED section draws no tab (view/layout.ts sectionLabelled) — reveal the row for the duration, or the
   // editor would open on a display:none element and swallow every keystroke. paintNode keeps it revealed
   // while ui.titleEdit points here, and hides it again after the commit if nothing was typed.
   n.el.classList.remove('no-title');
@@ -112,7 +112,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
 // ANCESTOR is decisive: the browser resolves any drag begun inside it as that ELEMENT's drag, so a
 // mouse can't select text inside a contenteditable while it holds. (A <textarea> is the exception — a
 // text control with a selection outranks the ancestor — which is why the CARD editor needs none of
-// this.) Every teardown path puts it back; exporting a frame mid-rename isn't a gesture anyone is making.
+// this.) Every teardown path puts it back; exporting a section mid-rename isn't a gesture anyone is making.
 function setCardDraggable(n: MindNode | undefined, on: boolean): void {
   if (n?.el) {
     n.el.draggable = on;
@@ -132,14 +132,14 @@ export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
     return;
   }
   // Enter finishes; ⇧Enter is a new line — the name is the first line, everything after it the
-  // frame's description (main.ts paintNode draws it under the name).
+  // section's description (main.ts paintNode draws it under the name).
   if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab'){ e.preventDefault(); e.stopPropagation(); endTitleEdit(); }
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
-// Commit (or cancel) a frame rename. The text is MARKDOWN, so it splits like any card's — `# Name` is a
+// Commit (or cancel) a section rename. The text is MARKDOWN, so it splits like any card's — `# Name` is a
 // heading on the label with the lines below it the description, `Name` is plain text there — and an
-// EMPTY commit is accepted: a frame may have no name, in which case it shows no label at all (main.ts
-// frameLabelled), like an untitled FigJam section. The label hangs outside the box, so neither moves
+// EMPTY commit is accepted: a section may have no name, in which case it shows no label at all (main.ts
+// sectionLabelled), like an untitled FigJam section. The label hangs outside the box, so neither moves
 // the box. The toolbar's title button (features/float-bar.ts) brings a label back.
 // Nothing restores the element's text here: `ui.titleEdit` is nulled first, which lets the paintAll below
 // re-render the tab from the fields — the raw source goes away with the editor.
@@ -151,7 +151,7 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   ui.titleEdit = null;                                // null first → the blur handler becomes a no-op
   const n = state.nodes.get(te.id);
   // Line breaks KEPT: `# Name` on the first line, the description below it (view/layout.ts
-  // frameDescription). Read while the editor is still `.editing` (white-space:pre-wrap) — innerText
+  // sectionDescription). Read while the editor is still `.editing` (white-space:pre-wrap) — innerText
   // follows the CSS, and the tab's own nowrap would fold every line break into a space.
   const val = (te.el.innerText ?? te.el.textContent ?? '').replace(/\r\n?/g, '\n').trim();
   setCardDraggable(n, true);
@@ -159,7 +159,7 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   te.el.classList.remove('editing');
   te.el.blur();                                       // ensure the keyboard closes on iOS
   if (!n) { commitStep(); return; }
-  if (cancel && te.isNew){                            // Esc on a freshly-created frame = cancel creation
+  if (cancel && te.isNew){                            // Esc on a freshly-created section = cancel creation
     discardNewCard(n.id, 'Cancelled new card');
     return;
   }
@@ -247,7 +247,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
     endBodyEdit();                              // close any other open editor
   }
   if (ui.titleEdit) {
-    endTitleEdit();                            // …including a frame's label
+    endTitleEdit();                            // …including a section's label
   }
   touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh card, incl. its creation)
   if (state.selId !== n.id || state.sel.size !== 1) {
@@ -498,8 +498,8 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change
-  // A note that grew past its frame's edge would be clipped out of sight — grow the frame instead.
-  if (changed && growFramesToHold([n.id])) {
+  // A note that grew past its section's edge would be clipped out of sight — grow the section instead.
+  if (changed && growSectionsToHold([n.id])) {
     relayout();
   }
   // The text decides what the bar offers (a card with lines to tuck away can fold): the bar was synced for

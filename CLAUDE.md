@@ -33,10 +33,10 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
-  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded frames), `save-alert.ts`.
-- `view/` — `camera.ts`, `layout.ts` (frame geometry, the drop test `frameAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
+  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts`.
+- `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
   grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
-- `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open frames), `frames.ts` (opening/leaving), `focus.ts`.
+- `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
   resize, text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
   `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
@@ -48,27 +48,27 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 Each has a longer "why" in `docs/architecture.md`; read it before changing the code it governs.
 
 - **One `.md` file per node, and the file's PATH is its identity**; ONE `board.json` holds ARRANGEMENT, never content.
-- **A frame IS a folder** (`Name/_index.md` + its cards; parent = the path, `parentFileOf`); a move moves the file
-  (`planPaths`). A FOLDED frame's folder is NOT READ until needed and lets go once saved (`data/lazy.ts`).
+- **A section IS a folder** (`Name/_index.md` + its cards; parent = the path, `parentFileOf`); a move moves the file
+  (`planPaths`). A FOLDED section's folder is NOT READ until needed and lets go once saved (`data/lazy.ts`).
 - **A node's TITLE is the leading `# ` line of its body and nothing else** (`splitHeading`/
   `joinHeading`, exact inverses). Not frontmatter, not the filename; no heading = an UNTITLED card. The
   filename is a slug TRACKING that text: re-derived each save, renamed on edit-commit, suffixed `Notes 2.md`.
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
-- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the frame that is its parent;
+- **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the section that is its parent;
   free edges live in `board.json`, ELBOW card to card (route derived, never stored), and mean nothing structural.
 - **Layout lives in `mm_*` frontmatter** (`mm_position_x`/`_y`,
   `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
-- **Two kinds, card and frame (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
-  through `holderOf`; a drop lands in the innermost frame under the card's centre (`frameAt`), else the top level.
+- **Two kinds, card and section (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
+  through `holderOf`; a drop lands in the innermost section under the card's centre (`sectionAt`), else the top level.
 - **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed** (dragged shorter, `n.clip`: exact, clipped). An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
-- **Visibility has ONE gate, `isHidden`**: a FOLDED frame ancestor (persisted) and the open-frame scope
+- **Visibility has ONE gate, `isHidden`**: a FOLDED section ancestor (persisted) and the open-section scope
   (ephemeral). Add new terms IN it, never beside it. Nothing writes through it.
 - **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
-  make writes no-ops. Folding a card and opening a frame stay allowed in read-only — they mutate nothing.
+  make writes no-ops. Folding a card and opening a section stay allowed in read-only — they mutate nothing.
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
   layout pass reads `offsetHeight`, so it needs current DOM (the paint-before-measure rule).
@@ -84,13 +84,13 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 
 ## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
-- Frames — "A frame COLLECTS what it covers" · "A frame's BOUNDS are its box" · "A container's content wrapper is
-  LIFECYCLE-managed" · "A frame can be OPENED, and
+- Sections — "A section COLLECTS what it covers" · "A section's BOUNDS are its box" · "A container's content wrapper is
+  LIFECYCLE-managed" · "A section can be OPENED, and
   then the canvas IS its interior" · "A CARD is never opened" (scope, crumbs, canvas colour, `detachParentId`).
-- The model — "Cards are flat; a FRAME is the only container" (drop rule, grow-to-hold, load migration) · "A frame's
+- The model — "Cards are flat; a SECTION is the only container" (drop rule, grow-to-hold, load migration) · "A section's
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
-- Interaction — "Collapse folds a card to a CHIP and a frame to its PILL" (arrow, peek, fold all) · "A plain double-click
+- Interaction — "Collapse folds a card to a CHIP and a section to its PILL" (arrow, peek, fold all) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).

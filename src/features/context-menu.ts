@@ -22,7 +22,7 @@ import { relayout } from '../main.js';
 import { buildCardMenu } from './float-bar.js';
 import { nodeLabel } from '../utils/model.js';
 import { byId, placeInViewport } from '../utils/dom.js';
-import { exitScope, goToScopeDepth } from '../nav/frames.js';
+import { exitScope, goToScopeDepth } from '../nav/sections.js';
 import { selectAll } from './selection.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -86,7 +86,7 @@ export function copyFilePath(n: MindNode): void {
 
 // ---------- image entries (right-click on an <img> inside a card body) ----------
 // Remove the image's markdown reference from the card body. The file itself stays: a note inside a
-// folded frame (not in memory) may still show it, and an undo has to find it there.
+// folded section (not in memory) may still show it, and an undo has to find it there.
 function removeImage(n: MindNode, path: string): void {
   if (state.readOnly || !path) {
     return;
@@ -162,7 +162,7 @@ function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
 
 function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   const entries: MenuEntry[] = [];
-  // While a frame is OPEN the whole visible canvas is its interior, so this menu — and the top-right
+  // While a section is OPEN the whole visible canvas is its interior, so this menu — and the top-right
   // kebab that shares it — is where a touch user finds the way out. Ahead of the read-only gate:
   // leaving isn't a mutation.
   const open = scopeRootNode();

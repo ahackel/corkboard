@@ -1,13 +1,13 @@
 // ---------- reading notes into nodes ----------
 import { type MindNode, isBoxType, state, world, setStatus } from '../core/state.js';
-import { NODE_W, nodeW, FRAME_BORDER, nodeH, snapPt } from '../view/geometry.js';
+import { NODE_W, nodeW, SECTION_BORDER, nodeH, snapPt } from '../view/geometry.js';
 import { parseMd, fileStem } from '../utils/frontmatter.js';
 import { soleImage } from '../utils/markdown.js';
-import { isFrameNote, parentFileOf, dirOf, FRAME_NOTE } from '../utils/filenames.js';
+import { isSectionNote, parentFileOf, dirOf, SECTION_NOTE } from '../utils/filenames.js';
 import { boardGeom, loadBoard, resolveEdges, resolveOrder, boardIsLegacy, flushBoard, unparkEdges } from './board.js';
 import { type TreeListing } from '../store/types.js';
 import { parentOf, childrenOf, ancestors } from '../utils/model.js';
-import { unreadFrameHolding } from './lazy.js';
+import { unreadSectionHolding } from './lazy.js';
 import { type FoldTest } from '../store/tree.js';
 import { scope, resolveScopeAfterLoad } from '../nav/scope.js';
 import { clearHistory } from '../features/history.js';
@@ -15,22 +15,22 @@ import { resetSaveState, scheduleSave } from './save.js';
 import { resetImageCache } from '../features/images.js';
 import { refreshGrid } from '../view/grid.js';
 import { store, updateMapTitle } from './persistence.js';
-import { flattenLegacyBranches, foldCardsIntoFrames } from './migrate.js';
+import { flattenLegacyBranches, foldCardsIntoSections } from './migrate.js';
 import { remeasure, paintNode } from '../main.js';
 import { fit } from '../view/camera.js';
-import { ancestorDepth, orderedKids, frameLabelH, moveSubtreeTo } from '../view/layout.js';
+import { ancestorDepth, orderedKids, sectionLabelH, moveSubtreeTo } from '../view/layout.js';
 import { SPACING } from '../utils/guides.js';
-import { MIN_FRAME_W } from '../features/resize.js';
+import { MIN_SECTION_W } from '../features/resize.js';
 
-// Shared by the load of the whole map and the read of ONE folded frame's folder (readFolder, below):
+// Shared by the load of the whole map and the read of ONE folded section's folder (readFolder, below):
 // both turn listed notes into nodes, take each node's parent off its FOLDER, and settle positions.
 //
 // How each node's rx/ry was seeded decides how the top-down pass (settle) reads it:
 //  · rel    — board.json or the current mm_position_x/y fields: already parent-relative.
-//  · legacy — the legacy mm_x/mm_y fields: parent-relative ONLY for frame children (the old
+//  · legacy — the legacy mm_x/mm_y fields: parent-relative ONLY for section children (the old
 //    behaviour), otherwise ABSOLUTE — converted to relative in the top-down pass.
-//  · neither — a grid fallback (absolute), likewise converted; and `unplaced`, so a frame whose notes
-//    ALL lack a position lays them out once (arrangeFrames).
+//  · neither — a grid fallback (absolute), likewise converted; and `unplaced`, so a section whose notes
+//    ALL lack a position lays them out once (arrangeSections).
 // TODO: legacy is a transitional migration shim — it can go once every map has been re-saved
 // (serializeMd only re-emits mm_position_*, so the first save of any note drops its mm_x/mm_y).
 interface Seeds { rel: Set<string>; legacy: Set<string>; wasStack: Set<string>; unplaced: Set<string>; placed: number; }
@@ -72,11 +72,11 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
   if (unmigrated) {
     rest.title = fileStem(rel);
   }
-  // A folder's frame note IS a frame, whatever its frontmatter says (or doesn't).
-  const type: MindNode['type'] = isFrameNote(rel) ? 'frame' : mm.type;
+  // A folder's section note IS a section, whatever its frontmatter says (or doesn't).
+  const type: MindNode['type'] = isSectionNote(rel) ? 'section' : mm.type;
   // The PARENT is the folder the note sits in (utils/filenames.ts parentFileOf). Only a note at the top
-  // level can still name one in `mm_parent` — a map from before frames were folders — and that note is
-  // marked dirty: the save that follows moves it into its frame's folder and drops the key.
+  // level can still name one in `mm_parent` — a map from before sections were folders — and that note is
+  // marked dirty: the save that follows moves it into its section's folder and drops the key.
   const folderParent = parentFileOf(rel);
   const legacyParent = !folderParent && mm.parent ? mm.parent : '';
   // GEOMETRY comes from board.json first (data/board.ts) and falls back to the note's own mm_*
@@ -119,17 +119,17 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
   }
   return node;
 }
-// A folder with notes in it but no frame note of its own — one made outside the app, in Finder or
-// Obsidian — is a frame all the same, named after the folder. Its frame note is written by the next
-// save (dirty), so from then on it is an ordinary frame.
-function folderFrame(path: string, seeds: Seeds): MindNode {
+// A folder with notes in it but no section note of its own — one made outside the app, in Finder or
+// Obsidian — is a section all the same, named after the folder. Its section note is written by the next
+// save (dirty), so from then on it is an ordinary section.
+function folderSection(path: string, seeds: Seeds): MindNode {
   const d = dirOf(path).slice(0, -1);
   const n = nodeFromNote(path, parseMd(`# ${d.slice(d.lastIndexOf('/') + 1)}\n`), seeds);
   n.dirty = true;
   return n;
 }
-// Add every node a listing yields: its notes, a frame for each folder that lacks one, and the FOLDED
-// frames whose notes stayed unread (`lazy`, with how many there are). Returns the nodes added.
+// Add every node a listing yields: its notes, a section for each folder that lacks one, and the FOLDED
+// sections whose notes stayed unread (`lazy`, with how many there are). Returns the nodes added.
 function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
   for (const d of listing.foreign) {
     foreignDirs.add(d);
@@ -143,28 +143,28 @@ function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
     }
   }
   for (const [dir, f] of listing.lazy) {
-    const path = dir + FRAME_NOTE;
+    const path = dir + SECTION_NOTE;
     let n = [...state.nodes.values()].find(m => m.file?.toLowerCase() === path.toLowerCase());
     if (!n) {
-      add(n = folderFrame(path, seeds));
+      add(n = folderSection(path, seeds));
     }
     n.lazy = f.count;
     n.collapsed = true;   // a folder nobody has unfolded yet arrives as its pill
   }
-  // Frames for the folders that have notes but no frame note — outermost last, since each one asks
-  // for its own parent folder's frame in turn.
+  // Sections for the folders that have notes but no section note — outermost last, since each one asks
+  // for its own parent folder's section in turn.
   for (let i = 0; i < added.length; i++) {
     const want = added[i]._parentPath;
     if (!want || !parentFileOf(added[i].file!) || known.has(want)) {
       continue;
     }
-    add(folderFrame(want, seeds));
+    add(folderSection(want, seeds));
   }
   return added;
 }
 // Resolve each new node's parent path -> a loaded node's id (drops links to missing files), then settle
 // every rx/ry to parent-relative and derive the working x/y — top-down, so a parent's absolute x/y is
-// final by the time its children are reached. rel seeds and legacy frame children are already
+// final by the time its children are reached. rel seeds and legacy section children are already
 // relative; the rest hold an ABSOLUTE seed, so subtract the parent's position.
 function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
   const byPath = new Map<string | null, string>([...state.nodes.values()].map(n => [n.file, n.id]));
@@ -180,7 +180,7 @@ function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
     const n = stack.pop()!;
     const p = parentOf(n);
     const pax = p ? p.x : 0, pay = p ? p.y : 0;   // final (parents are visited before their children)
-    const alreadyRel = seeds.rel.has(n.id) || (seeds.legacy.has(n.id) && !!p && p.type === 'frame');
+    const alreadyRel = seeds.rel.has(n.id) || (seeds.legacy.has(n.id) && !!p && p.type === 'section');
     if (p && !alreadyRel) { n.rx -= pax; n.ry -= pay; }   // absolute seed → parent-relative
     n.x = pax + n.rx; n.y = pay + n.ry;                   // working absolute coords
     for (const k of kidsOf.get(n.id) ?? []) {
@@ -189,42 +189,42 @@ function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
   }
   return byPath;
 }
-// The frame an unread note sits in, for a line that ends on it: the deepest folded frame in memory
+// The section an unread note sits in, for a line that ends on it: the deepest folded section in memory
 // whose folder holds the path (data/board.ts resolveEdges).
 function standInFor(path: string): string | null {
-  return unreadFrameHolding(path)?.id ?? null;
+  return unreadSectionHolding(path)?.id ?? null;
 }
-// Which folders a read leaves UNREAD (store/tree.ts): a frame folded in board.json, and a folder the
+// Which folders a read leaves UNREAD (store/tree.ts): a section folded in board.json, and a folder the
 // board has never seen — it arrives as a folded pill. Never one on the way to a path in `keep` (the
-// frames you are standing in), which has to be on the canvas.
+// sections you are standing in), which has to be on the canvas.
 function foldTest(keep: string[]): FoldTest {
   return (dir) => {
     if (keep.some(k => k.startsWith(dir))) {
       return false;
     }
-    const g = boardGeom(dir + FRAME_NOTE);
+    const g = boardGeom(dir + SECTION_NOTE);
     return g ? !!g.collapsed : true;
   };
 }
-// Folders on disk that are NOT frames (`attachments/`, …), lowercased: a frame may not move into one.
+// Folders on disk that are NOT sections (`attachments/`, …), lowercased: a section may not move into one.
 export const foreignDirs = new Set<string>();
 const scopeFiles = (): string[] => scope.stack.map(l => l.file).filter((f): f is string => !!f);
 
 export async function loadFromDir({ keepView = false }: { keepView?: boolean } = {}): Promise<void> {
   clearHistory();   // ids are minted fresh per load, so no snapshot survives a (re)load / map switch
-  // …including the container wrappers, which carry no data-id: a frame's clipping wrapper
-  // hangs off the NODE object (frameContentEl), so once state.nodes is
+  // …including the container wrappers, which carry no data-id: a section's clipping wrapper
+  // hangs off the NODE object (sectionContentEl), so once state.nodes is
   // cleared nothing can reach the old ones to remove them and they'd pile up in #world on every load.
   state.nodes.clear(); state.toDelete = [];
   resetSaveState();
   foreignDirs.clear();
   foreignDirs.add('attachments/');   // where pasted pictures go, even before the first one has
-  world.querySelectorAll('[data-id], .frame-content').forEach(e=>e.remove());
+  world.querySelectorAll('[data-id], .section-content').forEach(e=>e.remove());
   resetImageCache();   // blob URLs from the previous map (or store) are stale now
   await loadBoard();   // edges + ink layer + view prefs for this map (board.json), if any
   refreshGrid();
 
-  // Read every note — except the insides of FOLDED frames, which stay on disk until unfolded.
+  // Read every note — except the insides of FOLDED sections, which stay on disk until unfolded.
   // Ids are ephemeral (minted fresh each load) since the path is the real identity.
   state.idSeq = 1;
   const seeds = newSeeds();
@@ -235,11 +235,11 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // A map written before containment: its card-to-card links meant "beside", not "inside". Convert
   // them now that every node has final absolute coordinates to be re-anchored from.
   const flattened = boardIsLegacy() ? flattenLegacyBranches(seeds.wasStack) : 0;
-  // …and cards no longer hold cards: any card that still has children becomes a frame holding them.
-  const folded = foldCardsIntoFrames();
-  arrangeFrames(unplacedFrames(added, seeds), seeds.unplaced);
-  // Re-point the open-frame scope at the freshly minted ids BEFORE the first layout/paint, so a
-  // reload that happens while you're inside a frame lays out scoped straight away — no flash of the
+  // …and cards no longer hold cards: any card that still has children becomes a section holding them.
+  const folded = foldCardsIntoSections();
+  arrangeSections(unplacedSections(added, seeds), seeds.unplaced);
+  // Re-point the open-section scope at the freshly minted ids BEFORE the first layout/paint, so a
+  // reload that happens while you're inside a section lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).
   resolveScopeAfterLoad();
   remeasure();   // paint so every card has a real measured height, settle, and paint again
@@ -247,7 +247,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     fit();
   }
   // A migration is persisted BOARD FIRST, and awaited: the new edges and the model stamp have to be
-  // on disk before any note moves into its frame's folder, or a failed write between the two would drop the
+  // on disk before any note moves into its section's folder, or a failed write between the two would drop the
   // hierarchy AND the edges that replaced it. If the board write throws, the notes are left alone and
   // the map simply migrates again next time — the conversion is a pure function of what's on disk.
   if (flattened && !state.readOnly && store.isOpen) {
@@ -256,7 +256,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to edges — nothing moved.`);
   }
   if (folded) {
-    setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into frame${folded === 1 ? '' : 's'}`);
+    setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into section${folded === 1 ? '' : 's'}`);
   }
   // Persist the resolved layout so the saved mm_x/mm_y match what's on screen. Only write when
   // the load actually moved something, so a stable reopen touches no files.
@@ -265,8 +265,8 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   }
   updateMapTitle();
 }
-// Read the notes of ONE folded frame's folder into memory (data/lazy.ts decides when). `deep` reads
-// everything under it; otherwise the frames folded INSIDE it stay unread in turn, like on a load.
+// Read the notes of ONE folded section's folder into memory (data/lazy.ts decides when). `deep` reads
+// everything under it; otherwise the sections folded INSIDE it stay unread in turn, like on a load.
 // Nothing is painted or laid out here — the caller unfolds, opens or moves what it read.
 // Two asks for the same folder at once (a double-click, a save) share ONE read.
 const reading = new Map<string, Promise<void>>();
@@ -293,35 +293,35 @@ async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
   const byPath = settle(added, seeds);
   unparkEdges(byPath);
   resolveOrder(byPath);
-  // Paint what was read, so the arrangement below can measure it (it is hidden under its folded frame
+  // Paint what was read, so the arrangement below can measure it (it is hidden under its folded section
   // anyway until the caller unfolds that).
   for (const n of added) {
     paintNode(n);
   }
-  arrangeFrames(unplacedFrames([f, ...added], seeds), seeds.unplaced);
+  arrangeSections(unplacedSections([f, ...added], seeds), seeds.unplaced);
 }
-// Frames holding notes that arrived with no saved position — a folder made outside the app, a map
-// imported without its board.json, or a note saved into a frame's folder from somewhere else (the
+// Sections holding notes that arrived with no saved position — a folder made outside the app, a map
+// imported without its board.json, or a note saved into a section's folder from somewhere else (the
 // phone INBOX, docs/inbox.md): they get laid out, rather than dropped on a grid at the origin.
-function unplacedFrames(nodes: MindNode[], seeds: Seeds): MindNode[] {
-  return nodes.filter(f => f.type === 'frame' && f.lazy == null)
+function unplacedSections(nodes: MindNode[], seeds: Seeds): MindNode[] {
+  return nodes.filter(f => f.type === 'section' && f.lazy == null)
     .filter(f => childrenOf(f.id).some(k => seeds.unplaced.has(k.id)));
 }
-// Lay each frame's cards out ONCE, in a column in their stored order (kidOrder), with the house spacing,
-// and size the frame around them. Deepest first, so an inner frame has its final size before its parent
+// Lay each section's cards out ONCE, in a column in their stored order (kidOrder), with the house spacing,
+// and size the section around them. Deepest first, so an inner section has its final size before its parent
 // stacks it. That needs MEASURED heights, so every affected node is unfolded and painted for the
 // duration (scope set aside too: on a reload its ids are still the previous load's, and it would hide
 // everything), then folded back exactly as it was.
-// With `fresh` (the notes that arrived with no position), a frame that ALSO holds placed cards keeps
+// With `fresh` (the notes that arrived with no position), a section that ALSO holds placed cards keeps
 // them where they are — nothing moves on its own — and its new arrivals stack in a column of their own
-// just right of them (or from its top-left corner when it holds nothing yet), the frame growing to hold it. That is how a note saved into the Inbox folder from
+// just right of them (or from its top-left corner when it holds nothing yet), the section growing to hold it. That is how a note saved into the Inbox folder from
 // the phone shows up (docs/inbox.md).
-export function arrangeFrames(frames: MindNode[], fresh?: Set<string>): void {
-  if (!frames.length) {
+export function arrangeSections(sections: MindNode[], fresh?: Set<string>): void {
+  if (!sections.length) {
     return;
   }
   const unfolded = new Set<MindNode>();
-  for (const f of frames) {
+  for (const f of sections) {
     for (const a of [f, ...ancestors(f)]) {
       if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
     }
@@ -330,23 +330,23 @@ export function arrangeFrames(frames: MindNode[], fresh?: Set<string>): void {
   for (const n of state.nodes.values()) {
     paintNode(n);
   }
-  for (const f of frames.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
+  for (const f of sections.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
     const kids = orderedKids(f, childrenOf(f.id));
     const settled = fresh ? kids.filter(k => !fresh.has(k.id)) : [];
     const right = settled.reduce((r, k) => Math.max(r, k.x + nodeW(k)), -Infinity);
-    const x = settled.length ? right + SPACING : f.x + FRAME_BORDER + SPACING;
-    let y = settled.length ? Math.min(...settled.map(k => k.y - frameLabelH(k))) : f.y + FRAME_BORDER + SPACING, w = 0;
+    const x = settled.length ? right + SPACING : f.x + SECTION_BORDER + SPACING;
+    let y = settled.length ? Math.min(...settled.map(k => k.y - sectionLabelH(k))) : f.y + SECTION_BORDER + SPACING, w = 0;
     for (const k of settled.length ? kids.filter(k => fresh!.has(k.id)) : kids) {
-      y += frameLabelH(k);   // a frame's label hangs above its box — leave it room
+      y += sectionLabelH(k);   // a section's label hangs above its box — leave it room
       moveSubtreeTo(k, x, y);
       y += nodeH(k) + SPACING;
       w = Math.max(w, nodeW(k));
     }
-    const end = snapPt({ x: x + w + SPACING + FRAME_BORDER, y: y + FRAME_BORDER });
-    // A frame that was already placed (an Inbox you made) only GROWS to hold them; one that arrived
+    const end = snapPt({ x: x + w + SPACING + SECTION_BORDER, y: y + SECTION_BORDER });
+    // A section that was already placed (an Inbox you made) only GROWS to hold them; one that arrived
     // with its notes is sized around them.
     const keep = !!fresh && !fresh.has(f.id);
-    f.w = Math.max(keep ? f.w ?? 0 : MIN_FRAME_W, end.x - f.x);
+    f.w = Math.max(keep ? f.w ?? 0 : MIN_SECTION_W, end.x - f.x);
     f.h = keep ? Math.max(f.h ?? 0, end.y - f.y) : end.y - f.y;
     f.dirtyLayout = true;
     paintNode(f);

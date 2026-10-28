@@ -7,7 +7,7 @@
 //
 // Shape: #/<map-kind>/<map-id>/<node-file-path>?mode=outline&open=&x=&y=&k=&q=&ro=1
 //
-// `open` is the frame you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
+// `open` is the section you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
 // navigable VIEW state like mode=outline rather than identity. Only the INNERMOST level is carried;
 // the crumb path above it is rebuilt from the tree (openPathTo), so there's nothing to keep in sync.
 // The path carries IDENTITY (which map, which node); the query string carries VIEW STATE
@@ -27,7 +27,7 @@ import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';
 import { searchQuery, setSearchQuery } from '../features/search.js';
 import { nodeLabel, nodeByFile } from '../utils/model.js';
-import { restoreScopeFromFile } from './frames.js';
+import { restoreScopeFromFile } from './sections.js';
 import { selectNode } from '../features/selection.js';
 import { applyReadOnly } from '../features/read-only.js';
 
@@ -107,7 +107,7 @@ export function syncUrl(): void {
   writeHash('push');
 }
 // Everything else (mode/camera/search/read-only) — debounced, replaces the current entry
-// rather than creating a new back-stop for every drag frame or keystroke.
+// rather than creating a new back-stop for every drag section or keystroke.
 export function scheduleUrlSync(): void {
   if (applying) {
     return;
@@ -160,7 +160,7 @@ export async function applyUrlFromHash(): Promise<void> {
     // scope it's in; ahead of the camera because restoring the scope would otherwise fit over the
     // pan/zoom the URL explicitly asked for (hence restoreScopeFromFile's own no-camera contract).
     const open = params.get('open');
-    // A link may point INTO a folded frame whose notes haven't been read (data/lazy.ts): read the
+    // A link may point INTO a folded section whose notes haven't been read (data/lazy.ts): read the
     // folders on the way first, so there is a node there to stand in or select.
     if (open) {
       await revealPath(decodeFilePath(open));

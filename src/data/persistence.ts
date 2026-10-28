@@ -89,7 +89,7 @@ async function reloadFromDisk(): Promise<void> {
     return;
   }
   const selBefore = state.selId;
-  // Don't yank the rug out while the user is actively typing in a card or renaming a frame.
+  // Don't yank the rug out while the user is actively typing in a card or renaming a section.
   if (inPlaceEditActive() || isTypingInField()) {
     return;
   }
@@ -106,7 +106,7 @@ async function reloadFromDisk(): Promise<void> {
       return;   // began during the write
     }
     // What was there before, by PATH (ids are minted fresh each load) — and how many unread notes each
-    // folded frame held — so a note that came in from outside (the phone inbox) can be pointed out.
+    // folded section held — so a note that came in from outside (the phone inbox) can be pointed out.
     const known = new Set<string>(), unread = new Map<string, number>();
     for (const n of state.nodes.values()) {
       if (n.file) {
