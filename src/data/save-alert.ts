@@ -20,7 +20,9 @@ function paint(): void {
 export function saveFailed(src: Source, err: unknown, retry: () => void): void {
   console.error(`Save failed (${src}):`, err);
   const prev = failing.get(src);
-  if (prev) clearTimeout(prev.timer);
+  if (prev) {
+    clearTimeout(prev.timer);
+  }
   const attempt = prev ? prev.attempt + 1 : 0;
   const msg = (err as Error)?.message || (err as Error)?.name || String(err);
   const timer = window.setTimeout(retry, DELAYS[Math.min(attempt, DELAYS.length - 1)]);
@@ -29,7 +31,9 @@ export function saveFailed(src: Source, err: unknown, retry: () => void): void {
 }
 export function saveSucceeded(src: Source): void {
   const f = failing.get(src);
-  if (!f) return;
+  if (!f) {
+    return;
+  }
   clearTimeout(f.timer);
   failing.delete(src);
   paint();

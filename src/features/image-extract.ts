@@ -20,7 +20,9 @@ export function imageExtractInProgress(): boolean { return extracting; }
 
 let hoverEl: Element | null = null;
 function setHover(el: Element | null): void {
-  if (hoverEl === el) return;
+  if (hoverEl === el) {
+    return;
+  }
   hoverEl?.classList.remove('drop-merge');
   hoverEl = el;
   hoverEl?.classList.add('drop-merge');
@@ -34,14 +36,23 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   preview.style.display = '';
   const cardEl = under?.closest('#world [data-id]') as HTMLElement | null;
   const id = cardEl?.dataset.id;
-  if (!cardEl || !id || id === sourceId) return null;
+  if (!cardEl || !id || id === sourceId) {
+    return null;
+  }
   const node = state.nodes.get(id);
-  if (!node || isImageCard(node) || isFrame(node) || isLockedEffective(node)) return null;
+  if (!node || isImageCard(node) || isFrame(node) || isLockedEffective(node)) {
+    return null;
+  }
   return { el: cardEl, id };
 }
 export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, sx: number, sy: number): void {
-  if (state.readOnly) return;
-  const path = img.dataset.path; if (!path) return;
+  if (state.readOnly) {
+    return;
+  }
+  const path = img.dataset.path;
+  if (!path) {
+    return;
+  }
   extracting = true;
   const alt = img.alt || '';
   const nw = img.naturalWidth || IMAGE_W, nh = img.naturalHeight || IMAGE_H;
@@ -68,23 +79,32 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
     extracting = false;
   };
   const onMove = (ev: PointerEvent): void => {
-    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) moved = true;
+    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) {
+      moved = true;
+    }
     place(ev.clientX, ev.clientY);
     setHover(moveTargetAt(ev.clientX, ev.clientY, source.id, preview)?.el ?? null);
   };
   const onUp = (ev: PointerEvent): void => {
     const t = moveTargetAt(ev.clientX, ev.clientY, source.id, preview);
     cleanup();
-    if (!moved) return;                                   // a plain Alt-click on the image: no change
-    if (t) extractImage(source.id, path, alt, { toCardId: t.id });
-    else {
+    if (!moved) {
+      return;                                   // a plain Alt-click on the image: no change
+    }
+    if (t) {
+      extractImage(source.id, path, alt, { toCardId: t.id });
+    } else {
       const p = screenToWorld(ev.clientX, ev.clientY);
       const at = snapPt({ x: p.x - cardW / 2, y: p.y - cardH / 2 });   // on the grid, like any placed card
       extractImage(source.id, path, alt, { x: at.x, y: at.y, w: cardW, h: cardH });
     }
   };
   const onCancel = (): void => { cleanup(); };            // interrupted (tab switch, etc.): leave the card as-is
-  const onKey = (ev: KeyboardEvent): void => { if (ev.key === 'Escape') cleanup(); };
+  const onKey = (ev: KeyboardEvent): void => {
+    if (ev.key === 'Escape') {
+      cleanup();
+    }
+  };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onCancel);

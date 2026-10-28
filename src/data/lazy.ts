@@ -26,17 +26,24 @@ import { dirOf } from '../utils/filenames.js';
 // The folded frames still holding unread notes among `ids` and everything inside them.
 function unreadIn(ids: Iterable<string>): MindNode[] {
   const out: MindNode[] = [];
-  for (const id of ids) for (const s of subtreeIds(id)) {
-    const n = state.nodes.get(s);
-    if (n?.lazy != null) out.push(n);
+  for (const id of ids) {
+    for (const s of subtreeIds(id)) {
+      const n = state.nodes.get(s);
+      if (n?.lazy != null) {
+        out.push(n);
+      }
+    }
   }
   return out;
 }
 // Read every unread folder under `ids`, all the way down.
 export async function readAll(ids: Iterable<string> = [...state.nodes.keys()]): Promise<void> {
   const roots = [...ids];
-  for (let guard = 0, todo = unreadIn(roots); todo.length && guard < 64; guard++, todo = unreadIn(roots))
-    for (const f of todo) await readFolder(f, true);
+  for (let guard = 0, todo = unreadIn(roots); todo.length && guard < 64; guard++, todo = unreadIn(roots)) {
+    for (const f of todo) {
+      await readFolder(f, true);
+    }
+  }
 }
 // An action that needs the notes of the frames among `ids` (deep: everything under them too): if any
 // of them is still unread, read it and run `fn` afterwards, and say so — the caller returns at once.
@@ -44,10 +51,17 @@ export async function readAll(ids: Iterable<string> = [...state.nodes.keys()]): 
 export function afterReading(ids: Iterable<string>, fn: () => void, deep = true): boolean {
   const list = [...ids];
   const todo = deep ? unreadIn(list) : list.map(id => state.nodes.get(id)).filter((n): n is MindNode => n?.lazy != null);
-  if (!todo.length) return false;
+  if (!todo.length) {
+    return false;
+  }
   void (async () => {
-    if (deep) await readAll(list);
-    else for (const f of todo) await readFolder(f, false);
+    if (deep) {
+      await readAll(list);
+    } else {
+      for (const f of todo) {
+        await readFolder(f, false);
+      }
+    }
     fn();
   })();
   return true;
@@ -56,9 +70,13 @@ export function afterReading(ids: Iterable<string>, fn: () => void, deep = true)
 // until it is in memory or there is nothing left on the way to read.
 export async function revealPath(path: string): Promise<void> {
   for (let guard = 0; guard < 64; guard++) {
-    if (nodeByFile(path)) return;
+    if (nodeByFile(path)) {
+      return;
+    }
     const f = [...state.nodes.values()].find(n => n.lazy != null && n.file && path.startsWith(dirOf(n.file)));
-    if (!f) return;
+    if (!f) {
+      return;
+    }
     await readFolder(f, false);
   }
 }
@@ -68,14 +86,25 @@ export async function revealPath(path: string): Promise<void> {
 // nothing unread that is one pass over the nodes). The canvas repaints once they're in.
 let readingOpen = false;
 export function readOpenUnread(): void {
-  if (readingOpen) return;
+  if (readingOpen) {
+    return;
+  }
   let open: MindNode[] | null = null;
-  for (const n of state.nodes.values())
-    if (n.lazy != null && (n.id === scope.rootId || (!n.collapsed && !isHidden(n)))) (open ??= []).push(n);
-  if (!open) return;
+  for (const n of state.nodes.values()) {
+    if (n.lazy != null && (n.id === scope.rootId || (!n.collapsed && !isHidden(n)))) {
+      (open ??= []).push(n);
+    }
+  }
+  if (!open) {
+    return;
+  }
   readingOpen = true;
   void (async () => {
-    try { for (const f of open) await readFolder(f, false); }
+    try {
+      for (const f of open) {
+        await readFolder(f, false);
+      }
+    }
     finally { readingOpen = false; }
     remeasure();
   })();
@@ -85,27 +114,45 @@ export function readOpenUnread(): void {
 // Called after every successful save. Read-only and demo mode never let go: demo notes live ONLY in
 // memory, and read-only has nothing it could have saved them with.
 export function releaseFolded(): void {
-  if (!store.isOpen || state.readOnly) return;
+  if (!store.isOpen || state.readOnly) {
+    return;
+  }
   let held: Set<string> | null = null;   // built lazily: most saves have nothing folded to let go of
   const scoped = new Set(scope.stack.map(l => l.rootId));
   // Outermost first: a folded frame inside a folded frame goes with it.
   for (const f of [...state.nodes.values()].sort((a, b) => ancestorDepth(a) - ancestorDepth(b))) {
-    if (f.type !== 'frame' || !f.collapsed || f.lazy != null || !f.file || !state.nodes.has(f.id)) continue;
+    if (f.type !== 'frame' || !f.collapsed || f.lazy != null || !f.file || !state.nodes.has(f.id)) {
+      continue;
+    }
     const kids = subtreeIds(f.id).slice(1).map(id => state.nodes.get(id)!);
-    if (!kids.length) continue;
+    if (!kids.length) {
+      continue;
+    }
     held ??= historyRefs();
     const h = held;
     const busy = (n: MindNode): boolean => n.dirty || !n.file || h.has(n.id) || state.sel.has(n.id)
       || scoped.has(n.id) || searchHolds(n.id);
-    if (scoped.has(f.id)) continue;              // standing inside it: its notes ARE the canvas
-    if (kids.some(busy)) continue;
+    if (scoped.has(f.id)) {
+      continue;              // standing inside it: its notes ARE the canvas
+    }
+    if (kids.some(busy)) {
+      continue;
+    }
     rememberGeom([f, ...kids]);
     parkEdges(new Map(kids.map(n => [n.id, n.file!])), f.id);
     const pics = new Set<string>();
-    for (const n of kids) for (const { src } of bodyImages(n.body)) pics.add(src);
+    for (const n of kids) {
+      for (const { src } of bodyImages(n.body)) {
+        pics.add(src);
+      }
+    }
     for (const n of kids) { n.el?.remove(); n.frameContentEl?.remove(); state.nodes.delete(n.id); }
     // …keeping any picture a note still in memory shows too.
-    for (const n of state.nodes.values()) for (const { src } of bodyImages(n.body)) pics.delete(src);
+    for (const n of state.nodes.values()) {
+      for (const { src } of bodyImages(n.body)) {
+        pics.delete(src);
+      }
+    }
     forgetImages(pics);
     f.lazy = kids.reduce((c, n) => c + 1 + (n.lazy ?? 0), 0);   // a folded frame inside counts its own
     f.kidOrder = undefined;

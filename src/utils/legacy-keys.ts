@@ -15,11 +15,15 @@ const LEGACY_PREFIX = 'mindmap.', PREFIX = 'corkboard.';
 
 try {
   for (const key of Object.keys(localStorage)) {
-    if (!key.startsWith(LEGACY_PREFIX)) continue;
+    if (!key.startsWith(LEGACY_PREFIX)) {
+      continue;
+    }
     const val = localStorage.getItem(key);
     const next = PREFIX + key.slice(LEGACY_PREFIX.length);
     // Never clobber a value the renamed build already wrote (an upgrade/downgrade round-trip).
-    if (val !== null && localStorage.getItem(next) === null) localStorage.setItem(next, val);
+    if (val !== null && localStorage.getItem(next) === null) {
+      localStorage.setItem(next, val);
+    }
     localStorage.removeItem(key);
   }
 } catch {}

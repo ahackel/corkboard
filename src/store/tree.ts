@@ -24,23 +24,37 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
   const dirs = new Set<string>();
   const dirsOf = (p: string): string[] => {
     const out: string[] = [];
-    for (let i = p.indexOf('/', under.length); i >= 0; i = p.indexOf('/', i + 1)) out.push(p.slice(0, i + 1));
+    for (let i = p.indexOf('/', under.length); i >= 0; i = p.indexOf('/', i + 1)) {
+      out.push(p.slice(0, i + 1));
+    }
     return out;
   };
-  for (const p of paths) for (const d of dirsOf(p)) dirs.add(d);
+  for (const p of paths) {
+    for (const d of dirsOf(p)) {
+      dirs.add(d);
+    }
+  }
   for (const p of md) {
-    for (const d of dirsOf(p)) mdCount.set(d, (mdCount.get(d) ?? 0) + 1);
+    for (const d of dirsOf(p)) {
+      mdCount.set(d, (mdCount.get(d) ?? 0) + 1);
+    }
     const slash = p.lastIndexOf('/');
-    if (slash >= under.length && p.slice(slash + 1).toLowerCase() === FRAME_NOTE) index.set(p.slice(0, slash + 1), p);
+    if (slash >= under.length && p.slice(slash + 1).toLowerCase() === FRAME_NOTE) {
+      index.set(p.slice(0, slash + 1), p);
+    }
   }
   const lazy = new Map<string, LazyFolder>(), foreign = new Set<string>();
   const depth = (d: string): number => d.split('/').length;
   for (const d of [...dirs].sort((a, b) => depth(a) - depth(b))) {
     const n = mdCount.get(d) ?? 0;
     if (!n) { foreign.add(d.toLowerCase()); continue; }
-    if ([...lazy.keys()].some(l => d.startsWith(l))) continue;   // inside a folder nobody reads
+    if ([...lazy.keys()].some(l => d.startsWith(l))) {
+      continue;   // inside a folder nobody reads
+    }
     const hasIndex = index.has(d);
-    if (fold(d, hasIndex)) lazy.set(d, { count: n - (hasIndex ? 1 : 0), hasIndex });
+    if (fold(d, hasIndex)) {
+      lazy.set(d, { count: n - (hasIndex ? 1 : 0), hasIndex });
+    }
   }
   const lazyDirs = [...lazy.keys()];
   const read = md.filter(p => {

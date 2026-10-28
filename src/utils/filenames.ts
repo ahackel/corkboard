@@ -38,7 +38,9 @@ export function safeName(title: string): string {
 // other text to be named from, so this is the one kind of body worth reading structurally.
 export function slugStem(n: Pick<MindNode, 'title' | 'body'>): string {
   const img = soleImage(n.body);
-  if (!n.title.trim() && img) return safeName(img.alt || fileStem(img.src) || 'image');
+  if (!n.title.trim() && img) {
+    return safeName(img.alt || fileStem(img.src) || 'image');
+  }
   return safeName(n.title.trim() || firstLineLabel(n.body));
 }
 // ---------- a FRAME is a FOLDER ----------
@@ -59,7 +61,9 @@ export function folderOf(path: string): string { return dirOf(path); }
 // folder ABOVE its own; anything else's is the frame of the folder it sits in.
 export function parentFileOf(path: string): string | null {
   let dir = dirOf(path);
-  if (isFrameNote(path)) dir = dirOf(dir.slice(0, -1));
+  if (isFrameNote(path)) {
+    dir = dirOf(dir.slice(0, -1));
+  }
   return dir ? dir + FRAME_NOTE : null;
 }
 // The name a node goes by in its folder, without the folder: a frame's folder name, a card's stem.
@@ -83,7 +87,9 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
   // nothing to track, and renaming it would only renumber it as its neighbours come and go. A card the
   // user just CLEARED therefore keeps the slug it was named under, which utils/model.ts namelessLabel
   // leans on — the stem is the name they deleted, so nothing shows it to them again.
-  if (stem === 'Untitled' && n.file) stem = ownStem(n.file, frame);
+  if (stem === 'Untitled' && n.file) {
+    stem = ownStem(n.file, frame);
+  }
   const pathFor = (s: string): string => frame ? at + s + '/' + FRAME_NOTE : at + s + '.md';
   // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since
   // that's how the filesystem collides on macOS/Windows: "Notes" and "notes" are one file there, so
@@ -91,13 +97,19 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
   // A card may not be called `_index` (it would BE its folder's frame note), and a frame may not take
   // a folder that is already something else's.
   const taken = (s: string): boolean => {
-    if (!frame && s.toLowerCase() === FRAME_NOTE.slice(0, -3)) return true;
-    if (frame && reserved?.has((at + s + '/').toLowerCase())) return true;
+    if (!frame && s.toLowerCase() === FRAME_NOTE.slice(0, -3)) {
+      return true;
+    }
+    if (frame && reserved?.has((at + s + '/').toLowerCase())) {
+      return true;
+    }
     const owner = inUse.get(pathFor(s).toLowerCase());
     return owner !== undefined && owner !== n.id;
   };
   let i = 2, s = stem;
-  while (taken(s)) s = stem + ' ' + (i++);
+  while (taken(s)) {
+    s = stem + ' ' + (i++);
+  }
   return pathFor(s);
 }
 
@@ -109,10 +121,14 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
 // The alias half is carried through verbatim: `[[Untitled 7|see this]]` keeps the words the reader sees.
 // `renames` maps old path -> new path; returns the body unchanged (the same string) if nothing moved.
 export function retargetLinks(body: string, renames: Map<string, string>): string {
-  if (!renames.size) return body;
+  if (!renames.size) {
+    return body;
+  }
   const dropMd = (path: string): string => path.replace(/\.md$/i, '');
   const to = new Map<string, string>();   // old path, no `.md`, lowercased -> new path, no `.md`
-  for (const [from, into] of renames) to.set(dropMd(from).toLowerCase(), dropMd(into));
+  for (const [from, into] of renames) {
+    to.set(dropMd(from).toLowerCase(), dropMd(into));
+  }
   // Same shape as the renderer's wikilink arm (utils/markdown.ts mdInline).
   return body.replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, (m, target: string, alias?: string) => {
     const into = to.get(dropMd(target.trim()).toLowerCase());

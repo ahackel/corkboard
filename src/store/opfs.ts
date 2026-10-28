@@ -23,7 +23,9 @@ export const opfsStore = {
   // Resolve a map id to its directory handle ('vault' lives at the root, the rest under maps/).
   async _mapDir(id: string, create: boolean): Promise<FileSystemDirectoryHandle> {
     const root = await navigator.storage.getDirectory();
-    if (id === 'vault') return root.getDirectoryHandle('vault', { create });
+    if (id === 'vault') {
+      return root.getDirectoryHandle('vault', { create });
+    }
     const maps = await root.getDirectoryHandle('maps', { create: true });
     return maps.getDirectoryHandle(id, { create });
   },
@@ -34,7 +36,9 @@ export const opfsStore = {
   // Retarget every file op at another map. Cheap — the dir handle is re-resolved lazily.
   openMap(id: string, name?: string): void {
     if (id !== this._mapId){ this._mapId = id; this._dir = null; this._opened = false; }
-    if (name) this._mapName = name;
+    if (name) {
+      this._mapName = name;
+    }
   },
   async createMap(id: string, name: string): Promise<void> {
     const d = await this._mapDir(id, true);
@@ -43,14 +47,19 @@ export const opfsStore = {
   async deleteMap(id: string): Promise<void> {
     try {
       const root = await navigator.storage.getDirectory();
-      if (id === 'vault') await root.removeEntry('vault', { recursive: true });
-      else await (await root.getDirectoryHandle('maps')).removeEntry(id, { recursive: true });
+      if (id === 'vault') {
+        await root.removeEntry('vault', { recursive: true });
+      } else {
+        await (await root.getDirectoryHandle('maps')).removeEntry(id, { recursive: true });
+      }
     } catch { /* already gone — fine */ }
     if (id === this._mapId){ this._dir = null; this._opened = false; }
   },
   async renameMap(id: string, name: string): Promise<void> {
     await this.createMap(id, name);   // rename IS a meta rewrite
-    if (id === this._mapId) this._mapName = name;
+    if (id === this._mapId) {
+      this._mapName = name;
+    }
   },
   // Enumerate the maps that exist on disk (for the registry's one-time migration/rebuild).
   async listMaps(): Promise<Array<{ id: string; name: string }>> {
@@ -63,8 +72,11 @@ export const opfsStore = {
     try { dirs.push({ id: 'vault', handle: await root.getDirectoryHandle('vault'), fallback: 'My map' }); } catch {}
     try {
       const maps = await root.getDirectoryHandle('maps');
-      for await (const [id, h] of maps.entries())
-        if (h.kind === 'directory') dirs.push({ id, handle: h as FileSystemDirectoryHandle, fallback: id });
+      for await (const [id, h] of maps.entries()) {
+        if (h.kind === 'directory') {
+          dirs.push({ id, handle: h as FileSystemDirectoryHandle, fallback: id });
+        }
+      }
     } catch {}
     return Promise.all(dirs.map(async d => ({ id: d.id, name: await nameOf(d.handle, d.fallback) })));
   },

@@ -55,7 +55,9 @@ function capIcon(cap: EdgeCap, end: 'from' | 'to'): string {
   const x1 = left && cap !== 'none' ? 7 : 4;                 // …and where the shaft starts
   const x2 = !left && cap !== 'none' ? 17 : 20;
   const shaft = `<path d="M${x1} 12H${x2}"/>`;
-  if (cap === 'dot') return SVG(shaft + `<circle cx="${x}" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`);
+  if (cap === 'dot') {
+    return SVG(shaft + `<circle cx="${x}" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`);
+  }
   if (cap === 'arrow') {
     const head = left ? `M9 8l-4 4 4 4` : `M15 8l4 4-4 4`;
     return SVG(shaft + `<path d="${head}"/>`);
@@ -66,10 +68,18 @@ function capIcon(cap: EdgeCap, end: 'from' | 'to'): string {
 function endsIcon(from: EdgeCap, to: EdgeCap): string {
   const x1 = from === 'none' ? 4 : 7, x2 = to === 'none' ? 20 : 17;
   let g = `<path d="M${x1} 12H${x2}"/>`;
-  if (from === 'dot') g += `<circle cx="5" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`;
-  if (from === 'arrow') g += `<path d="M9 8l-4 4 4 4"/>`;
-  if (to === 'dot') g += `<circle cx="19" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`;
-  if (to === 'arrow') g += `<path d="M15 8l4 4-4 4"/>`;
+  if (from === 'dot') {
+    g += `<circle cx="5" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`;
+  }
+  if (from === 'arrow') {
+    g += `<path d="M9 8l-4 4 4 4"/>`;
+  }
+  if (to === 'dot') {
+    g += `<circle cx="19" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`;
+  }
+  if (to === 'arrow') {
+    g += `<path d="M15 8l4 4-4 4"/>`;
+  }
   return SVG(g);
 }
 // Each end offers the same three, and they are chosen INDEPENDENTLY: one axis of three values could
@@ -84,7 +94,10 @@ const ICON_TRASH = SVG('<path d="M5 7h14"/><path d="M9 7V5h6v2"/><path d="M7 7l1
 
 let wired = false;
 function wire(): void {
-  if (wired) return; wired = true;
+  if (wired) {
+    return;
+  }
+  wired = true;
   deleteBtn.innerHTML = ICON_TRASH;
 
   // Every control acts on the WHOLE selection, and sets one VALUE across it rather than toggling
@@ -94,22 +107,36 @@ function wire(): void {
   dashBtn.onclick = (ev) => { ev.stopPropagation(); dashPop.classList.contains('open') ? closeDashPop() : openDashPop(); };
   dashChips.onclick = (ev) => {
     const chip = (ev.target as Element).closest<HTMLElement>('[data-dash]');
-    const es = selectedEdges(); if (!chip || !es.length) return;
+    const es = selectedEdges();
+    if (!chip || !es.length) {
+      return;
+    }
     const want = chip.dataset.dash === '1';
     touchEdges();
-    for (const e of es) e.dashed = want;
+    for (const e of es) {
+      e.dashed = want;
+    }
     closeDashPop(); commit(); commitStep();
   };
   arrowsBtn.onclick = (ev) => { ev.stopPropagation(); arrowPop.classList.contains('open') ? closeArrowPop() : openArrowPop(); };
   arrowChips.onclick = (ev) => {
     const chip = (ev.target as Element).closest<HTMLElement>('[data-cap]');
     const col = chip?.closest<HTMLElement>('[data-end]');
-    const es = selectedEdges(); if (!chip || !col || !es.length) return;
+    const es = selectedEdges();
+    if (!chip || !col || !es.length) {
+      return;
+    }
     const cap = chip.dataset.cap as EdgeCap;
     touchEdges();
     // The picker stays OPEN: the two ends are two choices, and closing after the first would make
     // setting both a matter of reopening the same menu.
-    for (const e of es) { if (col.dataset.end === 'from') e.fromCap = cap; else e.toCap = cap; }
+    for (const e of es) {
+      if (col.dataset.end === 'from') {
+        e.fromCap = cap;
+      } else {
+        e.toCap = cap;
+      }
+    }
     commit(); openArrowPop();
     commitStep();
   };
@@ -118,16 +145,27 @@ function wire(): void {
   colorBtn.onclick = (ev) => { ev.stopPropagation(); colorPop.classList.contains('open') ? closeColorPop() : openColorPop(); };
   colorRow.onclick = (ev) => {
     const sw = (ev.target as Element).closest<HTMLElement>('[data-color]');
-    const es = selectedEdges(); if (!sw || !es.length) return;
+    const es = selectedEdges();
+    if (!sw || !es.length) {
+      return;
+    }
     touchEdges();
-    for (const e of es) e.color = sw.dataset.color!;
+    for (const e of es) {
+      e.color = sw.dataset.color!;
+    }
     closeColorPop(); commit(); commitStep();
   };
   document.addEventListener('pointerdown', (ev) => {
     const t = ev.target as Node;
-    if (colorPop.classList.contains('open') && !colorPop.contains(t) && !colorBtn.contains(t)) closeColorPop();
-    if (arrowPop.classList.contains('open') && !arrowPop.contains(t) && !arrowsBtn.contains(t)) closeArrowPop();
-    if (dashPop.classList.contains('open') && !dashPop.contains(t) && !dashBtn.contains(t)) closeDashPop();
+    if (colorPop.classList.contains('open') && !colorPop.contains(t) && !colorBtn.contains(t)) {
+      closeColorPop();
+    }
+    if (arrowPop.classList.contains('open') && !arrowPop.contains(t) && !arrowsBtn.contains(t)) {
+      closeArrowPop();
+    }
+    if (dashPop.classList.contains('open') && !dashPop.contains(t) && !dashBtn.contains(t)) {
+      closeDashPop();
+    }
   }, true);
 }
 function commit(): void {
@@ -176,7 +214,10 @@ function placePop(pop: HTMLElement, anchor: HTMLElement): void {
 function placeColorPop(): void { placePop(colorPop, colorBtn); }
 
 function syncControls(): void {
-  const e = leadEdge(); if (!e) return;
+  const e = leadEdge();
+  if (!e) {
+    return;
+  }
   colorDot.style.setProperty('--sw', colorFill(e.color) ?? 'var(--edge)');
   dashBtn.innerHTML = (e.dashed ? ICON_DASHED : ICON_SOLID) + chevron();
   dashBtn.title = e.dashed ? 'Line style: dashed' : 'Line style: solid';
@@ -188,8 +229,13 @@ function syncControls(): void {
 // gone (deleted, or an endpoint hidden), which is what closes the bar.
 function lineBox(): { x0: number; y0: number; x1: number; y1: number } | null {
   const e = leadEdge();
-  if (!e || !edgeVisible(e)) return null;
-  const g = edgeGeometry(e); if (!g) return null;
+  if (!e || !edgeVisible(e)) {
+    return null;
+  }
+  const g = edgeGeometry(e);
+  if (!g) {
+    return null;
+  }
   const k = state.view.k, sx = (x: number): number => x * k + state.view.x, sy = (y: number): number => y * k + state.view.y;
   return { x0: sx(g.box.x0), y0: sy(g.box.y0), x1: sx(g.box.x1), y1: sy(g.box.y1) };
 }
@@ -197,17 +243,28 @@ function lineBox(): { x0: number; y0: number; x1: number; y1: number } | null {
 // FigJam's placement: ABOVE the whole line, centred on it, never on top of it — the bar is for the line,
 // and covering it hides what you're changing. Below it when there's no room above.
 function place(): boolean {
-  const b = lineBox(); if (!b) return false;
+  const b = lineBox();
+  if (!b) {
+    return false;
+  }
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
   let top = b.y0 - bh - GAP;
   barAbove = top >= safeInsets().top + 4;
-  if (!barAbove) top = b.y1 + GAP;
+  if (!barAbove) {
+    top = b.y1 + GAP;
+  }
   const left = Math.min(Math.max(8, (b.x0 + b.x1) / 2 - bw / 2), window.innerWidth - bw - 8);
   bar.style.left = left + 'px';
   bar.style.top = Math.min(top, window.innerHeight - bh - 8) + 'px';
-  if (colorPop.classList.contains('open')) placeColorPop();
-  if (arrowPop.classList.contains('open')) placePop(arrowPop, arrowsBtn);
-  if (dashPop.classList.contains('open')) placePop(dashPop, dashBtn);
+  if (colorPop.classList.contains('open')) {
+    placeColorPop();
+  }
+  if (arrowPop.classList.contains('open')) {
+    placePop(arrowPop, arrowsBtn);
+  }
+  if (dashPop.classList.contains('open')) {
+    placePop(dashPop, dashBtn);
+  }
   return true;
 }
 
@@ -215,7 +272,9 @@ let raf: number | null = null;
 function followLoop(): void {
   if (!bar.classList.contains('open')) { raf = null; return; }
   if (!place()) { hide(); return; }
-  if (editingId) placeLabelEdit();
+  if (editingId) {
+    placeLabelEdit();
+  }
   const busy = isInteracting();
   bar.classList.toggle('hide-interact', busy);
   colorPop.classList.toggle('hide-interact', busy);
@@ -237,7 +296,9 @@ export function syncEdgeBar(): void {
   syncControls();
   bar.classList.add('open');
   if (!place()) { hide(); return; }
-  if (raf == null) followLoop();
+  if (raf == null) {
+    followLoop();
+  }
 }
 // ---------- the label, edited IN PLACE ----------
 // Double-clicking an edge opens a small field over the line's midpoint, where the label already is
@@ -247,8 +308,13 @@ const labelEdit = byId<HTMLInputElement>('ebLabelEdit');
 let editingId: string | null = null;
 
 export function startLabelEdit(edgeId: string): void {
-  if (state.readOnly) return;
-  const e = state.edges.find(x => x.id === edgeId); if (!e || !edgeVisible(e)) return;
+  if (state.readOnly) {
+    return;
+  }
+  const e = state.edges.find(x => x.id === edgeId);
+  if (!e || !edgeVisible(e)) {
+    return;
+  }
   editingId = edgeId;
   touchEdges();                       // one undo step for the whole editing session
   labelEdit.value = e.label;
@@ -262,8 +328,14 @@ export function startLabelEdit(edgeId: string): void {
 // edit having changed something. Font, width and padding all take the same k.
 const LABEL_PX = 14;                 // must match .fe-label's font-size (styles.css)
 function placeLabelEdit(): void {
-  const e = editingId ? state.edges.find(x => x.id === editingId) : null; if (!e) return;
-  const g = edgeGeometry(e); if (!g) return;
+  const e = editingId ? state.edges.find(x => x.id === editingId) : null;
+  if (!e) {
+    return;
+  }
+  const g = edgeGeometry(e);
+  if (!g) {
+    return;
+  }
   const k = state.view.k || 1;
   const x = g.mid.x * state.view.k + state.view.x, y = g.mid.y * state.view.k + state.view.y;
   labelEdit.style.fontSize = (LABEL_PX * k) + 'px';
@@ -275,7 +347,9 @@ function placeLabelEdit(): void {
   labelEdit.style.top = (y - labelEdit.offsetHeight / 2) + 'px';
 }
 function endLabelEdit(commitIt: boolean): void {
-  if (!editingId) return;
+  if (!editingId) {
+    return;
+  }
   const e = state.edges.find(x => x.id === editingId);
   const id = editingId; editingId = null;
   labelEdit.classList.remove('open');
@@ -285,7 +359,10 @@ function endLabelEdit(commitIt: boolean): void {
   void id;
 }
 labelEdit.addEventListener('input', () => {
-  const e = editingId ? state.edges.find(x => x.id === editingId) : null; if (!e) return;
+  const e = editingId ? state.edges.find(x => x.id === editingId) : null;
+  if (!e) {
+    return;
+  }
   e.label = labelEdit.value;          // live on the line, like a card's inline edit
   paintFreeEdges();
   placeLabelEdit();

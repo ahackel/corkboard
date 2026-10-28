@@ -11,13 +11,22 @@ async function listPaths(root: FileSystemDirectoryHandle, under: string): Promis
   const out = new Map<string, FileSystemFileHandle>();
   const walk = async (handle: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
     for await (const [name, h] of handle.entries()){
-      if (name.startsWith('.')) continue;
-      if (h.kind === 'directory') await walk(h as FileSystemDirectoryHandle, prefix + name + '/');
-      else out.set(prefix + name, h as FileSystemFileHandle);
+      if (name.startsWith('.')) {
+        continue;
+      }
+      if (h.kind === 'directory') {
+        await walk(h as FileSystemDirectoryHandle, prefix + name + '/');
+      } else {
+        out.set(prefix + name, h as FileSystemFileHandle);
+      }
     }
   };
   let start = root;
-  try { for (const part of under.split('/').filter(Boolean)) start = await start.getDirectoryHandle(part); }
+  try {
+    for (const part of under.split('/').filter(Boolean)) {
+      start = await start.getDirectoryHandle(part);
+    }
+  }
   catch { return out; }                       // the folder isn't there (any more): nothing under it
   await walk(start, under);
   return out;
@@ -52,7 +61,9 @@ export async function removeEmptyDir(root: FileSystemDirectoryHandle, dir: strin
 // `create` makes the intermediate dirs as it goes (for writes); without it a missing dir throws.
 async function resolvePath(root: FileSystemDirectoryHandle, path: string, create = false): Promise<[FileSystemDirectoryHandle, string]> {
   const parts = path.split('/'); let d = root;
-  for (let i=0;i<parts.length-1;i++) d = await d.getDirectoryHandle(parts[i], { create });
+  for (let i=0;i<parts.length-1;i++) {
+    d = await d.getDirectoryHandle(parts[i], { create });
+  }
   return [d, parts[parts.length-1]];
 }
 // Create/overwrite a note at a relative path (intermediate dirs created).

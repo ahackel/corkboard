@@ -73,7 +73,9 @@ setupCanvasColor();
 // float bar's lock toggle (features/float-bar.ts), which shares this one glyph.
 export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
-  if (n.el) return n.el;
+  if (n.el) {
+    return n.el;
+  }
   const el = document.createElement('div');
   el.dataset.id = n.id;
   // `.fold-more` is the badge at the end of a FOLDED card's chip ("+4", "3/5" — paintNode). There is no
@@ -106,7 +108,10 @@ function nodeEl(n: MindNode): HTMLElement {
     // a `#tag` written in the note filters by it, like the chip on the card's edge
     const tag = (e.target as HTMLElement).closest('.md-tag') as HTMLElement | null;
     if (tag){ e.stopPropagation(); toggleSearchTag(tag.dataset.tag!); return; }
-    const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null; if (!a) return;
+    const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null;
+    if (!a) {
+      return;
+    }
     e.stopPropagation();
     if (a.classList.contains('wikilink')){
       e.preventDefault();
@@ -115,7 +120,10 @@ function nodeEl(n: MindNode): HTMLElement {
   });
   // task checkboxes: toggle the matching [ ]/[x] in the body and persist
   bodyEl.addEventListener('change', (e)=>{
-    const cb = (e.target as HTMLElement).closest('input.taskbox') as HTMLInputElement | null; if (!cb) return;
+    const cb = (e.target as HTMLElement).closest('input.taskbox') as HTMLInputElement | null;
+    if (!cb) {
+      return;
+    }
     e.stopPropagation();
     toggleTask(n, +(cb.dataset.ti ?? 0));
   });
@@ -126,7 +134,11 @@ function nodeEl(n: MindNode): HTMLElement {
   const titleEl = el.querySelector('.title') as HTMLElement;
   titleEl.addEventListener('input',   ()  => onTitleInput(n));
   titleEl.addEventListener('keydown', (e) => onTitleKeydown(e as KeyboardEvent, n));
-  titleEl.addEventListener('blur',    ()  => { if (ui.titleEdit && ui.titleEdit.id === n.id) endTitleEdit(); });
+  titleEl.addEventListener('blur',    ()  => {
+    if (ui.titleEdit && ui.titleEdit.id === n.id) {
+      endTitleEdit();
+    }
+  });
   // Double-click OPENS the node — rename / edit its note / add a card inside it, dispatched by what
   // was hit (activateNode). Folding lives on the corner chip above.
   el.addEventListener('dblclick', (e)=>{
@@ -139,10 +151,14 @@ function nodeEl(n: MindNode): HTMLElement {
     // .frame-content wrapper), so this is about the card's own controls.
     e.stopPropagation();
     // while editing this node, a double-click selects a word — don't take it over
-    if (inPlaceEditOn(n.id)) return;
+    if (inPlaceEditOn(n.id)) {
+      return;
+    }
     // the card's own buttons keep their click — except a FRAME's resize zones, which lie over the rim
     // this gesture now writes on (onFrameRim / activateNode)
-    if (isNodeControlAt(e.clientX, e.clientY) && !onFrameRim(n, e.clientX, e.clientY)) return;
+    if (isNodeControlAt(e.clientX, e.clientY) && !onFrameRim(n, e.clientX, e.clientY)) {
+      return;
+    }
     e.preventDefault();
     activateNode(n, e.clientX, e.clientY, { open: e.altKey });
   });
@@ -151,8 +167,11 @@ function nodeEl(n: MindNode): HTMLElement {
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
 // what a Space tap used to.
 function newCardAtPointer(): void {
-  if (ui.lastMouse) createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
-  else createNode();
+  if (ui.lastMouse) {
+    createNode(centredAt(screenToWorld(ui.lastMouse.x, ui.lastMouse.y)));
+  } else {
+    createNode();
+  }
 }
 // …and an empty FRAME there, named on the spot — the palette's "New frame".
 function newFrameAtPointer(): void {
@@ -169,18 +188,24 @@ const inboxFrame = (): MindNode | undefined =>
 function goToInbox(): void {
   const f = inboxFrame();
   if (f) {
-    if (f.collapsed && !isLockedEffective(f) && afterReading([f.id], goToInbox, false)) return;
+    if (f.collapsed && !isLockedEffective(f) && afterReading([f.id], goToInbox, false)) {
+      return;
+    }
     popScopeFor(f);
     focusNode(f, true);
     return;
   }
   if (state.readOnly || !store.isOpen) { setStatus('This map has no Inbox frame'); return; }
-  while (scopeActive()) exitScope();
+  while (scopeActive()) {
+    exitScope();
+  }
   const tops = [...state.nodes.values()].filter(n => !n.parent);
   const left = tops.reduce((x, n) => Math.min(x, n.x), Infinity), top = tops.reduce((y, n) => Math.min(y, n.y), Infinity);
   const at = tops.length ? snapPt({ x: left - FRAME_W - 80, y: top }) : centredAt(screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
   const n = createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, title: 'Inbox', parent: null, edit: false });
-  if (!n) return;
+  if (!n) {
+    return;
+  }
   focusNode(n);
   setStatus('Made the Inbox — notes saved into its folder show up here (docs/inbox.md)');
 }
@@ -189,7 +214,9 @@ function goToInbox(): void {
 // cards that share this card's parent, paged with ‹ / › (features/image-viewer.ts). Shared by the
 // magnifier button and the Space tap below, so both open the same view of the same set.
 function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
-  if (!img || !img.src || img.classList.contains('md-img-missing')) return false;
+  if (!img || !img.src || img.classList.contains('md-img-missing')) {
+    return false;
+  }
   openImageViewer(img.src, img.alt, { nodeId: n.id, path: img.dataset.path ?? '' });
   return true;
 }
@@ -213,10 +240,15 @@ export const isNodeControlAt = (cx: number, cy: number): boolean => !!hitAt(cx, 
 // around the border rather than the border itself — 4px of rim plus 4 of slack, 8px of handle outside.)
 const RIM_IN = 8, RIM_OUT = 8;
 export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
-  const el = n.el; if (!el) return false;
+  const el = n.el;
+  if (!el) {
+    return false;
+  }
   const r = el.getBoundingClientRect();
   const k = state.view.k, inB = RIM_IN * k, outB = RIM_OUT * k;
-  if (cx < r.left - outB || cx > r.right + outB || cy < r.top - outB || cy > r.bottom + outB) return false;
+  if (cx < r.left - outB || cx > r.right + outB || cy < r.top - outB || cy > r.bottom + outB) {
+    return false;
+  }
   return cx <= r.left + inB || cx >= r.right - inB || cy <= r.top + inB || cy >= r.bottom - inB;
 }
 // ---------- double-click / double-tap = OPEN this node ----------
@@ -262,7 +294,9 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
 export function effectiveColor(n: MindNode): string {
   // A FRAME wears only its own colour: one nested in a blue frame would otherwise turn blue too and
   // vanish into it. Uncoloured, it's the neutral surface below — a box you can see inside any other.
-  if (n.type === 'frame') return n.color || 'white';
+  if (n.type === 'frame') {
+    return n.color || 'white';
+  }
   const drag = ui.drag;
   let previewId: string | null = null;
   let previewParent: MindNode | null | undefined;
@@ -274,8 +308,11 @@ export function effectiveColor(n: MindNode): string {
   // `guard`: a chain is only as trustworthy as the data behind it, and this
   // runs on every paint of every card — a cycle must degrade to a fallback colour, not hang the tab.
   let guard = 0;
-  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c))
-    if (c.color) return c.color;
+  for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c)) {
+    if (c.color) {
+      return c.color;
+    }
+  }
   // Nothing in the chain is coloured. A CARD is a sticky note, and a sticky note is yellow (docs/PRODUCT.md:
   // "a default card is a coloured sticky note") — derived here, never written, so a note on disk stays
   // uncoloured and picking a colour is still the user's own act. A FRAME is a surface cards sit ON, so it
@@ -292,15 +329,38 @@ const arrivedIds = new Set<string>();
 export function flashArrived(ids: Iterable<string>): void {
   const shown = new Set<string>();
   for (const id of ids) {
-    const n = state.nodes.get(id); if (!n) continue;
+    const n = state.nodes.get(id);
+    if (!n) {
+      continue;
+    }
     let at: MindNode = n;
-    for (const a of ancestors(n)) if (a.collapsed) at = a;   // the OUTERMOST fold is what's on screen
-    if (!isHidden(at)) shown.add(at.id);
+    for (const a of ancestors(n)) {
+      if (a.collapsed) {
+        at = a;   // the OUTERMOST fold is what's on screen
+      }
+    }
+    if (!isHidden(at)) {
+      shown.add(at.id);
+    }
   }
-  for (const id of shown) { arrivedIds.add(id); const n = state.nodes.get(id); if (n) paintNode(n); }
-  if (shown.size) setTimeout(() => {
-    for (const id of shown) { arrivedIds.delete(id); const n = state.nodes.get(id); if (n) paintNode(n); }
-  }, 2400);
+  for (const id of shown) {
+    arrivedIds.add(id);
+    const n = state.nodes.get(id);
+    if (n) {
+      paintNode(n);
+    }
+  }
+  if (shown.size) {
+    setTimeout(() => {
+      for (const id of shown) {
+        arrivedIds.delete(id);
+        const n = state.nodes.get(id);
+        if (n) {
+          paintNode(n);
+        }
+      }
+    }, 2400);
+  }
 }
 export function paintNode(n: MindNode): void {
   const el = nodeEl(n);
@@ -367,9 +427,13 @@ export function paintNode(n: MindNode): void {
     el.style.left = dragOrig.x + 'px'; el.style.top = dragOrig.y + 'px';
     el.style.transform = `translate(${n.x - dragOrig.x}px,${n.y - dragOrig.y}px)`;
     const root = dragRoot();
-    if (el.parentElement !== root) root.appendChild(el);
+    if (el.parentElement !== root) {
+      root.appendChild(el);
+    }
   } else {
-    if (el.style.transform) el.style.transform = '';
+    if (el.style.transform) {
+      el.style.transform = '';
+    }
     // A child card is nested INSIDE its parent card's element, positioned by its offset from the
     // parent (n.x - parent.x — the live, staleness-proof form of rx/ry). So the parent carries its
     // whole subtree via the compositor: moving the parent's element moves every descendant with it,
@@ -383,7 +447,9 @@ export function paintNode(n: MindNode): void {
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
       el.style.top  = (np.y - pp.y) + 'px';
-      if (el.parentElement !== pEl) pEl.appendChild(el);
+      if (el.parentElement !== pEl) {
+        pEl.appendChild(el);
+      }
     } else {
       // root → #world; direct frame child → its content wrapper. A FRAME's own box always takes
       // this branch: its content wrapper is placed by the very same place()/settledHost call
@@ -403,13 +469,16 @@ export function paintNode(n: MindNode): void {
     const hold = ui.bodyEdit?.id === n.id ? ui.bodyEdit.holdH ?? 0 : 0;
     const min = Math.max(n.h != null ? n.h : 0, hold);
     el.style.minHeight = min ? min + 'px' : '';
+  } else if (el.style.minHeight) {
+    el.style.minHeight = '';
   }
-  else if (el.style.minHeight) el.style.minHeight = '';
   if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     el.style.height = nodeH(n) + 'px';
     ensureResizeHandles(n, FRAME_DIRS);
-    if (isFrame(n)) frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+    if (isFrame(n)) {
+      frameContentEl(n);   // create/reposition/resize this frame's overflow:hidden content wrapper
+    }
   } else if (isFrameFold(n)) {
     // folded: the element is the bare pill, shrink-wrapped by CSS (.frame-folded) — no inline size,
     // no resize zones (unfolding gives the box back at its authored size).
@@ -429,11 +498,19 @@ export function paintNode(n: MindNode): void {
     const authored = n.w != null && !collapsed;
     el.style.width = authored ? nodeW(n) + 'px' : '';
     const cap = collapsed ? (n.w ?? NODE_W) + 'px' : '';
-    if (el.style.maxWidth !== cap) el.style.maxWidth = cap;
-    if (el.style.height) el.style.height = '';
+    if (el.style.maxWidth !== cap) {
+      el.style.maxWidth = cap;
+    }
+    if (el.style.height) {
+      el.style.height = '';
+    }
     // A FOLDED card is a chip sized by its one line: nothing to drag, so no handles (and no corner
     // squares on it when selected). Unfolding hands them back on the next paint.
-    if (collapsed) clearResizeHandles(el); else ensureResizeHandles(n, FRAME_DIRS);
+    if (collapsed) {
+      clearResizeHandles(el);
+    } else {
+      ensureResizeHandles(n, FRAME_DIRS);
+    }
   }
   // Don't clobber a FRAME's label while it's being renamed on itself (ui.titleEdit — the user is
   // typing into this very element). A card needs no such guard: its name is the leading `# ` line of its
@@ -540,10 +617,14 @@ export function paintNode(n: MindNode): void {
   // what's left under the padding and the rest is simply cut. Not while folded, opened as a page, or
   // edited — the editor shows the whole note, then it clips again.
   const clipH = clipHeight(n, !!editingBody);
-  if (clipH != null){
+  if (clipH != null) {
     const cap = Math.max(0, clipH - bodyEl.offsetTop - parseFloat(getComputedStyle(el).paddingBottom));
-    if (bodyEl.style.maxHeight !== cap + 'px') bodyEl.style.maxHeight = cap + 'px';
-  } else if (bodyEl.style.maxHeight) bodyEl.style.maxHeight = '';
+    if (bodyEl.style.maxHeight !== cap + 'px') {
+      bodyEl.style.maxHeight = cap + 'px';
+    }
+  } else if (bodyEl.style.maxHeight) {
+    bodyEl.style.maxHeight = '';
+  }
 }
 function clipHeight(n: MindNode, editing: boolean): number | null {
   return n.clip && n.h != null && !n.collapsed && !editing && !isBoxNode(n) && !isImageFold(n) ? n.h : null;
@@ -618,7 +699,9 @@ export const canToggleFold = (n: MindNode): boolean => canFold(n) && !isLockedEf
 // Being HIDDEN (an ancestor folded) counts as holding nothing, which is what lets paintNode maintain
 // "a wrapper exists iff hostsContent(n)" with ONE drop, ahead of its isHidden early return.
 function hostsContent(n: MindNode): boolean {
-  if (isHidden(n)) return false;
+  if (isHidden(n)) {
+    return false;
+  }
   return isFrame(n);
 }
 // WHICH element carries this node's visible title. Its own `.title-row`, except for a frame that
@@ -626,7 +709,9 @@ function hostsContent(n: MindNode): boolean {
 // the float bar centres itself on the label rather than the box (features/float-bar.ts) and needs the
 // same answer this does — so a kind whose label element differs is a change in one place, not two.
 export function labelEl(n: MindNode): HTMLElement | null {
-  if (!n.el) return null;
+  if (!n.el) {
+    return null;
+  }
   return isFrameFold(n) ? n.el : (n.el.querySelector(':scope > .title-row') as HTMLElement | null);
 }
 // An image card rendering AS its picture: no padding, both axes authored, aspect-locked resize.
@@ -653,17 +738,31 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRA
 // authors only this axis (its height comes from its content). A folded frame's tab shrink-wraps its
 // title instead.
 export function nodeW(n: MindNode): number {
-  if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
-  if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
-  if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the pill shrink-wraps its label
-  if (n.collapsed && n.el && n.el.offsetWidth) return n.el.offsetWidth;   // a folded card's chip, likewise
+  if (isBoxNode(n)) {
+    return n.w ?? boxDefaultW(n);
+  }
+  if (isImageFold(n)) {
+    return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
+  }
+  if (isFrameFold(n)) {
+    return (n.el && n.el.offsetWidth) || NODE_W;   // the pill shrink-wraps its label
+  }
+  if (n.collapsed && n.el && n.el.offsetWidth) {
+    return n.el.offsetWidth;   // a folded card's chip, likewise
+  }
   return n.w ?? NODE_W;
 }
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h).
 export function nodeH(n: MindNode): number {
-  if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
-  if (isImageFold(n)) return IMAGE_FOLD;
-  if (isFrameFold(n)) return FRAME_TAB_H;   // just the pill — one fixed line, never measured
+  if (isBoxNode(n)) {
+    return n.h ?? boxDefaultH(n);
+  }
+  if (isImageFold(n)) {
+    return IMAGE_FOLD;
+  }
+  if (isFrameFold(n)) {
+    return FRAME_TAB_H;   // just the pill — one fixed line, never measured
+  }
   return (n.el && n.el.offsetHeight) || 64;
 }
 // Height used for LAYOUT geometry. Identical to nodeH for every kind whose height is DECLARED
@@ -673,8 +772,13 @@ export function nodeH(n: MindNode): number {
 // 0 (the tags on the top edge are absolutely positioned and
 // overhang, so they never inflate the measurement either way).
 export function layoutH(n: MindNode): number {
-  if (isBoxNode(n) || isImageFold(n) || isFrameFold(n)) return nodeH(n);
-  const el = n.el; if (!el) return 64;
+  if (isBoxNode(n) || isImageFold(n) || isFrameFold(n)) {
+    return nodeH(n);
+  }
+  const el = n.el;
+  if (!el) {
+    return 64;
+  }
   return el.offsetHeight;
 }
 // ---------- frame content containment (real CSS clipping, not per-card math) ----------
@@ -693,7 +797,9 @@ export function layoutH(n: MindNode): number {
 // `hostFrame` (view/layout.ts) does the actual ancestor walk — shared with edges.ts so an edge
 // between two cards inside the same frame clips to it too, not just the cards themselves.
 function settledHost(n: MindNode): MindNode | null {
-  if (ui.drag || inPlaceEditActive()) return n.hostFrameId ? (state.nodes.get(n.hostFrameId) ?? null) : null;
+  if (ui.drag || inPlaceEditActive()) {
+    return n.hostFrameId ? (state.nodes.get(n.hostFrameId) ?? null) : null;
+  }
   const want = hostFrame(n);
   n.hostFrameId = want ? want.id : null;
   return want;
@@ -726,7 +832,9 @@ function paintPos(n: MindNode): Pt {
 // layer) for a root, else the host container's content wrapper — which sits at the host's INTERIOR, so
 // the offset is the host's own inset (the border, plus a frame's title tab — see frameInsetY).
 function place(el: HTMLElement, absX: number, absY: number, host: MindNode | null): void {
-  if (!host) return placeIn(el, absX, absY, dragRoot(), 0, 0);
+  if (!host) {
+    return placeIn(el, absX, absY, dragRoot(), 0, 0);
+  }
   const o = contentOrigin(host);
   placeIn(el, absX, absY, frameContentEl(host), o.x, o.y);
 }
@@ -735,7 +843,9 @@ function place(el: HTMLElement, absX: number, absY: number, host: MindNode | nul
 function placeIn(el: HTMLElement, absX: number, absY: number, container: HTMLElement, ox: number, oy: number): void {
   el.style.left = (absX - ox) + 'px';
   el.style.top  = (absY - oy) + 'px';
-  if (el.parentElement !== container) container.appendChild(el);
+  if (el.parentElement !== container) {
+    container.appendChild(el);
+  }
 }
 // Where a container's content wrapper sits in world coords, on the PAINT basis (its frozen origin
 // mid-drag — see paintPos). Everything that has to agree on that point reads it here: place() offsets
@@ -765,8 +875,12 @@ function placeSelf(n: MindNode, absX: number, absY: number): void {
 // covers the mirror case (a wrapper built before its box had ever been placed).
 function orderContentAfterBox(n: MindNode): void {
   const w = n.frameContentEl, el = n.el;
-  if (!w || !el || w.parentElement !== el.parentElement) return;
-  if (el.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_PRECEDING) el.after(w);
+  if (!w || !el || w.parentElement !== el.parentElement) {
+    return;
+  }
+  if (el.compareDocumentPosition(w) & Node.DOCUMENT_POSITION_PRECEDING) {
+    el.after(w);
+  }
 }
 // A frame's own clipping wrapper: a plain overflow:hidden box (styles.css .frame-content) sized to
 // its INTERIOR (inside the border), holding every card/frame it hosts as flat DOM children. Created
@@ -809,7 +923,9 @@ export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;
 // trading height for width on a card whose text wraps badly, so its natural size is the floor. That
 // floor is NODE_W for a plain card and a frame alike, so they share the one fall-through.
 function minWOf(n: MindNode): number {
-  if (isImageBox(n) || isImageFold(n)) return IMAGE_FOLD;
+  if (isImageBox(n) || isImageFold(n)) {
+    return IMAGE_FOLD;
+  }
   return NODE_W;
 }
 // The shortest a CLIPPED card goes: about one line of text under its padding.
@@ -828,7 +944,9 @@ type FrameDir = typeof FRAME_DIRS[number];
 function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
   const el = n.el!;
   const key = dirs.join('');
-  if (el.dataset.fhDirs === key) return;   // keyed by the direction SET, so a type flip rebuilds
+  if (el.dataset.fhDirs === key) {
+    return;   // keyed by the direction SET, so a type flip rebuilds
+  }
   clearResizeHandles(el);
   for (const dir of dirs) {
     const h = document.createElement('div');
@@ -839,7 +957,9 @@ function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
   el.dataset.fhDirs = key;
 }
 function clearResizeHandles(el: HTMLElement): void {
-  if (!el.dataset.fhDirs) return;   // no handles to remove — skip the query, this runs every repaint
+  if (!el.dataset.fhDirs) {
+    return;   // no handles to remove — skip the query, this runs every repaint
+  }
   el.querySelectorAll(':scope > .fh').forEach(x => x.remove());
   delete el.dataset.fhDirs;
 }
@@ -852,12 +972,16 @@ function clearResizeHandles(el: HTMLElement): void {
 // before the blob URL loads).
 function imageAspect(n: MindNode): number {
   const img = n.el?.querySelector('img.md-img') as HTMLImageElement | null;
-  if (img && img.naturalWidth && img.naturalHeight) return img.naturalWidth / img.naturalHeight;
+  if (img && img.naturalWidth && img.naturalHeight) {
+    return img.naturalWidth / img.naturalHeight;
+  }
   const w = n.w ?? IMAGE_W, h = n.h ?? IMAGE_H;
   return w / (h || 1);
 }
 function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
-  if (state.readOnly || isLockedEffective(n)) return;
+  if (state.readOnly || isLockedEffective(n)) {
+    return;
+  }
   e.stopPropagation(); e.preventDefault();
   // Is this a BOX (its size is exactly what's dragged) or a card (its height is a minimum over what
   // its text measures)? A FOLDED image card counts as a box here even though isBoxNode says no: its
@@ -943,11 +1067,19 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // this same drag reversing or the chip unfolding it tomorrow.
     if (aspect) {
       const fold = Math.min(right - left, bottom - top) <= IMAGE_FOLD;
-      if (fold !== n.collapsed) n.collapsed = fold;
+      if (fold !== n.collapsed) {
+        n.collapsed = fold;
+      }
       if (fold) { n.dirty = true; return; }
     }
     n.x = left; n.w = right - left;
-    if (sizeH || north || south) { n.y = top; n.h = bottom - top; if (!sizeH) n.clip = n.h < natural0 - 1 || undefined; }
+    if (sizeH || north || south) {
+      n.y = top;
+      n.h = bottom - top;
+      if (!sizeH) {
+        n.clip = n.h < natural0 - 1 || undefined;
+      }
+    }
     n.dirty = true;
   };
   const move = (ev: PointerEvent): void => {
@@ -957,20 +1089,29 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     paintFreeEdges();
     // A width-only kind re-wraps its text at the new width, which changes its measured HEIGHT — let
     // everything that reads it (edges, the selection bar) settle as the drag goes, once per frame.
-    if (!sizeH && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
-      subtreeRAF = null;
-      relayout();
-    });
+    if (!sizeH && !subtreeRAF) {
+      subtreeRAF = requestAnimationFrame(() => {
+        subtreeRAF = null;
+        relayout();
+      });
+    }
     // A north/west resize shifts the frame's own x/y, which shifts its content wrapper's origin —
     // repaint the whole subtree (not just direct children) so every hosted descendant's live,
     // wrapper-relative position compensates and stays put in absolute space as the box resizes
     // around it (an east/south-only resize doesn't move the origin, so this is skipped entirely).
     // subtreeIds walks the whole node map, so coalesce it to once per animation frame rather than
     // once per raw pointermove (which can fire far faster than the screen repaints).
-    else if ((north || west) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
-      subtreeRAF = null;
-      for (const id of subtreeIds(n.id)) { const k = state.nodes.get(id); if (k) paintNode(k); }
-    });
+    else if ((north || west) && !subtreeRAF) {
+      subtreeRAF = requestAnimationFrame(() => {
+        subtreeRAF = null;
+        for (const id of subtreeIds(n.id)) {
+          const k = state.nodes.get(id);
+          if (k) {
+            paintNode(k);
+          }
+        }
+      });
+    }
   };
   const up = (): void => {
     window.removeEventListener('pointermove', move);
@@ -981,14 +1122,22 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     hideGuides();
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
     // a redundant mm_w on every card the user so much as nudges.
-    if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
+    if (!sizeH && n.w != null && Math.round(n.w) <= minW) {
+      n.w = undefined;
+    }
     // …and the same for a card's height: no taller than its text → it has no authored height.
     // Shorter than its text (at the width it ended at) → it clips; else it's a minimum again.
     if (!sizeH && n.h != null) {
       paintNode(n);
       const nat = natural();
-      if (Math.round(n.h) < nat - 1) n.clip = true;
-      else { n.clip = undefined; if (Math.round(n.h) <= nat + 1) n.h = undefined; }
+      if (Math.round(n.h) < nat - 1) {
+        n.clip = true;
+      } else {
+        n.clip = undefined;
+        if (Math.round(n.h) <= nat + 1) {
+          n.h = undefined;
+        }
+      }
     }
     // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
     // the DOM has it.
@@ -1011,7 +1160,9 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
 export function paintAll(): void {
   readOpenUnread();   // an open frame whose notes are still on disk reads them (data/lazy.ts)
   refreshSearch();    // what the search lights, off the tags and text as they are now
-  for (const n of state.nodes.values()) paintNode(n);
+  for (const n of state.nodes.values()) {
+    paintNode(n);
+  }
   refreshTray();      // the tag tray's stickers, when it's out
   paintFreeEdges();
   updateEmptyHints();
@@ -1041,11 +1192,24 @@ function prefersReducedMotion(): boolean { try { return matchMedia('(prefers-red
 // The animation writes left/top itself (that's what it interpolates), so it must go through the SAME
 // placement authority paintNode's own final branch uses — placeSelf, not a bare place() — so a hosted
 // card stays in its container's wrapper for the duration.
-function placeNodeEl(n: MindNode): void { if (n.el) placeSelf(n, n.x, n.y); }
-function setNodeElXY(n: MindNode, x: number, y: number): void { if (n.el) placeSelf(n, x, y); }
+function placeNodeEl(n: MindNode): void {
+  if (n.el) {
+    placeSelf(n, n.x, n.y);
+  }
+}
+function setNodeElXY(n: MindNode, x: number, y: number): void {
+  if (n.el) {
+    placeSelf(n, x, y);
+  }
+}
 // Newly revealed cards emanate from the nearest ancestor that was already on screen.
 function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
-  for (const p of ancestors(node)){ const b = before.get(p.id); if (b) return b; }
+  for (const p of ancestors(node)){
+    const b = before.get(p.id);
+    if (b) {
+      return b;
+    }
+  }
   return { x: node.x, y: node.y };
 }
 // Cards glide to new spots via a CSS transition; SVG edges can't transition, so for the duration
@@ -1053,18 +1217,32 @@ function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
 // Only a line's END cards (and the frames around them, which a hidden end is drawn to) are read: the
 // computed-style read is the cost, and there are far fewer of those than cards. No lines, no loop.
 function followEdges(tok: number, ms: number): void {
-  if (!state.edges.length) return;
+  if (!state.edges.length) {
+    return;
+  }
   const ends = new Set<MindNode>();
-  for (const e of state.edges) for (const id of [e.from, e.to]) {
-    const n = state.nodes.get(id); if (!n) continue;
-    ends.add(n); for (const a of ancestors(n)) ends.add(a);
+  for (const e of state.edges) {
+    for (const id of [e.from, e.to]) {
+      const n = state.nodes.get(id);
+      if (!n) {
+        continue;
+      }
+      ends.add(n);
+      for (const a of ancestors(n)) {
+        ends.add(a);
+      }
+    }
   }
   const t0 = performance.now();
   const tick = (now: number): void => {
-    if (tok !== ui.animToken) return;                  // superseded by a newer animation
+    if (tok !== ui.animToken) {
+      return;                  // superseded by a newer animation
+    }
     const saved: Array<[MindNode, number, number]> = [];
     for (const n of ends){
-      if (!n.el || isHidden(n)) continue;
+      if (!n.el || isHidden(n)) {
+        continue;
+      }
       const c = getComputedStyle(n.el);             // interpolated left/top while transitioning
       saved.push([n, n.x, n.y]);
       // left/top are HOST-relative for a hosted card — project back to absolute world coords, through
@@ -1077,7 +1255,11 @@ function followEdges(tok: number, ms: number): void {
     }
     paintFreeEdges();
     for (const [n,x,y] of saved){ n.x = x; n.y = y; }   // restore logical (final) positions
-    if (now - t0 < ms) requestAnimationFrame(tick); else paintFreeEdges();
+    if (now - t0 < ms) {
+      requestAnimationFrame(tick);
+    } else {
+      paintFreeEdges();
+    }
   };
   requestAnimationFrame(tick);
 }
@@ -1085,7 +1267,11 @@ function followEdges(tok: number, ms: number): void {
 // glides away from. Take it BEFORE the structural change.
 function layoutSnapshot(): Map<string, Pt> {
   const before = new Map<string, Pt>();
-  for (const m of state.nodes.values()) if (m.el && !isHidden(m)) before.set(m.id, { x:m.x, y:m.y });
+  for (const m of state.nodes.values()) {
+    if (m.el && !isHidden(m)) {
+      before.set(m.id, { x:m.x, y:m.y });
+    }
+  }
   return before;
 }
 // Run a structural change (a collapse toggle, a tidy-up) and CSS-animate the resulting reflow.
@@ -1110,9 +1296,13 @@ interface Size { w: number; h: number }
 function sizeSnapshot(): Map<HTMLElement, Size> {
   const out = new Map<HTMLElement, Size>();
   for (const m of state.nodes.values()) {
-    if (!m.el || isHidden(m)) continue;
+    if (!m.el || isHidden(m)) {
+      continue;
+    }
     out.set(m.el, { w: m.el.offsetWidth, h: m.el.offsetHeight });
-    if (m.frameContentEl) out.set(m.frameContentEl, { w: m.frameContentEl.offsetWidth, h: m.frameContentEl.offsetHeight });
+    if (m.frameContentEl) {
+      out.set(m.frameContentEl, { w: m.frameContentEl.offsetWidth, h: m.frameContentEl.offsetHeight });
+    }
   }
   return out;
 }
@@ -1123,18 +1313,26 @@ const SIZE_EASE = 'cubic-bezier(.45,0,.25,1)';
 // `.lt-anim`'s left/top transition in styles.css, which must say the same.
 const LAYOUT_ANIM_MS = 500;
 function animateSizes(before: Map<HTMLElement, Size>): void {
-  if (prefersReducedMotion()) return;
+  if (prefersReducedMotion()) {
+    return;
+  }
   // A frame that has just UNFOLDED had no content wrapper to snapshot: it starts as small as the box
   // it grows out of (the pill, less the box's own border), so its cards stay clipped all the way open.
   for (const m of state.nodes.values()) {
     const w = m.frameContentEl, a = m.el ? before.get(m.el) : undefined;
-    if (!w || !a || before.has(w) || !m.el) continue;
+    if (!w || !a || before.has(w) || !m.el) {
+      continue;
+    }
     before.set(w, { w: Math.max(0, a.w - (m.el.offsetWidth - w.offsetWidth)), h: Math.max(0, a.h - (m.el.offsetHeight - w.offsetHeight)) });
   }
   for (const [el, a] of before) {
-    if (!el.isConnected || el.style.display === 'none') continue;
+    if (!el.isConnected || el.style.display === 'none') {
+      continue;
+    }
     const b = { w: el.offsetWidth, h: el.offsetHeight };
-    if (Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1) continue;
+    if (Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1) {
+      continue;
+    }
     el.animate([
       { width: a.w + 'px', height: a.h + 'px', minHeight: '0px', maxWidth: 'none', overflow: 'hidden' },
       { width: b.w + 'px', height: b.h + 'px', minHeight: '0px', maxWidth: 'none', overflow: 'hidden' },
@@ -1155,9 +1353,13 @@ function animateReflow(before: Map<string, Pt>): void {
   //    along with it. Only a card that moved WITHIN its frame (a tidy-up) glides.
   const stays = (m: MindNode): boolean => {
     const p = parentOf(m);
-    if (!p || isScopeRoot(p)) return false;
+    if (!p || isScopeRoot(p)) {
+      return false;
+    }
     const bm = before.get(m.id), bp = before.get(p.id);
-    if (!bm) return true;
+    if (!bm) {
+      return true;
+    }
     return !!bp && Math.abs((bm.x - bp.x) - (m.x - p.x)) < 0.5 && Math.abs((bm.y - bp.y) - (m.y - p.y)) < 0.5;
   };
   // A frame's content wrapper (its CLIP) is a sibling of its box, not inside it, so it glides alongside:
@@ -1168,7 +1370,9 @@ function animateReflow(before: Map<string, Pt>): void {
     m.el!.classList.remove('lt-anim');
     const s = stays(m) ? { x: m.x, y: m.y } : before.get(m.id) || ancestorStart(m, before);
     setNodeElXY(m, s.x, s.y);
-    if (!before.has(m.id)) m.el!.style.opacity = '0';
+    if (!before.has(m.id)) {
+      m.el!.style.opacity = '0';
+    }
     const w = m.frameContentEl;
     if (w?.isConnected && (s.x !== m.x || s.y !== m.y)) {
       w.classList.remove('lt-anim');
@@ -1180,14 +1384,26 @@ function animateReflow(before: Map<string, Pt>): void {
   void document.body.offsetWidth;                    // commit the start positions before transitioning
   // 2) turn on the transition and move every card to its FINAL spot → the browser animates left/top
   const DUR = LAYOUT_ANIM_MS;
-  for (const m of visible){ if (!stays(m)) m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
+  for (const m of visible){
+    if (!stays(m)) {
+      m.el!.classList.add('lt-anim');
+    }
+    placeNodeEl(m);
+    m.el!.style.opacity = '';
+  }
   for (const [w, left, top] of clips){ w.classList.add('lt-anim'); w.style.left = left; w.style.top = top; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);
   setTimeout(() => {
-    if (tok !== ui.animToken) return;
-    for (const m of visible) m.el && m.el.classList.remove('lt-anim');
-    for (const [w] of clips) w.classList.remove('lt-anim');
+    if (tok !== ui.animToken) {
+      return;
+    }
+    for (const m of visible) {
+      m.el && m.el.classList.remove('lt-anim');
+    }
+    for (const [w] of clips) {
+      w.classList.remove('lt-anim');
+    }
     document.body.classList.remove('layout-anim');
     paintFreeEdges();
   }, DUR + 60);
@@ -1197,11 +1413,18 @@ function animateReflow(before: Map<string, Pt>): void {
 // Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
 // children, folds them (and everything below) too. A leaf with a body can fold its body alone.
 export function toggleCollapse(id: string): void {
-  const n = state.nodes.get(id); if (!n) return;
+  const n = state.nodes.get(id);
+  if (!n) {
+    return;
+  }
   if (isLockedEffective(n)) { setStatus('Locked — can’t collapse/expand'); return; }
-  if (!canFold(n)) return;   // a card with nothing to tuck away
+  if (!canFold(n)) {
+    return;   // a card with nothing to tuck away
+  }
   // Unfolding a frame whose notes are still on disk reads them first (data/lazy.ts), then unfolds.
-  if (n.collapsed && afterReading([id], () => toggleCollapse(id), false)) return;
+  if (n.collapsed && afterReading([id], () => toggleCollapse(id), false)) {
+    return;
+  }
   // animate the reflow; animateLayout paints, measures heights, and lays out the children
   record([id], () => animateLayout(() => { n.collapsed = !n.collapsed; n.dirtyLayout = true; }));
   dropHiddenFromSelection();
@@ -1212,8 +1435,9 @@ export function toggleCollapse(id: string): void {
 // A frame folded around selected cards takes them off the canvas — and out of the selection, so no key
 // or bar acts on cards you can't see.
 function dropHiddenFromSelection(): void {
-  if ([...state.sel].some(id => { const m = state.nodes.get(id); return !!m && isHidden(m); }))
+  if ([...state.sel].some(id => { const m = state.nodes.get(id); return !!m && isHidden(m); })) {
     setSelectionSet([...state.sel].filter(id => { const m = state.nodes.get(id); return !m || !isHidden(m); }));
+  }
 }
 // Fold/unfold a whole set of cards together (double-clicking one card of a multi-selection).
 // Only foldable cards (children or a body) count; the group lands on one shared state — expand
@@ -1227,7 +1451,9 @@ function foldableSelection(ids: Iterable<string>): MindNode[] {
 }
 // Apply one shared fold state to a whole set, as ONE undo step and one animated reflow.
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
-  if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) return;
+  if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) {
+    return;
+  }
   record(cards.map(n => n.id),
     () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
@@ -1238,7 +1464,9 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
 }
 export function toggleCollapseSelection(ids: Iterable<string>): void {
   const cards = foldableSelection(ids);
-  if (!cards.length) return;
+  if (!cards.length) {
+    return;
+  }
   applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
 }
 // What "Collapse/Expand all" (⌘P) act on: the selected frames and everything inside them when frames
@@ -1256,14 +1484,18 @@ export function foldScope(): MindNode[] {
 // (data/lazy.ts) — and the set is taken again after, since what was read holds more to unfold.
 function expandAll(): void {
   const go = (): void => setCollapsedSelection(foldScope().map(n => n.id), false);
-  if (!afterReading(foldScope().map(n => n.id), go)) go();
+  if (!afterReading(foldScope().map(n => n.id), go)) {
+    go();
+  }
 }
 // The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
 // leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
 // selection lands on one state in a single press instead of needing two.
 export function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean): void {
   const cards = foldableSelection(ids).filter(n => !!n.collapsed !== collapsed);
-  if (!cards.length) return;
+  if (!cards.length) {
+    return;
+  }
   applyCollapsed(cards, collapsed);
 }
 // ---------- arrow keys: go IN and OUT of frames, fold and unfold branches ----------
@@ -1291,7 +1523,9 @@ function navArrow(key: string): void {
     openFrame(n);          // reports its own refusal for the kinds that can't be opened
     return;
   }
-  if (!n) return;          // ←/→ have nothing to fold
+  if (!n) {
+    return;          // ←/→ have nothing to fold
+  }
   // → unfolds, ← folds — every selected card that isn't already there.
   setCollapsedSelection(selectedIds(), key === 'ArrowLeft');
 }
@@ -1308,9 +1542,13 @@ export function anyLocked(ids: Iterable<string>): boolean {
   return [...ids].some(id => { const n = state.nodes.get(id); return !!n && isLockedEffective(n); });
 }
 export function setLockedSelection(ids: Iterable<string>, locked: boolean): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const cards = [...ids].map(id => state.nodes.get(id)).filter((n): n is MindNode => !!n && n.locked !== locked);
-  if (!cards.length) return;
+  if (!cards.length) {
+    return;
+  }
   record(cards.map(n => n.id), () => { for (const n of cards){ n.locked = locked; n.dirty = true; } });
   paintAll();
   syncFloatBar();   // the bar collapses to just its lock toggle while the selection is locked
@@ -1319,14 +1557,18 @@ export function setLockedSelection(ids: Iterable<string>, locked: boolean): void
 }
 // Flip the idx-th task checkbox in a node's body and write the change back to disk.
 function toggleTask(n: MindNode, idx: number): void {
-  if (state.readOnly || isLockedEffective(n)) return;
+  if (state.readOnly || isLockedEffective(n)) {
+    return;
+  }
   let i = 0;
   record([n.id], () => {
     n.body = n.body.replace(/^(\s*[-*+]\s+)\[([ xX])\]/gm, (m, pre, mark) =>
       i++ === idx ? pre + (mark === ' ' ? '[x]' : '[ ]') : m);
     n.dirty = true;
   });
-  if (ui.bodyEdit && ui.bodyEdit.id === n.id) ui.bodyEdit.ta.value = n.body;   // keep an open in-card editor in sync
+  if (ui.bodyEdit && ui.bodyEdit.id === n.id) {
+    ui.bodyEdit.ta.value = n.body;   // keep an open in-card editor in sync
+  }
   paintNode(n); scheduleSave();
 }
 
@@ -1334,7 +1576,9 @@ function toggleTask(n: MindNode, idx: number): void {
 export function subtreeIds(id: string): string[] {
   // id + every descendant
   const out = [id];
-  for (const ch of childrenOf(id)) out.push(...subtreeIds(ch.id));
+  for (const ch of childrenOf(id)) {
+    out.push(...subtreeIds(ch.id));
+  }
   return out;
 }
 // ---------- pan / zoom / marquee-select gestures live in features/gestures.ts ----------
@@ -1342,19 +1586,26 @@ export function subtreeIds(id: string): string[] {
 
 // Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {
-  if (!target) return;
+  if (!target) {
+    return;
+  }
   const before = layoutSnapshot();             // pre-reveal frame to glide away from
   // Unfold the frames it's tucked inside (and, when openTarget, the card itself) so it's on the canvas.
   const toReveal = [...ancestors(target)].filter(p => p.collapsed);
-  if (openTarget && target.collapsed) toReveal.push(target);
+  if (openTarget && target.collapsed) {
+    toReveal.push(target);
+  }
   let revealed = false;
-  if (toReveal.length)
+  if (toReveal.length) {
     record(toReveal.map(m => m.id), () => { for (const m of toReveal){ m.collapsed = false; m.dirtyLayout = true; } revealed = true; });
+  }
   selectNode(target.id);                       // select → the card shows its full body (grows)
   relayout();                  // reflow siblings around the now-taller selection
   animateReflow(before);                       // one glide from the pre-reveal frame to the final
   frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
-  if (revealed && store.isOpen) scheduleSave();
+  if (revealed && store.isOpen) {
+    scheduleSave();
+  }
 }
 // Follow a [[wikilink]] and focus its target. Map-wide, on purpose — a link that only worked inside the
 // frame you happened to be in would be a broken link — so it comes out of as many scope levels as it
@@ -1377,20 +1628,26 @@ function focusByTitle(title: string, from?: MindNode): void {
       setStatus(`No node titled “${title}” in this map`); return;
     }
     const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
-    if (createNode({ x: at.x, y: at.y, title, edit: false })) setStatus(`Created “${title}”`);
+    if (createNode({ x: at.x, y: at.y, title, edit: false })) {
+      setStatus(`Created “${title}”`);
+    }
     return;
   }
   popScopeFor(target);
   focusNode(target);
-  if (hits.length > 1)
+  if (hits.length > 1) {
     setStatus(`${hits.length} cards are titled “${title}” — went to the one in ${target.file ?? 'this map'}`);
+  }
 }
 // The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
 // frame the whole map when nothing is selected — both glide with the same easing. While a frame is
 // OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free.
 function focusOrFit(): void {
-  if (state.selId && state.nodes.has(state.selId)) focusNode(state.nodes.get(state.selId));
-  else focusScope();
+  if (state.selId && state.nodes.has(state.selId)) {
+    focusNode(state.nodes.get(state.selId));
+  } else {
+    focusScope();
+  }
 }
 // Re-frame whatever is ON the canvas right now: the open frame's contents while scoped (isHidden
 // does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
@@ -1424,9 +1681,13 @@ function scopeRectFor(t: MindNode): { x: number; y: number; w: number; h: number
 // move (it isn't selectable and nothing lays it out). Returns whether anything actually changed.
 function refreshScopeRect(): boolean {
   const top = scope.stack[scope.stack.length - 1];
-  if (!top) return false;
+  if (!top) {
+    return false;
+  }
   const s = stageSize();
-  if (Math.round(top.rect.w) === Math.round(s.width) && Math.round(top.rect.h) === Math.round(s.height)) return false;
+  if (Math.round(top.rect.w) === Math.round(s.width) && Math.round(top.rect.h) === Math.round(s.height)) {
+    return false;
+  }
   top.rect = { x: top.rect.x, y: top.rect.y, w: s.width, h: s.height };
   return true;
 }
@@ -1441,10 +1702,13 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
   if (!target) { scope.stack = []; scope.rootId = null; return; }
   const keep = new Map(scope.stack.map(l => [l.rootId, l]));
   const next: ScopeLevel[] = [];
-  for (const n of [...openPathTo(target), target])
+  for (const n of [...openPathTo(target), target]) {
     next.push(keep.get(n.id) ?? { rootId: n.id, file: n.file ?? null, rect: scopeRectFor(n), back: null });
+  }
   const top = next[next.length - 1]!;
-  if (!keep.has(top.rootId)) top.back = back;   // only a level you're newly entering records a way back
+  if (!keep.has(top.rootId)) {
+    top.back = back;   // only a level you're newly entering records a way back
+  }
   scope.stack = next;
   scope.rootId = target.id;
 }
@@ -1457,7 +1721,9 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
 // A FOLDED frame is measured as the box it unfolds to, not its pill: unfolded for the measurement
 // only, and folded straight back, so leaving it moves nothing unless a card really sticks out.
 function growToFitContents(f: MindNode): void {
-  if (state.readOnly || f.type !== 'frame') return;
+  if (state.readOnly || f.type !== 'frame') {
+    return;
+  }
   const folded = f.collapsed;
   f.collapsed = false;
   try { growFramesToHold(childrenOf(f.id).map(k => k.id)); }
@@ -1477,13 +1743,17 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
     // settledHost caches which wrapper each element sits in (hostFrameId), and the scope just
     // changed which wrapper that IS. Drop the cache or the children keep being placed into a
     // wrapper paintNode is about to remove.
-    for (const n of state.nodes.values()) n.hostFrameId = undefined;
+    for (const n of state.nodes.values()) {
+      n.hostFrameId = undefined;
+    }
     refreshScopeRect();
     // Now that the stack is settled, containerBox reports the frame we just left at its real size
     // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
     // step: ⌘Z undoes the resize without teleporting you between scopes.
     // `type === 'frame'` and not a scope predicate: the scope stack has already moved above this line.
-    if (left && left.type === 'frame' && !isScopeRoot(left)) record([left.id], () => growToFitContents(left));
+    if (left && left.type === 'frame' && !isScopeRoot(left)) {
+      record([left.id], () => growToFitContents(left));
+    }
   });
   if (opts.exiting) {
     // Leaving: select the frame you came out of — that's what makes a crumb read as a back button —
@@ -1492,26 +1762,37 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
     const ids = came && !outOfScope(came) ? [came.id]
       : (opts.restore?.sel ?? []).filter(id => { const n = state.nodes.get(id); return !!n && !outOfScope(n); });
     setSelectionSet(ids);
-    if (opts.restore) animateViewTo(opts.restore.view.x, opts.restore.view.y, opts.restore.view.k);
-    else if (opts.camera !== false) focusScope();
+    if (opts.restore) {
+      animateViewTo(opts.restore.view.x, opts.restore.view.y, opts.restore.view.k);
+    } else if (opts.camera !== false) {
+      focusScope();
+    }
   } else {
     selectNode(null);            // the frame itself is off the canvas now, so nothing is selected
-    if (opts.camera !== false) focusScope();
+    if (opts.camera !== false) {
+      focusScope();
+    }
   }
   syncUrl();                     // a discrete navigation step, like selecting a node → a history entry
-  if (before !== scope.rootId) scheduleSave();
+  if (before !== scope.rootId) {
+    scheduleSave();
+  }
 }
 
 // Open a frame. Allowed in read-only and on a LOCKED frame: looking inside the box isn't changing it.
 export function openFrame(target: MindNode | undefined): void {
   const t = target;
   if (!t || !canOpen(t)) { setStatus('Only a frame can be opened'); return; }
-  if (afterReading([t.id], () => openFrame(t), false)) return;   // its notes are the canvas you open onto
+  if (afterReading([t.id], () => openFrame(t), false)) {
+    return;   // its notes are the canvas you open onto
+  }
   const back = currentBack();
   // Opening is pure navigation, in the same class as revealInView: it writes no node field. A FOLDED
   // frame stays folded — while you stand in it its interior is the canvas whatever its fold says
   // (isHidden asks about the open frame before the fold), and you come back out to the same pill.
-  if (isScopeRoot(t)) return;                  // already standing in it
+  if (isScopeRoot(t)) {
+    return;                  // already standing in it
+  }
   applyScope(t, { back });
   setStatus(`Opened “${nodeLabel(t)}”`);
 }
@@ -1524,13 +1805,17 @@ export function exitScope(): void {
   // which is what "close" means. A level you DID open by hand keeps its own back and stops the walk,
   // so `open A → open B → leave` still lands in A exactly as before.
   let d = scope.stack.length - 1;
-  while (d > 0 && scope.stack[d - 1]!.back === null) d--;
+  while (d > 0 && scope.stack[d - 1]!.back === null) {
+    d--;
+  }
   goToScopeDepth(d);
 }
 // Leave the level AT `depth`, landing in the one above it — so depth 0 is "back to the whole map".
 // A crumb click is exactly this, which is why the crumbs need no logic of their own.
 export function goToScopeDepth(depth: number): void {
-  if (depth < 0 || depth >= scope.stack.length) return;   // ↓ at the top level: silently inert
+  if (depth < 0 || depth >= scope.stack.length) {
+    return;   // ↓ at the top level: silently inert
+  }
   const leaving = scope.stack[depth]!;
   const upId = depth > 0 ? scope.stack[depth - 1]!.rootId : null;
   // Several levels can be left at once — exitScope pops the synthesized ones, a crumb click jumps out
@@ -1538,7 +1823,9 @@ export function goToScopeDepth(depth: number): void {
   // was synthesized and never recorded a camera, to the innermost that did: that is the state the user
   // was actually in before the whole excursion.
   let back = leaving.back;
-  for (let i = scope.stack.length - 1; i > depth && !back; i--) back = scope.stack[i]!.back;
+  for (let i = scope.stack.length - 1; i > depth && !back; i--) {
+    back = scope.stack[i]!.back;
+  }
   applyScope(upId ? state.nodes.get(upId) ?? null : null, { restore: back, exiting: true });
 }
 // Restore the scope a URL hash asked for (nav/url-state.ts). No fit: the hash carries its own camera
@@ -1550,7 +1837,9 @@ export function restoreScopeFromFile(file: string | null): void {
   const t = file ? nodeByFile(file) : undefined;
   const want = t && canOpen(t) ? t : null;
   if (!want) { if (scopeActive()) { withoutScopeFade(); applyScope(null, { exiting: true, camera: false }); } return; }
-  if (isScopeRoot(want)) return;
+  if (isScopeRoot(want)) {
+    return;
+  }
   withoutScopeFade();
   applyScope(want, { camera: false });
 }
@@ -1569,7 +1858,9 @@ function withoutScopeFade(): void {
 // resurrects a node elsewhere) all go through here, so none of them can select a card that isn't on
 // the canvas — isSelectable refuses an out-of-scope id.
 export function popScopeFor(t: MindNode): void {
-  for (let guard = 0; scopeActive() && outOfScope(t) && guard < 64; guard++) exitScope();
+  for (let guard = 0; scopeActive() && outOfScope(t) && guard < 64; guard++) {
+    exitScope();
+  }
 }
 // Keep the crumb bar in step, and recover from the open frame having been deleted / undone away /
 // removed on disk. pruneScope (view/layout.ts's applyLayouts) already truncated the stack; the
@@ -1590,8 +1881,14 @@ export function popScopeFor(t: MindNode): void {
 // ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
 // coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
 function hasAuthoredColor(n: MindNode): boolean {
-  if (n.color) return true;
-  for (const a of ancestors(n)) if (a.color) return true;
+  if (n.color) {
+    return true;
+  }
+  for (const a of ancestors(n)) {
+    if (a.color) {
+      return true;
+    }
+  }
   return false;
 }
 // WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
@@ -1608,7 +1905,9 @@ export const canvasOwner = (): MindNode | null => scopeRootNode();
 // going in turned a teal board grey, and coming out turned it teal again.
 export function canvasFill(): string | null {
   const owner = canvasOwner();
-  if (!owner || !hasAuthoredColor(owner)) return colorFill(state.canvasColor);
+  if (!owner || !hasAuthoredColor(owner)) {
+    return colorFill(state.canvasColor);
+  }
   const fill = colorFill(effectiveColor(owner));
   return fill && paleFill(fill);
 }
@@ -1641,18 +1940,26 @@ export function syncCanvasBackground(): void {
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 let themeProbe: HTMLElement | null = null;
 function syncThemeColor(fill: string | null | undefined): void {
-  if (!themeMeta) return;
+  if (!themeMeta) {
+    return;
+  }
   if (!themeProbe) { themeProbe = document.createElement('i'); themeProbe.hidden = true; document.body.append(themeProbe); }
   themeProbe.style.color = fill || 'var(--bg)';
   const rgb = getComputedStyle(themeProbe).color;
-  if (themeMeta.getAttribute('content') !== rgb) themeMeta.setAttribute('content', rgb);
+  if (themeMeta.getAttribute('content') !== rgb) {
+    themeMeta.setAttribute('content', rgb);
+  }
 }
 function syncScopeChrome(): void {
   renderCrumbs();
   syncCanvasBackground();
-  if (!scope.pruned) return;
+  if (!scope.pruned) {
+    return;
+  }
   scope.pruned = false;
-  if (state.sel.size || state.selId) setSelectionSet([]);
+  if (state.sel.size || state.selId) {
+    setSelectionSet([]);
+  }
   focusScope();
   const open = scopeRootNode();
   setStatus(open ? `That frame is gone — back to “${nodeLabel(open)}”` : 'That frame is gone — back to the whole map');
@@ -1662,7 +1969,9 @@ function syncScopeChrome(): void {
 // stale rect would confine to the old window. Debounced, and a no-op when the size didn't really change.
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
 window.addEventListener('resize', () => {
-  if (!scopeActive()) return;
+  if (!scopeActive()) {
+    return;
+  }
   clearTimeout(scopeResizeTimer);
   scopeResizeTimer = setTimeout(refreshScopeRect, 200);
 });
@@ -1741,7 +2050,9 @@ export function applyColorVars(el: HTMLElement, c: string): void {
     el.style.setProperty('--ink', inkFor(c));
     el.style.setProperty('--scrim', scrimFor(c));
   } else {
-    for (const prop of ['--card', '--ink', '--scrim']) el.style.removeProperty(prop);
+    for (const prop of ['--card', '--ink', '--scrim']) {
+      el.style.removeProperty(prop);
+    }
   }
 }
 // Select everything ON THE CANVAS — which, inside an open frame, is that frame's contents and nothing
@@ -1763,10 +2074,21 @@ export const taggableSelection = (): string[] => selectedIds().filter(id => wear
 // stale) and the new selection. A click used to repaint the whole map. A mutation that also selects
 // still ends in its own relayout()/remeasure().
 export function applySelection(): void {
-  if (state.sel.size && state.selEdges.size) clearEdgeSelection();
+  if (state.sel.size && state.selEdges.size) {
+    clearEdgeSelection();
+  }
   const ids = new Set(state.sel);
-  world.querySelectorAll<HTMLElement>('.node.sel').forEach(el => { if (el.dataset.id) ids.add(el.dataset.id); });
-  for (const id of ids) { const n = state.nodes.get(id); if (n) paintNode(n); }
+  world.querySelectorAll<HTMLElement>('.node.sel').forEach(el => {
+    if (el.dataset.id) {
+      ids.add(el.dataset.id);
+    }
+  });
+  for (const id of ids) {
+    const n = state.nodes.get(id);
+    if (n) {
+      paintNode(n);
+    }
+  }
   paintFreeEdges(); syncFloatBar(); syncUrl(); updateDocumentTitle();
 }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
@@ -1780,18 +2102,26 @@ function isSelectable(id: string): boolean {
 // Replace the whole selection with `ids` (a Set or array), recomputing the primary.
 export function setSelectionSet(ids: Iterable<string>): void {
   state.sel = new Set([...ids].filter(isSelectable));
-  if (state.sel.size === 0) state.selId = null;
-  else if (state.sel.size === 1) state.selId = [...state.sel][0];
-  else if (!state.selId || !state.sel.has(state.selId)) state.selId = [...state.sel].pop() ?? null;
+  if (state.sel.size === 0) {
+    state.selId = null;
+  } else if (state.sel.size === 1) {
+    state.selId = [...state.sel][0];
+  } else if (!state.selId || !state.sel.has(state.selId)) {
+    state.selId = [...state.sel].pop() ?? null;
+  }
   applySelection();
 }
 // ⌘/Ctrl-click: add or remove one card from the selection.
 export function toggleSel(id: string): void {
   if (state.sel.has(id)){
     state.sel.delete(id);
-    if (state.selId === id) state.selId = state.sel.size ? ([...state.sel].pop() ?? null) : null;
+    if (state.selId === id) {
+      state.selId = state.sel.size ? ([...state.sel].pop() ?? null) : null;
+    }
   } else {
-    if (!isSelectable(id)) return;
+    if (!isSelectable(id)) {
+      return;
+    }
     state.sel.add(id); state.selId = id;
   }
   applySelection();
@@ -1818,14 +2148,18 @@ export function applyReadOnly(): void {
 }
 applyReadOnly();
 async function setReadOnly(on: boolean): Promise<void> {
-  if (on === state.readOnly) return;
+  if (on === state.readOnly) {
+    return;
+  }
   if (on){
     await flushSave();                                   // persist anything pending before locking (clears the save timer)
     state.readOnly = true;
     selectNode(null);                                    // close any open edit
   } else {
     state.readOnly = false;
-    if (store.isOpen) await loadFromDir({ keepView:true }); // discard in-memory collapses, restore disk state
+    if (store.isOpen) {
+      await loadFromDir({ keepView:true }); // discard in-memory collapses, restore disk state
+    }
   }
   applyReadOnly();
 }
@@ -1835,7 +2169,9 @@ roBadge.onclick = () => setReadOnly(false);
 export function selectNode(id: string | null): void {
   if (id == null){ state.sel.clear(); state.selId = null; }
   else {
-    if (!isSelectable(id)) return;
+    if (!isSelectable(id)) {
+      return;
+    }
     state.sel = new Set([id]); state.selId = id;
   }
   applySelection();
@@ -1887,14 +2223,23 @@ window.addEventListener('keydown', (e) => {
   // Esc blurs the active field (so Delete works next), or deselects when not typing.
   if (key === 'Escape'){
     e.preventDefault();
-    if (typing) { active?.blur?.(); }
-    else if (state.selEdges.size) clearEdgeSelection();
-    else if (searchActive()) closeSearch();   // a search left standing over the board, before the selection
-    else if (state.sel.size) selectNode(null);
+    if (typing) {
+      active?.blur?.();
+    } else if (state.selEdges.size) {
+      clearEdgeSelection();
+    } else if (searchActive()) {
+      closeSearch();   // a search left standing over the board, before the selection
+    } else if (state.sel.size) {
+      selectNode(null);
+    }
     return;
   }
-  if (typing) return;
-  if (tidyShortcut(e)) return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
+  if (typing) {
+    return;
+  }
+  if (tidyShortcut(e)) {
+    return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
+  }
   // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
   if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey){
@@ -1903,7 +2248,15 @@ window.addEventListener('keydown', (e) => {
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
-  if (key === '#' && !mod){ e.preventDefault(); if (taggableSelection().length) openTagPicker(); else openSearch('#'); return; }
+  if (key === '#' && !mod){
+    e.preventDefault();
+    if (taggableSelection().length) {
+      openTagPicker();
+    } else {
+      openSearch('#');
+    }
+    return;
+  }
   if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
@@ -1933,34 +2286,56 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
   }
   if (key === 'e' && !mod && state.selId){
-    e.preventDefault(); const n = state.nodes.get(state.selId); if (n) startBodyEdit(n); return;
+    e.preventDefault(); const n = state.nodes.get(state.selId);
+    if (n) {
+      startBodyEdit(n);
+    }
+    return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
   // Tab puts a new card INSIDE the selected frame — the one thing that has an inside.
-  if (key === 'Tab' && state.selId){ e.preventDefault(); if (state.nodes.get(state.selId)?.type === 'frame') addCardInside(state.selId); return; }
+  if (key === 'Tab' && state.selId){
+    e.preventDefault();
+    if (state.nodes.get(state.selId)?.type === 'frame') {
+      addCardInside(state.selId);
+    }
+    return;
+  }
   if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
   // ⌘L connects the selected cards (MindNode's shortcut for the same thing). Bare `l` is lock.
   if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
   if (del && state.sel.size){
     e.preventDefault();
     // ⌥Delete keeps the children, promoting them to the deleted card's parent.
-    if (e.altKey) deleteSelectionKeepChildren(); else deleteSelection();
+    if (e.altKey) {
+      deleteSelectionKeepChildren();
+    } else {
+      deleteSelection();
+    }
   }
 });
 // Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.
 window.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse') ui.lastMouse = { x: e.clientX, y: e.clientY };
+  if (e.pointerType === 'mouse') {
+    ui.lastMouse = { x: e.clientX, y: e.clientY };
+  }
 });
 window.addEventListener('keyup', (e) => {
-  if (e.key !== ' ') return;
+  if (e.key !== ' ') {
+    return;
+  }
   const wasPan = ui.spaceUsedForPan;
   ui.spaceHeld = false; ui.spaceUsedForPan = false;
-  if (isTypingInField() || wasPan || ui.pan) return;
+  if (isTypingInField() || wasPan || ui.pan) {
+    return;
+  }
   // A Space TAP on a lone IMAGE card opens it full-screen — the picture is the whole card, so "look at
   // this properly" is the obvious thing the key can mean there, and the viewer closes on Space too
   // (features/image-viewer.ts). Everything else Space used to do on release (making a card) is `N` now.
   const sole = state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : null;
-  if (sole && isImageCard(sole)) openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
+  if (sole && isImageCard(sole)) {
+    openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
+  }
 });
 
 // Ghost-card drag: grab the corner card to spawn a new note that rides the cursor through the same
@@ -1983,10 +2358,16 @@ window.addEventListener('keyup', (e) => {
     window.removeEventListener('pointercancel', onCancel);
     return n;
   }
-  function onMove(e: PointerEvent): void { if (newNode) feedDragMove(e.clientX, e.clientY); }
+  function onMove(e: PointerEvent): void {
+    if (newNode) {
+      feedDragMove(e.clientX, e.clientY);
+    }
+  }
   function onUp(e: PointerEvent): void {
     const n = endGhostDrag();
-    if (!n) return;
+    if (!n) {
+      return;
+    }
     // released back on the ghost card itself -> cancel: discard the new card, create nothing
     const r = ghost.getBoundingClientRect();
     const onGhost = e.clientX >= r.left && e.clientX <= r.right &&
@@ -2001,7 +2382,9 @@ window.addEventListener('keyup', (e) => {
   }
 
   ghost.addEventListener('pointerdown', (e: PointerEvent) => {
-    if (state.readOnly) return;
+    if (state.readOnly) {
+      return;
+    }
     e.preventDefault();
     endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
     // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
@@ -2009,7 +2392,9 @@ window.addEventListener('keyup', (e) => {
     const r = ghost.getBoundingClientRect();
     const w = screenToWorld(r.left, r.top);
     newNode = createDetachedNode(w.x, w.y) ?? null;
-    if (!newNode) return;
+    if (!newNode) {
+      return;
+    }
     try { ghost.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
     startNodeDrag(newNode, e.clientX, e.clientY);
     window.addEventListener('pointermove', onMove);
@@ -2040,7 +2425,12 @@ function paletteCommands(): Command[] {
     { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1.2) },
     { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomAt(window.innerWidth/2, window.innerHeight/2, 1/1.2) },
     { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
-    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
+    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => {
+      const n = oneSel();
+      if (n) {
+        startBodyEdit(n);
+      }
+    } },
     { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
     { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
     { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || editable(), run: goToInbox },
@@ -2067,20 +2457,43 @@ function paletteCommands(): Command[] {
 }
 setPaletteSource(paletteCommands);
 byId('paletteBtn').title = `Actions (${MOD.trim() === '⌘' ? '⌘P' : 'Ctrl+P'})`;
-byId('paletteBtn').onclick = (e) => { e.stopPropagation(); if (paletteOpen()) closePalette(); else openPalette(); };
+byId('paletteBtn').onclick = (e) => {
+  e.stopPropagation();
+  if (paletteOpen()) {
+    closePalette();
+  } else {
+    openPalette();
+  }
+};
 
 // keyboard shortcuts: ⌘S force-save, ⌘A select-all, ⌘Z/⇧⌘Z/⌘Y undo-redo  (duplicate = D, new node = Space)
 window.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (!mod) return;
+  if (!mod) {
+    return;
+  }
   const k = e.key.toLowerCase();
   if (k === 's') { e.preventDefault(); flushSave(); return; }
   // ⌘P is FigJam's quick actions. Never the browser's print dialog, even while typing in a card.
-  if (k === 'p') { e.preventDefault(); if (!isTypingInField()) openPalette(); return; }
+  if (k === 'p') {
+    e.preventDefault();
+    if (!isTypingInField()) {
+      openPalette();
+    }
+    return;
+  }
   // While typing, ⌘A belongs to the field.
   if (k === 'a' && !isTypingInField()) { e.preventDefault(); selectAll(); return; }
   // While typing in a field, leave ⌘Z to the browser's native undo inside that editor.
-  if (k === 'z' && !isTypingInField()) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+  if (k === 'z' && !isTypingInField()) {
+    e.preventDefault();
+    if (e.shiftKey) {
+      redo();
+    } else {
+      undo();
+    }
+    return;
+  }
   if (k === 'y' && !isTypingInField()) { e.preventDefault(); redo(); }
 });
 

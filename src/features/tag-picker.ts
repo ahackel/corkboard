@@ -30,8 +30,17 @@ export function pushMru(tag: string): void {
 export function boardTags(): Array<{ tag: string; count: number }> {
   const by = new Map<string, { tag: string; count: number }>();
   for (const n of state.nodes.values()) {
-    if (!wearsTags(n)) continue;
-    for (const t of allTags(n)) { const e = by.get(tagKey(t)); if (e) e.count++; else by.set(tagKey(t), { tag: t, count: 1 }); }
+    if (!wearsTags(n)) {
+      continue;
+    }
+    for (const t of allTags(n)) {
+      const e = by.get(tagKey(t));
+      if (e) {
+        e.count++;
+      } else {
+        by.set(tagKey(t), { tag: t, count: 1 });
+      }
+    }
   }
   return [...by.values()].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
@@ -65,9 +74,13 @@ function sections(): Section[] {
   const nodes = nodesOf(targets);
   // the selection's own tags: frontmatter ones can be unticked, the text's can't
   const mine = new Map<string, Row>();
-  for (const n of nodes) for (const t of noteTags(n)) {
-    const k = tagKey(t.tag), had = mine.get(k);
-    if (!had || (had.act === null && !t.inText)) mine.set(k, row(t.inText ? null : 'remove', t.tag, t.inText ? 'in the text' : '', true));
+  for (const n of nodes) {
+    for (const t of noteTags(n)) {
+      const k = tagKey(t.tag), had = mine.get(k);
+      if (!had || (had.act === null && !t.inText)) {
+        mine.set(k, row(t.inText ? null : 'remove', t.tag, t.inText ? 'in the text' : '', true));
+      }
+    }
   }
   const free = (t: string): boolean => !mine.has(tagKey(t));
   const out: Section[] = [];
@@ -75,8 +88,12 @@ function sections(): Section[] {
     const recent = loadMru().filter(free).slice(0, 5);
     const seen = new Set(recent.map(tagKey));
     const more = board.filter(b => free(b.tag) && !seen.has(tagKey(b.tag))).slice(0, 6);
-    if (recent.length) out.push({ title: 'Recent', rows: recent.map(t => row('add', t)) });
-    if (more.length) out.push({ title: 'On the board', rows: more.map(b => row('add', b.tag, plural(b.count))) });
+    if (recent.length) {
+      out.push({ title: 'Recent', rows: recent.map(t => row('add', t)) });
+    }
+    if (more.length) {
+      out.push({ title: 'On the board', rows: more.map(b => row('add', b.tag, plural(b.count))) });
+    }
   } else {
     const typed = cleanTag(q);
     const exact = board.some(b => tagKey(b.tag) === tagKey(typed)) || !free(typed);
@@ -92,7 +109,9 @@ function sections(): Section[] {
       ...inside.map(b => row('add', b.tag, plural(b.count)))].slice(0, 8);
     out.push({ title: 'Matches', rows: hits });
   }
-  if (mine.size) out.push({ title: nodes.length > 1 ? 'On the selection' : 'On this card', rows: [...mine.values()] });
+  if (mine.size) {
+    out.push({ title: nodes.length > 1 ? 'On the selection' : 'On this card', rows: [...mine.values()] });
+  }
   return out;
 }
 
@@ -101,7 +120,9 @@ function render(): void {
   rows = [];
   let html = '';
   for (const s of secs) {
-    if (!s.rows.length) continue;
+    if (!s.rows.length) {
+      continue;
+    }
     html += `<div class="tp-sec">${esc(s.title)}</div>`;
     for (const r of s.rows) {
       const i = r.act ? rows.push(r) - 1 : -1;
@@ -120,9 +141,13 @@ function markActive(): void {
 }
 
 function run(r: Row | undefined): void {
-  if (!r?.act) return;
+  if (!r?.act) {
+    return;
+  }
   setTagOnNodes(targets, r.tag, r.act === 'add');
-  if (r.act === 'add') pushMru(r.tag);
+  if (r.act === 'add') {
+    pushMru(r.tag);
+  }
   input.value = '';
   render();
   input.focus();
@@ -140,12 +165,20 @@ input.addEventListener('keydown', (e) => {
 list.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus in the field
 list.addEventListener('click', (e) => {
   const b = (e.target as Element).closest<HTMLElement>('.tp-row[data-i]');
-  if (b) run(rows[+b.dataset.i!]);
+  if (b) {
+    run(rows[+b.dataset.i!]);
+  }
 });
-function onOutside(e: PointerEvent): void { if (!pop.contains(e.target as Node)) closeTagPicker(); }
+function onOutside(e: PointerEvent): void {
+  if (!pop.contains(e.target as Node)) {
+    closeTagPicker();
+  }
+}
 
 export function closeTagPicker(): void {
-  if (!tagPickerOpen()) return;
+  if (!tagPickerOpen()) {
+    return;
+  }
   pop.classList.remove('open');
   document.removeEventListener('pointerdown', onOutside, true);
   input.blur();
@@ -162,7 +195,9 @@ function open(place: () => void): void {
 
 // `#`: tag the selected cards. Beside the selection's anchor card, else the first selected one.
 export function openTagPicker(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = taggableSelection();
   if (!ids.length) { setStatus(state.sel.size ? 'Tags go on cards, not frames' : 'Select a card to tag'); return; }
   const editable = ids.filter(id => !isLockedEffective(state.nodes.get(id)!));

@@ -23,7 +23,9 @@ export function advanceTitle(t: string): string {
     }
   }
   const n = /(\d+)(?!.*\d)/.exec(t);
-  if (n) return t.slice(0, n.index) + String(+n[1] + 1).padStart(n[1].length, '0') + t.slice(n.index + n[1].length);
+  if (n) {
+    return t.slice(0, n.index) + String(+n[1] + 1).padStart(n[1].length, '0') + t.slice(n.index + n[1].length);
+  }
   return t;
 }
 
@@ -32,7 +34,9 @@ function nextWeekday(t: string, day: number): string {
   for (const names of DAYS) {
     const re = new RegExp(`\\b(${names.join('|')})\\b`, 'i');
     const m = re.exec(t);
-    if (!m) continue;
+    if (!m) {
+      continue;
+    }
     const name = names[day];
     const cased = m[0] === m[0].toUpperCase() ? name.toUpperCase()
       : m[0] === m[0].toLowerCase() ? name.toLowerCase() : name;

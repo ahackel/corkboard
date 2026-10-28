@@ -108,7 +108,9 @@ let painted = '';
 
 // Called on every pan/zoom (view/camera.ts applyView) as well as after a style/size change.
 export function paintGrid(): void {
-  if (!gridEl || !gridFineEl) return;
+  if (!gridEl || !gridFineEl) {
+    return;
+  }
   const base = state.gridSize;
   if (state.gridStyle === 'none' || !base){ gridEl.style.display = 'none'; return; }
   gridEl.style.display = '';
@@ -191,5 +193,7 @@ function set(patch: { gridStyle?: GridStyle; gridSize?: GridSize }): void {
 // settings.json has loaded (loadFromDir calls refreshGrid()).
 export function setupGrid(): void {
   gridBtn = document.getElementById('gridBtn');
-  if (gridBtn) gridBtn.onclick = (e) => { e.stopPropagation(); openGridMenu(); };
+  if (gridBtn) {
+    gridBtn.onclick = (e) => { e.stopPropagation(); openGridMenu(); };
+  }
 }

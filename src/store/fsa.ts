@@ -32,14 +32,18 @@ export const fsaStore = {
   async _ensurePerm(handle: FileSystemDirectoryHandle): Promise<boolean> {
     const opts = { mode: 'readwrite' };
     const h = handle as unknown as Permable;
-    if ((await h.queryPermission(opts)) === 'granted') return true;
+    if ((await h.queryPermission(opts)) === 'granted') {
+      return true;
+    }
     return (await h.requestPermission(opts)) === 'granted';
   },
 
   // The tail both ways IN share: confirm read-write permission, adopt the handle as the live root,
   // and remember it for the recents list.
   async _adopt(handle: FileSystemDirectoryHandle): Promise<PickResult> {
-    if (!(await this._ensurePerm(handle))) return 'denied';
+    if (!(await this._ensurePerm(handle))) {
+      return 'denied';
+    }
     this._dir = handle;
     await this._remember(handle);
     return 'ok';
@@ -47,7 +51,9 @@ export const fsaStore = {
 
   // Pick a NEW source (needs a user gesture — the toolbar / start-screen click).
   async pick(): Promise<PickResult> {
-    if (!showDirectoryPicker) return 'unsupported';
+    if (!showDirectoryPicker) {
+      return 'unsupported';
+    }
     let handle: FileSystemDirectoryHandle;
     try { handle = await showDirectoryPicker({ mode: 'readwrite' }); }
     catch (e){ return (e as DOMException).name === 'AbortError' ? 'cancel' : 'error'; }
@@ -56,10 +62,14 @@ export const fsaStore = {
 
   // Reopen a REMEMBERED source by its recents key (the click is the gesture).
   async openRecent(key?: string): Promise<PickResult> {
-    if (!key) return 'gone';
+    if (!key) {
+      return 'gone';
+    }
     let handle: FileSystemDirectoryHandle | undefined;
     try { handle = await idbGet<FileSystemDirectoryHandle>(key); } catch {}
-    if (!handle) return 'gone';
+    if (!handle) {
+      return 'gone';
+    }
     return this._adopt(handle);
   },
 
@@ -67,8 +77,14 @@ export const fsaStore = {
   async resume(key: string): Promise<boolean> {
     let handle: FileSystemDirectoryHandle | undefined;
     try { handle = await idbGet<FileSystemDirectoryHandle>(key); } catch {}
-    if (!handle) return false;
-    try { if ((await (handle as unknown as Permable).queryPermission({ mode:'readwrite' })) !== 'granted') return false; } catch { return false; }
+    if (!handle) {
+      return false;
+    }
+    try {
+      if ((await (handle as unknown as Permable).queryPermission({ mode:'readwrite' })) !== 'granted') {
+        return false;
+      }
+    } catch { return false; }
     this._dir = handle; this._key = key; return true;
   },
 

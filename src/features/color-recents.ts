@@ -25,7 +25,9 @@ const SHOWN_MAX = 6;  // what fits on the row (see .swatches in styles.css)
 // those together the same colour shows up as two chips.
 export function normalizeColor(c: string): string {
   const h = c.trim().toLowerCase();
-  if (!isHexColor(h)) return '';
+  if (!isHexColor(h)) {
+    return '';
+  }
   const d = h.slice(1);
   return d.length === 3 ? `#${d[0]}${d[0]}${d[1]}${d[1]}${d[2]}${d[2]}` : `#${d}`;
 }
@@ -35,7 +37,10 @@ const loadMru = (): string[] => readStrings(MRU_KEY);
 // native sheet streams a colour for every pointer move, which would bury the real picks under a
 // drag's worth of intermediates.
 export function rememberColor(color: string): void {
-  const c = normalizeColor(color); if (!c) return;
+  const c = normalizeColor(color);
+  if (!c) {
+    return;
+  }
   const mru = [c, ...loadMru().filter(x => x !== c)].slice(0, MRU_MAX);
   writeJSON(MRU_KEY, mru);
 }
@@ -44,7 +49,9 @@ function mapColors(): string[] {
   const seen = new Set<string>();
   for (const n of state.nodes.values()) {
     const c = normalizeColor(n.color ?? '');
-    if (c) seen.add(c);
+    if (c) {
+      seen.add(c);
+    }
   }
   return [...seen];
 }
@@ -52,7 +59,10 @@ function mapColors(): string[] {
 // swatch row is rebuilt each time it's shown), so there's nothing to keep in sync with a map load.
 export function recentColors(): string[] {
   const out: string[] = [];
-  for (const c of [...loadMru(), ...mapColors()])
-    if (c && !out.includes(c)) out.push(c);
+  for (const c of [...loadMru(), ...mapColors()]) {
+    if (c && !out.includes(c)) {
+      out.push(c);
+    }
+  }
   return out.slice(0, SHOWN_MAX);
 }

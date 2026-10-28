@@ -10,7 +10,11 @@ import { store } from '../data/persistence.js';
 const imgUrlCache = new Map<string, string>();    // src path -> resolved URL (blob:… or the original remote/data URL)
 const imgInflight = new Map<string, Promise<string | null>>();    // src path -> in-flight read (de-dupes concurrent reads)
 export function resetImageCache(): void {
-  for (const url of imgUrlCache.values()) if (typeof url === 'string' && url.startsWith('blob:')) URL.revokeObjectURL(url);
+  for (const url of imgUrlCache.values()) {
+    if (typeof url === 'string' && url.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
+  }
   imgUrlCache.clear(); imgInflight.clear();
 }
 // Let go of the pictures only notes that are no longer in memory used (data/lazy.ts releaseFolded):
@@ -18,7 +22,9 @@ export function resetImageCache(): void {
 export function forgetImages(paths: Iterable<string>): void {
   for (const p of paths) {
     const url = imgUrlCache.get(p);
-    if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+    if (url?.startsWith('blob:')) {
+      URL.revokeObjectURL(url);
+    }
     imgUrlCache.delete(p); imgInflight.delete(p);
   }
 }
@@ -27,7 +33,9 @@ export function forgetImages(paths: Iterable<string>): void {
 const EXT_MIME: Record<string, string> = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif',
   webp:'image/webp', svg:'image/svg+xml', avif:'image/avif', bmp:'image/bmp' };
 export function typedImageBlob(blob: Blob, path: string): Blob {
-  if (blob.type && blob.type !== 'application/octet-stream') return blob;
+  if (blob.type && blob.type !== 'application/octet-stream') {
+    return blob;
+  }
   const mime = EXT_MIME[(path.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase()];
   return mime ? new Blob([blob], { type: mime }) : blob;
 }
@@ -36,14 +44,20 @@ export function typedImageBlob(blob: Blob, path: string): Blob {
 // which pages through images that may not be on screen — and so may not have been hydrated yet.
 export function imageUrl(path: string): Promise<string | null> { return loadImgUrl(path); }
 function loadImgUrl(path: string): Promise<string | null> {
-  if (imgUrlCache.has(path)) return Promise.resolve(imgUrlCache.get(path)!);
+  if (imgUrlCache.has(path)) {
+    return Promise.resolve(imgUrlCache.get(path)!);
+  }
   if (/^(https?:|data:)/i.test(path)){ imgUrlCache.set(path, path); return Promise.resolve(path); }
-  if (imgInflight.has(path)) return imgInflight.get(path)!;
+  if (imgInflight.has(path)) {
+    return imgInflight.get(path)!;
+  }
   const p = (async () => {
     const raw = store.readBlob ? await store.readBlob(path) : null;
     const blob = raw ? typedImageBlob(raw, path) : null;
     const url = blob ? URL.createObjectURL(blob) : null;
-    if (url) imgUrlCache.set(path, url);
+    if (url) {
+      imgUrlCache.set(path, url);
+    }
     imgInflight.delete(path);
     return url;
   })();
@@ -58,7 +72,9 @@ function loadImgUrl(path: string): Promise<string | null> {
 export function bodyImageAt(cardEl: HTMLElement, x: number, y: number): HTMLImageElement | null {
   for (const img of cardEl.querySelectorAll<HTMLImageElement>('img.md-img')){
     const r = img.getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return img;
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      return img;
+    }
   }
   return null;
 }
@@ -70,7 +86,9 @@ function scheduleImgRelayout(): void {
 export function hydrateImages(el: ParentNode): void {
   el.querySelectorAll<HTMLImageElement>('img.md-img[data-img-src]').forEach(img => {
     const path = img.getAttribute('data-img-src');
-    if (!path) return;
+    if (!path) {
+      return;
+    }
     img.removeAttribute('data-img-src');                 // claim it so repaints don't re-trigger
     if (imgUrlCache.has(path)){ img.src = imgUrlCache.get(path)!; return; }   // known → set, no relayout
     loadImgUrl(path).then(url => {

@@ -52,8 +52,12 @@ function locked(): boolean {
 // a pick puts the colour back wherever you were standing (see history.ts's Step).
 function applyColor(color: string): void {
   const owner = canvasOwner();
-  if (owner) { owner.color = color; owner.dirty = true; }
-  else state.canvasColor = color;
+  if (owner) {
+    owner.color = color;
+    owner.dirty = true;
+  } else {
+    state.canvasColor = color;
+  }
 }
 // Repainting a frame means repainting the cards that INHERIT from it, so the whole scope. The map's
 // own colour reaches the background — and the free edges' LABELS, whose ink is derived from the fill
@@ -61,8 +65,12 @@ function applyColor(color: string): void {
 // against the colour the canvas used to be. Still not paintAll: those two are the whole of what a map
 // colour touches, and this runs once per pointer move over the native colour sheet.
 function repaint(): void {
-  if (canvasOwner()) paintAll();
-  else { syncCanvasBackground(); paintFreeEdges(); }
+  if (canvasOwner()) {
+    paintAll();
+  } else {
+    syncCanvasBackground();
+    paintFreeEdges();
+  }
 }
 function setColor(color: string): void {
   if (state.readOnly) { setStatus('Read-only — can’t recolour the canvas'); return; }
@@ -91,14 +99,20 @@ function setColor(color: string): void {
 // has ever been built. Reuses the .swatch look the chips have (see index.html).
 export function markCanvasColorBtn(): void {
   const chip = btn?.querySelector<HTMLElement>('.swatch');
-  if (!btn || !chip) return;
+  if (!btn || !chip) {
+    return;
+  }
   const v = currentColor();
   const fill = colorFill(v);
   chip.classList.remove('inherit', 'nofill');
   chip.style.removeProperty('--sw');
-  if (v === 'none') chip.classList.add('nofill');
+  if (v === 'none') {
+    chip.classList.add('nofill');
+  }
   // nothing authored: the colour actually behind you — the board's own grey at the top level
-  else chip.style.setProperty('--sw', fill ?? canvasSurface());
+  else {
+    chip.style.setProperty('--sw', fill ?? canvasSurface());
+  }
   const owner = canvasOwner();
   btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the frame you’re in` : 'Canvas colour of this map';
 }
@@ -108,18 +122,26 @@ export function markCanvasColorBtn(): void {
 // inherits from its parent, the map falls back to the theme — see properties.ts's FirstChip), and the
 // recents row is derived from the open map, which may have changed since the last time it was shown.
 function build(): void {
-  if (!colors) return;
+  if (!colors) {
+    return;
+  }
   colors.innerHTML = swatchRowHTML(canvasOwner() ? 'inherit' : 'default');
   renderRecentChips(colors);
   markSwatchRow(colors, currentColor());
-  if (built) return;
+  if (built) {
+    return;
+  }
   built = true;
   // Delegated once, so the row above can be replaced freely. The custom chip is excluded: its click
   // OPENS the native sheet (the <label>'s job) and picks nothing.
   colors.addEventListener('click', (e) => {
     const sw = (e.target as HTMLElement).closest<HTMLElement>('.swatch');
-    if (!sw) return;
-    if (sw.classList.contains('custom')) return;   // closing here would tear the row down mid-choice
+    if (!sw) {
+      return;
+    }
+    if (sw.classList.contains('custom')) {
+      return;   // closing here would tear the row down mid-choice
+    }
     setColor(sw.dataset.color ?? '');
     close();
   });
@@ -134,7 +156,9 @@ function build(): void {
 // replaces the row's innerHTML on every open, so a captured element reference would be detached
 // from the second open onwards and every later drag would commit the first input's stale value.
 function bindCustom(): void {
-  if (!colors) return;
+  if (!colors) {
+    return;
+  }
   const row = colors;
   let before: string | null = null;
   const picker = (e: Event): HTMLInputElement | null => {
@@ -143,15 +167,21 @@ function bindCustom(): void {
   };
   row.addEventListener('input', (e) => {
     const input = picker(e);
-    if (!input || state.readOnly || locked()) return;
-    if (before === null) before = currentColor();
+    if (!input || state.readOnly || locked()) {
+      return;
+    }
+    if (before === null) {
+      before = currentColor();
+    }
     applyColor(input.value);
     repaint();                        // live preview: paint only — no history entry, no disk write
     markSwatchRow(row, currentColor());
   });
   row.addEventListener('change', (e) => {
     const input = picker(e);
-    if (!input || before === null) return;
+    if (!input || before === null) {
+      return;
+    }
     const prev = before; before = null;
     applyColor(prev);                 // rewind, so the history sees the real before-image
     setColor(input.value);
@@ -159,17 +189,23 @@ function bindCustom(): void {
 }
 // Anchored above its own button (which lives in the bottom-right corner), clamped into the viewport.
 function position(): void {
-  if (!pop || !btn) return;
+  if (!pop || !btn) {
+    return;
+  }
   const r = btn.getBoundingClientRect();
   const pw = pop.offsetWidth, ph = pop.offsetHeight;
   const left = r.left + r.width / 2 - pw / 2;
   let top = r.top - ph - POP_GAP;
-  if (top < 4) top = r.bottom + POP_GAP;
+  if (top < 4) {
+    top = r.bottom + POP_GAP;
+  }
   placeInViewport(pop, left, top);
 }
 function close(): void { pop?.classList.remove('open'); }
 function toggle(): void {
-  if (!pop) return;
+  if (!pop) {
+    return;
+  }
   if (pop.classList.contains('open')) { close(); return; }
   build();
   pop.classList.add('open');
@@ -177,13 +213,21 @@ function toggle(): void {
 }
 
 export function setupCanvasColor(): void {
-  if (!btn || !pop) return;
+  if (!btn || !pop) {
+    return;
+  }
   btn.onclick = (e) => { e.stopPropagation(); toggle(); };
   document.addEventListener('pointerdown', (e) => {
     const t = e.target as Node;
-    if (pop.classList.contains('open') && !pop.contains(t) && !btn.contains(t)) close();
+    if (pop.classList.contains('open') && !pop.contains(t) && !btn.contains(t)) {
+      close();
+    }
   }, true);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      close();
+    }
+  }, true);
   // Deliberately NOT marking the chip here. setupCanvasColor runs while main.ts's own body is still
   // evaluating (beside setupTheme/setupGrid), and markCanvasColorBtn reads colorFill → SWATCH_BG,
   // which main.ts doesn't declare until much further down — reading it now is a TDZ crash that takes

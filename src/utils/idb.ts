@@ -42,8 +42,12 @@ export function dbDel(db: IDBDatabase, store: string, key: IDBValidKey): Promise
 export async function openRenamed(name: string, legacy: string, store: string): Promise<IDBDatabase> {
   const db = await openDB(name, store);
   try {
-    if (await dbCount(db, store)) return db;      // already populated — nothing to carry over
-    if (!(await dbExists(legacy))) return db;
+    if (await dbCount(db, store)) {
+      return db;      // already populated — nothing to carry over
+    }
+    if (!(await dbExists(legacy))) {
+      return db;
+    }
     const old = await openDB(legacy, store);
     await dbCopyAll(old, db, store);
     old.close();
@@ -69,10 +73,14 @@ async function dbCopyAll(from: IDBDatabase, to: IDBDatabase, store: string): Pro
     if (c){ rows.push({ key: c.key, value: c.value }); c.continue(); }
   };
   await done(readTx);
-  if (!rows.length) return;
+  if (!rows.length) {
+    return;
+  }
   const writeTx = to.transaction(store, 'readwrite');
   const os = writeTx.objectStore(store);
-  for (const r of rows) os.put(r.value, r.key);
+  for (const r of rows) {
+    os.put(r.value, r.key);
+  }
   await done(writeTx);
 }
 

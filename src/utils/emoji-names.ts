@@ -40,14 +40,18 @@ const EMOJI: Array<[string, string]> = [
 // other words. At most `max` of them.
 export function emojiByName(q: string, max = 6): Array<{ emoji: string; name: string }> {
   const s = q.trim().toLowerCase();
-  if (!s) return [];
+  if (!s) {
+    return [];
+  }
   const hits: Array<{ emoji: string; name: string; rank: number }> = [];
   for (const [emoji, spec] of EMOJI) {
     const [head, rest = ''] = spec.split('|');
     const name = spec.includes('|') ? head : head.split(' ')[0];
     const words = (head + ' ' + rest).split(/\s+/).filter(Boolean);
     const at = words.findIndex(w => w.startsWith(s));
-    if (at >= 0) hits.push({ emoji, name, rank: at === 0 ? 0 : 1 });
+    if (at >= 0) {
+      hits.push({ emoji, name, rank: at === 0 ? 0 : 1 });
+    }
   }
   return hits.sort((a, b) => a.rank - b.rank).slice(0, max).map(({ emoji, name }) => ({ emoji, name }));
 }

@@ -6,12 +6,16 @@ import { renderBodyHTML } from '../src/utils/markdown.js';
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
 function at(s: string): [string, number, number] {
   const c = s.indexOf('|');
-  if (c >= 0) return [s.slice(0, c) + s.slice(c + 1), c, c];
+  if (c >= 0) {
+    return [s.slice(0, c) + s.slice(c + 1), c, c];
+  }
   const a = s.indexOf('['), b = s.indexOf(']') - 1;
   return [s.replace('[', '').replace(']', ''), a, b];
 }
 function show(r: TextEdit | null): string | null {
-  if (!r) return null;
+  if (!r) {
+    return null;
+  }
   return r.start === r.end ? r.text.slice(0, r.start) + '|' + r.text.slice(r.start)
     : r.text.slice(0, r.start) + '[' + r.text.slice(r.start, r.end) + ']' + r.text.slice(r.end);
 }
@@ -91,7 +95,9 @@ function tat(s: string): [string, number, number] {
   return [s.slice(0, c) + s.slice(c + 1), c, c];
 }
 function tshow(r: TextEdit | null): string | null {
-  if (!r) return null;
+  if (!r) {
+    return null;
+  }
   return r.start === r.end ? r.text.slice(0, r.start) + '^' + r.text.slice(r.start)
     : r.text.slice(0, r.start) + '«' + r.text.slice(r.start, r.end) + '»' + r.text.slice(r.end);
 }

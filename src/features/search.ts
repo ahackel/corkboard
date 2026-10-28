@@ -60,7 +60,9 @@ export function openSearch(prefill?: string): void {
   searchWrap.classList.add('open');
   if (prefill != null) { searchBox.value = prefill; runSearch(); }
   searchBox.focus();
-  if (prefill == null) searchBox.select();
+  if (prefill == null) {
+    searchBox.select();
+  }
 }
 export function closeSearch(): void {
   searchBox.value = ''; chips = [];
@@ -89,7 +91,9 @@ function renderChips(): void {
 chipsEl.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus where it is
 chipsEl.addEventListener('click', (e) => {
   const b = (e.target as Element).closest<HTMLElement>('.sc-tag');
-  if (b) toggleSearchTag(b.dataset.tag!);
+  if (b) {
+    toggleSearchTag(b.dataset.tag!);
+  }
 });
 
 // The text part of the query, and a `#word` being typed at its end (null when there isn't one).
@@ -105,18 +109,28 @@ export function refreshSearch(): void {
   if (!chips.length && !text) { state.searchMatch = null; hits = new Map(); return; }
   const lit = new Set<string>(), held = new Map<string, number>();
   for (const n of state.nodes.values()) {
-    if (!matches(n, text)) continue;
+    if (!matches(n, text)) {
+      continue;
+    }
     const rep = firstVisible(n);
     lit.add(rep.id);
-    if (rep !== n) held.set(rep.id, (held.get(rep.id) ?? 0) + 1);
-    for (const p of ancestors(rep)) lit.add(p.id);   // the frames around a match stay lit around it
+    if (rep !== n) {
+      held.set(rep.id, (held.get(rep.id) ?? 0) + 1);
+    }
+    for (const p of ancestors(rep)) {
+      lit.add(p.id);   // the frames around a match stay lit around it
+    }
   }
   state.searchMatch = lit;
   hits = held;
 }
 function matches(n: MindNode, text: string): boolean {
-  if (outOfScope(n)) return false;
-  if (chips.length && (!wearsTags(n) || !chips.every(c => hasTag(allTags(n), c)))) return false;
+  if (outOfScope(n)) {
+    return false;
+  }
+  if (chips.length && (!wearsTags(n) || !chips.every(c => hasTag(allTags(n), c)))) {
+    return false;
+  }
   return !text || nodeLabel(n).toLowerCase().includes(text) || (!!n.body && n.body.toLowerCase().includes(text));
 }
 
@@ -129,7 +143,9 @@ export function runSearch(showList = true): void {
   if (typing == null) {
     const found: Array<{ n: MindNode; label: string; onLabel: boolean }> = [];
     for (const n of state.nodes.values()) {
-      if (!matches(n, text)) continue;
+      if (!matches(n, text)) {
+        continue;
+      }
       const label = nodeLabel(n);
       found.push({ n, label, onLabel: !!text && label.toLowerCase().includes(text) });
     }
@@ -158,7 +174,9 @@ const countOf = (t: string): string => { const b = boardTags().find(x => tagKey(
 function tagSuggestions(q: string): string[] {
   const k = q.toLowerCase(), on = new Set(chips.map(tagKey));
   const board = boardTags().filter(b => !on.has(tagKey(b.tag))).map(b => b.tag);
-  if (!k) return board.slice(0, 10);
+  if (!k) {
+    return board.slice(0, 10);
+  }
   const emoji = new Set(emojiByName(k, 12).map(e => e.emoji));
   return [...board.filter(t => tagKey(t).startsWith(k)), ...board.filter(t => emoji.has(t)),
     ...board.filter(t => !tagKey(t).startsWith(k) && tagKey(t).includes(k))].filter((t, i, a) => a.indexOf(t) === i).slice(0, 10);
@@ -179,30 +197,48 @@ function clearResults(): void {
 function chipFromTyping(tag?: string): boolean {
   const { typing } = parts();
   const t = tag ?? (typing ? cleanTag(typing) : '');
-  if (!t) return false;
+  if (!t) {
+    return false;
+  }
   searchBox.value = searchBox.value.replace(/(?:^|\s)#\S*$/, '').trimEnd();
-  if (!chips.some(c => tagKey(c) === tagKey(t))) chips = [...chips, t];
+  if (!chips.some(c => tagKey(c) === tagKey(t))) {
+    chips = [...chips, t];
+  }
   renderChips();
   runSearch();
   return true;
 }
 function gotoHit(id: string): void {
-  const n = state.nodes.get(id); if (!n) return;
+  const n = state.nodes.get(id);
+  if (!n) {
+    return;
+  }
   closeSearch();   // jumping to a card dismisses the search
   focusNode(n, true);   // reveal ancestors level by level AND open the hit itself
 }
 
 searchBox.addEventListener('input', () => {
   // a space right after a `#word` makes it a chip, the way a tag field does
-  if (/(?:^|\s)#\S+\s$/.test(searchBox.value)) { searchBox.value = searchBox.value.trimEnd(); if (chipFromTyping()) return; }
+  if (/(?:^|\s)#\S+\s$/.test(searchBox.value)) {
+    searchBox.value = searchBox.value.trimEnd();
+    if (chipFromTyping()) {
+      return;
+    }
+  }
   runSearch();
 });
-searchBox.addEventListener('focus', () => { if (searchActive()) runSearch(); });
+searchBox.addEventListener('focus', () => {
+  if (searchActive()) {
+    runSearch();
+  }
+});
 searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
   const rows = tagRows.length || parts().typing != null ? tagRows.length : cardHits.length;
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
     e.preventDefault();
-    if (!rows) return;
+    if (!rows) {
+      return;
+    }
     active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows) % rows;
     markActive();
   } else if (e.key === 'Enter'){
@@ -210,7 +246,9 @@ searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
     e.stopPropagation();   // don't let Enter reach the window handler (it would create a sibling)
     if (parts().typing != null) { chipFromTyping(tagRows[active]); return; }
     const hit = cardHits[active];
-    if (hit) gotoHit(hit.id);
+    if (hit) {
+      gotoHit(hit.id);
+    }
   } else if (e.key === 'Backspace' && !searchBox.value && chips.length){
     e.preventDefault();
     chips = chips.slice(0, -1); renderChips(); runSearch();
@@ -218,26 +256,46 @@ searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault();
     e.stopPropagation();
     // one step at a time: the text, then the chips, then the field
-    if (searchBox.value){ searchBox.value = ''; runSearch(); }
-    else if (chips.length){ chips = []; renderChips(); runSearch(); }
-    else closeSearch();
+    if (searchBox.value) {
+      searchBox.value = '';
+      runSearch();
+    } else if (chips.length) {
+      chips = [];
+      renderChips();
+      runSearch();
+    } else {
+      closeSearch();
+    }
   }
 });
 searchResults.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus in the field
 searchResults.addEventListener('click', (e: MouseEvent) => {
   const item = (e.target as Element).closest<HTMLElement>('.sr-item');
-  if (!item) return;
-  if (item.dataset.tag) chipFromTyping(item.dataset.tag);
-  else gotoHit(item.dataset.id!);
+  if (!item) {
+    return;
+  }
+  if (item.dataset.tag) {
+    chipFromTyping(item.dataset.tag);
+  } else {
+    gotoHit(item.dataset.id!);
+  }
 });
 // clear-or-close, exactly like Escape — but all at once: the × means "done searching".
 searchClear.addEventListener('click', () => closeSearch());
 // A click elsewhere: an EMPTY field closes; one with a query in it stays, its list folded away, so the
 // board can be worked on under the filter.
 document.addEventListener('pointerdown', (e: PointerEvent) => {
-  if (!searchWrap.classList.contains('open')) return;
-  if ((e.target as Element).closest('#searchWrap')) return;
-  if (!searchActive()) closeSearch();
-  else { searchResults.classList.remove('open'); searchBox.blur(); }
+  if (!searchWrap.classList.contains('open')) {
+    return;
+  }
+  if ((e.target as Element).closest('#searchWrap')) {
+    return;
+  }
+  if (!searchActive()) {
+    closeSearch();
+  } else {
+    searchResults.classList.remove('open');
+    searchBox.blur();
+  }
 });
 renderChips();

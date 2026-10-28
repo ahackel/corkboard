@@ -41,16 +41,22 @@ export function tagChipHTML(t: ShownTag): string {
 // every other per-card mutation. Case is ignored: `Idea` is `idea`. Returns whether anything changed. ----
 export interface TagChange { id: string; tag: string; on: boolean; }
 export function retag(changes: TagChange[]): boolean {
-  if (state.readOnly) return false;
+  if (state.readOnly) {
+    return false;
+  }
   const todo = changes.filter(c => {
     const n = state.nodes.get(c.id);
     return !!n && wearsTags(n) && !isLockedEffective(n) && n.tags.some(t => tagKey(t) === tagKey(c.tag)) !== c.on;
   });
-  if (!todo.length) return false;
+  if (!todo.length) {
+    return false;
+  }
   record([...new Set(todo.map(c => c.id))], () => {
     for (const c of todo) {
       const n = state.nodes.get(c.id)!, k = tagKey(c.tag);
-      if (n.tags.some(t => tagKey(t) === k) === c.on) continue;
+      if (n.tags.some(t => tagKey(t) === k) === c.on) {
+        continue;
+      }
       n.tags = c.on ? [...n.tags, c.tag] : n.tags.filter(t => tagKey(t) !== k);
       n.dirty = true;
     }
@@ -72,6 +78,11 @@ export function bindCardTags(rowEl: HTMLElement, cardId: string): void {
       e.stopPropagation();   // don't start a card drag/select
       beginTagDrag(e, chip, chip.dataset.tag!, chip.dataset.inText ? null : cardId);
     });
-    chip.addEventListener('click', (e) => { e.stopPropagation(); if (!chip.dataset.dragged) toggleSearchTag(chip.dataset.tag!); });
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!chip.dataset.dragged) {
+        toggleSearchTag(chip.dataset.tag!);
+      }
+    });
   });
 }

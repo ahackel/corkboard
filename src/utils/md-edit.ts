@@ -31,10 +31,14 @@ const splice = (text: string, from: number, to: number, insert: string): string 
 // after its marker ENDS the list instead: the empty marker goes away, which is what Obsidian, Bear and
 // GitHub do. Only for a caret (a selection's Enter replaces it, natively) placed past the marker.
 export function listEnter(text: string, start: number, end: number): TextEdit | null {
-  if (start !== end) return null;
+  if (start !== end) {
+    return null;
+  }
   const { from, to } = lineAt(text, start);
   const it = itemOf(text.slice(from, to));
-  if (!it || start < from + it.lead) return null;
+  if (!it || start < from + it.lead) {
+    return null;
+  }
   if (!text.slice(from + it.lead, to).trim()) {
     return { text: splice(text, from, to, ''), start: from, end: from };
   }
@@ -71,9 +75,14 @@ export function indentLines(text: string, start: number, end: number, out: boole
   const next = lines.map((l, i) => {
     const lead = l.match(/^[ \t]*/)![0];
     let nl: string;
-    if (!out) nl = l.trim() || lines.length === 1 ? ' '.repeat(step) + l : l;   // blank lines stay blank
-    else nl = ' '.repeat(Math.max(0, width(lead) - step)) + l.slice(lead.length);
-    if (i === 0) delta0 = nl.length - l.length;
+    if (!out) {
+      nl = l.trim() || lines.length === 1 ? ' '.repeat(step) + l : l;   // blank lines stay blank
+    } else {
+      nl = ' '.repeat(Math.max(0, width(lead) - step)) + l.slice(lead.length);
+    }
+    if (i === 0) {
+      delta0 = nl.length - l.length;
+    }
     deltaAll += nl.length - l.length;
     return nl;
   });
@@ -92,8 +101,20 @@ export function indentLines(text: string, start: number, end: number, out: boole
 export function toggleWrap(text: string, start: number, end: number, mark: string): TextEdit {
   const ch = mark[0];
   const holds = (run: number) => run === mark.length || (ch === '*' && run === 3);
-  const runBack = (at: number) => { let n = 0; while (at - n - 1 >= 0 && text[at - n - 1] === ch) n++; return n; };
-  const runFwd = (at: number) => { let n = 0; while (text[at + n] === ch) n++; return n; };
+  const runBack = (at: number) => {
+    let n = 0;
+    while (at - n - 1 >= 0 && text[at - n - 1] === ch) {
+      n++;
+    }
+    return n;
+  };
+  const runFwd = (at: number) => {
+    let n = 0;
+    while (text[at + n] === ch) {
+      n++;
+    }
+    return n;
+  };
   const L = mark.length;
   if (start === end) {
     if (runBack(start) === L && runFwd(start) === L) {
@@ -104,7 +125,9 @@ export function toggleWrap(text: string, start: number, end: number, mark: strin
   const sel = text.slice(start, end);
   const a = start + (sel.length - sel.trimStart().length);
   const b = end - (sel.length - sel.trimEnd().length);
-  if (a >= b) return { text, start, end };
+  if (a >= b) {
+    return { text, start, end };
+  }
   // markers just OUTSIDE the selection
   if (holds(runBack(a)) && holds(runFwd(b))) {
     const t = splice(splice(text, b, b + L, ''), a - L, a, '');
@@ -112,8 +135,14 @@ export function toggleWrap(text: string, start: number, end: number, mark: strin
   }
   // markers INSIDE it (the whole `**word**` selected)
   const inner = text.slice(a, b);
-  let lead = 0; while (inner[lead] === ch) lead++;
-  let trail = 0; while (trail < inner.length - lead && inner[inner.length - 1 - trail] === ch) trail++;
+  let lead = 0;
+  while (inner[lead] === ch) {
+    lead++;
+  }
+  let trail = 0;
+  while (trail < inner.length - lead && inner[inner.length - 1 - trail] === ch) {
+    trail++;
+  }
   if (inner.length > 2 * L && holds(lead) && holds(trail) && lead === trail) {
     const t = splice(splice(text, b - L, b, ''), a, a + L, '');
     return { text: t, start: a, end: b - 2 * L };
@@ -145,18 +174,30 @@ function tableAround(text: string, pos: number): TableAt | null {
   for (let i = li; i >= 0 && lines[i].trim() && PIPE.test(lines[i]); i--) {
     if ((cols = tableAt(lines, i))) { h = i; break; }
   }
-  if (h < 0) return null;
+  if (h < 0) {
+    return null;
+  }
   let end = h + 2;                                    // renderTable's own end rule
-  while (end < lines.length && lines[end].trim() && PIPE.test(lines[end])) end++;
-  if (li >= end) return null;
+  while (end < lines.length && lines[end].trim() && PIPE.test(lines[end])) {
+    end++;
+  }
+  if (li >= end) {
+    return null;
+  }
   let from = 0;
-  for (let k = 0; k < h; k++) from += lines[k].length + 1;
+  for (let k = 0; k < h; k++) {
+    from += lines[k].length + 1;
+  }
   const tableLines = lines.slice(h, end);
   const align = tableRow(lines[h + 1]).map(c => c.startsWith(':') && c.endsWith(':') ? 'c' : c.endsWith(':') ? 'r' : c.startsWith(':') ? 'l' : '');
   // the caret's cell: unescaped pipes before it on its line, less the optional leading one
   const line = lines[li], at = pos - (before.lastIndexOf('\n') + 1);
   let pipes = 0;
-  for (let k = 0; k < at; k++) if (line[k] === '|' && line[k - 1] !== '\\') pipes++;
+  for (let k = 0; k < at; k++) {
+    if (line[k] === '|' && line[k - 1] !== '\\') {
+      pipes++;
+    }
+  }
   const lead = line.trimStart().startsWith('|') ? 1 : 0;
   return { from, to: from + tableLines.join('\n').length, rows: tableLines.map(tableRow), cols, align,
            indent: lines[h].match(/^[ \t]*/)![0], row: li - h, col: Math.min(cols - 1, Math.max(0, pipes - lead)) };
@@ -168,7 +209,9 @@ const WIDE = /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF
 const ZERO = /[\p{M}\u200D\uFE0F]/u;
 function cellWidth(s: string): number {
   let w = 0;
-  for (const ch of s) w += WIDE.test(ch) ? 2 : ZERO.test(ch) ? 0 : 1;
+  for (const ch of s) {
+    w += WIDE.test(ch) ? 2 : ZERO.test(ch) ? 0 : 1;
+  }
   return w;
 }
 // Write the table back tidied, and say where cell (r, c)'s text sits in what was written.
@@ -179,7 +222,9 @@ function writeTable(t: TableAt, r: number, c: number): { text: string; start: nu
     Math.max(3, ...cells.map((row, i) => i === 1 ? 0 : cellWidth(row[k] ?? ''))));
   let out = '', start = 0, end = 0;
   cells.forEach((row, i) => {
-    if (i) out += '\n';
+    if (i) {
+      out += '\n';
+    }
     if (i === 1) {
       out += t.indent + '| ' + t.align.map((a, k) => {
         const d = w[k];
@@ -191,7 +236,9 @@ function writeTable(t: TableAt, r: number, c: number): { text: string; start: nu
     const len = i === 0 ? t.cols : Math.max(t.cols, row.length);
     for (let k = 0; k < len; k++) {
       const x = row[k] ?? '';
-      if (k) out += ' | ';
+      if (k) {
+        out += ' | ';
+      }
       if (i === r && k === c) { start = out.length; end = start + x.length; }
       out += x + ' '.repeat(w[k] - cellWidth(x));
     }
@@ -209,7 +256,9 @@ const emptyRow = (t: TableAt): string[] => Array(t.cols).fill('');
 // last cell adds a row; ⇧Tab out of the first stays there. Null off a table (Tab then indents).
 export function tableTab(text: string, start: number, _end: number, back: boolean): TextEdit | null {
   const t = tableAround(text, start);
-  if (!t) return null;
+  if (!t) {
+    return null;
+  }
   let r = t.row, c = t.col;
   if (back) {
     if (r === 1) { r = 0; c = t.cols - 1; }
@@ -217,7 +266,9 @@ export function tableTab(text: string, start: number, _end: number, back: boolea
   } else {
     if (r === 1) { r = 2; c = 0; }
     else if (++c >= t.cols) { r = r === 0 ? 2 : r + 1; c = 0; }
-    if (r >= t.rows.length) t.rows.push(emptyRow(t));
+    if (r >= t.rows.length) {
+      t.rows.push(emptyRow(t));
+    }
   }
   return placeTable(text, t, r, c);
 }
@@ -227,7 +278,9 @@ export function tableTab(text: string, start: number, _end: number, back: boolea
 // it gets its delimiter row and a first empty row, the way you'd begin one by hand.
 export function tableEnter(text: string, start: number, end: number): TextEdit | null {
   const t = tableAround(text, start);
-  if (!t) return tableStart(text, start, end);
+  if (!t) {
+    return tableStart(text, start, end);
+  }
   if (t.row >= 2 && t.row === t.rows.length - 1 && t.rows[t.row].every(x => !x.trim())) {
     t.rows.pop();
     const wr = writeTable(t, 0, 0);
@@ -239,16 +292,26 @@ export function tableEnter(text: string, start: number, end: number): TextEdit |
   return placeTable(text, t, r, t.col);
 }
 function tableStart(text: string, start: number, end: number): TextEdit | null {
-  if (start !== end) return null;
+  if (start !== end) {
+    return null;
+  }
   const lineEnd = text.indexOf('\n', start);
-  if (lineEnd >= 0 ? lineEnd !== start : start !== text.length) return null;   // only at the line's end
+  if (lineEnd >= 0 ? lineEnd !== start : start !== text.length) {
+    return null;   // only at the line's end
+  }
   const from = text.lastIndexOf('\n', start - 1) + 1;
   const line = text.slice(from, start), s = line.trim();
-  if (!s.startsWith('|') || !s.endsWith('|') || s.length < 2) return null;
+  if (!s.startsWith('|') || !s.endsWith('|') || s.length < 2) {
+    return null;
+  }
   const head = tableRow(line);
-  if (head.length < 2) return null;                   // `| x |` is too likely to be prose
+  if (head.length < 2) {
+    return null;                   // `| x |` is too likely to be prose
+  }
   const next = text.slice(start + 1).split('\n')[0];
-  if (lineEnd >= 0 && PIPE.test(next)) return null;   // already followed by table-ish lines
+  if (lineEnd >= 0 && PIPE.test(next)) {
+    return null;   // already followed by table-ish lines
+  }
   const t: TableAt = { from, to: start, rows: [head, [], emptyRow({ cols: head.length } as TableAt)],
     cols: head.length, align: head.map(() => ''), indent: line.match(/^[ \t]*/)![0], row: 0, col: 0 };
   return placeTable(text, t, 2, 0);
@@ -282,11 +345,17 @@ const indentOf = (l: string): number => l.match(/^[ \t]*/)![0].replace(/\t/g, ' 
 // steps out a level first (⇧Tab), a top-level one becomes a plain line keeping its text — the way
 // back out of a list that Enter on an empty item is the way forward out of it.
 export function listBackspace(text: string, start: number, end: number): TextEdit | null {
-  if (start !== end) return null;
+  if (start !== end) {
+    return null;
+  }
   const { from, to } = lineAt(text, start);
   const it = itemOf(text.slice(from, to));
-  if (!it || start !== from + it.lead) return null;
-  if (it.indent) return indentLines(text, start, end, true);
+  if (!it || start !== from + it.lead) {
+    return null;
+  }
+  if (it.indent) {
+    return indentLines(text, start, end, true);
+  }
   return { text: splice(text, from, start, ''), start: from, end: from };
 }
 
@@ -300,18 +369,32 @@ export function moveLines(text: string, start: number, end: number, up: boolean)
   let b = lineNo(end > start && text[end - 1] === '\n' ? end - 1 : end);
   const own = lines.slice(a, b + 1).filter(l => l.trim());
   const base = own.length ? Math.min(...own.map(indentOf)) : 0;
-  while (own.length && b + 1 < lines.length && !blank(b + 1) && indentOf(lines[b + 1]) > base) b++;
+  while (own.length && b + 1 < lines.length && !blank(b + 1) && indentOf(lines[b + 1]) > base) {
+    b++;
+  }
   let lo: number, hi: number;                           // the neighbouring unit, lines [lo, hi]
   if (up) {
-    if (a === 0) return null;
+    if (a === 0) {
+      return null;
+    }
     hi = a - 1; lo = hi;
     let k = hi;
-    while (k >= 0 && !blank(k) && indentOf(lines[k]) > base) k--;
-    if (k >= 0 && k < hi && !blank(k)) lo = k;          // the item above, with the children we're under
+    while (k >= 0 && !blank(k) && indentOf(lines[k]) > base) {
+      k--;
+    }
+    if (k >= 0 && k < hi && !blank(k)) {
+      lo = k;          // the item above, with the children we're under
+    }
   } else {
-    if (b === lines.length - 1) return null;
+    if (b === lines.length - 1) {
+      return null;
+    }
     lo = b + 1; hi = lo;
-    if (!blank(lo)) while (hi + 1 < lines.length && !blank(hi + 1) && indentOf(lines[hi + 1]) > indentOf(lines[lo])) hi++;
+    if (!blank(lo)) {
+      while (hi + 1 < lines.length && !blank(hi + 1) && indentOf(lines[hi + 1]) > indentOf(lines[lo])) {
+        hi++;
+      }
+    }
   }
   const block = lines.slice(a, b + 1), unit = lines.slice(lo, hi + 1);
   const shift = unit.join('\n').length + 1;
@@ -336,14 +419,22 @@ export function taskLines(text: string, start: number, end: number): TextEdit {
   const allDone = allTasks && lines.every((_, i) => !use[i] || /x/i.test(items[i]!.task));
   const next = lines.map((l, i) => {
     const it = items[i];
-    if (!use[i]) return l;
+    if (!use[i]) {
+      return l;
+    }
     if (allTasks) {
       const p = it!.indent.length + it!.marker.length + it!.gap.length;
       return l.slice(0, p) + (allDone ? '[ ]' : '[x]') + l.slice(p + 3);
     }
-    if (it?.task) return l;
-    if (it && /\d/.test(it.marker)) return it.indent + '- [ ] ' + l.slice(it.lead);
-    if (it) return l.slice(0, it.lead) + '[ ] ' + l.slice(it.lead);
+    if (it?.task) {
+      return l;
+    }
+    if (it && /\d/.test(it.marker)) {
+      return it.indent + '- [ ] ' + l.slice(it.lead);
+    }
+    if (it) {
+      return l.slice(0, it.lead) + '[ ] ' + l.slice(it.lead);
+    }
     const ind = l.match(/^[ \t]*/)![0];
     return ind + '- [ ] ' + l.slice(ind.length);
   });
@@ -363,27 +454,49 @@ const ORDERED = /^([ \t]*)(\d+)([.)])(?=[ \t])/;
 export function renumber(r: TextEdit): TextEdit {
   const lines = r.text.split('\n');
   let li = r.text.slice(0, r.start).split('\n').length - 1;
-  if (!lines[li].trim() && li > 0) li--;
-  if (!lines[li].trim()) return r;
+  if (!lines[li].trim() && li > 0) {
+    li--;
+  }
+  if (!lines[li].trim()) {
+    return r;
+  }
   let a = li, b = li;
-  while (a > 0 && lines[a - 1].trim()) a--;
-  while (b + 1 < lines.length && lines[b + 1].trim()) b++;
+  while (a > 0 && lines[a - 1].trim()) {
+    a--;
+  }
+  while (b + 1 < lines.length && lines[b + 1].trim()) {
+    b++;
+  }
   const counters = new Map<number, { n: number; d: string }>();
   const next = lines.slice(a, b + 1).map(l => {
     const w = indentOf(l), m = l.match(ORDERED);
     const outer = [...counters.keys()].some(k => k < w);
-    for (const k of [...counters.keys()]) if (k > w || (k === w && !m)) counters.delete(k);
-    if (!m) return l;
+    for (const k of [...counters.keys()]) {
+      if (k > w || (k === w && !m)) {
+        counters.delete(k);
+      }
+    }
+    if (!m) {
+      return l;
+    }
     const c = counters.get(w);
     let num: number;
-    if (c && c.d === m[3]) num = c.n++;
-    else { num = outer ? 1 : +m[2]; counters.set(w, { n: num + 1, d: m[3] }); }
+    if (c && c.d === m[3]) {
+      num = c.n++;
+    } else {
+      num = outer ? 1 : +m[2];
+      counters.set(w, { n: num + 1, d: m[3] });
+    }
     return m[1] + num + l.slice(m[1].length + m[2].length);
   });
   let first = 0;
-  for (let k = 0; k < a; k++) first += lines[k].length + 1;
+  for (let k = 0; k < a; k++) {
+    first += lines[k].length + 1;
+  }
   const last = first + lines.slice(a, b + 1).join('\n').length;
-  if (next.join('\n') === lines.slice(a, b + 1).join('\n')) return r;
+  if (next.join('\n') === lines.slice(a, b + 1).join('\n')) {
+    return r;
+  }
   return rewriteLines(r.text, first, last, next, r.start, r.end);
 }
 export const renumbered = (r: TextEdit | null): TextEdit | null => r && renumber(r);
@@ -394,15 +507,25 @@ export const renumbered = (r: TextEdit | null): TextEdit | null => r && renumber
 // become a tidied table, its first row the header; anything else is pasted as the text it is. Not
 // inside a table — there a tab is just a cell's character.
 function parseTsv(s: string): string[][] | null {
-  if (!s.includes('\t')) return null;
+  if (!s.includes('\t')) {
+    return null;
+  }
   s = s.replace(/\r\n?/g, '\n').replace(/\n+$/, '');
   const rows: string[][] = [];
   let row: string[] = [], cell = '', q = false, fresh = true;
   for (let i = 0; i < s.length; i++) {
     const ch = s[i];
     if (q) {
-      if (ch === '"') { if (s[i + 1] === '"') { cell += '"'; i++; } else q = false; }
-      else cell += ch;
+      if (ch === '"') {
+        if (s[i + 1] === '"') {
+          cell += '"';
+          i++;
+        } else {
+          q = false;
+        }
+      } else {
+        cell += ch;
+      }
     } else if (ch === '"' && fresh) { q = true; fresh = false; }
     else if (ch === '\t') { row.push(cell); cell = ''; fresh = true; }
     else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; fresh = true; }
@@ -410,12 +533,16 @@ function parseTsv(s: string): string[][] | null {
   }
   row.push(cell); rows.push(row);
   const cols = rows[0].length;
-  if (rows.length < 2 || cols < 2 || rows.some(x => x.length !== cols)) return null;
+  if (rows.length < 2 || cols < 2 || rows.some(x => x.length !== cols)) {
+    return null;
+  }
   return rows.map(x => x.map(c => c.replace(/\s*\n\s*/g, ' ').trim()));
 }
 export function pasteTable(text: string, start: number, end: number, clip: string): TextEdit | null {
   const rows = parseTsv(clip);
-  if (!rows || tableAround(text, start)) return null;
+  if (!rows || tableAround(text, start)) {
+    return null;
+  }
   const cols = rows[0].length;
   const t: TableAt = { from: 0, to: 0, rows: [rows[0], [], ...rows.slice(1)], cols,
     align: rows[0].map(() => ''), indent: '', row: 0, col: 0 };
@@ -437,17 +564,34 @@ export function sourceOffset(source: string, from: number, texts: string[], hit:
   let cur = from;
   for (let i = 0; i <= hit; i++) {
     const t = texts[i], s = t.trim();
-    if (!s) { if (i === hit) return cur; continue; }
+    if (!s) {
+      if (i === hit) {
+        return cur;
+      }
+      continue;
+    }
     const re = new RegExp(escRe(s).replace(/\s+/g, '\\s+'), 'g');
     re.lastIndex = cur;
     const m = re.exec(source);
-    if (!m) { if (i === hit) return null; continue; }
+    if (!m) {
+      if (i === hit) {
+        return null;
+      }
+      continue;
+    }
     if (i === hit) {
       // walk the rendered text and its match together, a whitespace run against a whitespace run
       const k = Math.max(0, Math.min(s.length, off - (t.length - t.trimStart().length)));
       let x = 0, y = 0;
       while (x < k) {
-        if (/\s/.test(s[x])) { while (x < k && /\s/.test(s[x])) x++; while (y < m[0].length && /\s/.test(m[0][y])) y++; }
+        if (/\s/.test(s[x])) {
+          while (x < k && /\s/.test(s[x])) {
+            x++;
+          }
+          while (y < m[0].length && /\s/.test(m[0][y])) {
+            y++;
+          }
+        }
         else { x++; y++; }
       }
       return m.index + y;

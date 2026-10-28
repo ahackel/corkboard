@@ -63,14 +63,18 @@ export async function switchToDeviceMap(ref: MapRef): Promise<void> {
 // Open a registry-backed map for URL/history restoration. Device maps can always be reopened;
 // local folders only switch when their existing permission grant can be resumed silently.
 export async function openMapRef(ref: MapRef): Promise<boolean> {
-  if (currentMap?.kind === ref.kind && currentMap.id === ref.id && store.isOpen) return true;
+  if (currentMap?.kind === ref.kind && currentMap.id === ref.id && store.isOpen) {
+    return true;
+  }
   if (ref.kind === 'device') {
     await switchToDeviceMap(ref);
     await loadFromDir();
     return true;
   }
   await settleSave();
-  if (!fsaStore.resume || !(await fsaStore.resume(ref.id))) return false;
+  if (!fsaStore.resume || !(await fsaStore.resume(ref.id))) {
+    return false;
+  }
   useStore(fsaStore, { kind: 'folder', id: ref.id });
   await loadFromDir();
   return true;
@@ -86,7 +90,9 @@ document.body.appendChild(importInput);
 importInput.addEventListener('change', async () => {
   const files = [...(importInput.files || [])];
   importInput.value = '';
-  if (files.length) await importFiles(files);
+  if (files.length) {
+    await importFiles(files);
+  }
 });
 export function openImportPicker(): void { importInput.click(); }
 
@@ -99,9 +105,13 @@ interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
 export async function importFiles(files: File[]): Promise<void> {
   const entries: ImportEntry[] = [];
   for (const f of files){
-    if (/\.zip$/i.test(f.name)) { try { entries.push(...await unzip(await f.arrayBuffer())); } catch { setStatus('That .zip could not be read.'); } }
-    else if (/\.(md|markdown)$/i.test(f.name)) entries.push({ name: f.name, text: await f.text() });
-    else if (IMG_RE.test(f.name)) entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    if (/\.zip$/i.test(f.name)) {
+      try { entries.push(...await unzip(await f.arrayBuffer())); } catch { setStatus('That .zip could not be read.'); }
+    } else if (/\.(md|markdown)$/i.test(f.name)) {
+      entries.push({ name: f.name, text: await f.text() });
+    } else if (IMG_RE.test(f.name)) {
+      entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    }
   }
   let md  = entries.filter(e => /\.(md|markdown)$/i.test(e.name) && !e.name.endsWith('/'));
   let img = entries.filter(e => e.bytes && IMG_RE.test(e.name) && !e.name.endsWith('/'));
@@ -120,11 +130,17 @@ export async function importFiles(files: File[]): Promise<void> {
     md  = md.map(e => ({ ...e, name: e.name.slice(top.length) }));
     img = img.map(e => e.name.startsWith(top) ? { ...e, name: e.name.slice(top.length) } : e);
   }
-  for (const e of md)  await store.write(e.name, e.text ?? '');
-  for (const e of img) await store.write(e.name, new Blob([e.bytes! as BlobPart]));
+  for (const e of md) {
+    await store.write(e.name, e.text ?? '');
+  }
+  for (const e of img) {
+    await store.write(e.name, new Blob([e.bytes! as BlobPart]));
+  }
   // carry over the board file if the archive included one (matching the note top-folder strip)
   const board = entries.find(e => e.text != null && (e.name === BOARD_FILE || e.name === top + BOARD_FILE));
-  if (board?.text != null) await store.write(BOARD_FILE, board.text);
+  if (board?.text != null) {
+    await store.write(BOARD_FILE, board.text);
+  }
   hideStart();
   await loadFromDir();
   setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}.`);
@@ -143,20 +159,32 @@ export async function exportZip(): Promise<void> {
     // A node that has never been saved has no file yet; name it the way desiredFileFor would, off
     // its title or (untitled) off its first line — hence the shared slugStem.
     let name = n.file || (slugStem(n) + '.md');
-    while (used.has(name.toLowerCase())) name = name.replace(/(\.md)?$/, '') + '-1.md';
+    while (used.has(name.toLowerCase())) {
+      name = name.replace(/(\.md)?$/, '') + '-1.md';
+    }
     used.add(name.toLowerCase());
     return { name, data: serializeMd(n) };
   });
   // collect every vault-relative image referenced in a body, and pack the files alongside the notes
   const refs = new Set<string>();
-  for (const n of nodes) for (const { src } of bodyImages(n.body)) if (!/^(https?:|data:)/i.test(src)) refs.add(src);
+  for (const n of nodes) {
+    for (const { src } of bodyImages(n.body)) {
+      if (!/^(https?:|data:)/i.test(src)) {
+        refs.add(src);
+      }
+    }
+  }
   // read every referenced image concurrently, then pack the ones that resolved
   const images = await Promise.all([...refs].map(async path => {
     const blob = store.readBlob ? await store.readBlob(path) : null;
     return blob ? { name: path, bytes: new Uint8Array(await blob.arrayBuffer()) } : null;
   }));
   const attached = images.filter(Boolean).length;
-  for (const img of images) if (img) files.push(img);
+  for (const img of images) {
+    if (img) {
+      files.push(img);
+    }
+  }
   // Always: the board file now carries every node's position and size, so a zip without it would
   // unpack as a pile of notes with no layout.
   files.push({ name: BOARD_FILE, data: boardJSON() });
@@ -188,8 +216,12 @@ const newSeeds = (): Seeds => ({ rel: new Set(), legacy: new Set(), wasStack: ne
 // that used to carry `mm_type: image` now loads as an ordinary card (foldTypeLayout), so without
 // this its authored size would be read as junk from that era and thrown away.
 function authoredW(w: number | null | undefined, type: MindNode['type'], isImage: boolean): number | undefined {
-  if (w == null) return undefined;
-  if (isBoxType(type) || isImage) return w;
+  if (w == null) {
+    return undefined;
+  }
+  if (isBoxType(type) || isImage) {
+    return w;
+  }
   return w >= NODE_W ? w : undefined;
 }
 function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Seeds): MindNode {
@@ -209,7 +241,9 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
   // same thing off the live node). Needed here before the node exists, for the width filter below.
   const imageOnly = !rest.title.trim() && !!soleImage(rest.body);
   const unmigrated = !rest.title.trim() && !rest.body.trim() && !mm.blank;
-  if (unmigrated) rest.title = fileStem(rel);
+  if (unmigrated) {
+    rest.title = fileStem(rel);
+  }
   // A folder's frame note IS a frame, whatever its frontmatter says (or doesn't).
   const type: MindNode['type'] = isFrameNote(rel) ? 'frame' : mm.type;
   // The PARENT is the folder the note sits in (utils/filenames.ts parentFileOf). Only a note at the top
@@ -244,10 +278,17 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
     clip: !!g?.clip,
     ...rest, dirty: unmigrated || !!mm.parent, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
   };
-  if (mm.wasStack) seeds.wasStack.add(node.id);
-  if (hasRel) seeds.rel.add(node.id);
-  else if (hasLegacy) seeds.legacy.add(node.id);
-  else { seeds.placed++; seeds.unplaced.add(node.id); }   // no saved position → fallback layout
+  if (mm.wasStack) {
+    seeds.wasStack.add(node.id);
+  }
+  if (hasRel) {
+    seeds.rel.add(node.id);
+  } else if (hasLegacy) {
+    seeds.legacy.add(node.id);
+  } else {
+    seeds.placed++;
+    seeds.unplaced.add(node.id);   // no saved position → fallback layout
+  }
   return node;
 }
 // A folder with notes in it but no frame note of its own — one made outside the app, in Finder or
@@ -262,15 +303,23 @@ function folderFrame(path: string, seeds: Seeds): MindNode {
 // Add every node a listing yields: its notes, a frame for each folder that lacks one, and the FOLDED
 // frames whose notes stayed unread (`lazy`, with how many there are). Returns the nodes added.
 function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
-  for (const d of listing.foreign) foreignDirs.add(d);
+  for (const d of listing.foreign) {
+    foreignDirs.add(d);
+  }
   const known = new Set([...state.nodes.values()].map(n => n.file));
   const added: MindNode[] = [];
   const add = (n: MindNode): void => { state.nodes.set(n.id, n); known.add(n.file); added.push(n); };
-  for (const { path, text } of listing.files) if (!known.has(path)) add(nodeFromNote(path, parseMd(text), seeds));
+  for (const { path, text } of listing.files) {
+    if (!known.has(path)) {
+      add(nodeFromNote(path, parseMd(text), seeds));
+    }
+  }
   for (const [dir, f] of listing.lazy) {
     const path = dir + FRAME_NOTE;
     let n = [...state.nodes.values()].find(m => m.file?.toLowerCase() === path.toLowerCase());
-    if (!n) add(n = folderFrame(path, seeds));
+    if (!n) {
+      add(n = folderFrame(path, seeds));
+    }
     n.lazy = f.count;
     n.collapsed = true;   // a folder nobody has unfolded yet arrives as its pill
   }
@@ -278,7 +327,9 @@ function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
   // for its own parent folder's frame in turn.
   for (let i = 0; i < added.length; i++) {
     const want = added[i]._parentPath;
-    if (!want || !parentFileOf(added[i].file!) || known.has(want)) continue;
+    if (!want || !parentFileOf(added[i].file!) || known.has(want)) {
+      continue;
+    }
     add(folderFrame(want, seeds));
   }
   return added;
@@ -304,7 +355,9 @@ function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
     const alreadyRel = seeds.rel.has(n.id) || (seeds.legacy.has(n.id) && !!p && p.type === 'frame');
     if (p && !alreadyRel) { n.rx -= pax; n.ry -= pay; }   // absolute seed → parent-relative
     n.x = pax + n.rx; n.y = pay + n.ry;                   // working absolute coords
-    for (const k of kidsOf.get(n.id) ?? []) stack.push(k);
+    for (const k of kidsOf.get(n.id) ?? []) {
+      stack.push(k);
+    }
   }
   return byPath;
 }
@@ -312,8 +365,11 @@ function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
 // whose folder holds the path (data/board.ts resolveEdges).
 function standInFor(path: string): string | null {
   let best: MindNode | null = null;
-  for (const n of state.nodes.values())
-    if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) best = n;
+  for (const n of state.nodes.values()) {
+    if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) {
+      best = n;
+    }
+  }
   return best?.id ?? null;
 }
 // Which folders a read leaves UNREAD (store/tree.ts): a frame folded in board.json, and a folder the
@@ -321,7 +377,9 @@ function standInFor(path: string): string | null {
 // frames you are standing in), which has to be on the canvas.
 function foldTest(keep: string[]): FoldTest {
   return (dir) => {
-    if (keep.some(k => k.startsWith(dir))) return false;
+    if (keep.some(k => k.startsWith(dir))) {
+      return false;
+    }
     const g = boardGeom(dir + FRAME_NOTE);
     return g ? !!g.collapsed : true;
   };
@@ -361,7 +419,9 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // whole map (nav/scope.ts).
   resolveScopeAfterLoad();
   remeasure();   // paint so every card has a real measured height, settle, and paint again
-  if (!keepView) fit();
+  if (!keepView) {
+    fit();
+  }
   // A migration is persisted BOARD FIRST, and awaited: the new edges and the model stamp have to be
   // on disk before any note moves into its frame's folder, or a failed write between the two would drop the
   // hierarchy AND the edges that replaced it. If the board write throws, the notes are left alone and
@@ -371,11 +431,14 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
     catch { setStatus('⚠ Could not write board.json — leaving this map as it was.'); return; }
     setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to edges — nothing moved.`);
   }
-  if (folded) setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into frame${folded === 1 ? '' : 's'}`);
+  if (folded) {
+    setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into frame${folded === 1 ? '' : 's'}`);
+  }
   // Persist the resolved layout so the saved mm_x/mm_y match what's on screen. Only write when
   // the load actually moved something, so a stable reopen touches no files.
-  if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout))
+  if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout)) {
     scheduleSave();
+  }
   updateMapTitle();
 }
 // Read the notes of ONE folded frame's folder into memory (data/lazy.ts decides when). `deep` reads
@@ -385,15 +448,21 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
 const reading = new Map<string, Promise<void>>();
 export function readFolder(f: MindNode, deep: boolean): Promise<void> {
   const busy = reading.get(f.id);
-  if (busy) return busy;
+  if (busy) {
+    return busy;
+  }
   const p = readFolderNow(f, deep).finally(() => reading.delete(f.id));
   reading.set(f.id, p);
   return p;
 }
 async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
-  if (f.lazy == null || !f.file || !store.isOpen) return;
+  if (f.lazy == null || !f.file || !store.isOpen) {
+    return;
+  }
   const listing = await store.listTree(dirOf(f.file), deep ? () => false : foldTest(scopeFiles()));
-  if (f.lazy == null || !state.nodes.has(f.id)) return;   // read twice at once, or gone meanwhile
+  if (f.lazy == null || !state.nodes.has(f.id)) {
+    return;   // read twice at once, or gone meanwhile
+  }
   f.lazy = undefined;
   const seeds = newSeeds();
   const added = addListed(listing, seeds);
@@ -402,7 +471,9 @@ async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
   resolveOrder(byPath);
   // Paint what was read, so the arrangement below can measure it (it is hidden under its folded frame
   // anyway until the caller unfolds that).
-  for (const n of added) paintNode(n);
+  for (const n of added) {
+    paintNode(n);
+  }
   arrangeFrames(unplacedFrames([f, ...added], seeds), seeds.unplaced);
 }
 // Frames holding notes that arrived with no saved position — a folder made outside the app, a map
@@ -428,7 +499,9 @@ function unplacedFrames(nodes: MindNode[], seeds: Seeds): MindNode[] {
 // Pure function of what's on disk, so a failed save simply migrates again next time.
 function foldCardsIntoFrames(): number {
   const cards = [...state.nodes.values()].filter(n => n.type === 'card' && childrenOf(n.id).length);
-  if (!cards.length) return 0;
+  if (!cards.length) {
+    return 0;
+  }
   const was = new Set(cards.map(n => n.id));
   const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
     && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
@@ -446,11 +519,19 @@ function foldCardsIntoFrames(): number {
 // just right of them (or from its top-left corner when it holds nothing yet), the frame growing to hold it. That is how a note saved into the Inbox folder from
 // the phone shows up (docs/inbox.md).
 function arrangeFrames(frames: MindNode[], fresh?: Set<string>): void {
-  if (!frames.length) return;
+  if (!frames.length) {
+    return;
+  }
   const unfolded = new Set<MindNode>();
-  for (const f of frames) for (const a of [f, ...ancestors(f)]) if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
+  for (const f of frames) {
+    for (const a of [f, ...ancestors(f)]) {
+      if (a.collapsed) { a.collapsed = false; unfolded.add(a); }
+    }
+  }
   const keepScope = scope.rootId; scope.rootId = null;
-  for (const n of state.nodes.values()) paintNode(n);
+  for (const n of state.nodes.values()) {
+    paintNode(n);
+  }
   for (const f of frames.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
     const kids = orderedKids(f, childrenOf(f.id));
     const settled = fresh ? kids.filter(k => !fresh.has(k.id)) : [];
@@ -473,7 +554,9 @@ function arrangeFrames(frames: MindNode[], fresh?: Set<string>): void {
     paintNode(f);
   }
   scope.rootId = keepScope;
-  for (const a of unfolded) a.collapsed = true;
+  for (const a of unfolded) {
+    a.collapsed = true;
+  }
 }
 
 // ---------- the containment migration (runs once per map) ----------
@@ -502,27 +585,47 @@ function flattenLegacyBranches(wasStack: Set<string>): number {
   const outlined = new Set<string>();
   const wasOutlined = (n: MindNode): boolean => {
     for (let p = parentOf(n); p; p = parentOf(p)) {
-      if (wasStack.has(p.id)) return true;
-      if (p.type !== 'card' && p.type !== 'frame') return false;
+      if (wasStack.has(p.id)) {
+        return true;
+      }
+      if (p.type !== 'card' && p.type !== 'frame') {
+        return false;
+      }
     }
     return false;
   };
-  for (const n of state.nodes.values()) if (wasOutlined(n)) outlined.add(n.id);
+  for (const n of state.nodes.values()) {
+    if (wasOutlined(n)) {
+      outlined.add(n.id);
+    }
+  }
   const collapsedAbove = (n: MindNode): boolean => {
-    for (let p = parentOf(n); p; p = parentOf(p)) if (p.collapsed) return true;
+    for (let p = parentOf(n); p; p = parentOf(p)) {
+      if (p.collapsed) {
+        return true;
+      }
+    }
     return false;
   };
   // The container this card should belong to once its branch is cut: the nearest FRAME above it, or
   // the world. Never a card — that is the whole point of the migration.
   const containerAbove = (n: MindNode): MindNode | null => {
-    for (let p = parentOf(n); p; p = parentOf(p)) if (p.type === 'frame') return p;
+    for (let p = parentOf(n); p; p = parentOf(p)) {
+      if (p.type === 'frame') {
+        return p;
+      }
+    }
     return null;
   };
   let made = 0;
   for (const n of [...state.nodes.values()]) {
     const p = parentOf(n);
-    if (!p || p.type !== 'card') continue;          // roots, and frame children, stay as they are
-    if (outlined.has(n.id) || collapsedAbove(n)) continue;
+    if (!p || p.type !== 'card') {
+      continue;          // roots, and frame children, stay as they are
+    }
+    if (outlined.has(n.id) || collapsedAbove(n)) {
+      continue;
+    }
     const host = containerAbove(n);
     n.parent = host ? host.id : null;
     // x/y are already absolute and final; re-derive the stored offset against the NEW anchor so the
@@ -546,17 +649,25 @@ export function updateMapTitle(): void {
 // comparison. Lowercased because that is how the filesystem collides (see below).
 function filesInUse(): Map<string, string> {
   const m = new Map<string, string>();
-  for (const o of state.nodes.values()) if (o.file) m.set(o.file.toLowerCase(), o.id);
+  for (const o of state.nodes.values()) {
+    if (o.file) {
+      m.set(o.file.toLowerCase(), o.id);
+    }
+  }
   return m;
 }
 // Re-point inbound [[wikilinks]] across every note (utils/filenames.ts retargetLinks), returning the
 // ids whose body changed, for phase 2 to write.
 function retargetWikilinks(renames: Map<string, string>): string[] {
-  if (!renames.size) return [];
+  if (!renames.size) {
+    return [];
+  }
   const touched: string[] = [];
   for (const n of state.nodes.values()) {
     const body = retargetLinks(n.body, renames);
-    if (body === n.body) continue;
+    if (body === n.body) {
+      continue;
+    }
     n.body = body; n.dirty = true; touched.push(n.id);
   }
   return touched;
@@ -575,14 +686,18 @@ function planPaths(): Map<string, string> {
     const p = parentOf(n);
     const pFile = p ? out.get(p.id) ?? p.file : null;
     const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs);
-    if (n.file) inUse.delete(n.file.toLowerCase());
+    if (n.file) {
+      inUse.delete(n.file.toLowerCase());
+    }
     inUse.set(target.toLowerCase(), n.id);
     out.set(n.id, target);
   }
   return out;
 }
 export async function saveAll(): Promise<void> {
-  if (state.readOnly) return;        // read-only mode never writes to disk
+  if (state.readOnly) {
+    return;        // read-only mode never writes to disk
+  }
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
   // Phase 0 — a FOLDED frame whose notes were never read can't move them without reading them: one
   // that is about to move (renamed, retyped, dropped into another frame, or inside one that is) reads
@@ -592,9 +707,15 @@ export async function saveAll(): Promise<void> {
     const plan = planPaths();
     const moving = [...state.nodes.values()].filter(n => n.lazy != null && n.file && plan.get(n.id) !== n.file);
     const holding = [...state.nodes.values()].filter(n => n.lazy != null && childrenOf(n.id).length);
-    if (!moving.length && !holding.length) break;
-    for (const f of moving) await readFolder(f, true);
-    for (const f of holding) await readFolder(f, false);
+    if (!moving.length && !holding.length) {
+      break;
+    }
+    for (const f of moving) {
+      await readFolder(f, true);
+    }
+    for (const f of holding) {
+      await readFolder(f, false);
+    }
   }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
   // Each step below records its progress AS it lands, so a save that throws half-way (quota, a revoked
@@ -606,7 +727,11 @@ export async function saveAll(): Promise<void> {
   // order live in board.json now, so `dirtyLayout` alone is not a reason to touch a .md. Moving a
   // card therefore writes one small JSON file instead of one .md per moved card.
   const needWrite = new Set<string>();
-  for (const n of state.nodes.values()) if (n.dirty || !n.file) needWrite.add(n.id);
+  for (const n of state.nodes.values()) {
+    if (n.dirty || !n.file) {
+      needWrite.add(n.id);
+    }
+  }
 
   // Phase 1 — settle every note's final path IN MEMORY first (planPaths). A frame is a folder, so a
   // renamed or moved frame moves every note inside it: each one is a rename of its own here.
@@ -625,15 +750,21 @@ export async function saveAll(): Promise<void> {
 
   // Phase 1b — a rename drags its INBOUND links along: a path recorded elsewhere in the vault must not
   // outlive the path it records.
-  for (const id of retargetWikilinks(renames)) needWrite.add(id);
+  for (const id of retargetWikilinks(renames)) {
+    needWrite.add(id);
+  }
   // Everything phase 1 decided must be written is now DIRTY, not just in this call's set: n.file has
   // already moved to its new name, so a retry would see no rename and forget it had to write it.
-  for (const id of needWrite) state.nodes.get(id)!.dirty = true;
+  for (const id of needWrite) {
+    state.nodes.get(id)!.dirty = true;
+  }
 
   // Phase 2 — write everything that changed, now that all paths are final.
   let written = 0;
   for (const n of state.nodes.values()) {
-    if (!needWrite.has(n.id)) continue;
+    if (!needWrite.has(n.id)) {
+      continue;
+    }
     await store.write(n.file!, serializeMd(n));
     n.dirty = false;
     written++;
@@ -648,16 +779,34 @@ export async function saveAll(): Promise<void> {
   // Deepest first, and up the chain, since emptying `A/B/` can empty `A/` too. removeDir only ever
   // removes an EMPTY folder, so one still holding anything — a live note, another app's file — stays.
   const live = new Set<string>();
-  for (const f of held) if (f) for (let d = dirOf(f); d; d = dirOf(d.slice(0, -1))) live.add(d);
+  for (const f of held) {
+    if (f) {
+      for (let d = dirOf(f); d; d = dirOf(d.slice(0, -1))) {
+        live.add(d);
+      }
+    }
+  }
   const dirs = new Set<string>();
-  for (const d0 of emptied) for (let d = d0; d; d = dirOf(d.slice(0, -1))) dirs.add(d);
+  for (const d0 of emptied) {
+    for (let d = d0; d; d = dirOf(d.slice(0, -1))) {
+      dirs.add(d);
+    }
+  }
   emptied.clear();
-  for (const d of [...dirs].sort((a, b) => b.length - a.length)) if (!live.has(d)) await store.removeDir(d);
+  for (const d of [...dirs].sort((a, b) => b.length - a.length)) {
+    if (!live.has(d)) {
+      await store.removeDir(d);
+    }
+  }
 
   // …and the board follows, AWAITED: it is keyed by path, so after a move it must land before anything
   // else does — a reload in between would find the notes in their new folders and no layout for them.
-  if (pathsMoved) await flushBoard();
-  for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write carries these
+  if (pathsMoved) {
+    await flushBoard();
+  }
+  for (const n of state.nodes.values()) {
+    n.dirtyLayout = false;   // the board write carries these
+  }
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
   releaseFolded();   // a folded frame whose notes are all safely on disk can let go of them (data/lazy.ts)
@@ -673,8 +822,12 @@ const emptied = new Set<string>();
 let saveTimer: number | undefined, saveAgain = false;
 let savePromise: Promise<void> | null = null;   // non-null while a save chain is in flight
 export function scheduleSave(): void {
-  if (state.readOnly) return;         // read-only mode never writes to disk
-  if (!store.isOpen) return;          // demo mode: nothing to write
+  if (state.readOnly) {
+    return;         // read-only mode never writes to disk
+  }
+  if (!store.isOpen) {
+    return;          // demo mode: nothing to write
+  }
   // Geometry lives in board.json, so the two files settle together: every mutation path in the app
   // ends in scheduleSave(), and a great many of them move something.
   scheduleSaveBoard();
@@ -683,7 +836,9 @@ export function scheduleSave(): void {
   saveTimer = window.setTimeout(flushSave, 400);
 }
 export function flushSave(): Promise<void> {
-  if (!store.isOpen) return Promise.resolve();
+  if (!store.isOpen) {
+    return Promise.resolve();
+  }
   clearTimeout(saveTimer); saveTimer = undefined;
   if (savePromise) { saveAgain = true; return savePromise; }   // coalesce overlapping writes
   savePromise = (async () => {
@@ -702,19 +857,33 @@ export function flushSave(): Promise<void> {
 // completion. MUST be called before retargeting the store at another map/folder — a straggling
 // autosave firing after the switch would write the old map's files into the new one.
 export async function settleSave(): Promise<void> {
-  if (boardSavePending()) await flushBoard();
-  if (saveTimer != null || savePromise || notesUnsaved()) await flushSave();
+  if (boardSavePending()) {
+    await flushBoard();
+  }
+  if (saveTimer != null || savePromise || notesUnsaved()) {
+    await flushSave();
+  }
 }
 // Is there anything in memory the disk doesn't have yet — queued, in flight, or left over by a write
 // that failed? Read-only and demo mode never write, so they never have anything unsaved.
 function notesUnsaved(): boolean {
-  if (state.readOnly || !store.isOpen) return false;
-  if (state.toDelete.length || pendingRemovals.size) return true;
-  for (const n of state.nodes.values()) if (n.dirty || !n.file) return true;
+  if (state.readOnly || !store.isOpen) {
+    return false;
+  }
+  if (state.toDelete.length || pendingRemovals.size) {
+    return true;
+  }
+  for (const n of state.nodes.values()) {
+    if (n.dirty || !n.file) {
+      return true;
+    }
+  }
   return false;
 }
 export function hasUnsavedChanges(): boolean {
-  if (state.readOnly || !store.isOpen) return false;
+  if (state.readOnly || !store.isOpen) {
+    return false;
+  }
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();
 }
 
@@ -723,10 +892,16 @@ export function hasUnsavedChanges(): boolean {
 // closed or reloaded would otherwise die with it. Hiding is the dependable signal (it fires before
 // unload, and is the LAST one iOS gives a backgrounded page); beforeunload also asks the browser to
 // hold the page while anything is still unwritten.
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') void settleSave(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    void settleSave();
+  }
+});
 window.addEventListener('pagehide', () => { void settleSave(); });
 window.addEventListener('beforeunload', e => {
-  if (!hasUnsavedChanges()) return;
+  if (!hasUnsavedChanges()) {
+    return;
+  }
   void settleSave();
   e.preventDefault();
 });
@@ -734,29 +909,51 @@ window.addEventListener('beforeunload', e => {
 // ---------- reload on focus ----------
 let reloading = false;
 export async function reloadFromDisk(): Promise<void> {
-  if (!store.isOpen) return;
+  if (!store.isOpen) {
+    return;
+  }
   // A single refocus dispatches BOTH window 'focus' and 'visibilitychange'. Guard re-entry.
-  if (reloading) return;
+  if (reloading) {
+    return;
+  }
   // if we just wrote, the focus event is almost certainly our own round-trip — skip
-  if (Date.now() - (state.lastSelfWrite || 0) < 600) return;
+  if (Date.now() - (state.lastSelfWrite || 0) < 600) {
+    return;
+  }
   const selBefore = state.selId;
   // Don't yank the rug out while the user is actively typing in a card or renaming a frame.
-  if (inPlaceEditActive() || isTypingInField()) return;
+  if (inPlaceEditActive() || isTypingInField()) {
+    return;
+  }
   reloading = true;
   try {
     // loadFromDir REPLACES every note with what's on disk, so whatever is still queued must reach the
     // disk first — this used to cancel the pending save instead, and an edit made just before
     // switching away was read over. If a write fails, memory holds the only copy: keep it, don't reload.
     await settleSave();
-    if (hasUnsavedChanges()) return;
-    if (inPlaceEditActive() || isTypingInField()) return;   // began during the write
+    if (hasUnsavedChanges()) {
+      return;
+    }
+    if (inPlaceEditActive() || isTypingInField()) {
+      return;   // began during the write
+    }
     // What was there before, by PATH (ids are minted fresh each load) — and how many unread notes each
     // folded frame held — so a note that came in from outside (the phone inbox) can be pointed out.
     const known = new Set<string>(), unread = new Map<string, number>();
-    for (const n of state.nodes.values()) if (n.file) { known.add(n.file); if (n.lazy != null) unread.set(n.file, n.lazy); }
+    for (const n of state.nodes.values()) {
+      if (n.file) {
+        known.add(n.file);
+        if (n.lazy != null) {
+          unread.set(n.file, n.lazy);
+        }
+      }
+    }
     await loadFromDir({ keepView:true });
-    if (selBefore && state.nodes.has(selBefore)) selectNode(selBefore);
-    else selectNode(null);
+    if (selBefore && state.nodes.has(selBefore)) {
+      selectNode(selBefore);
+    } else {
+      selectNode(null);
+    }
     flashArrived([...state.nodes.values()]
       .filter(n => n.file && (!known.has(n.file) || (n.lazy ?? 0) > (unread.get(n.file) ?? n.lazy ?? 0)))
       .map(n => n.id));

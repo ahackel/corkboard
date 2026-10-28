@@ -202,7 +202,9 @@ export const statusEl = byId('status');
 const QUIET = /^(Saving…|Saved \d|Collapsed|Expanded|Editing enabled|Selected \d|Opened “|Moved |Adding image…|Image (moved|extracted|removed)$|Edge (moved|deleted)$|\d+ edges deleted|Drop to save|Pasted “|Pasted \d|Deleted \d|Cloned|Duplicated|Created “|Grouped|Extracted|Connected \d|Merged)/;
 let toastTimer = 0;
 export const setStatus = (t: string): void => {
-  if (QUIET.test(t)) return;
+  if (QUIET.test(t)) {
+    return;
+  }
   statusEl.textContent = t;
   statusEl.classList.add('show');
   window.clearTimeout(toastTimer);

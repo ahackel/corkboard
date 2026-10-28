@@ -42,9 +42,13 @@ const STARTS_MARK = /^<!-- (?:corkboard|mindmap)-card: /;
 // serializeMd emits the parent's on-disk path, which is meaningless outside this map.
 function withParentRef(md: string, parentName: string | null): string {
   const m = md.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!m) return md;
+  if (!m) {
+    return md;
+  }
   const fm = m[1].split('\n').filter(l => !l.startsWith('mm_parent:'));
-  if (parentName) fm.push(`mm_parent: ${parentName}`);
+  if (parentName) {
+    fm.push(`mm_parent: ${parentName}`);
+  }
   return `---\n${fm.join('\n')}\n---\n${m[2]}`;
 }
 
@@ -86,7 +90,9 @@ export const cardsToPayload = (files: CardFile[]): string =>
 export async function copySelection(): Promise<boolean> {
   await readAll(selectedIds());   // a folded frame's notes are part of what's copied
   const files = selectionFiles();
-  if (!files.length) return false;
+  if (!files.length) {
+    return false;
+  }
   try {
     await navigator.clipboard.writeText(cardsToPayload(files));
     setStatus(`Copied ${files.length} card${files.length === 1 ? '' : 's'}`);
@@ -100,9 +106,13 @@ export async function copySelection(): Promise<boolean> {
 // Cut = copy + delete. The delete only happens once the clipboard write succeeded, so a
 // denied clipboard can never destroy cards. deleteSelection records its own undo step.
 export async function cutSelection(): Promise<void> {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = selectedIds();
-  if (!ids.length || !(await copySelection())) return;
+  if (!ids.length || !(await copySelection())) {
+    return;
+  }
   deleteSelection();
   setStatus(`Cut ${ids.length} card${ids.length === 1 ? '' : 's'}`);
 }
@@ -113,7 +123,9 @@ export async function cutSelection(): Promise<void> {
 // keeping the copied cards' relative offsets plus a small nudge so a paste over the source
 // never lands exactly on top.
 export function tryPasteCards(text: string, at: { sx: number | null; sy: number | null; parent: string | null }): boolean {
-  if (!STARTS_MARK.test(text)) return false;
+  if (!STARTS_MARK.test(text)) {
+    return false;
+  }
   if (state.readOnly){ setStatus('Read-only — can’t paste'); return true; }
   // split on the marker lines; each chunk is one card's .md content named by its marker
   const cards: Array<{ name: string; p: ParsedNote }> = [];
@@ -123,7 +135,9 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
     const end = i + 1 < marks.length ? marks[i + 1].index : text.length;
     cards.push({ name: marks[i][1], p: parseMd(text.slice(start, end).trim()) });
   }
-  if (!cards.length) return false;
+  if (!cards.length) {
+    return false;
+  }
   const byName = new Map(cards.map(c => [c.name, c]));
   const isPayloadRoot = (c: { p: ParsedNote }): boolean => !c.p.mm.parent || !byName.has(c.p.mm.parent);
   // anchor the payload roots' top-left at the target point (+ a nudge off the source)
@@ -133,8 +147,10 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
     ? screenToWorld(at.sx, at.sy)
     : screenToWorld(window.innerWidth / 2, window.innerHeight / 2));
   let ax = Infinity, ay = Infinity;
-  for (const c of cards) if (isPayloadRoot(c) && c.p.mm.x != null && c.p.mm.y != null){
-    ax = Math.min(ax, c.p.mm.x); ay = Math.min(ay, c.p.mm.y);
+  for (const c of cards) {
+    if (isPayloadRoot(c) && c.p.mm.x != null && c.p.mm.y != null){
+      ax = Math.min(ax, c.p.mm.x); ay = Math.min(ay, c.p.mm.y);
+    }
   }
   const dx = target.x - (ax === Infinity ? target.x : ax) + 16;
   const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
@@ -155,7 +171,9 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
       });
       state.nodes.set(n.id, n);
       newIds.set(c.name, n.id);
-      if (root) rootIds.push(n.id);
+      if (root) {
+        rootIds.push(n.id);
+      }
     }
     // resolve payload-internal parent links (by original names, before any title renaming)
     for (const c of cards){
@@ -182,8 +200,9 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
 // text payload — dropping into an editor lands markdown.
 function b64(bytes: Uint8Array): string {
   let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000)
+  for (let i = 0; i < bytes.length; i += 0x8000) {
     s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
   return btoa(s);
 }
 // A multi-card export .zip is named after its first (root) card.
@@ -209,7 +228,9 @@ export function bindCardFileDrag(n: MindNode): void {
     // (unlike the two bails below, which hand the gesture back to the pointer machinery) leaves the
     // browser's text drag alive for text-drag.ts's own document-level handlers to land. First, so a
     // held ⌥ can't turn a drag of the text into an export of the whole card.
-    if (cardTextDrag(e.target)) return;
+    if (cardTextDrag(e.target)) {
+      return;
+    }
     if (!e.altKey || !e.dataTransfer){ e.preventDefault(); return; }
     // ⌥-press began on an inline body image → that's an image EXTRACT gesture (image-extract.ts),
     // not a card-file export; let the native drag stand down so the pointer machinery keeps it.
@@ -229,9 +250,13 @@ export function bindCardFileDrag(n: MindNode): void {
 // as one .zip. A plain download works in every browser; for drag-to-Finder use ⌥-drag on the
 // card itself.
 export function exportSelection(): void {
-  if (afterReading(selectedIds(), exportSelection)) return;
+  if (afterReading(selectedIds(), exportSelection)) {
+    return;
+  }
   const files = selectionFiles();
-  if (!files.length) return;
+  if (!files.length) {
+    return;
+  }
   const name = zipName(files);
   downloadBlob(zipBlob(files.map(f => ({ name: f.name, data: f.text }))), name);
   setStatus(`Saved ${name}`);
@@ -264,7 +289,9 @@ export const canShareFiles = location.protocol !== 'file:' && !noOsShareSurface
 export async function shareSelection(): Promise<void> {
   await readAll(selectedIds());
   const files = selectionFiles();
-  if (!files.length) return;
+  if (!files.length) {
+    return;
+  }
   const f = exportFile(files);
   const file = new File([f.bytes as BlobPart], f.name, { type: f.mime });
   if (!navigator.canShare?.({ files: [file] })){
@@ -275,7 +302,9 @@ export async function shareSelection(): Promise<void> {
   try {
     await navigator.share({ files: [file], title: f.name });
   } catch (err) {
-    if ((err as DOMException)?.name === 'AbortError') return;   // user dismissed the share sheet
+    if ((err as DOMException)?.name === 'AbortError') {
+      return;   // user dismissed the share sheet
+    }
     console.error('shareSelection: navigator.share failed', err, { ua: navigator.userAgent, platform: navigator.platform });
     setStatus('Couldn’t share');
   }

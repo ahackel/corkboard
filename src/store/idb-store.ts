@@ -26,8 +26,12 @@ export const idbStore = (() => {
       const tx = d.transaction('files', 'readonly');
       tx.objectStore('files').openCursor().onsuccess = e => {
         const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-        if (c){ cb(c.key as string, c.value); c.continue(); }
-        else res();
+        if (c) {
+          cb(c.key as string, c.value);
+          c.continue();
+        } else {
+          res();
+        }
       };
       tx.onerror = e => rej((e.target as IDBTransaction).error);
     });
@@ -39,11 +43,18 @@ export const idbStore = (() => {
     get isOpen(){ return _opened; },
     get name(){ return _mapName; },
 
-    openMap(id: string, name?: string){ _mapId = id; if (name) _mapName = name; },
+    openMap(id: string, name?: string){
+      _mapId = id;
+      if (name) {
+        _mapName = name;
+      }
+    },
     async createMap(id: string, name: string){ await put(prefixOf(id) + MAP_META_FILE, serializeMapMeta(name)); },
     async renameMap(id: string, name: string){
       await this.createMap(id, name);   // rename IS a meta rewrite
-      if (id === _mapId) _mapName = name;
+      if (id === _mapId) {
+        _mapName = name;
+      }
     },
     async deleteMap(id: string){
       // one readwrite cursor pass: delete the map's keys inside a single transaction
@@ -52,7 +63,12 @@ export const idbStore = (() => {
         const tx = d.transaction('files', 'readwrite');
         tx.objectStore('files').openCursor().onsuccess = e => {
           const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-          if (c){ if (ownedBy(c.key as string, id)) c.delete(); c.continue(); }
+          if (c){
+            if (ownedBy(c.key as string, id)) {
+              c.delete();
+            }
+            c.continue();
+          }
         };
         tx.oncomplete = () => res(); tx.onerror = e => rej((e.target as IDBTransaction).error);
       });
@@ -66,7 +82,9 @@ export const idbStore = (() => {
         ids.add(id);
         if (k === prefixOf(id) + MAP_META_FILE && typeof v === 'string'){
           const name = parseMapMetaName(v);
-          if (name) names.set(id, name);
+          if (name) {
+            names.set(id, name);
+          }
         }
       });
       return [...ids].map(id => ({ id, name: names.get(id) ?? (id === 'vault' ? 'My map' : id) }));
@@ -78,9 +96,13 @@ export const idbStore = (() => {
       // A flat key space: every file is already in hand, so the plan simply picks which texts to keep.
       const p = prefixOf(_mapId), all = new Map<string, unknown>();
       await eachKey((k, v) => {
-        if (!ownedBy(k, _mapId)) return;
+        if (!ownedBy(k, _mapId)) {
+          return;
+        }
         const path = k.slice(p.length);
-        if (path.startsWith(under) && !path.split('/').some(s => s.startsWith('.'))) all.set(path, v);
+        if (path.startsWith(under) && !path.split('/').some(s => s.startsWith('.'))) {
+          all.set(path, v);
+        }
       });
       const plan = planTree([...all.keys()], under, fold);
       return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign };

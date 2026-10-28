@@ -8,12 +8,21 @@ import { scope } from '../nav/scope.js';
 // The nodes for some ids, skipping any that are gone.
 export function nodesOf(ids: Iterable<string>): MindNode[] {
   const out: MindNode[] = [];
-  for (const id of ids) { const n = state.nodes.get(id); if (n) out.push(n); }
+  for (const id of ids) {
+    const n = state.nodes.get(id);
+    if (n) {
+      out.push(n);
+    }
+  }
   return out;
 }
 // The node a file path names (a path is a node's identity on disk), if it is in memory.
 export function nodeByFile(file: string): MindNode | undefined {
-  for (const n of state.nodes.values()) if (n.file === file) return n;
+  for (const n of state.nodes.values()) {
+    if (n.file === file) {
+      return n;
+    }
+  }
   return undefined;
 }
 export function childrenOf(id: string | null): MindNode[] {
@@ -32,7 +41,9 @@ export function parentOf(n: MindNode): MindNode | null {
 // at the call sites were for.
 export function* ancestors(n: MindNode): Generator<MindNode> {
   let guard = 0;
-  for (let p = parentOf(n); p && guard++ < 4096; p = parentOf(p)) yield p;
+  for (let p = parentOf(n); p && guard++ < 4096; p = parentOf(p)) {
+    yield p;
+  }
 }
 // The OUTERMOST of some nodes: those with no ancestor among them (an inner one rides along with it).
 export function outermost(nodes: MindNode[]): MindNode[] {
@@ -60,8 +71,12 @@ export function isHidden(n: MindNode): boolean {
   // A plain loop rather than `ancestors`: this is the hottest walk in the app (~38 call sites, every
   // one of them on the paint path), so it keeps the early returns and skips the generator.
   for (let p = parentOf(n); p; p = parentOf(p)){
-    if (p.id === scopeId) return false;
-    if (p.collapsed) return true;
+    if (p.id === scopeId) {
+      return false;
+    }
+    if (p.collapsed) {
+      return true;
+    }
   }
   // Nothing above n is the open frame, so n is outside it.
   return scopeId !== null;
@@ -70,20 +85,34 @@ export function isHidden(n: MindNode): boolean {
 // ancestor that is still visible: the folded frame a card is tucked inside. Search highlights it for a
 // match it hides, and a line to a hidden card attaches to it (view/free-edges.ts edgeEnd).
 export function firstVisible(n: MindNode): MindNode {
-  if (!isHidden(n)) return n;
-  for (const p of ancestors(n)) if (!isHidden(p)) return p;
+  if (!isHidden(n)) {
+    return n;
+  }
+  for (const p of ancestors(n)) {
+    if (!isHidden(p)) {
+      return p;
+    }
+  }
   // A root is always visible, so the walk resolves — EXCEPT for a node outside the open frame,
   // whose ancestors are hidden all the way up. Search filters those out before it ever asks
   // (features/search.ts), so the fallback is only a backstop, not a case anyone relies on.
   return n;
 }
 export function descendantCount(id: string): number {
-  let c = 0; for (const ch of childrenOf(id)) c += 1 + descendantCount(ch.id); return c;
+  let c = 0;
+  for (const ch of childrenOf(id)) {
+    c += 1 + descendantCount(ch.id);
+  }
+  return c;
 }
 // A node whose lock cascades down: any ANCESTOR (not itself) is locked. Such a node can't even be
 // selected — only the locked card itself remains selectable (see isLockedEffective below).
 export function hasLockedAncestor(n: MindNode): boolean {
-  for (let p = parentOf(n); p; p = parentOf(p)) if (p.locked) return true;
+  for (let p = parentOf(n); p; p = parentOf(p)) {
+    if (p.locked) {
+      return true;
+    }
+  }
   return false;
 }
 // A node protected from move/collapse-toggle/edit/delete: it's locked itself, or a descendant of a
@@ -94,7 +123,9 @@ export function isLockedEffective(n: MindNode): boolean { return n.locked || has
 // branch that contains a locked card, even when the branch's root itself isn't locked.
 export function subtreeHasLocked(id: string): boolean {
   const n = state.nodes.get(id);
-  if (n?.locked) return true;
+  if (n?.locked) {
+    return true;
+  }
   return childrenOf(id).some(ch => subtreeHasLocked(ch.id));
 }
 // The name to SHOW for a node ANYWHERE the card itself isn't — the outline, search results, a status
@@ -122,7 +153,14 @@ const nameless = (n: MindNode): boolean => !n.title.trim() && !firstLineLabel(n.
 // nothing to be named off, so the pass costs nothing on an ordinary map.
 function namelessLabel(n: MindNode): string {
   let i = 0;
-  for (const o of state.nodes.values()){ if (nameless(o)) i++; if (o.id === n.id) break; }
+  for (const o of state.nodes.values()){
+    if (nameless(o)) {
+      i++;
+    }
+    if (o.id === n.id) {
+      break;
+    }
+  }
   return `No-title ${i || 1}`;   // `|| 1`: a node still being created isn't in state.nodes yet
 }
 // …and the label with its PARENT appended, but only where the label alone is ambiguous. Two cards may
@@ -138,21 +176,33 @@ export function duplicateLabels(): Set<string> {
   const seen = new Set<string>(), dup = new Set<string>();
   for (const o of state.nodes.values()){
     const l = nodeLabel(o);
-    if (seen.has(l)) dup.add(l); else seen.add(l);
+    if (seen.has(l)) {
+      dup.add(l);
+    } else {
+      seen.add(l);
+    }
   }
   return dup;
 }
 export function disambiguatedLabel(n: MindNode, dup: Set<string> = duplicateLabels()): string {
   const label = nodeLabel(n);
-  if (!dup.has(label)) return label;
+  if (!dup.has(label)) {
+    return label;
+  }
   const p = parentOf(n);
   return p ? `${label} — ${nodeLabel(p)}` : label;
 }
 // guard against cycles when re-parenting
 export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
   const n = state.nodes.get(nodeId);
-  if (!n) return false;
-  for (const p of ancestors(n)) if (p.id === maybeAncestorId) return true;
+  if (!n) {
+    return false;
+  }
+  for (const p of ancestors(n)) {
+    if (p.id === maybeAncestorId) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -163,7 +213,9 @@ export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
 // (view/free-edges.ts). A line that pointed somewhere the click doesn't go would be a lie.
 export function resolveWikilink(name: string): MindNode[] {
   const t = name.trim().toLowerCase();
-  if (!t) return [];
+  if (!t) {
+    return [];
+  }
   const nodes = [...state.nodes.values()];
   const byFile = nodes.filter(n => {
     const f = (n.file ?? '').toLowerCase();

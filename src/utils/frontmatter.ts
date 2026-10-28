@@ -43,9 +43,13 @@ export function headingOnLine(line: string): { markerLen: number; title: string 
 export function splitHeading(text: string): { title: string; body: string; gap: boolean } {
   const lines = text.split('\n');
   const i = firstTextLine(lines);
-  if (i < 0) return { title: '', body: '', gap: true };
+  if (i < 0) {
+    return { title: '', body: '', gap: true };
+  }
   const h = headingOnLine(lines[i]);
-  if (!h || !h.title) return { title: '', body: text.trim(), gap: true };
+  if (!h || !h.title) {
+    return { title: '', body: text.trim(), gap: true };
+  }
   const rest = lines.slice(i + 1);
   const body = rest.join('\n').trim();
   return { title: h.title, body, gap: body ? !rest[0]?.trim() : true };
@@ -56,7 +60,9 @@ export function splitHeading(text: string): { title: string; body: string; gap: 
 // note rather than re-reading one (a merge, an extract, the clipboard), where spaced is what to write.
 export function joinHeading(title: string, body: string, gap = true): string {
   const t = title.trim(), b = body.trim();
-  if (!t) return b;
+  if (!t) {
+    return b;
+  }
   return b ? `# ${t}\n${gap ? '\n' : ''}${b}` : `# ${t}`;
 }
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
@@ -84,7 +90,10 @@ export function firstLineLabel(text: string): string {
 // that is really breaking text in two (the text-drag ghost's caption + its new card's note).
 export function firstLineSplit(text: string): { title: string; body: string } {
   const lines = text.split('\n');
-  let i = firstTextLine(lines); if (i < 0) i = 0;
+  let i = firstTextLine(lines);
+  if (i < 0) {
+    i = 0;
+  }
   return { title: (lines[i] ?? '').replace(MARKER_RE, '').trim(),
            body: lines.slice(i + 1).join('\n').trim() };
 }
@@ -122,34 +131,52 @@ function parseFM(fmText: string): FmEntry[] {
   const entries: FmEntry[] = [];
   for (const line of fmText.split('\n')){
     const m = line.match(/^([\w-]+):(.*)$/);
-    if (m) entries.push({ key: m[1], lines: [line] });
-    else if (entries.length) entries[entries.length-1].lines.push(line);   // continuation
-    else entries.push({ key: null, lines: [line] });
+    if (m) {
+      entries.push({ key: m[1], lines: [line] });
+    } else if (entries.length) {
+      entries[entries.length-1].lines.push(line);   // continuation
+    } else {
+      entries.push({ key: null, lines: [line] });
+    }
   }
   return entries;
 }
 function fmEntry(entries: FmEntry[], key: string): FmEntry | undefined { return entries.find(e => e.key === key); }
 function fmValue(entries: FmEntry[], key: string): string {
-  const e = fmEntry(entries, key); if (!e) return '';
+  const e = fmEntry(entries, key);
+  if (!e) {
+    return '';
+  }
   return e.lines[0].slice(e.lines[0].indexOf(':')+1).trim();
 }
 // A tag is written bare (`tags: [idea, 🔥]`), but Obsidian also takes a quoted `"#idea"` — the `#` is
 // not part of the tag (utils/tags.ts).
 function fmTags(entries: FmEntry[]): string[] {
-  const e = fmEntry(entries, 'tags'); if (!e) return [];
+  const e = fmEntry(entries, 'tags');
+  if (!e) {
+    return [];
+  }
   const inline = e.lines[0].slice(e.lines[0].indexOf(':')+1).trim();
   const bare = (s: string): string => s.trim().replace(/^["']|["']$/g,'').replace(/^#/,'').trim();
-  if (inline) return inline.replace(/^\[|\]$/g,'').split(',').map(bare).filter(Boolean);
+  if (inline) {
+    return inline.replace(/^\[|\]$/g,'').split(',').map(bare).filter(Boolean);
+  }
   return e.lines.slice(1).map(l=>l.trim()).filter(l=>l.startsWith('-'))   // YAML list form
     .map(l=>bare(l.replace(/^-\s*/,''))).filter(Boolean);
 }
 function fmSet(entries: FmEntry[], key: string, line: string): void {
   const e = fmEntry(entries, key);
-  if (e) e.lines = [line]; else entries.push({ key, lines:[line] });
+  if (e) {
+    e.lines = [line];
+  } else {
+    entries.push({ key, lines:[line] });
+  }
 }
 function fmRemove(entries: FmEntry[], key: string): void {
   const i = entries.findIndex(e => e.key === key);
-  if (i >= 0) entries.splice(i, 1);
+  if (i >= 0) {
+    entries.splice(i, 1);
+  }
 }
 
 // Resolve a note's kind from frontmatter, folding legacy tokens. There are TWO kinds, card and frame,
@@ -164,7 +191,9 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // flows, tabs, line and fan arrangements are all cut), and the stale key is dropped on the next write.
 function foldType(entries: FmEntry[]): { type: NodeType; wasStack: boolean } {
   const t = fmValue(entries, 'mm_type'), v = fmValue(entries, 'mm_layout');
-  if (t === 'frame' || (!t && (v === 'frame' || v === 'frame-h' || v === 'frame-v'))) return { type: 'frame', wasStack: false };
+  if (t === 'frame' || (!t && (v === 'frame' || v === 'frame-h' || v === 'frame-v'))) {
+    return { type: 'frame', wasStack: false };
+  }
   return { type: 'card', wasStack: t === 'stack' || (!t && v === 'stack') };
 }
 
@@ -218,9 +247,14 @@ export function serializeMd(n: MindNode): string {
   fmSet(entries, 'tags', `tags: ${n.tags.length ? `[${n.tags.join(', ')}]` : '[]'}`);
   // A custom colour is a hex, and `color: #ff8800` reads as an EMPTY value plus a comment to any
   // real YAML parser — so quote it. Palette keys stay bare, the way every existing vault has them.
-  if (n.color) fmSet(entries, 'color', `color: ${n.color.startsWith('#') ? `"${n.color}"` : n.color}`);
-  else fmRemove(entries, 'color');
-  if (!fmEntry(entries, 'date')) entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
+  if (n.color) {
+    fmSet(entries, 'color', `color: ${n.color.startsWith('#') ? `"${n.color}"` : n.color}`);
+  } else {
+    fmRemove(entries, 'color');
+  }
+  if (!fmEntry(entries, 'date')) {
+    entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
+  }
   // GEOMETRY IS NOT WRITTEN HERE any more — position, size and collapse live in board.json
   // (data/board.ts), which is what "frontmatter describes the NOTE, board.json describes the BOARD's
   // arrangement of it" means in practice. mm_position_x/y, mm_w/mm_h and mm_collapsed are still READ
@@ -228,7 +262,9 @@ export function serializeMd(n: MindNode): string {
   // each note the first time it is rewritten. Neither is the PARENT written any more: a frame is a
   // folder, so where the file sits says which frame holds it (utils/filenames.ts parentFileOf), and
   // the old `mm_parent` is swept with the rest.
-  if (n.locked) entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
+  if (n.locked) {
+    entries.push({ key:'mm_locked', lines:['mm_locked: true'] });
+  }
   // A note that is blank ON PURPOSE — the user cleared every character out of an existing card, which is
   // allowed and keeps the card's file, children and position (features/inline-edit.ts endBodyEdit). On
   // disk that is indistinguishable from a note written before titles moved into the body, whose name WAS
@@ -237,8 +273,12 @@ export function serializeMd(n: MindNode): string {
   // the two apart (mm_position_x predates the title move by a hundred commits, so its presence says
   // nothing), so the blankness is STATED rather than inferred. Written only while there is nothing else to
   // write, and dropped again by the stale-mm_* sweep at the top as soon as anything is typed.
-  if (!n.title.trim() && !n.body.trim()) entries.push({ key:'mm_blank', lines:['mm_blank: true'] });
-  if (n.type !== 'card') entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
+  if (!n.title.trim() && !n.body.trim()) {
+    entries.push({ key:'mm_blank', lines:['mm_blank: true'] });
+  }
+  if (n.type !== 'card') {
+    entries.push({ key:'mm_type', lines:[`mm_type: ${n.type}`] });   // card is the default
+  }
   const fm = entries.flatMap(e => e.lines).join('\n');
   // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse
   // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing, down to

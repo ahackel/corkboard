@@ -52,17 +52,19 @@ export function swatchRowHTML(first: FirstChip): string {
   // the default yellow), and the picker rings the colour it SHOWS (markSwatch). The custom colours used
   // recently wrap onto a third row (renderRecentChips). The MAP's canvas alone gets a reset chip in
   // the board's own grey, ahead of them, since there is no other way back to "no canvas colour".
-  if (first === 'default')
+  if (first === 'default') {
     html += `<span class="swatch-break"></span><div class="swatch" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
+  }
   return html;
 }
 // The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered at
 // the end of the third row, after the default chips.
 export function renderRecentChips(colors: HTMLElement): void {
   colors.querySelectorAll('.swatch.recent').forEach(el => el.remove());
-  for (const c of recentColors())
+  for (const c of recentColors()) {
     colors.insertAdjacentHTML('beforeend',
       `<div class="swatch recent" data-color="${c}" title="${c}" style="--sw:${c}"></div>`);
+  }
 }
 // Ring the chip carrying `active` ('' → the first chip). A custom colour is usually carried by one of
 // the RECENT chips, and that's the one that should ring. The custom chip only ADOPTS the colour when
@@ -77,13 +79,19 @@ export function markSwatchRow(colors: HTMLElement, active: string): void {
     const adopt = isHexColor(active) && !onRecent;
     // DELETED rather than set to '' when the chip isn't adopting: '' is the *first* chip's own
     // value, so an empty data-color here would light up two chips at once on a fresh card.
-    if (adopt) custom.dataset.color = active; else delete custom.dataset.color;
+    if (adopt) {
+      custom.dataset.color = active;
+    } else {
+      delete custom.dataset.color;
+    }
     custom.style.setProperty('--sw', adopt ? active : CUSTOM_FALLBACK);
     custom.classList.toggle('picked', adopt);   // .picked shows the colour; otherwise a spectrum chip
     const input = custom.querySelector<HTMLInputElement>('input');
     // The sheet should open on whatever colour is showing, recent chip or not — that's the one
     // you'd want to nudge — falling back to the neutral start only when there's no custom colour.
-    if (input) input.value = isHexColor(active) ? active : CUSTOM_FALLBACK;
+    if (input) {
+      input.value = isHexColor(active) ? active : CUSTOM_FALLBACK;
+    }
   }
   colors.querySelectorAll<HTMLElement>('.swatch').forEach(sw =>
     sw.classList.toggle('active', sw.dataset.color === active));
@@ -103,15 +111,24 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
     // custom chip is excluded: its click OPENS the native sheet (the <label>'s job) and picks nothing.
     els.colors.addEventListener('click', (e) => {
       const sw = (e.target as HTMLElement).closest<HTMLElement>('.swatch');
-      if (!sw || sw.classList.contains('custom')) return;
+      if (!sw || sw.classList.contains('custom')) {
+        return;
+      }
       setColor(sw.dataset.color ?? '');
     });
     bindCustom(els.colors.querySelector<HTMLInputElement>('.swatch.custom input')!);
   }
   function renderRecents(): void { renderRecentChips(els.colors); }
   function setColor(color: string): void {
-    const ids = editableIds(); if (!ids.length) return;
-    record(ids, () => { for (const id of ids) applyColor(id, color); });
+    const ids = editableIds();
+    if (!ids.length) {
+      return;
+    }
+    record(ids, () => {
+      for (const id of ids) {
+        applyColor(id, color);
+      }
+    });
     // Deliberately here and not in applyColor: this is the COMMIT path (a chip click, or the native
     // sheet's `change`), while applyColor also runs per `input` event during a live drag — remembering
     // there would bury the real picks under a drag's worth of intermediate colours.
@@ -133,16 +150,27 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
   function bindCustom(input: HTMLInputElement): void {
     let before: Map<string, string> | null = null;
     input.addEventListener('input', () => {
-      const ids = editableIds(); if (!ids.length) return;
-      if (!before) before = new Map(ids.map(id => [id, state.nodes.get(id)?.color ?? '']));
-      for (const id of ids) applyColor(id, input.value);
+      const ids = editableIds();
+      if (!ids.length) {
+        return;
+      }
+      if (!before) {
+        before = new Map(ids.map(id => [id, state.nodes.get(id)?.color ?? '']));
+      }
+      for (const id of ids) {
+        applyColor(id, input.value);
+      }
       markSwatch();
       paintAll();
     });
     input.addEventListener('change', () => {
-      if (!before) return;
+      if (!before) {
+        return;
+      }
       const prev = before; before = null;
-      for (const [id, color] of prev) applyColor(id, color);   // rewind, so `record` sees the real before-image
+      for (const [id, color] of prev) {
+        applyColor(id, color);   // rewind, so `record` sees the real before-image
+      }
       setColor(input.value);
     });
   }

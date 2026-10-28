@@ -32,10 +32,14 @@ export function textTags(md: string): string[] {
   for (const line of md.split('\n')) {
     const f = line.match(/^(```|~~~)/);
     if (f) { fence = fence ? (line.startsWith(fence) ? '' : fence) : f[1]; continue; }
-    if (fence || !line.includes('#')) continue;
+    if (fence || !line.includes('#')) {
+      continue;
+    }
     for (const m of line.replace(/`[^`]*`/g, '').matchAll(INLINE_TAG)) {
       const t = m[2].replace(/\/+$/, '');
-      if (valid(t)) out.push(t);
+      if (valid(t)) {
+        out.push(t);
+      }
     }
   }
   return uniqueTags(out);
@@ -65,7 +69,9 @@ export function isEmojiTag(t: string): boolean {
 const TILTS = [-8, -5, -3, 3, 5, 7];
 export function tagTilt(t: string): number {
   let h = 0;
-  for (const c of t) h = (h * 31 + c.codePointAt(0)!) | 0;
+  for (const c of t) {
+    h = (h * 31 + c.codePointAt(0)!) | 0;
+  }
   return TILTS[Math.abs(h) % TILTS.length];
 }
 
@@ -78,7 +84,9 @@ const fromText = new WeakMap<Tagged, { src: string; tags: string[] }>();
 export function noteTags(n: Tagged): ShownTag[] {
   const src = n.title + '\n' + n.body;
   let c = fromText.get(n);
-  if (!c || c.src !== src) fromText.set(n, c = { src, tags: src.includes('#') ? textTags(src) : [] });
+  if (!c || c.src !== src) {
+    fromText.set(n, c = { src, tags: src.includes('#') ? textTags(src) : [] });
+  }
   const own = new Set(n.tags.map(tagKey));
   return [...n.tags.map(tag => ({ tag, inText: false })),
     ...c.tags.filter(t => !own.has(tagKey(t))).map(tag => ({ tag, inText: true }))];

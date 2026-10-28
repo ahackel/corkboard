@@ -43,4 +43,7 @@ export default tseslint.config(
   // Tool configs are consumed as default exports.
   { files: ['vite.config.js', 'playwright.config.ts', 'eslint.config.js'], rules: { 'import-x/no-default-export': 'off' } },
   prettier,
+
+  // House style: every if/else/loop body is a braced block. After `prettier`, which switches `curly` off.
+  { files: ['**/*.{ts,js}'], rules: { curly: ['error', 'all'] } },
 );

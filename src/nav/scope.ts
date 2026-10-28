@@ -57,9 +57,14 @@ export const canEnter = (n: MindNode | null | undefined): boolean => canOpen(n) 
 // fuses this with the collapse walk so the paint path only walks the ancestors once.
 export function outOfScope(n: MindNode): boolean {
   const id = scope.rootId;
-  if (id === null) return false;
-  for (let p = n.parent ? state.nodes.get(n.parent) : undefined; p; p = p.parent ? state.nodes.get(p.parent) : undefined)
-    if (p.id === id) return false;
+  if (id === null) {
+    return false;
+  }
+  for (let p = n.parent ? state.nodes.get(n.parent) : undefined; p; p = p.parent ? state.nodes.get(p.parent) : undefined) {
+    if (p.id === id) {
+      return false;
+    }
+  }
   return true;   // never reached the open frame
 }
 
@@ -83,8 +88,11 @@ export function detachParentId(): string | null { return scope.rootId; }
 // from the ⋯ menu still shows `Map › A › B › C` rather than `Map › C`.
 export function openPathTo(t: MindNode): MindNode[] {
   const out: MindNode[] = [];
-  for (let p = t.parent ? state.nodes.get(t.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null)
-    if (canOpen(p)) out.push(p);
+  for (let p = t.parent ? state.nodes.get(t.parent) : null; p; p = p.parent ? state.nodes.get(p.parent) : null) {
+    if (canOpen(p)) {
+      out.push(p);
+    }
+  }
   return out.reverse();
 }
 
@@ -97,13 +105,21 @@ export function openPathTo(t: MindNode): MindNode[] {
 // Deliberately NOT cleared outright the way the undo history is: a background refocus reload must not
 // kick you out of the frame you're working in.
 export function resolveScopeAfterLoad(): void {
-  if (!scope.stack.length) return;
+  if (!scope.stack.length) {
+    return;
+  }
   const byFile = new Map<string, MindNode>();
-  for (const n of state.nodes.values()) if (n.file) byFile.set(n.file, n);
+  for (const n of state.nodes.values()) {
+    if (n.file) {
+      byFile.set(n.file, n);
+    }
+  }
   const next: ScopeLevel[] = [];
   for (const l of scope.stack) {
     const n = l.file ? byFile.get(l.file) : undefined;
-    if (!n || !canOpen(n)) break;
+    if (!n || !canOpen(n)) {
+      break;
+    }
     next.push({ rootId: n.id, file: l.file, rect: l.rect, back: null });
   }
   scope.stack = next;
@@ -117,7 +133,9 @@ export function resolveScopeAfterLoad(): void {
 // to syncScopeChrome, since it needs the camera. Returns whether anything was dropped.
 export function pruneScope(): boolean {
   const cut = scope.stack.findIndex(l => { const n = state.nodes.get(l.rootId); return !n || !canOpen(n); });
-  if (cut < 0) return false;
+  if (cut < 0) {
+    return false;
+  }
   scope.stack.length = cut;
   scope.rootId = scope.stack[scope.stack.length - 1]?.rootId ?? null;
   scope.pruned = true;

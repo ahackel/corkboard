@@ -46,13 +46,19 @@ export function peekCard(cardEl: HTMLElement): void {
 }
 function show(cardEl: HTMLElement): void {
   const n = state.nodes.get(cardEl.dataset.id ?? '');
-  if (!n || !n.collapsed || n.type === 'frame' || busy() || !cardEl.isConnected) return;   // a folded frame's pill is a count, not a note
+  if (!n || !n.collapsed || n.type === 'frame' || busy() || !cardEl.isConnected) {
+    return;   // a folded frame's pill is a count, not a note
+  }
   showing = n.id;
   // the card's own colour: its palette class, or a custom colour's variables
   panel.className = 'node open ' + [...cardEl.classList].filter(c => c.startsWith('c-')).join(' ');
   for (const v of ['--card', '--ink', '--scrim']) {
     const val = cardEl.style.getPropertyValue(v);
-    if (val) panel.style.setProperty(v, val); else panel.style.removeProperty(v);
+    if (val) {
+      panel.style.setProperty(v, val);
+    } else {
+      panel.style.removeProperty(v);
+    }
   }
   panelBody.innerHTML = renderBodyHTML(joinHeading(n.title, n.body, n.titleGap !== false));
   hydrateImages(panelBody);
@@ -66,30 +72,44 @@ function show(cardEl: HTMLElement): void {
 
 export function installPeek(): void {
   world.addEventListener('pointerover', (e: PointerEvent) => {
-    if (e.pointerType !== 'mouse') return;
+    if (e.pointerType !== 'mouse') {
+      return;
+    }
     const el = (e.target as Element).closest<HTMLElement>('.node.collapsed[data-id]');
-    if (!el || el.dataset.id === showing) return;
+    if (!el || el.dataset.id === showing) {
+      return;
+    }
     hidePeek();
     timer = window.setTimeout(() => { timer = null; show(el); }, PEEK_DELAY);
   });
   world.addEventListener('pointerout', (e: PointerEvent) => {
     const to = e.relatedTarget as Node | null;
     const from = (e.target as Element).closest('.node[data-id]');
-    if (to && (panel.contains(to) || (from && from.contains(to)))) return;   // still on the card, or onto the panel
+    if (to && (panel.contains(to) || (from && from.contains(to)))) {
+      return;   // still on the card, or onto the panel
+    }
     hidePeek();
   });
   panel.addEventListener('pointerleave', (e: PointerEvent) => {
     const to = e.relatedTarget as Element | null;
-    if (to?.closest?.(`.node[data-id="${showing}"]`)) return;   // back onto its card
+    if (to?.closest?.(`.node[data-id="${showing}"]`)) {
+      return;   // back onto its card
+    }
     hidePeek();
   });
   // anything that acts on the board puts it away
   // (not a press on "N more lines": that one toggles it itself, in peekCard)
   document.addEventListener('pointerdown', (e) => {
     const t = e.target as Element;
-    if (!panel.contains(t) && !t.closest?.('.fold-more')) hidePeek();
+    if (!panel.contains(t) && !t.closest?.('.fold-more')) {
+      hidePeek();
+    }
   }, true);
   document.addEventListener('keydown', () => hidePeek(), true);
-  window.addEventListener('wheel', (e) => { if (!panel.contains(e.target as Node)) hidePeek(); }, { passive: true, capture: true });
+  window.addEventListener('wheel', (e) => {
+    if (!panel.contains(e.target as Node)) {
+      hidePeek();
+    }
+  }, { passive: true, capture: true });
   window.addEventListener('blur', hidePeek);
 }

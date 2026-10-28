@@ -30,7 +30,9 @@ export function commitRel(): void {
   for (const n of state.nodes.values()) {
     const p = parentOf(n);
     const rx = n.x - (p ? p.x : 0), ry = n.y - (p ? p.y : 0);
-    if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) n.dirtyLayout = true;
+    if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) {
+      n.dirtyLayout = true;
+    }
     n.rx = rx; n.ry = ry;
   }
 }
@@ -41,11 +43,17 @@ export function commitRel(): void {
 export function subtreeBox(node: MindNode){
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const walk = (n: MindNode): void => {
-    if (isHidden(n)) return;
+    if (isHidden(n)) {
+      return;
+    }
     x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y - frameLabelH(n));
     x1 = Math.max(x1, n.x + nodeW(n)); y1 = Math.max(y1, n.y + layoutH(n));
-    if (isFrame(n)) return;
-    for (const c of childrenOf(n.id)) walk(c);
+    if (isFrame(n)) {
+      return;
+    }
+    for (const c of childrenOf(n.id)) {
+      walk(c);
+    }
   };
   walk(node);
   return { x0, y0, x1, y1 };
@@ -70,14 +78,20 @@ export function containerBox(f: MindNode): { x: number; y: number; w: number; h:
   // …or, for the OPEN one (nav/scope.ts), the VIEWPORT — that's what gives its contents the whole
   // window instead of a rectangle on the canvas. A DERIVED override: f.w/f.h are neither read nor
   // written here, which is what lets the frame come back out at its authored size.
-  if (isScopeRoot(f)) return scopeRect();
+  if (isScopeRoot(f)) {
+    return scopeRect();
+  }
   return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
 }
 // Does this node live inside a frame (any frame ancestor)? Such nodes track their frame even while
 // HIDDEN, so a folded frame that moves doesn't leave its contents behind. Uses `type` (not isFrame)
 // so a COLLAPSED frame still counts.
 function insideFrame(node: MindNode): boolean {
-  for (const p of ancestors(node)) if (p.type === 'frame') return true;
+  for (const p of ancestors(node)) {
+    if (p.type === 'frame') {
+      return true;
+    }
+  }
   return false;
 }
 // The nearest ANCESTOR frame actually hosting `node` right now — the frame whose content wrapper
@@ -95,23 +109,31 @@ export function hostFrame(node: MindNode): MindNode | null {
 // The OPEN frame counts even FOLDED: it is the canvas, and its fold must not hand its cards to a frame
 // further up.
 function containerHost(node: MindNode): MindNode | null {
-  for (let p = parentOf(node); p; p = parentOf(p))
-    if (isFrame(p) || isScopeRoot(p)) return p;
+  for (let p = parentOf(node); p; p = parentOf(p)) {
+    if (isFrame(p) || isScopeRoot(p)) {
+      return p;
+    }
+  }
   return null;
 }
 // How many ancestors `node` has (0 for a root). Picks the INNERMOST of several nested, overlapping
 // frames — "deepest wins" in every frame hit-test (frameAt below, drag.ts innermostFrameAt).
 export function ancestorDepth(node: MindNode): number {
   let d = 0;
-  for (let p = parentOf(node); p; p = parentOf(p)) d++;
+  for (let p = parentOf(node); p; p = parentOf(p)) {
+    d++;
+  }
   return d;
 }
 // What would HOLD a new card asked to go "in" `id`: that node if it's a frame, else the frame the node
 // sits in — or null (the top level). Cards never hold cards; every create/paste path asks this, so a
 // card can't end up with children however the request was phrased.
 export function holderOf(id: string | null | undefined): string | null {
-  for (let n = id ? state.nodes.get(id) : undefined; n; n = parentOf(n) ?? undefined)
-    if (n.type === 'frame') return n.id;
+  for (let n = id ? state.nodes.get(id) : undefined; n; n = parentOf(n) ?? undefined) {
+    if (n.type === 'frame') {
+      return n.id;
+    }
+  }
   return null;
 }
 // The innermost expanded, visible, UNLOCKED frame whose box contains the world point (x,y), skipping
@@ -127,9 +149,13 @@ export function collectsCards(m: MindNode): boolean {
 export function frameAt(x: number, y: number, skip: Set<string>): MindNode | null {
   let best: MindNode | null = null, bestDepth = -1;
   for (const m of state.nodes.values()) {
-    if (skip.has(m.id) || !collectsCards(m)) continue;
+    if (skip.has(m.id) || !collectsCards(m)) {
+      continue;
+    }
     const b = containerBox(m);
-    if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) continue;
+    if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) {
+      continue;
+    }
     const d = ancestorDepth(m);
     if (d > bestDepth) { bestDepth = d; best = m; }
   }
@@ -140,7 +166,9 @@ export function frameAt(x: number, y: number, skip: Set<string>): MindNode | nul
 // two containment mechanisms stay pixel-identical by construction.
 export function frameInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
   // The OPEN frame's interior IS the viewport, with no border and no tab to inset from.
-  if (isScopeRoot(f)) return scopeRect();
+  if (isScopeRoot(f)) {
+    return scopeRect();
+  }
   return {
     x: f.x + FRAME_BORDER, y: f.y + FRAME_BORDER,
     w: Math.max(0, nodeW(f) - FRAME_BORDER * 2),
@@ -154,7 +182,9 @@ export function frameLabelled(f: MindNode): boolean { return !!(f.title.trim() |
 // height plus its 7px gap (styles.css `.node.frame > .title-row`), or a one-line pill's before paint.
 export const FRAME_LABEL_GAP = 7;
 export function frameLabelH(f: MindNode): number {
-  if (!isFrame(f) || !frameLabelled(f)) return 0;
+  if (!isFrame(f) || !frameLabelled(f)) {
+    return 0;
+  }
   const row = f.el?.querySelector(':scope > .title-row') as HTMLElement | null;
   return (row?.offsetHeight || 28) + FRAME_LABEL_GAP;
 }
@@ -166,7 +196,9 @@ export function frameDescription(f: MindNode): string { return f.title.trim() ? 
 // the same centre frameAt is asked about on drop.
 export function centreInFrame(child: MindNode, frame: MindNode): boolean {
   // The OPEN frame's interior is the whole canvas, so its children can never leave it.
-  if (isScopeRoot(frame)) return true;
+  if (isScopeRoot(frame)) {
+    return true;
+  }
   const cx = child.x + nodeW(child)/2, cy = child.y + nodeH(child)/2;
   const b = containerBox(frame);
   return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
@@ -176,10 +208,17 @@ export function centreInFrame(child: MindNode, frame: MindNode): boolean {
 export function moveSubtreeTo(node: MindNode, x: number, y: number): void {
   const dx = x - node.x, dy = y - node.y;
   // Saved positions are integers; ignore sub-pixel nudges so nothing is rewritten for nothing.
-  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
+  if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+    return;
+  }
   for (const id of subtreeIds(node.id)){
-    const n = state.nodes.get(id); if (!n) continue;
-    if (isHidden(n) && !insideFrame(n)) continue;
+    const n = state.nodes.get(id);
+    if (!n) {
+      continue;
+    }
+    if (isHidden(n) && !insideFrame(n)) {
+      continue;
+    }
     n.x += dx; n.y += dy; n.dirtyLayout = true;
   }
 }
@@ -198,7 +237,9 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
   let order = (node.kidOrder || []).filter(id => have.has(id));   // drop removed children
   const known = new Set(order);
   const fresh = kids.filter(k => !known.has(k.id));                // new children → append in reading order
-  if (fresh.length) order = order.concat(readingOrder(fresh));
+  if (fresh.length) {
+    order = order.concat(readingOrder(fresh));
+  }
   node.kidOrder = order;
   const rank = new Map(order.map((id,i)=>[id,i]));
   return kids.slice().sort((a,b)=>rank.get(a.id)! - rank.get(b.id)!);

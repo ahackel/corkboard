@@ -10,7 +10,9 @@ async function seedFolder(page: Page, files: Record<string, string>): Promise<vo
     for (const [path, text] of Object.entries(files)) {
       const parts = path.split('/');
       let d = root;
-      for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p, { create: true });
+      for (const p of parts.slice(0, -1)) {
+        d = await d.getDirectoryHandle(p, { create: true });
+      }
       const w = await (await d.getFileHandle(parts[parts.length - 1]!, { create: true })).createWritable();
       await w.write(text); await w.close();
     }
