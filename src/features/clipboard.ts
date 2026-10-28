@@ -17,7 +17,7 @@
 // (features/attachments.ts).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { nodesOf, outermost } from '../utils/model.js';
+import { nodesOf, outermost, isLockedEffective } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
@@ -138,6 +138,12 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   }
   const dx = target.x - (ax === Infinity ? target.x : ax) + 16;
   const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
+  const dest = holderOf(at.parent) ?? detachParentId();
+  const destNode = dest ? state.nodes.get(dest) : undefined;
+  if (destNode && isLockedEffective(destNode)) {
+    setStatus('Locked — can’t add a child');
+    return true;
+  }
   const rootIds: string[] = [];
   record([], () => {
     const holder = holderOf(at.parent);

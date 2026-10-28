@@ -62,3 +62,26 @@ test('a selected line shows its end handles above it, and its toolbar never cove
   const z = (sel: string) => page.locator(sel).evaluate(el => Number(getComputedStyle(el).zIndex));
   expect(await z('svg#toggles')).toBeGreaterThan(await z('svg#freeEdges'));
 });
+
+test('Esc on a line\'s label puts the old label back', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 300, 250, 'Source');
+  const b = await makeCard(page, 750, 500, 'Target');
+  await drawLine(page, a, 'right', b);
+  await clickAway(page);
+  const mid = await lines(page).first().evaluate(el => {
+    const path = el as SVGPathElement;
+    const p = path.getPointAtLength(path.getTotalLength() / 2).matrixTransform(path.getScreenCTM()!);
+    return { x: p.x, y: p.y };
+  });
+  const editLabel = async (text: string, key: string): Promise<void> => {
+    await page.mouse.dblclick(mid.x, mid.y);
+    await expect(page.locator('#ebLabelEdit')).toBeFocused();
+    await page.keyboard.type(text);
+    await page.keyboard.press(key);
+  };
+  await editLabel('kept', 'Enter');
+  await expect(page.locator('#freeEdges .fe-label')).toHaveText('kept');
+  await editLabel('dropped', 'Escape');
+  await expect(page.locator('#freeEdges .fe-label')).toHaveText('kept');
+});

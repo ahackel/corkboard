@@ -514,22 +514,44 @@ function canPromoteDelete(id: string): boolean {
 // (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
 // position, so nothing needs doing here. Shared by ⌥Delete/⌥Backspace and the ⋯ menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = selectedIds().filter(canPromoteDelete);
-  if (!ids.length) { setStatus('Locked — can’t delete'); return; }
-  if (afterReading(ids, deleteSelectionKeepChildren, false)) return;   // the children it keeps must exist
+  if (!ids.length) {
+    setStatus('Locked — can’t delete');
+    return;
+  }
+  if (afterReading(ids, deleteSelectionKeepChildren, false)) {
+    return;   // the children it keeps must exist
+  }
   const promoted = new Set<string>();
   record([], () => {
     for (const id of ids) {
-      const n = state.nodes.get(id); if (!n) continue;
+      const n = state.nodes.get(id);
+      if (!n) {
+        continue;
+      }
       const kids = childrenOf(id);
       touch(id, ...kids.map(k => k.id));
-      for (const k of kids) { k.parent = n.parent; k.dirty = true; promoted.add(k.id); }
-      state.nodes.delete(id); n.el?.remove();
-      if (n.file) state.toDelete.push(n.file);
+      for (const k of kids) {
+        k.parent = n.parent;
+        k.dirty = true;
+        promoted.add(k.id);
+      }
+
+      // the kept cards sit in the wrapper, and the next paint moves them out of it
+      state.nodes.delete(id);
+      n.el?.remove();
+      n.frameContentEl?.remove();
+      if (n.file) {
+        state.toDelete.push(n.file);
+      }
     }
   });
-  for (const id of ids) promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
+  for (const id of ids) {
+    promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
+  }
   relayout();
   setSelectionSet(promoted);
   scheduleSave();
@@ -565,11 +587,16 @@ export function extractImage(sourceId: string, path: string, alt: string,
   } else {
     // untitled: the note is the picture and nothing else, which is what makes it render as one
     // (core/state.ts isImageCard). The alt rides along in the markdown and names the file.
-    const n = mkNode({ x: target.x, y: target.y, parent: null, title: '',
+    const into = frameAt(target.x + target.w / 2, target.y + target.h / 2, new Set());
+    const n = mkNode({ x: target.x, y: target.y, parent: into?.id ?? detachParentId(), title: '',
       body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
+    relayout();
+    growFramesToHold([n.id]);
     setStatus('Image extracted');
   }
-  relayout(); scheduleSave(); commitStep();
+  relayout();
+  scheduleSave();
+  commitStep();
 }
