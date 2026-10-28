@@ -154,7 +154,7 @@ export interface AppState {
   gridSize: GridSize;               // pattern cell size in world px — restored per-map from settings.json
   // The MAP's own canvas colour — a colour VALUE like a node's (a palette key or an authored hex,
   // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
-  // open frame the canvas wears that frame's fill instead. See main.ts's canvasFill, the one resolver.
+  // open frame the canvas wears that frame's fill instead. See features/canvas-color.ts's canvasFill, the one resolver.
   canvasColor: string;
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching

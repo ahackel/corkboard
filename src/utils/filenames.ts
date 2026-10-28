@@ -1,6 +1,6 @@
 // ============================================================
 // A note's FILENAME: the slug its text gives it, the collision rule, and the [[wikilink]] fixup a
-// rename drags along. Pure — no state, no store — so data/persistence.ts saveAll can lean on it and
+// rename drags along. Pure — no state, no store — so data/save.ts saveAll can lean on it and
 // the tests (tests/filenames.test.ts) can pin it down without a DOM.
 // ============================================================
 import type { MindNode } from '../core/state.js';

@@ -69,7 +69,7 @@ export function setNoteText(n: MindNode, text: string): void {
 
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
 // this, and it survives in two places for that reason: the one-shot migration of a body-less note
-// (data/persistence.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).
+// (data/load.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).
 export function fileStem(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
 }
@@ -165,7 +165,7 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // `mm_type` (card|frame, default card) is the current field. Everything older folds onto those two:
 //  · `image`, `stack`, `query`, `annotation` → card. Each was a kind once and was cut or derived away;
 //    an old note simply opens as a card. A stack's children are turned into a frame's on load
-//    (data/persistence.ts foldCardsIntoFrames), like any card's.
+//    (data/migrate.ts foldCardsIntoFrames), like any card's.
 //  · LEGACY notes with no mm_type: a single `mm_layout` token conflated kind and arrangement —
 //    `frame`/`frame-h`/`frame-v` → frame, anything else → card.
 // `mm_layout` is no longer READ for anything else: a frame's children sit where you put them (the

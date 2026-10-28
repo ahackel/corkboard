@@ -344,7 +344,7 @@ fbMore.addEventListener('click', (e) => {
 const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
 
 // Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
-// desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (main.ts navArrow): you can only stand
+// desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (features/commands.ts navArrow): you can only stand
 // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
 // kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });

@@ -22,7 +22,7 @@ export const BOARD_FILE = 'board.json';
 // The MODEL the board was last written by, which is how the flatten migration knows a map predates
 // containment. 1 (or a missing board file) = a map whose card-to-card `mm_parent` links meant
 // "placed BESIDE this card, joined by a branch line"; 2 = they mean "inside it, as outline rows".
-// data/persistence.ts flattenLegacyBranches converts the first into the second, once, and the write
+// data/migrate.ts flattenLegacyBranches converts the first into the second, once, and the write
 // that follows stamps this. Bump it only for another migration of the same kind.
 const BOARD_MODEL = 2;
 let loadedModel = BOARD_MODEL;

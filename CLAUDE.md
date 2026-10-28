@@ -32,16 +32,16 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
-- `data/` — `persistence.ts` (the active `store` + `useStore`, debounced autosave `scheduleSave`/
-  `flushSave`, `loadFromDir`/`readFolder`, zip import/export) `board.ts` (the ONE sidecar), `lazy.ts` (when a folded frame is read / let go), `save-alert.ts` (the only UI here).
-- `view/` — `camera.ts`, `layout.ts` (frame geometry, the drop test `frameAt`, `holderOf`), `free-edges.ts`, `grid.ts`, `icons.ts`.
-- `nav/` — where you ARE, not what the map is: `url-state.ts` (the hash), `scope.ts` (open frames).
-- `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud,
-  text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
-  `palette.ts` is ⌘P, the ONLY list of every action (no toolbar) — add a new action to `paletteCommands` (main.ts).
+- `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
+  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded frames), `save-alert.ts`.
+- `view/` — `camera.ts`, `layout.ts` (frame geometry, the drop test `frameAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
+  grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
+- `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open frames), `frames.ts` (opening/leaving), `focus.ts`.
+- `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
+  resize, text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
+  `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
-- `main.ts` — entry: the render core (`paintNode`/`paintAll`/`effectiveColor`), selection, read-only
-  mode, global keyboard wiring and the palette's command list. Its `main`↔feature cycles are deliberate and runtime-only.
+- `main.ts` — entry + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`); its `main`↔feature cycles are runtime-only.
 
 ## Non-negotiable invariants
 

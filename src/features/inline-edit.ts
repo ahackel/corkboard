@@ -81,7 +81,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // in the tab: the next paint sees a matching key and skips the re-render. Same reason startCardEdit
   // clears the body's.
   delete titleEl.dataset.md;
-  // An UNNAMED frame draws no tab (main.ts frameLabelled) — reveal the row for the duration, or the
+  // An UNNAMED frame draws no tab (view/layout.ts frameLabelled) — reveal the row for the duration, or the
   // editor would open on a display:none element and swallow every keystroke. paintNode keeps it revealed
   // while ui.titleEdit points here, and hides it again after the commit if nothing was typed.
   n.el.classList.remove('no-title');

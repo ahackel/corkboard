@@ -1,6 +1,6 @@
 // ---------- the canvas colour button (#canvasColorBtn, bottom-right beside the grid controls) ----------
 // ONE button meaning "the colour of the canvas I'm standing on". What that IS depends on where you
-// are, and main.ts's canvasOwner is the single place that decides:
+// are, and features/canvas-color.ts's canvasOwner is the single place that decides:
 //   · at the TOP level there's no frame, so it edits the MAP's own colour — state.canvasColor,
 //     per-map in settings.json beside the grid, so it travels with the vault rather than the browser.
 //   · inside an OPEN frame the canvas already IS that frame's interior and wears its fill, so the
@@ -60,7 +60,7 @@ function applyColor(color: string): void {
 }
 // Repainting a frame means repainting the cards that INHERIT from it, so the whole scope. The map's
 // own colour reaches the background — and the free edges' LABELS, whose ink is derived from the fill
-// they sit on (view/free-edges.ts, main.ts canvasSurface), so a label left unpainted keeps ink chosen
+// they sit on (view/free-edges.ts, features/canvas-color.ts canvasSurface), so a label left unpainted keeps ink chosen
 // against the colour the canvas used to be. Still not paintAll: those two are the whole of what a map
 // colour touches, and this runs once per pointer move over the native colour sheet.
 function repaint(): void {

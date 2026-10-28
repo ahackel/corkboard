@@ -47,7 +47,7 @@ const NEW_CARD_H = 64;
 // container) lands the card under the pointer rather than hanging down-right of it, so the default
 // card's size is written once instead of once per gesture.
 // Where a card goes when it is placed AT a point — the pointer, usually. Centred on that point and then
-// put on the grid (main.ts snapPt), which is the one funnel every interactive create runs through: the
+// put on the grid (view/geometry.ts snapPt), which is the one funnel every interactive create runs through: the
 // canvas double-click, Space/N, both "New card here" menus, a dropped image, a dragged-out selection. A
 // card the user positions is on the grid whether it was placed or dragged there.
 export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }); }

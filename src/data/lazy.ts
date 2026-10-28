@@ -4,11 +4,11 @@
 // frame carries only how many there are (MindNode.lazy). This module is the POLICY around that:
 //   · what has to READ a folder first — unfolding, opening, deleting, copying, exporting, a link into it
 //     (afterReading / readAll / revealPath); a save that moves a folded frame reads it itself
-//     (persistence.ts saveAll, phase 0);
+//     (data/save.ts saveAll, phase 0);
 //   · and when a folded frame LETS GO of what it read again (releaseFolded): once every note under it
 //     is safely on disk and nothing — the selection, the undo history, a search result, the frame
 //     you are standing in — can still reach one of them.
-// The mechanism (turning a listing into nodes) is persistence.ts readFolder's.
+// The mechanism (turning a listing into nodes) is data/load.ts readFolder's.
 // ============================================================
 import { state, type MindNode } from '../core/state.js';
 import { store } from './persistence.js';

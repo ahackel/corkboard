@@ -129,7 +129,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const byName = new Map(cards.map(c => [c.name, c]));
   const isPayloadRoot = (c: { p: ParsedNote }): boolean => !c.p.mm.parent || !byName.has(c.p.mm.parent);
   // anchor the payload roots' top-left at the target point (+ a nudge off the source)
-  // On the grid (main.ts snapPt), like every other card the user places: the payload keeps its own
+  // On the grid (view/geometry.ts snapPt), like every other card the user places: the payload keeps its own
   // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
   const target = snapPt(worldAtOrCentre(at.sx, at.sy));
   let ax = Infinity, ay = Infinity;

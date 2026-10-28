@@ -156,7 +156,7 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
       x: p.x - w / 2 + i * 24, y: p.y - h / 2 + i * 24,
       // UNTITLED, deliberately: a card whose whole note is one image IS that image (core/state.ts
       // isImageCard), and a title would both draw a row over the picture and end image mode. The alt
-      // still names the FILE — data/persistence.ts slugStem reads it straight off the markdown.
+      // still names the FILE — utils/filenames.ts slugStem reads it straight off the markdown.
       parent, title: '', body: `![${alt}](${path})`,
       color: 'none', w, h, edit: false,
     });
