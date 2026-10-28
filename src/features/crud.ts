@@ -39,6 +39,9 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
     ...fields,
   };
 }
+// A new card is a square yellow sticky (amber is the sticky pastel) — written, not inherited, so one made
+// inside a coloured section is still yellow. Every interactive create spreads it: createNode, the dock's ghost.
+const NEW_CARD = { color: 'amber', h: NODE_W };
 // A pasted list's first-guess row height, before each card has an element to measure (layoutH's own
 // fallback is the same number); createCards restacks from the measured heights.
 const NEW_CARD_H = 64;
@@ -87,11 +90,10 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     // where the minted "New Card 1" used to come from: it existed only so the
     // node had a unique filename, which is no longer the title's job.
     title: opts.title ?? '',
-    // A new card is a square yellow sticky (amber is the sticky pastel); a section keeps its own look.
-    color: opts.color ?? (isCard ? 'amber' : ''),
+    color: opts.color ?? (isCard ? NEW_CARD.color : ''),
     tags: opts.tags ? [...opts.tags] : [], body: opts.body ?? '',
     type: opts.type ?? 'card',
-    w: opts.w, h: opts.h ?? (isCard ? NODE_W : undefined),
+    w: opts.w, h: opts.h ?? (isCard ? NEW_CARD.h : undefined),
   });
   const id = n.id;
   state.nodes.set(id, n);
@@ -153,7 +155,7 @@ export function createDetachedNode(x: number, y: number): MindNode | undefined {
   }
   // …parented to the open section while there is one, so the ghost card rides the ordinary section-child
   // machinery instead of being dragged onto a canvas that can't show it.
-  const n = mkNode({ x, y, parent: detachParentId() });
+  const n = mkNode({ ...NEW_CARD, x, y, parent: detachParentId() });
   state.nodes.set(n.id, n);
   paintAll();   // give the card a DOM element so it can be dragged
   return n;
