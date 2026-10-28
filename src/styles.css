@@ -1283,12 +1283,12 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
 /* A DROPDOWN: every toolbar button that opens a menu or a popover — the colour dot, the line style, the
    ends, ⋯, the dock's canvas colour and grid — is its face followed by a small grey chevron, flat on
    the bar until hovered (FigJam's). One rule for both dark bars and the light dock. */
-#floatBar button.fb-dd, #edgeBar button.fb-dd { width:auto; gap:0; padding:0 6px 0 4px; background:transparent; color:var(--bar-ink); }
+#floatBar button.fb-dd, #edgeBar button.fb-dd { width:auto; gap:0; padding:0 8px 0 4px; background:transparent; color:var(--bar-ink); }
 #floatBar button.fb-dd:hover, #edgeBar button.fb-dd:hover { background:var(--bar-hover); }
-#dock .floating-btn.fb-dd { width:auto; gap:0; padding:0 6px 0 7px; }
+#dock .floating-btn.fb-dd { width:auto; gap:0; padding:0 8px 0 7px; }
 .fb-dd > svg, .fb-dd > .ic:not(.fb-chev) svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-#floatBar .fb-dd .fb-swatch, #edgeBar .fb-dd .fb-swatch { pointer-events:none; }
-.fb-chev { margin-left:3px; opacity:.6; }
+#floatBar .fb-dd .fb-swatch, #edgeBar .fb-dd .fb-swatch { pointer-events:none; margin-right:0; }
+.fb-chev { margin-left:6px; opacity:.6; }
 .fb-dd:hover .fb-chev { opacity:1; }
 .fb-chev svg { width:10px; height:10px; display:block; transform:rotate(90deg); }
 /* the fold button shows what a click would DO: chevrons closing while anything is open, opening once
