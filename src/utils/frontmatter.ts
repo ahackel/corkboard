@@ -69,7 +69,7 @@ export function setNoteText(n: MindNode, text: string): void {
 
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
 // this, and it survives in two places for that reason: the one-shot migration of a body-less note
-// (data/persistence.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).
+// (data/load.ts loadFromDir) and the last resort for SHOWING a name (utils/model.ts nodeLabel).
 export function fileStem(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1).replace(/\.md$/i, '');
 }
@@ -165,7 +165,7 @@ function fmRemove(entries: FmEntry[], key: string): void {
 // `mm_type` (card|frame, default card) is the current field. Everything older folds onto those two:
 //  · `image`, `stack`, `query`, `annotation` → card. Each was a kind once and was cut or derived away;
 //    an old note simply opens as a card. A stack's children are turned into a frame's on load
-//    (data/persistence.ts foldCardsIntoFrames), like any card's.
+//    (data/migrate.ts foldCardsIntoFrames), like any card's.
 //  · LEGACY notes with no mm_type: a single `mm_layout` token conflated kind and arrangement —
 //    `frame`/`frame-h`/`frame-v` → frame, anything else → card.
 // `mm_layout` is no longer READ for anything else: a frame's children sit where you put them (the
@@ -251,6 +251,40 @@ export function serializeMd(n: MindNode): string {
   // The title goes back where it lives: the body's leading heading (joinHeading — the exact inverse
   // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing, down to
   // whether the note's first line sits under a blank one).
-  const body = joinHeading(n.title, n.body, n.titleGap !== false);
+  const body = cardMarkdown(n);
   return `---\n${fm}\n---\n` + (body ? '\n' + body + '\n' : '\n');
+}
+
+// The markdown a node RENDERS — its whole note, title included.
+//
+// For a plain card that's `joinHeading(title, body)`: the title is the leading `# ` line of the text, and
+// putting it back means renderBodyHTML makes it an H1 the same way it makes `- item` a bullet. There is no
+// title element on a card any more, so this is the only place its name is drawn, and a card can't end up
+// showing its name in one typeface in the row and another in the note.
+// (An image card needs no arm of its own — it is untitled by definition, so joinHeading hands back the
+// picture markdown unchanged.)
+export function cardMarkdown(n: MindNode): string {
+  return joinHeading(n.title, n.body, n.titleGap !== false);
+}
+// …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
+// follows it. Still MARKDOWN, fed to the same renderer, which is the whole point — `# Name` folds to a
+// heading, `- milk` to a bullet, plain text to plain text, nothing restyled and nothing made bold.
+//
+// The `…` has to be put here rather than left to CSS, and the reason is a hard limit rather than a
+// preference: `text-overflow` and `-webkit-line-clamp` can only ellipsise WITHIN one element. The text
+// that a fold hides usually isn't in the same element — a heading followed by a paragraph, or several
+// short lines that markdown makes into separate `<p>`s, are SIBLING blocks, and hiding a sibling
+// truncates nothing the browser will mark. So CSS showed an ellipsis only when a single line happened to
+// be too wide, which is the one case that needed it least. CSS still handles exactly that case (see
+// styles.css) — this handles "there is more".
+export function collapsedMarkdown(n: MindNode): string {
+  const lines = cardMarkdown(n).split('\n');
+  const i = firstTextLine(lines);
+  return i < 0 ? '' : lines[i];
+}
+// How many non-blank lines a fold tucks away below the first one — the "N more lines" under it.
+export function hiddenLineCount(n: MindNode): number {
+  const lines = cardMarkdown(n).split('\n');
+  const i = firstTextLine(lines);
+  return i < 0 ? 0 : lines.slice(i + 1).filter(l => l.trim()).length;
 }

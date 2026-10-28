@@ -17,7 +17,7 @@
 // (features/attachments.ts).
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { nodesOf, outermost, isLockedEffective } from '../utils/model.js';
+import { nodesOf, outermost, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
@@ -28,9 +28,11 @@ import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { worldAtOrCentre } from '../view/camera.js';
-import { scheduleSave } from '../data/persistence.js';
 import { readAll, afterReading } from '../data/lazy.js';
-import { setSelectionSet, selectedIds, subtreeIds, snapPt, remeasure } from '../main.js';
+import { remeasure } from '../main.js';
+import { snapPt } from '../view/geometry.js';
+import { setSelectionSet, selectedIds } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or
@@ -127,7 +129,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
   const byName = new Map(cards.map(c => [c.name, c]));
   const isPayloadRoot = (c: { p: ParsedNote }): boolean => !c.p.mm.parent || !byName.has(c.p.mm.parent);
   // anchor the payload roots' top-left at the target point (+ a nudge off the source)
-  // On the grid (main.ts snapPt), like every other card the user places: the payload keeps its own
+  // On the grid (view/geometry.ts snapPt), like every other card the user places: the payload keeps its own
   // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
   const target = snapPt(worldAtOrCentre(at.sx, at.sy));
   let ax = Infinity, ay = Infinity;

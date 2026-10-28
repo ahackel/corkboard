@@ -6,7 +6,7 @@ import { state, world, type MindNode } from '../core/state.js';
 import { isHidden, parentOf } from '../utils/model.js';
 import { snapBox, snapEdges, type Box, type Snap, type Side } from '../utils/guides.js';
 import { screenToWorld } from '../view/camera.js';
-import { nodeW, nodeH } from '../main.js';
+import { nodeW, nodeH } from '../view/geometry.js';
 
 const TOL = 6;   // screen px: close enough to pull
 
@@ -57,7 +57,7 @@ export function guidePull(act: MindNode, roots: Array<{ n: MindNode; s: { x: num
   return { x: has('x') ? snap.dx : null, y: has('y') ? snap.dy : null };
 }
 
-// The pull for a box being RESIZED (main.ts startNodeResize): `box` is its live, unsnapped footprint
+// The pull for a box being RESIZED (features/resize.ts startNodeResize): `box` is its live, unsnapped footprint
 // and `edges` the edge dragged on each axis. Returns how far each dragged edge moves, or null on an axis
 // nothing pulls (the grid has it then) — the same contract as guidePull.
 export function guideResize(act: MindNode, box: Box, edges: { x?: Side; y?: Side }): { x: number | null; y: number | null } {

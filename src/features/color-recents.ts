@@ -1,5 +1,5 @@
 // ---------- recently-used custom colours ----------
-// The palette's 11 keys are fixed, but a custom colour (`color: "#ff8800"` — see main.ts's
+// The palette's 11 keys are fixed, but a custom colour (`color: "#ff8800"` — see view/color.ts's
 // colorClass/applyColorVars) is picked from the OS colour sheet and would otherwise be unrepeatable: no
 // chip to click a second time, and no way to give a sibling card the shade you chose a minute ago.
 //

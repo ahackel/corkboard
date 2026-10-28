@@ -15,10 +15,11 @@ import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges, commitStep } from './history.js';
 import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
-import { paintAll, nodeW, nodeH, snapPt } from '../main.js';
+import { paintAll } from '../main.js';
 import { createNode } from './crud.js';
 import { SPACING } from '../utils/guides.js';
 import { trackPointer } from '../utils/dom.js';
+import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
@@ -32,7 +33,7 @@ export function leadEdge(): BoardEdge | null {
   return last ? state.edges.find(e => e.id === last) ?? null : null;
 }
 // Selecting an edge clears the card selection and vice versa — see AppState.selEdges. `add` is the
-// ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (main.ts selectNode).
+// ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (features/selection.ts selectNode).
 function selectEdge(id: string | null, add = false): void {
   if (id == null) state.selEdges.clear();
   else if (!add) { state.selEdges.clear(); state.selEdges.add(id); }
@@ -240,7 +241,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   paintFreeEdges();
 }
 
-// Delete/Backspace with edges selected — handled before the card path in main.ts's key handler. All
+// Delete/Backspace with edges selected — handled before the card path in features/tag-tray.ts's key handler. All
 // of them go in ONE undo step: the selection was the unit the user acted on.
 export function deleteSelectedEdge(): boolean {
   const ids = [...state.selEdges];

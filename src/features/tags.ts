@@ -8,12 +8,12 @@
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { remeasure } from '../main.js';
 import { esc } from '../utils/markdown.js';
 import { isEmojiTag, tagKey, tagTilt, wearsTags, type ShownTag } from '../utils/tags.js';
 import { searchTags, toggleSearchTag } from './search.js';
 import { beginTagDrag } from './tag-drag.js';
+import { scheduleSave } from '../data/save.js';
 
 // How a tag is written for a person: an emoji as itself, a word with its `#`.
 export const tagText = (t: string): string => isEmojiTag(t) ? t : '#' + t;

@@ -13,27 +13,26 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { joinHeading, setNoteText, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
+import { cardMarkdown, setNoteText, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
-import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
-import { selectNode, relayout, remeasure, paintNode } from '../main.js';
+import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { extractToCard, discardNewCard } from './crud.js';
 import { growFramesToHold, syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
+import { selectNode } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
-// The text the editor holds: the note with its title back on the front as a heading — exactly the
-// file's own body (utils/frontmatter.ts joinHeading), which is what makes the editor a view of the
-// note rather than a form over two fields. `titleGap` rides along for the same reason: delete the
-// blank line under a heading and the editor must not put it back on the next open.
-const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.titleGap !== false);
+// The text the editor holds is the note with its title back on the front as a heading — exactly the
+// file's own body (utils/frontmatter.ts cardMarkdown), which makes the editor a view of the note rather
+// than a form over two fields.
 
 export function syncOpenEditor(n: MindNode): void {
   if (ui.bodyEdit?.id === n.id) {
-    ui.bodyEdit.ta.value = cardEditText(n);
+    ui.bodyEdit.ta.value = cardMarkdown(n);
   }
 }
 
@@ -73,7 +72,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
   // text for the duration. Otherwise the editor would show `Name` where the file says `# Name`, and
   // committing would write the rendered text back and silently strip the heading away.
-  const own = cardEditText(n);
+  const own = cardMarkdown(n);
   const raw = own.trim() ? own : seed ? '# ' + seed : own;
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
@@ -82,7 +81,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // in the tab: the next paint sees a matching key and skips the re-render. Same reason startCardEdit
   // clears the body's.
   delete titleEl.dataset.md;
-  // An UNNAMED frame draws no tab (main.ts frameLabelled) — reveal the row for the duration, or the
+  // An UNNAMED frame draws no tab (view/layout.ts frameLabelled) — reveal the row for the duration, or the
   // editor would open on a display:none element and swallow every keystroke. paintNode keeps it revealed
   // while ui.titleEdit points here, and hides it again after the commit if nothing was typed.
   n.el.classList.remove('no-title');
@@ -216,7 +215,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   // name writes markdown the user didn't type, and it had to be swept up again at commit when they
   // didn't want it. F2 on an untitled card puts the caret at the very start instead (caretIn), which is
   // where a `# ` would go if that's what they meant.
-  const text = cardEditText(n);
+  const text = cardMarkdown(n);
   // A double-click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
   const clicked = typeof caret === 'object' ? clickedOffset(bodyEl, text, caret) : null;
   ta.className = 'body-edit'; ta.spellcheck = false; ta.value = text;

@@ -4,15 +4,14 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
 import { stripImageRef, appendMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading, setNoteText } from '../utils/frontmatter.js';
 import { frameInterior, holderOf, frameAt } from '../view/layout.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
-import { scheduleSave } from '../data/persistence.js';
-import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
+import { paintAll, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING, slidePast } from '../utils/guides.js';
@@ -21,6 +20,9 @@ import { growFramesToHold } from './float-bar.js';
 import { settleFrames } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
+import { nodeH, nodeW, snapPt, NODE_W, FRAME_W, FRAME_H } from '../view/geometry.js';
+import { selectNode, setSelectionSet, applySelection, selectedIds } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -45,7 +47,7 @@ const NEW_CARD_H = 64;
 // container) lands the card under the pointer rather than hanging down-right of it, so the default
 // card's size is written once instead of once per gesture.
 // Where a card goes when it is placed AT a point — the pointer, usually. Centred on that point and then
-// put on the grid (main.ts snapPt), which is the one funnel every interactive create runs through: the
+// put on the grid (view/geometry.ts snapPt), which is the one funnel every interactive create runs through: the
 // canvas double-click, Space/N, both "New card here" menus, a dropped image, a dragged-out selection. A
 // card the user positions is on the grid whether it was placed or dragged there.
 export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }); }

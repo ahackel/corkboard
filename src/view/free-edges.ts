@@ -17,9 +17,11 @@ import { clamp } from '../utils/num.js';
 import { isHidden, firstVisible, resolveWikilink } from '../utils/model.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
-import { nodeW, nodeH, colorFill, canvasSurface } from '../main.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
+import { colorFill } from './color.js';
+import { nodeW, nodeH } from './geometry.js';
+import { canvasSurface } from '../features/canvas-color.js';
 
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.

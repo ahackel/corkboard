@@ -7,16 +7,16 @@
 //
 // nodeH/nodeW/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
 import { state, type MindNode } from '../core/state.js';
-import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective } from '../utils/model.js';
+import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
-import { subtreeIds, layoutH, nodeH, nodeW, FRAME_BORDER } from '../main.js';
+import { layoutH, nodeH, nodeW, FRAME_BORDER } from './geometry.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the drag engine
 // reads and mutates) and the PERSISTED form rx/ry (offset from the parent, world origin for a root —
 // what board.json stores). commitRel() derives the persisted form from the working form; it's the
 // only bridge, called just before every save (saveAll / exportZip). Load does the reverse — see
-// data/persistence.ts loadFromDir.
+// data/load.ts loadFromDir.
 // A node's persisted position is an OFFSET from its parent, so moving the PARENT restales every
 // child's stored position even though nothing about the child moved on screen — dragging a frame's
 // west edge (which shifts the frame's own x), or undoing such a resize, leaves each child's saved
@@ -186,7 +186,7 @@ export function moveSubtreeTo(node: MindNode, x: number, y: number): void {
 // A parent's child ORDER: STORED (board.json), seeded from reading order (top to bottom, then left to
 // right) the first time it's needed, and kept from then on. Nothing on the canvas depends on it — the
 // children sit where they were put — but the arrow keys walk siblings in it and the load migration
-// lays a former outline out in it (data/persistence.ts foldCardsIntoFrames).
+// lays a former outline out in it (data/migrate.ts foldCardsIntoFrames).
 function readingOrder(kids: MindNode[]): string[] {
   const tie = (n: MindNode) => n.file || n.title || n.id;
   return kids.slice()

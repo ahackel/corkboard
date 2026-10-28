@@ -8,19 +8,21 @@
 import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
 import { phoneMode } from './core/ui-state.js';
-import { isRoot, descendantCount } from './utils/model.js';
-import { store, currentMap, loadFromDir, loadFolder, exportZip, settleSave, switchToDeviceMap, updateMapTitle, openImportPicker } from './data/persistence.js';
+import { isRoot, descendantCount, subtreeIds } from './utils/model.js';
+import { store, currentMap, loadFolder, switchToDeviceMap, updateMapTitle } from './data/persistence.js';
 import {
   fsaStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
   readMaps, getLastMap, ensureMapRegistry, createDeviceMap, deleteDeviceMap, renameDeviceMap,
   type MapRef, type MapKind,
 } from './store/index.js';
 import { esc } from './utils/markdown.js';
-import { subtreeIds } from './main.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';
 import { byId } from './utils/dom.js';
+import { settleSave } from './data/save.js';
+import { exportZip, openImportPicker } from './data/zip-io.js';
+import { loadFromDir } from './data/load.js';
 
 // Chrome/Edge offer opening a real local folder (FSA); iPad/Firefox/Safari use on-device +
 // import/export. ?nofsa hides the folder option for testing the no-FSA layout on desktop.

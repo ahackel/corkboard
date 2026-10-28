@@ -9,11 +9,11 @@
 // A tag written in a note's TEXT can be dragged out as a copy, never moved or removed: it's the text's.
 // Under 4px of movement it was a click, and the chip's own click handler searches by the tag instead.
 import { state } from '../core/state.js';
-import { taggableSelection } from '../main.js';
 import { wearsTags } from '../utils/tags.js';
 import { retag, tagFaceHTML, type TagChange } from './tags.js';
 import { pushMru } from './tag-picker.js';
 import { classMarker, trackPointer } from '../utils/dom.js';
+import { taggableSelection } from './selection.js';
 
 const SLOP = 4;
 

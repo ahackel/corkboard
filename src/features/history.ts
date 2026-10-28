@@ -8,13 +8,16 @@
 // plain clicks, cancelled drags and unchanged edits never pollute the history.
 import { state, stage, setStatus, type MindNode, type BoardEdge } from '../core/state.js';
 import { frameBox } from '../view/camera.js';
-import { scheduleSave } from '../data/persistence.js';
 import { scheduleSaveBoard } from '../data/board.js';
-import { setSelectionSet, popScopeFor, nodeW, nodeH, remeasure } from '../main.js';
+import { remeasure } from '../main.js';
 import { endInPlaceEdit } from './inline-edit.js';
 import { syncEdgeBar } from './edge-bar.js';
 import { isScopeRoot } from '../nav/scope.js';
 import { nodesOf } from '../utils/model.js';
+import { nodeW, nodeH } from '../view/geometry.js';
+import { popScopeFor } from '../nav/frames.js';
+import { setSelectionSet } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
