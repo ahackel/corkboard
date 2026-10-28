@@ -212,9 +212,10 @@ function onSectionRim(n: MindNode, cx: number, cy: number): boolean {
 export function activateNode(n: MindNode, cx: number, cy: number, { open = false }: { open?: boolean } = {}): void {
   // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch, on a SECTION: go IN. The one navigating gesture
   // on a node, held apart from the editing ones by the modifier rather than by which PART of the section
-  // was hit. Ahead of the read-only bail on purpose, the same exemption openSection itself takes: looking
-  // inside something isn't changing it. A card has no inside, so on one it's a plain double-click.
-  if (open && canOpen(n)) { openSection(n); return; }
+  // was hit. A FOLDED section is a folder icon, so a plain double-click goes in too, as in Finder. Ahead of
+  // the read-only bail on purpose, the same exemption openSection itself takes: looking inside something
+  // isn't changing it. A card has no inside, so on one it's a plain double-click.
+  if ((open || n.collapsed) && canOpen(n)) { openSection(n); return; }
   // Read-only (a map the user has locked down): there is nothing to edit, so the
   // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
   // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
@@ -223,7 +224,7 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // a hit inside a DOM-nested child card can't be read as a hit on its host's title.
   const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
   // startInlineEdit is the single rename funnel: it refuses a locked node.
-  // A FOLDED card or section unfolds: the pill is a summary, and the double-click asks to see what's in it.
+  // A FOLDED card unfolds: the chip is a summary, and the double-click asks to see what's in it.
   if (n.collapsed) { toggleCollapse(n.id); return; }
   if (onTitle) { startInlineEdit(n); return; }
   // A section's own RIM edits its text — the chrome a section has that isn't its interior or its tab

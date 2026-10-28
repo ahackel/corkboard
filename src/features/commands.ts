@@ -22,7 +22,7 @@ import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { openImageAt } from '../main.js';
 import { inboxSection, goToInbox } from './inbox.js';
-import { canEnter } from '../nav/scope.js';
+import { canEnter, scopeActive } from '../nav/scope.js';
 import { openGridMenu } from '../view/grid.js';
 import { byId } from '../utils/dom.js';
 import { showStart } from '../boot.js';
@@ -46,7 +46,7 @@ function zoomStep(factor: number): void {
   zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
 }
 // ---------- arrow keys: go IN and OUT of sections, fold and unfold branches ----------
-//   ↑  open the selected section (nav/scope.ts)        ↓  leave the open one
+//   ⌘↓ open the selected section (nav/scope.ts)       ⌘↑ leave the open one — Finder's keys
 //   →  unfold                                        ←  fold
 // The four keys are about DEPTH, in the two senses this map has: which folder you're standing in,
 // and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
@@ -59,13 +59,13 @@ function zoomStep(factor: number): void {
 // and X do — a fold is something you do to cards, and there's no reason a keyboard fold should reach
 // fewer of them than a click does.
 function navArrow(key: string): void {
-  // ↓ reads the SCOPE, not the selection, so it still works right after clicking empty space to
+  // ⌘↑ reads the SCOPE, not the selection, so it still works right after clicking empty space to
   // deselect — which is exactly when you want to go back up. Inert at the top level, silently: a
   // status line there would nag on every repeat press.
-  if (key === 'ArrowDown') { exitScope(); return; }
+  if (key === 'ArrowUp') { exitScope(); return; }
   const n = state.selId ? state.nodes.get(state.selId) : null;
-  if (key === 'ArrowUp') {
-    // ↑ stays single: you can only stand in one place, so it acts on the anchor.
+  if (key === 'ArrowDown') {
+    // ⌘↓ stays single: you can only stand in one place, so it acts on the anchor.
     if (!n) { setStatus('Select a section to open it'); return; }
     openSection(n);          // reports its own refusal for the kinds that can't be opened
     return;
@@ -82,7 +82,7 @@ function navArrow(key: string): void {
 //  · Tab            → a new card inside the selected section
 //  · F2             → rename the selected node in place (also: double-click its title)
 //  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
-//  · ← → ↑ ↓        → ↑/↓ open/leave a section, →/← unfold/fold
+//  · ⌘↓ ⌘↑ → ←      → open/leave a section, unfold/fold
 //  · E              → edit the selected node's note/body in place (also: double-click the body)
 //  · #              → tag the selected cards (features/tag-picker.ts), or with none find by tag
 //  · ⌘F or /        → find, by text and #tags (features/search.ts); Esc ends a standing search first
@@ -172,9 +172,10 @@ window.addEventListener('keydown', (e) => {
   if (tidyShortcut(e)) {
     return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
   }
-  // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
-  // arrow combinations are left free for the browser and for later (extend-selection).
-  if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey){
+  // ⌘↓/⌘↑ go in and out, →/← unfold and fold (navArrow). Plain ↑/↓ and ⇧/⌥ arrows are left free for
+  // the browser and for later (extend-selection).
+  const vertical = key === 'ArrowUp' || key === 'ArrowDown';
+  if (key.startsWith('Arrow') && !e.shiftKey && !e.altKey && mod === vertical){
     e.preventDefault(); navArrow(key); return;
   }
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
@@ -294,8 +295,9 @@ function paletteCommands(): Command[] {
     { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'section', run: () => addCardInside(state.selId!) },
     { label: 'New section', keywords: 'group box section', when: editable, run: newSectionAtPointer },
     { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || editable(), run: goToInbox },
+    { label: 'Leave the section', shortcut: MOD + '↑', keywords: 'exit back up out parent', when: scopeActive, run: exitScope },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
-    { label: 'Open', shortcut: '↑', keywords: 'enter section', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
+    { label: 'Open', shortcut: MOD + '↓', keywords: 'enter section', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: hasSel, run: groupSelectionIntoSection },
     { label: 'Resize to fit', shortcut: '⌥⇧' + MOD + 'R', keywords: 'fit contents auto size shrink grow', when: hasSel, run: autoSizeSelection },

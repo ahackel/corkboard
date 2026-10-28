@@ -48,7 +48,8 @@ test('a folded section is not read until it unfolds, and lets go of its notes wh
   await expect(pill.locator('.section-count')).toHaveText('2');          // counted, not read
   await expect(page.locator('#world .node', { hasText: 'First inside' })).toHaveCount(0);
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);     // its line still meets the pill
-  await pill.dblclick();
+  await pill.click();
+  await page.keyboard.press('ArrowRight');                           // unfold
   await expect(card(page, 'First inside')).toBeVisible();
   await expect(card(page, 'Second inside')).toBeVisible();
   // fold it again: once saved, its notes leave memory (and the DOM) again
@@ -106,9 +107,9 @@ test('opening a folded section and leaving it again keeps it folded, where it wa
   const before = (await pill.boundingBox())!;
   const atRest = async () => { const b = (await pill.boundingBox())!; return [Math.round(b.x), Math.round(b.y)]; };
   await pill.click();
-  await page.keyboard.press('ArrowUp');                              // go in
+  await page.keyboard.press('ControlOrMeta+ArrowDown');             // go in
   await expect(card(page, 'First inside')).toBeVisible();
-  await page.keyboard.press('ArrowDown');                            // and out
+  await page.keyboard.press('ControlOrMeta+ArrowUp');               // and out
   await page.waitForTimeout(700);
   await expect(pill).toBeVisible();
   await expect(card(page, 'First inside')).toBeHidden();
@@ -120,10 +121,19 @@ test('opening a folded section and leaving it again keeps it folded, where it wa
   expect(errors).toEqual([]);
 });
 
-test('unfolding a section does not glide its cards: they appear where they sit', async ({ page }) => {
+test('a double-click on a folded section goes into it, like a folder in Finder', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, FOLDERS);
   await page.locator('#world .node.section-folded', { hasText: 'Box' }).dblclick();
+  await expect(page.locator('body')).toHaveClass(/scoped/);
+  await expect(card(page, 'First inside')).toBeVisible();
+});
+
+test('unfolding a section does not glide its cards: they appear where they sit', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, FOLDERS);
+  await page.locator('#world .node.section-folded', { hasText: 'Box' }).click();
+  await page.keyboard.press('ArrowRight');
   const one = card(page, 'First inside');
   await expect(one).toBeVisible();
   const early = (await one.boundingBox())!;                          // mid-animation
@@ -135,7 +145,8 @@ test('unfolding a section does not glide its cards: they appear where they sit',
 test('a section clips its cards all the way through an unfold', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, FOLDERS);
-  await page.locator('#world .node.section-folded', { hasText: 'Box' }).dblclick();
+  await page.locator('#world .node.section-folded', { hasText: 'Box' }).click();
+  await page.keyboard.press('ArrowRight');
   await expect(card(page, 'First inside')).toBeVisible();
   await page.waitForTimeout(120);                                    // mid-animation
   const [box, clip] = await page.evaluate(() => {

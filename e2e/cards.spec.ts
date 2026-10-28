@@ -85,7 +85,7 @@ test('a card is never opened: only a section has an inside', async ({ page }) =>
   const c = await makeCard(page, 400, 300, '# Note\nsome text');
   await select(page, c);
   await expect(page.locator('#fbOpen')).toBeHidden();
-  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ControlOrMeta+ArrowDown');
   await expect(page.locator('body')).not.toHaveClass(/scoped/);
   await expect(c).toBeVisible();
 });

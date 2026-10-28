@@ -43,7 +43,7 @@ test('inside an open section, a card dropped on the map crumb moves up to the to
   await openBoard(page);
   await seedBoard(page, BOARD);
   await section(page, 'Shelf').locator(':scope > .title-row').click();
-  await page.keyboard.press('ArrowUp');   // open it
+  await page.keyboard.press('ControlOrMeta+ArrowDown');   // open it
   await page.waitForTimeout(500);
   await dragOnto(page, card(page, 'Inner card'), page.locator('#folderName'));
   await expect(card(page, 'Inner card')).toBeHidden();   // it left the section you are in

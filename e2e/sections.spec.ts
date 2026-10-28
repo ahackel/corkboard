@@ -45,7 +45,7 @@ test('a section collects what it is moved over, and lets go when moved away', as
   expect(errors).toEqual([]);
 });
 
-test('a section folds to its label pill: its cards hide, its lines meet the pill, a double-click opens it', async ({ page }) => {
+test('a section folds to its label pill: its cards hide, its lines meet the pill, → unfolds it', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, BOARD);
@@ -70,7 +70,8 @@ test('a section folds to its label pill: its cards hide, its lines meet the pill
   await page.mouse.up();
   await reload(page);
   const again = page.locator('#world .node.section-folded', { hasText: 'Todo' });
-  await again.dblclick();
+  await again.click();
+  await page.keyboard.press('ArrowRight');                       // unfold
   await expect(section(page, 'Todo')).toBeVisible();
   await page.waitForTimeout(650);                                // the box grows back, animated
   const milk = (await card(page, 'Buy milk').boundingBox())!, box = (await section(page, 'Todo').boundingBox())!;

@@ -333,7 +333,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
                          : { label:'Edit', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
   }
   if (!multi && canOpen(n)) {
-    entries.push({ label:'Open', shortcut:'↑', run: () => openSection(n) });
+    entries.push({ label:'Open', shortcut:'⌘↓', run: () => openSection(n) });
   }
   if (!multi && canFold(n)) {
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });

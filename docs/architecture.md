@@ -276,8 +276,11 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   the section's own content origin, so the coordinates its contents already have stay meaningful.
 - **Double-click is still the way OUT, but no longer the way IN.** The empty canvas — which, once you're
   inside, is that same interior — leaves it (`features/gestures.ts`); at the top level there's nowhere to
-  leave to, so the canvas keeps its "new card here". Going in is ⌥-double-click / two-finger double-tap, `↑`,
-  the float bar's Open (`→]`) or `⋯ → Open`. The crumb path and `↓` are the other ways out.
+  leave to, so the canvas keeps its "new card here". Going in is ⌥-double-click / two-finger double-tap (a plain
+  one on a folded pill), `⌘↓`, the float bar's Open (`→]`) or `⋯ → Open`. The crumb path and `⌘↑` are the other
+  ways out. Going in or out does NOT glide the cards (`applyScope` ends in `remeasure`, not `animateLayout`):
+  played from where they were, they flew in from their ancestor and the canvas visibly built itself up. Only
+  the camera moves.
 - **Leaving pops every SYNTHESIZED level under you, not one crumb at a time.** A level with no `back` is
   one nobody stepped through (`setScopeStack` records a back only on the level you newly enter), so opening
   something three sections deep pushes those sections as crumbs — and leaving one at a time would walk you out
@@ -343,7 +346,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   visit that moved nothing moves nothing — and ⌘Z un-grows it without teleporting you between scopes. Allowed in
   read-only and on a LOCKED section (`activateTab`'s exemption: looking inside the box isn't changing it) —
   though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
-  `↑`, the float bar's Open and the right-click menu as the ways in.
+  `⌘↓`, the float bar's Open and the right-click menu as the ways in (and a folded pill's double-click).
 - **"No parent" means the OPEN SECTION** (`detachParentId`) — for `createNode`, `createDetachedNode`, a paste's
   payload roots, and a card dropped outside every section. A real root would land outside the scope and vanish.
 - **You can't drag a card out of the section you're in**: its interior is the whole canvas, so there's nowhere
@@ -359,7 +362,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   re-points the stack by FILE before the first layout — deliberately not cleared like the undo history, since a
   background refocus reload must not kick you out of the section you're working in.
 - **Only a SECTION opens** (`canOpen`, the one kind test — never widen it at a call site). A card has no inside:
-  it is read where it sits (or peeked, or in Obsidian). `↑`, the float bar's Open and `⋯ → Open` refuse a
+  it is read where it sits (or peeked, or in Obsidian). `⌘↓`, the float bar's Open and `⋯ → Open` refuse a
   card, and `⌥`-double-click on one is a plain double-click, i.e. it edits.
 
 **A CARD is never opened.** There used to be a reading view — a card opened as a 680px page, its own
@@ -667,12 +670,13 @@ Web Animations on width/height with the content clipped, a section's content wra
   that walks the canvas sees it. Tapping a folded card's badge (`peekCard`) opens it on any device — the touch
   way in, since touch has no hover. Cards only: a folded section's pill is a count, not a note.
 
-**A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — no plain
-double-click navigates any more, and that is one rule in place of a per-kind table. Editing is what the
+**A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — the one plain
+double-click that navigates is on a FOLDED section's pill, which goes in the way a folder icon in Finder does
+(even in read-only); otherwise it is one rule in place of a per-kind table. Editing is what the
 gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
 the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
 and only a section opens: on a card ⌥-double-click is a plain double-click. Its touch spelling is a TWO-FINGER
-double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `↑`, the float bar's
+double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `⌘↓`, the float bar's
 Open and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
 the exemption `openSection` itself takes: looking inside something isn't changing it.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
@@ -700,7 +704,7 @@ that section (`detachParentId`). Four things hold it together:
 - **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on it
   renames — otherwise a double-click would open an editor inside a hidden `.body`.
 - **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows). The short-circuit sits
-  ahead of everything, so a read-only double-click on a section FOLDS it rather than opening it — `↑` and the ⋯
+  ahead of everything, so a read-only double-click on an expanded section FOLDS it rather than opening it — `⌘↓` and the ⋯
   menu are the routes in.
 
 **A click now only ever SELECTS.** Don't reintroduce a slow-second-click rename timer: it can only race the
@@ -839,19 +843,19 @@ delete, a break is a body edit plus a create.
   selection dragged back into its own note, a plain in-textarea move that must stay one (hence `destAt`
   returning null for the source card).
 
-**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `features/commands.ts`):** `↑` opens the selected section, `↓`
-leaves the open one, `→` unfolds, `←` folds. All four are about DEPTH, in the two senses this map has — which
+**Arrow keys go IN and OUT, and fold and unfold (`navArrow` in `features/commands.ts`):** `⌘↓` opens the selected section, `⌘↑`
+leaves the open one (Finder's keys), `→` unfolds, `←` folds. All four are about DEPTH, in the two senses this map has — which
 folder you're standing in, and whether a section or note is folded. **Walking between cards lost its keys to
 that**, deliberately: opening a section is the primary way to move around a big map, and clicking covers the
-rest. The keys no longer pan — `↑` re-frames via
-`frameBox`, `↓` glides back to a remembered camera, `→`/`←` don't move the camera at all (`revealInView`
+rest. The keys no longer pan — `⌘↓` re-frames via
+`frameBox`, `⌘↑` glides back to a remembered camera, `→`/`←` don't move the camera at all (`revealInView`
 survives for its other callers). Two details: `←`/`→` are
 DIRECTIONAL rather than toggles (pressing `→` twice can't fold what it just unfolded, and a MIXED selection
 lands on one state in a single press). They act on the WHOLE selection via the directional sibling of `toggleCollapseSelection`,
 both filtering through one shared foldable-selection helper so the chip, `X` and the arrows can't disagree about
-what counts — a keyboard fold has no business reaching fewer cards than a click does. `↑` stays single, since
+what counts — a keyboard fold has no business reaching fewer cards than a click does. `⌘↓` stays single, since
 you can only stand in one section. Because the directional form skips cards already in the target state, its undo
-step covers exactly what it changed. `↓` reads the SCOPE, not the selection, so it still works right after
+step covers exactly what it changed. `⌘↑` reads the SCOPE, not the selection, so it still works right after
 clicking empty space to deselect — which is exactly when you want to go up; it's silently inert at the top
 level, since a status line there would nag on every repeat.
 

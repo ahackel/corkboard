@@ -5,7 +5,7 @@ import { scope, type ScopeBack, type ScopeLevel, openPathTo, isScopeRoot, outOfS
 import { growSectionsToHold } from '../features/float-bar.js';
 import { childrenOf, nodeLabel, nodeByFile } from '../utils/model.js';
 import { endInPlaceEdit } from '../features/inline-edit.js';
-import { animateLayout } from '../main.js';
+import { remeasure } from '../main.js';
 import { record } from '../features/history.js';
 import { syncUrl } from './url-state.js';
 import { afterReading } from '../data/lazy.js';
@@ -99,23 +99,24 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   cancelViewAnim();
   const before = scope.rootId;
   const left = before ? state.nodes.get(before) : undefined;
-  animateLayout(() => {
-    setScopeStack(target, opts.back ?? null);
-    // settledHost caches which wrapper each element sits in (hostSectionId), and the scope just
-    // changed which wrapper that IS. Drop the cache or the children keep being placed into a
-    // wrapper paintNode is about to remove.
-    for (const n of state.nodes.values()) {
-      n.hostSectionId = undefined;
-    }
-    refreshScopeRect();
-    // Now that the stack is settled, containerBox reports the section we just left at its real size
-    // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
-    // step: ⌘Z undoes the resize without teleporting you between scopes.
-    // `type === 'section'` and not a scope predicate: the scope stack has already moved above this line.
-    if (left && left.type === 'section' && !isScopeRoot(left)) {
-      record([left.id], () => growToFitContents(left));
-    }
-  });
+  // No layout glide: the cards of the level you step into are simply THERE, where they sit — played from
+  // where they were, they fly in from their ancestor and the canvas visibly builds itself up.
+  setScopeStack(target, opts.back ?? null);
+  // settledHost caches which wrapper each element sits in (hostSectionId), and the scope just
+  // changed which wrapper that IS. Drop the cache or the children keep being placed into a
+  // wrapper paintNode is about to remove.
+  for (const n of state.nodes.values()) {
+    n.hostSectionId = undefined;
+  }
+  refreshScopeRect();
+  // Now that the stack is settled, containerBox reports the section we just left at its real size
+  // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
+  // step: ⌘Z undoes the resize without teleporting you between scopes.
+  // `type === 'section'` and not a scope predicate: the scope stack has already moved above this line.
+  if (left && left.type === 'section' && !isScopeRoot(left)) {
+    record([left.id], () => growToFitContents(left));
+  }
+  remeasure();
   if (opts.exiting) {
     // Leaving: select the section you came out of — that's what makes a crumb read as a back button —
     // and glide to the camera you left. A level nobody stepped through has none, so it re-fits.
