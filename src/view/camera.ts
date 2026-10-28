@@ -89,6 +89,13 @@ export function applyView(): void {
 let viewAnim: number | null = null;
 export function cancelViewAnim(): void { if (viewAnim){ cancelAnimationFrame(viewAnim); viewAnim = null; } }
 const GLIDE_MS = 420;
+// The same move with no glide — stepping into or out of a section is a cut, not a pan.
+export function jumpViewTo(tx: number, ty: number, tk: number = state.view.k): void {
+  cancelViewAnim();
+  state.view.x = tx; state.view.y = ty; state.view.k = tk;
+  applyView();
+}
+
 export function animateViewTo(tx: number, ty: number, tk: number = state.view.k): void {
   cancelViewAnim();
   const sx = state.view.x, sy = state.view.y, sk = state.view.k;
@@ -169,7 +176,7 @@ function bottomInset(): number {
 // Zoom + glide so a set of nodes fits, honouring the space the editor sidebar takes from the
 // right. Zoom is clamped so we never blow things up huge. Shared by focus-selected and fit-all.
 const FOCUS_MIN_K = 0.2, FOCUS_MAX_K = 1.0, FOCUS_PAD = 80;
-export function frameBox(nodes: ReadonlyArray<MindNode | undefined>): void {
+export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, instant = false): void {
   const group = nodes.filter((n): n is MindNode => !!n && !isHidden(n));
   if (!group.length) {
     return;
@@ -185,6 +192,6 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>): void {
   const availH = r.height - bottomInset();
   const k = clamp(Math.min((availW - 2*FOCUS_PAD) / bw, (availH - 2*FOCUS_PAD) / bh),
                   FOCUS_MIN_K, FOCUS_MAX_K);
-  animateViewTo(availW/2 - cx*k, availH/2 - cy*k, k);   // glide + zoom, never jump
+  (instant ? jumpViewTo : animateViewTo)(availW/2 - cx*k, availH/2 - cy*k, k);
 }
 

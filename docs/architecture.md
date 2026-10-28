@@ -279,8 +279,8 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   leave to, so the canvas keeps its "new card here". Going in is ⌥-double-click / two-finger double-tap (a plain
   one on a folded pill), `⌘↓`, the float bar's Open (`→]`) or `⋯ → Open`. The crumb path and `⌘↑` are the other
   ways out. Going in or out does NOT glide the cards (`applyScope` ends in `remeasure`, not `animateLayout`):
-  played from where they were, they flew in from their ancestor and the canvas visibly built itself up. Only
-  the camera moves.
+  played from where they were, they flew in from their ancestor and the canvas visibly built itself up. The
+  camera CUTS too (`jumpViewTo`, `focusScope(true)`): a step through a doorway, not a pan.
 - **Leaving pops every SYNTHESIZED level under you, not one crumb at a time.** A level with no `back` is
   one nobody stepped through (`setScopeStack` records a back only on the level you newly enter), so opening
   something three sections deep pushes those sections as crumbs — and leaving one at a time would walk you out
@@ -336,7 +336,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   being, where `overflow:hidden` would clip it into invisibility.
 - **The stack IS the crumb path** (`openPathTo`), not just what you clicked through, so opening a deep section
   from the right-click menu still reads `Map › A › B › C`. Levels you really stepped through remember their camera and
-  selection, so leaving one glides back to it; levels rebuilt from a URL don't (their ids are gone) and re-fit
+  selection, so leaving one cuts back to it; levels rebuilt from a URL don't (their ids are gone) and re-fit
   instead. The stack is session-only; the hash carries only the innermost level.
 - **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no node field.
   A FOLDED section stays folded: while you stand in it its interior is the canvas whatever its fold says
@@ -848,7 +848,7 @@ leaves the open one (Finder's keys), `→` unfolds, `←` folds. All four are ab
 folder you're standing in, and whether a section or note is folded. **Walking between cards lost its keys to
 that**, deliberately: opening a section is the primary way to move around a big map, and clicking covers the
 rest. The keys no longer pan — `⌘↓` re-frames via
-`frameBox`, `⌘↑` glides back to a remembered camera, `→`/`←` don't move the camera at all (`revealInView`
+`frameBox`, `⌘↑` cuts back to a remembered camera, `→`/`←` don't move the camera at all (`revealInView`
 survives for its other callers). Two details: `←`/`→` are
 DIRECTIONAL rather than toggles (pressing `→` twice can't fold what it just unfolded, and a MIXED selection
 lands on one state in a single press). They act on the WHOLE selection via the directional sibling of `toggleCollapseSelection`,

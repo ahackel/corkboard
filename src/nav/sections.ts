@@ -1,6 +1,6 @@
 import { type MindNode, state, setStatus } from '../core/state.js';
 import { containerBox } from '../view/layout.js';
-import { stageSize, cancelViewAnim, animateViewTo } from '../view/camera.js';
+import { stageSize, cancelViewAnim, jumpViewTo } from '../view/camera.js';
 import { scope, type ScopeBack, type ScopeLevel, openPathTo, isScopeRoot, outOfScope, canOpen, scopeActive, scopeRootNode } from './scope.js';
 import { growSectionsToHold } from '../features/float-bar.js';
 import { childrenOf, nodeLabel, nodeByFile } from '../utils/model.js';
@@ -57,7 +57,7 @@ function currentBack(): ScopeBack { return { view: { ...state.view }, sel: [...s
 // Rebuild the stack so its last level is `target` (null = the whole map). The stack IS the crumb
 // path — the openable ancestor chain, not just what the user happened to click through — so opening
 // a deep section from the ⋯ menu still reads `Map › A › B › C`. Levels that survive the rebuild keep
-// their remembered camera and rect, which is what makes `open A → open B → leave` glide back to the
+// their remembered camera and rect, which is what makes `open A → open B → leave` cut back to the
 // camera A really had; levels nobody stepped through get no `back` and are re-fitted instead.
 function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
   if (!target) { scope.stack = []; scope.rootId = null; return; }
@@ -119,20 +119,20 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   remeasure();
   if (opts.exiting) {
     // Leaving: select the section you came out of — that's what makes a crumb read as a back button —
-    // and glide to the camera you left. A level nobody stepped through has none, so it re-fits.
+    // and cut back to the camera you left. A level nobody stepped through has none, so it re-fits.
     const came = before ? state.nodes.get(before) : undefined;
     const ids = came && !outOfScope(came) ? [came.id]
       : (opts.restore?.sel ?? []).filter(id => { const n = state.nodes.get(id); return !!n && !outOfScope(n); });
     setSelectionSet(ids);
     if (opts.restore) {
-      animateViewTo(opts.restore.view.x, opts.restore.view.y, opts.restore.view.k);
+      jumpViewTo(opts.restore.view.x, opts.restore.view.y, opts.restore.view.k);
     } else if (opts.camera !== false) {
-      focusScope();
+      focusScope(true);
     }
   } else {
     selectNode(null);            // the section itself is off the canvas now, so nothing is selected
     if (opts.camera !== false) {
-      focusScope();
+      focusScope(true);
     }
   }
   syncUrl();                     // a discrete navigation step, like selecting a node → a history entry
@@ -181,7 +181,7 @@ export function goToScopeDepth(depth: number): void {
   const leaving = scope.stack[depth]!;
   const upId = depth > 0 ? scope.stack[depth - 1]!.rootId : null;
   // Several levels can be left at once — exitScope pops the synthesized ones, a crumb click jumps out
-  // of many. The camera to glide back to belongs to the OUTERMOST level being left, or, when that one
+  // of many. The camera to go back to belongs to the OUTERMOST level being left, or, when that one
   // was synthesized and never recorded a camera, to the innermost that did: that is the state the user
   // was actually in before the whole excursion.
   let back = leaving.back;

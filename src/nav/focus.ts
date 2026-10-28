@@ -79,4 +79,4 @@ export function focusOrFit(): void {
 // Re-frame whatever is ON the canvas right now: the open section's contents while scoped (isHidden
 // does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
 // this", shared by F-with-nothing-selected, every open/exit and the current crumb.
-export function focusScope(): void { frameBox([...state.nodes.values()]); }
+export function focusScope(instant = false): void { frameBox([...state.nodes.values()], instant); }
