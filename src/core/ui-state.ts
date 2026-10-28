@@ -29,7 +29,12 @@ export interface Drag {
   // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
   // dropTarget stays null and every other preview stands down.
   cardMerge?: string | null;
+  // Over a folded section's pill or a crumb of the open-section path: the drop FILES the dragged cards
+  // there (drag.ts fileAway) instead of placing them where they were let go. `beside` is the section the
+  // cards come out of, for a crumb — they land next to it.
+  chute?: Chute | null;
 }
+export interface Chute { parent: string | null; beside?: string }
 // A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
 // its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the
 // textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape

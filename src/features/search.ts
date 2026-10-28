@@ -9,8 +9,10 @@
 // sections holding them; a match tucked inside a FOLDED section lights that section, which says how many it
 // holds (searchHitsIn). The match set is DERIVED on every paint (main.ts paintAll → refreshSearch), so
 // tagging a card while searching takes effect at once. The dropdown lists the matching cards; ↓/Enter
-// jump to one. The field stays while a query is in it — a filter you can work under — and goes with
-// Esc or its ×.
+// jump to one. "2/5" and its chevrons (FigJam's) step through every match, framing each on the canvas
+// without ending the search. The field stays while a query is in it — a filter you can work under — and
+// goes with Esc or its ×. A FOLDED section never read can't say what it holds, so a search reads them all
+// (data/lazy.ts readAll) and keeps them while it is up (searchHolds).
 import { state, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
 import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible, ancestors } from '../utils/model.js';
@@ -23,23 +25,28 @@ import { byId } from '../utils/dom.js';
 import { tagText, tagChipHTML } from './tags.js';
 import { boardTags } from './tag-picker.js';
 import { focusNode } from '../nav/focus.js';
+import { afterReading } from '../data/lazy.js';
 
 const searchBox = byId<HTMLInputElement>('searchBox');
 const searchWrap = byId('searchWrap');
 const searchResults = byId('searchResults');
 const searchClear = byId<HTMLButtonElement>('searchClear');
+const searchCount = byId('searchCount');
+const searchPrev = byId<HTMLButtonElement>('searchPrev');
+const searchNext = byId<HTMLButtonElement>('searchNext');
 const chipsEl = document.createElement('span');
 chipsEl.id = 'searchChips';
 searchWrap.insertBefore(chipsEl, searchBox);
 
 let chips: string[] = [];                 // the tags of the query
-let cardHits: MindNode[] = [];            // the dropdown's cards
+let cardHits: MindNode[] = [];            // every matching card, in the dropdown's order (it shows the first few)
 let tagRows: string[] = [];               // …or, while a `#word` is being typed, its tag suggestions
 let active = -1;
 let hits = new Map<string, number>();     // a hidden match counted on the visible section holding it
+let reading = false;                      // the unread folded sections are being read for this search
 
-// Does the open result list point at this node? Nothing a result points at may be let go of.
-export function searchHolds(id: string): boolean { return cardHits.some(h => h.id === id); }
+// While a search is up, no folded section lets go of its notes: they are what it searches.
+export const searchHolds = (): boolean => searchActive();
 export const searchTags = (): readonly string[] => chips;
 export const searchActive = (): boolean => chips.length > 0 || !!searchBox.value.trim();
 export const searchHitsIn = (id: string): number => hits.get(id) ?? 0;
@@ -139,6 +146,9 @@ function matches(n: MindNode, text: string): boolean {
 function runSearch(showList = true): void {
   const { text, typing } = parts();
   if (!searchActive()) { clearResults(); paintAll(); scheduleUrlSync(); return; }
+  if (!reading && afterReading(state.nodes.keys(), () => { reading = false; if (searchActive()) { runSearch(showList); } })) {
+    reading = true;
+  }
   paintAll();   // → refreshSearch
   tagRows = typing != null ? tagSuggestions(typing) : [];
   if (typing == null) {
@@ -152,11 +162,11 @@ function runSearch(showList = true): void {
     }
     // title matches first, then body-only matches, alphabetical within each
     found.sort((a, b) => a.onLabel !== b.onLabel ? (a.onLabel ? -1 : 1) : a.label.localeCompare(b.label));
-    cardHits = found.slice(0, 12).map(f => f.n);
+    cardHits = found.map(f => f.n);
     active = cardHits.length ? 0 : -1;
     const dup = duplicateLabels();
     searchResults.innerHTML = `<div class="sr-count">${found.length} card${found.length === 1 ? '' : 's'}</div>` + (cardHits.length
-      ? cardHits.map((n, i) => `<button class="sr-item${i === active ? ' active' : ''}" data-id="${n.id}">${esc(disambiguatedLabel(n, dup))}</button>`).join('')
+      ? cardHits.slice(0, 12).map((n, i) => `<button class="sr-item${i === active ? ' active' : ''}" data-id="${n.id}">${esc(disambiguatedLabel(n, dup))}</button>`).join('')
       : '<div class="sr-none">No card matches</div>');
   } else {
     cardHits = [];
@@ -184,6 +194,10 @@ function tagSuggestions(q: string): string[] {
 }
 // Point state.searchActiveId at the active option's (visible) card so paintNode outlines it.
 function markActive(): void {
+  const nav = parts().typing == null && searchActive();
+  searchWrap.classList.toggle('has-nav', nav);
+  searchCount.textContent = nav ? `${active + 1}/${cardHits.length}` : '';
+  searchPrev.disabled = searchNext.disabled = cardHits.length < 2;
   [...searchResults.querySelectorAll('.sr-item')].forEach((el, i) => el.classList.toggle('active', i === active));
   const hit = cardHits[active];
   const id = hit ? firstVisible(hit).id : null;
@@ -193,6 +207,17 @@ function clearResults(): void {
   searchResults.classList.remove('open'); searchResults.innerHTML = '';
   cardHits = []; tagRows = []; active = -1;
   state.searchActiveId = null;
+  searchWrap.classList.remove('has-nav');
+}
+// A chevron: on to the next (or previous) match, framed on the canvas — the search stays up.
+function stepHit(by: number): void {
+  if (!cardHits.length) {
+    return;
+  }
+  active = (active + by + cardHits.length) % cardHits.length;
+  searchResults.classList.remove('open');
+  markActive();
+  focusNode(cardHits[active]);
 }
 // Make the `#word` being typed (or the suggestion picked for it) a chip.
 function chipFromTyping(tag?: string): boolean {
@@ -270,6 +295,7 @@ searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
   }
 });
 searchResults.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus in the field
+byId('searchNav').addEventListener('pointerdown', (e) => e.preventDefault());
 searchResults.addEventListener('click', (e: MouseEvent) => {
   const item = (e.target as Element).closest<HTMLElement>('.sr-item');
   if (!item) {
@@ -281,6 +307,8 @@ searchResults.addEventListener('click', (e: MouseEvent) => {
     gotoHit(item.dataset.id!);
   }
 });
+searchPrev.addEventListener('click', () => stepHit(-1));
+searchNext.addEventListener('click', () => stepHit(1));
 // clear-or-close, exactly like Escape — but all at once: the × means "done searching".
 searchClear.addEventListener('click', () => closeSearch());
 // A click elsewhere: an EMPTY field closes; one with a query in it stays, its list folded away, so the

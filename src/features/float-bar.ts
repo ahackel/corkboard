@@ -98,7 +98,7 @@ export function growSectionsToHold(ids: Iterable<string>): boolean {
   }
   return grew;
 }
-// FIT — the float bar's ↔, ⇧A and the menu's "Fit to contents": every selected section hugs its cards
+// FIT — the float bar's ↔, ⌥⇧⌘R and the menu's "Resize to fit": every selected section hugs its cards
 // (fitSectionToContent), every selected card drops its authored height — a minimum it was dragged out to,
 // or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
 function canFit(n: MindNode): boolean {
@@ -341,7 +341,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   if (!ro){
     entries.push({ label:'Wrap in new section', shortcut:'⌘S', run: () => { selectTargetFirst(); groupSelectionIntoSection(); }, disabled: someLocked });
     if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); })) {
-      entries.push({ label: 'Fit to contents', shortcut:'⇧A',
+      entries.push({ label: 'Resize to fit', shortcut:'⌥⇧⌘R',
         run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
     }
   }

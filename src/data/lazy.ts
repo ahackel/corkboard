@@ -7,7 +7,7 @@
 //     (data/save.ts saveAll, phase 0);
 //   · and when a folded section LETS GO of what it read again (releaseFolded): once every note under it
 //     is safely on disk and nothing — the selection, the undo history, a search result, the section
-//     you are standing in — can still reach one of them.
+//     you are standing in — can still reach one of them; and not at all while a search is up.
 // The mechanism (turning a listing into nodes) is data/load.ts readFolder's.
 // ============================================================
 import { state, type MindNode } from '../core/state.js';
@@ -126,7 +126,7 @@ export function readOpenUnread(): void {
 // Called after every successful save. Read-only and demo mode never let go: demo notes live ONLY in
 // memory, and read-only has nothing it could have saved them with.
 export function releaseFolded(): void {
-  if (!store.isOpen || state.readOnly) {
+  if (!store.isOpen || state.readOnly || searchHolds()) {
     return;
   }
   let held: Set<string> | null = null;   // built lazily: most saves have nothing folded to let go of
@@ -143,7 +143,7 @@ export function releaseFolded(): void {
     held ??= historyRefs();
     const h = held;
     const busy = (n: MindNode): boolean => n.dirty || !n.file || h.has(n.id) || state.sel.has(n.id)
-      || scoped.has(n.id) || searchHolds(n.id);
+      || scoped.has(n.id);
     if (scoped.has(f.id)) {
       continue;              // standing inside it: its notes ARE the canvas
     }

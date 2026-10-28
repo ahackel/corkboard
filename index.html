@@ -56,6 +56,11 @@
   <div id="searchWrap">
     <span class="ic" data-icon="search"></span>
     <input id="searchBox" type="text" placeholder="Find a card, or #tag…" title="Find (⌘F)" aria-label="Find a card by text or tag" autocomplete="off" spellcheck="false" />
+    <span id="searchNav">
+      <span id="searchCount"></span>
+      <button id="searchPrev" title="Previous match" aria-label="Previous match"><span class="ic" data-icon="chevron"></span></button>
+      <button id="searchNext" title="Next match" aria-label="Next match"><span class="ic" data-icon="chevron"></span></button>
+    </span>
     <button id="searchClear" title="Clear search · close (Esc)" aria-label="Clear search or close">
       <span class="ic" data-icon="close"></span></button>
     <div id="searchResults"></div>
@@ -111,7 +116,7 @@
     <!-- collapse / expand the selection: a card to its one-line chip, a section to its label pill -->
     <button id="fbFold" class="fb-icon" title="Collapse (X)" aria-label="Collapse">
       <span class="ic ic-fold" data-icon="fold"></span><span class="ic ic-unfold" data-icon="unfold"></span></button>
-    <button id="fbFit" class="fb-icon" title="Fit to contents (⇧A)" aria-label="Fit to contents">
+    <button id="fbFit" class="fb-icon" title="Resize to fit (⌥⇧⌘R)" aria-label="Resize to fit">
       <span class="ic" data-icon="expand"></span></button>
     <button id="fbOpen" class="fb-icon" title="Open (↑)" aria-label="Open">
       <span class="ic" data-icon="enter"></span></button>

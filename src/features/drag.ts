@@ -9,14 +9,14 @@
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds } from '../utils/model.js';
-import { detachParentId } from '../nav/scope.js';
-import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection } from '../view/layout.js';
+import { detachParentId, scope } from '../nav/scope.js';
+import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection, moveSubtreeTo } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
-import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
+import { ui, inPlaceEditOn, type Pt, type Drag, type Chute } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { paintAll, paintNode, activateNode, isNodeControlAt, relayout, remeasure } from '../main.js';
+import { paintAll, paintNode, activateNode, isNodeControlAt, relayout, remeasure, flashArrived } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -27,6 +27,9 @@ import { growSectionsToHold } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { selectNode, setSelectionSet, toggleSel } from './selection.js';
+import { afterReading } from '../data/lazy.js';
+import { arrangeSections } from '../data/load.js';
+import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
 
 
@@ -150,8 +153,9 @@ function autoPanStep(): void {
   let vx = 0, vy = 0;
   const x = drag.cx, y = drag.cy;
   // Pan only while the pointer is still INSIDE the browser window: once it crosses out
-  // (e.g. a drag heading for another app), scrolling on would carry the map away under it.
-  if (!outsideWindow(x, y)){
+  // (e.g. a drag heading for another app), scrolling on would carry the map away under it. Nor while it
+  // rests on a path crumb in the corner: that is a drop target, not a push against the edge.
+  if (!outsideWindow(x, y) && !document.querySelector('#homeBar .drop-target')){
     if (x < r.left + M) {
       vx =  Math.min(1, (r.left + M - x) / M);
     } else if (x > right - M) {
@@ -457,7 +461,7 @@ function dragPointerUp(): void {
       } else {
         // ⌥ over a card merges into it; otherwise every dragged root belongs to the section its
         // centre is in, else the top level (sectionAt — the same test the preview ran).
-        const { cloned, targets, clones, selRoots, cardMerge } = drag;
+        const { cloned, targets, clones, selRoots, cardMerge, chute } = drag;
         clearDropTarget();
         // Null drag NOW so every paint in the commit phase sees no active drag and draws all edges.
         ui.drag = null;
@@ -477,6 +481,10 @@ function dragPointerUp(): void {
             scheduleSave(); commitStep();
             return;
           }
+        }
+        if (chute) {
+          fileAway(selRoots, chute);
+          return;
         }
         // THE drop rule. Per root, from its own centre, so a group straddling a section's edge splits
         // the way it looks. Positions stay exactly where they were dropped — snappedDelta already put
@@ -695,10 +703,11 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       }
     }
   }
-  const f = fuse ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
-  const target = fuse ? dragged.parent : (f?.id ?? detachParentId());
+  const chute = fuse ? null : chuteAt(e.clientX, e.clientY, sub);
+  const f = fuse || chute ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
+  const target = fuse ? dragged.parent : chute ? chute.parent : (f?.id ?? detachParentId());
   const changed = drag.dropTarget !== target;
-  drag.dropTarget = target; drag.cardMerge = fuse;
+  drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute;
   if (changed) {
     for (const id of sub) {
       const m = state.nodes.get(id);
@@ -709,13 +718,79 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   }
   if (fuse) {
     state.nodes.get(fuse)!.el?.classList.add('drop-merge');
+  } else if (chute) {
+    chute.el.classList.add('drop-target');
   } else if (f && f.id !== dragged.parent) {
     f.el?.classList.add('drop-target');
   }
 }
 function clearDropTarget(): void {
-  document.querySelectorAll('.node.drop-target, .node.drop-merge')
+  document.querySelectorAll('.drop-target, .drop-merge')
     .forEach(el => el.classList.remove('drop-target', 'drop-merge'));
+}
+// What the POINTER is over that files a drop somewhere off the canvas: a crumb of the open-section path
+// (out to that level, beside the section you came out of) or a folded section's pill (into it). The
+// pointer decides rather than the card's centre: both are small targets you aim at.
+function chuteAt(cx: number, cy: number, sub: Set<string>): (Chute & { el: HTMLElement }) | null {
+  const over = (el: Element): boolean => {
+    const r = el.getBoundingClientRect();
+    return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+  };
+
+  // the CURRENT crumb is where the cards already are; `…` has no single level
+  for (const el of document.querySelectorAll<HTMLElement>('#homeBar .sc-crumb[data-depth]:not(.sc-cur)')) {
+    if (over(el)) {
+      const d = Number(el.dataset.depth);
+      const parent = d ? scope.stack[d - 1]?.rootId ?? null : null;
+      const p = parent ? state.nodes.get(parent) : null;
+      return p && isLockedEffective(p) ? null : { parent, beside: scope.stack[d]?.rootId, el };
+    }
+  }
+  for (const m of state.nodes.values()) {
+    if (m.type === 'section' && m.collapsed && m.el && !sub.has(m.id) && !isHidden(m) && !isLockedEffective(m) && over(m.el)) {
+      return { parent: m.id, el: m.el };
+    }
+  }
+  return null;
+}
+// File the dragged roots into a chute's section (or the top level). Into a folded section they join its
+// cards in a column of their own beside them (load.ts arrangeSections, the inbox's rule) — reading its
+// folder first if it was never read; out through a crumb they land in a column right of the section they
+// came out of. Either way they leave the canvas you're looking at, so the toast says where they went.
+function fileAway(roots: string[], chute: Chute): void {
+  const p = chute.parent ? state.nodes.get(chute.parent) ?? null : null;
+  const go = (): void => {
+    const ids = roots.filter(id => {
+      const r = state.nodes.get(id);
+      return !!r && (r.parent === chute.parent || reparentOnly(id, chute.parent));
+    });
+    if (!ids.length) {
+      remeasure(); commitStep();
+      return;
+    }
+    const beside = chute.beside ? state.nodes.get(chute.beside) : null;
+    if (p?.collapsed) {
+      touch(p.id, ...ids.flatMap(id => subtreeIds(id)));
+      arrangeSections([p], new Set(ids));
+    } else if (beside) {
+      // shortcut: the column may overlap whatever already sits right of that section; ⌃⌥T tidies it.
+      let y = beside.y;
+      for (const id of ids) {
+        const r = state.nodes.get(id)!;
+        moveSubtreeTo(r, beside.x + nodeW(beside) + SPACING, y);
+        y += nodeH(r) + SPACING;
+      }
+      growSectionsToHold(ids);
+    }
+    setSelectionSet([]);
+    setStatus(`Moved ${ids.length > 1 ? `${ids.length} cards` : `“${nodeLabel(state.nodes.get(ids[0])!)}”`} to “${p ? nodeLabel(p) : 'the top level'}”`);
+    relayout();
+    flashArrived(ids);
+    scheduleSave(); commitStep();
+  };
+  if (!(p && afterReading([p.id], go, false))) {
+    go();
+  }
 }
 // A section COLLECTS what it covers — the drop rule run from the section's side, FigJam-style. After a section
 // is moved, resized or made, every card whose centre is now in it belongs to it (sectionAt: the

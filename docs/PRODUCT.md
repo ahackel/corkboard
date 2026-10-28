@@ -66,7 +66,8 @@ one searchable list.
   until you open it, which keeps a big board quick.
 - **The rule:** a card is in the section its centre is over — whether you drop the card there, or move,
   resize or draw the section over it. A section grows to hold what you drop into it, so nothing is hidden
-  past its edge.
+  past its edge. Drop cards on a FOLDED section's pill to file them in it, or on a crumb of the path to move
+  them up out of the section you're in.
 
 **Tags are for finding.** A tag is an Obsidian tag — a word, or an emoji as its shortest form — worn on
 the card's top edge as a stamp or a label. `#` tags the selection, or drag a sticker from the tag tray onto

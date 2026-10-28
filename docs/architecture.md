@@ -186,6 +186,13 @@ big section could be swallowed by a small one laid across it. Locked and hidden 
 create then grows sections around what they took in (`growSectionsToHold`); a resize doesn't — the user just
 chose that size — but a card it let go of grows the section it landed in.
 
+**A drop can FILE cards somewhere off the canvas** (`chuteAt`/`fileAway`, features/drag.ts): let go with the
+POINTER over a folded section's pill and the dragged cards go into it, in a column of their own right of its
+cards (`arrangeSections` with `fresh`, the inbox's rule — its folder read first if it never was); over a crumb
+of the open-section path and they go up to that level (the map crumb: the top level), in a column right of the
+section they came out of. The pointer decides, not the card's centre: both are small targets you aim at. Either
+way the cards leave the canvas you're looking at, so a toast says where they went. One undo step.
+
 ## Sections
 
 **A section looks like a FigJam SECTION: a pale box, its name on a pill ABOVE it.** The box is the section's
@@ -381,7 +388,7 @@ dragged size and nothing else — never a value a layout pass computed. What the
   the same `n.h` is exact: paintNode caps `.body`'s `max-height` to what's left under the padding and the
   rest is simply cut (a fade was tried and read as a smudge on a short card). No scrolling — it's a sticky note, not a
   viewport. Folded, opened as a page or open in the editor it doesn't clip (the editor shows the whole
-  note). **Fit** (`autoSizeSelection`: the float bar's ↔, `⇧A`, "Fit to contents") drops a card's `h` and
+  note). **Fit** (`autoSizeSelection`: the float bar's ↔, `⌥⇧⌘R`, "Resize to fit") drops a card's `h` and
   `clip` — and fits a section to its cards, as before; `canFit` says which selections offer it.
 
 **A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
@@ -776,7 +783,9 @@ moved or rewritten: the note's, not ours). Matching ignores case and a parent ma
   the board's tags (and its emoji by name) and Enter or a space makes the chip; Backspace on an empty field
   takes the last one back. Non-matches fade; the match set is DERIVED every paint (`paintAll` →
   `refreshSearch`), so tagging under a search shows at once, and it lights the sections around a match, a FOLDED
-  one saying "2 matches". A folded section never read (`data/lazy.ts`) knows no tags and just fades. A field with
+  one saying "2 matches". A folded section never read (`data/lazy.ts`) is READ when a search starts (`readAll`),
+  and nothing lets go while a search is up (`searchHolds`), so a hit is found wherever it sits. "2/5" and two
+  chevrons (FigJam's) step through every match, framing each without ending the search. A field with
   a query in it STAYS when you click away — a filter to work under — and Esc or × ends it. So a click is never
   a delete, and there is no second filter mode to keep in step.
 - Sections wear no tags: a section is a place, and a search lights it by what it holds.
@@ -911,7 +920,7 @@ untrimmed ends included), or below when there's no room, and its pickers open on
 `buildCardMenu` in float-bar.ts). The float bar has NO kebab, as in FigJam: it shows "Wrap in new section"
 (⌘S) when several are selected and "Ungroup" (⌘⌫) when a section is. Groups, in FigJam's order: the clipboard
 (Copy/Cut/Paste/Duplicate), Delete/Ungroup, what you can do with it (Edit or Rename, Open, Collapse, Wrap,
-Fit to contents), where it goes outside the map (file path, download, share), and Lock last. Only actions with
+Resize to fit), where it goes outside the map (file path, download, share), and Lock last. Only actions with
 no easier home: a new card beside one is the port ⊕, a card inside a section is a double-click, zooming is
 F. Rows are 24px, text 16px from the edges, the shortcut grey at the right, the hover a rounded blue row
 inset 8px, and no red Delete.

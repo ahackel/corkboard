@@ -92,7 +92,7 @@ function navArrow(key: string): void {
 // so these card shortcuts stay out of the way while you're naming something.
 window.addEventListener('keydown', (e) => {
   // The letter shortcuts below are case-INSENSITIVE (Caps Lock, or a held ⇧ that means something of
-  // its own like ⇧A), so a single printable character is folded down once here rather than tested
+  // its own like ⇧D), so a single printable character is folded down once here rather than tested
   // twice per line. Named keys keep their own spelling — 'F2' must not become 'f2', nor 'ArrowUp'
   // 'arrowup' — hence the length test rather than a blanket toLowerCase.
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -114,6 +114,15 @@ window.addEventListener('keydown', (e) => {
         groupSelectionIntoSection();
       } else {
         flushSave();
+      }
+      return;
+    }
+
+    // ⌥⇧⌘R is Figma's Resize to fit — by KEY CODE, since ⌥ rewrites the letter on a Mac.
+    if (e.code === 'KeyR' && e.altKey && e.shiftKey) {
+      e.preventDefault();
+      if (state.sel.size && !isTypingInField() && !state.readOnly) {
+        autoSizeSelection();
       }
       return;
     }
@@ -190,8 +199,6 @@ window.addEventListener('keydown', (e) => {
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
   if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: the SMART duplicate (crud.ts copyNext)
-  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected sections and cards to their contents
-  if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoSection(); return; }   // G: group selection into a section
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
   // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
   if (key === 'c' && mod && state.sel.size){ e.preventDefault(); void copySelection(); return; }
@@ -291,6 +298,7 @@ function paletteCommands(): Command[] {
     { label: 'Open', shortcut: '↑', keywords: 'enter section', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: hasSel, run: groupSelectionIntoSection },
+    { label: 'Resize to fit', shortcut: '⌥⇧' + MOD + 'R', keywords: 'fit contents auto size shrink grow', when: hasSel, run: autoSizeSelection },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
