@@ -28,7 +28,9 @@ function boxOf(n: MindNode): Box {
 export function canTidy(): boolean { return !state.readOnly && targets().length >= 2; }
 
 function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const nodes = targets();
   if (nodes.length < min) { setStatus(min > 2 ? 'Select three or more to distribute' : 'Select two or more to tidy'); return; }
   const boxes = nodes.map(boxOf);
@@ -36,7 +38,10 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
   const ids = nodes.flatMap(n => subtreeIds(n.id));
   record(ids, () => animateLayout(() => {
     for (const n of nodes) {
-      const p = pos.get(n.id); if (!p) continue;
+      const p = pos.get(n.id);
+      if (!p) {
+        continue;
+      }
       const lh = n.type === 'frame' ? frameLabelH(n) : 0;
       moveSubtreeTo(n, p.x, p.y + lh);
     }
@@ -60,7 +65,9 @@ function distributeSelection(axis: 'x' | 'y'): void {
 // Same width: every selected plain CARD takes the widest one's width (frames and pictures size
 // themselves; a card's text re-wraps, so its height is re-measured).
 function sameWidth(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const cards = targets().filter(n => n.type !== 'frame' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }
   const w = Math.max(...cards.map(nodeW));
@@ -94,9 +101,13 @@ export function tidyMenuEntries(): Array<'sep' | { label: string; shortcut?: str
 const ALT_KEYS: Record<string, number> = { KeyA: 1, KeyH: 2, KeyD: 3, KeyW: 4, KeyV: 5, KeyS: 6 };
 const CTRL_ALT_KEYS: Record<string, number> = { KeyT: 0, KeyH: 7, KeyV: 8 };
 export function tidyShortcut(e: KeyboardEvent): boolean {
-  if (!e.altKey || e.metaKey || state.sel.size < 2) return false;
+  if (!e.altKey || e.metaKey || state.sel.size < 2) {
+    return false;
+  }
   const i = e.ctrlKey ? CTRL_ALT_KEYS[e.code] : (!e.shiftKey ? ALT_KEYS[e.code] : undefined);
-  if (i === undefined) return false;
+  if (i === undefined) {
+    return false;
+  }
   e.preventDefault();
   TIDY_ACTIONS[i].run();
   return true;

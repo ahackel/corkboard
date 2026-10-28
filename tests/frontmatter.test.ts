@@ -16,11 +16,12 @@ describe('splitHeading / joinHeading', () => {
     '- milk\n- eggs',
     '',
   ];
-  for (const text of cases)
+  for (const text of cases) {
     it(`round-trips ${JSON.stringify(text)}`, () => {
       const { title, body, gap } = splitHeading(text);
       expect(joinHeading(title, body, gap)).toBe(text);
     });
+  }
 
   it('only a leading # line is a title', () => {
     expect(splitHeading('- milk').title).toBe('');
@@ -46,10 +47,11 @@ describe('parseMd / serializeMd round-trip', () => {
     'body with a markdown table and code':
       '---\ndate: 2026-01-02\ntags: []\n---\n\n# T\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```\n---\nnot frontmatter\n---\n```\n',
   };
-  for (const [name, text] of Object.entries(files))
+  for (const [name, text] of Object.entries(files)) {
     it(`leaves a ${name} unchanged`, () => {
       expect(serializeMd(nodeFrom(text))).toBe(text);
     });
+  }
 
   it('preserves unknown keys and their order when an app-owned key changes', () => {
     const n = nodeFrom('---\ndate: 2020-05-05\nauthor: Ada\ntags: []\nsource: web\n---\n\n# X\n');

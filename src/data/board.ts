@@ -66,7 +66,9 @@ function serializeEdge(e: BoardEdge): StoredEdge | null {
   // An end held by a PATH is a note inside a folded frame nobody has read (resolveEdges): the frame
   // stands in for it on the canvas, but the path is still where the line goes.
   const from = e.fromPath ?? state.nodes.get(e.from)?.file, to = e.toPath ?? state.nodes.get(e.to)?.file;
-  if (!from || !to) return null;
+  if (!from || !to) {
+    return null;
+  }
   // Most fields are omitted when they equal the DEFAULT a fresh edge is born with (makeEdge), so a
   // board file stays readable. `dashed` is written ALWAYS, deliberately: it is a boolean whose
   // default has already been changed once, and the omit-when-default rule silently inverts such a
@@ -115,19 +117,39 @@ function collectGeom(): Record<string, StoredGeom> {
   // What sits in an UNREAD folder isn't in memory, so its geometry is carried over as it was read
   // (or as it was when it was let go of — rememberGeom), or the next write would forget it.
   const lazy = lazyFolders();
-  if (lazy.length) for (const [path, g] of geom) if (lazy.some(d => path.startsWith(d))) out[path] = g;
+  if (lazy.length) {
+    for (const [path, g] of geom) {
+      if (lazy.some(d => path.startsWith(d))) {
+        out[path] = g;
+      }
+    }
+  }
   for (const n of state.nodes.values()) {
-    if (!n.file) continue;                       // never saved yet: it has no key to be stored under
+    if (!n.file) {
+      continue;                       // never saved yet: it has no key to be stored under
+    }
     const g: StoredGeom = { x: Math.round(n.rx), y: Math.round(n.ry) };
     // The AUTHORED size — every kind can carry both axes. A frame's and an IMAGE card's h is its box;
     // a plain card's is a MINIMUM its text can still grow past (main.ts paintNode).
-    if (n.w != null) g.w = Math.round(n.w);
-    if (n.h != null) g.h = Math.round(n.h);
-    if (n.clip) g.clip = true;                   // …unless it was dragged SHORTER than its text: then exact
-    if (n.collapsed) g.collapsed = true;
+    if (n.w != null) {
+      g.w = Math.round(n.w);
+    }
+    if (n.h != null) {
+      g.h = Math.round(n.h);
+    }
+    if (n.clip) {
+      g.clip = true;                   // …unless it was dragged SHORTER than its text: then exact
+    }
+    if (n.collapsed) {
+      g.collapsed = true;
+    }
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
-    if (order.length > 1) g.order = order;       // a single child has no order worth writing
-    if (n.lazy != null && geom.get(n.file)?.order) g.order = geom.get(n.file)!.order;   // its kids are unread
+    if (order.length > 1) {
+      g.order = order;       // a single child has no order worth writing
+    }
+    if (n.lazy != null && geom.get(n.file)?.order) {
+      g.order = geom.get(n.file)!.order;   // its kids are unread
+    }
     out[n.file] = g;
   }
   return out;
@@ -137,7 +159,9 @@ function collectGeom(): Record<string, StoredGeom> {
 export function rememberGeom(nodes: Iterable<MindNode>): void {
   commitRel();
   for (const n of nodes) {
-    if (!n.file) continue;
+    if (!n.file) {
+      continue;
+    }
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     geom.set(n.file, { x: Math.round(n.rx), y: Math.round(n.ry), w: n.w, h: n.h, clip: !!n.clip,
                        collapsed: n.collapsed, order: order.length > 1 ? order : geom.get(n.file)?.order });
@@ -148,9 +172,13 @@ export function rememberGeom(nodes: Iterable<MindNode>): void {
 export function resolveOrder(byPath: Map<string | null, string>): void {
   for (const n of state.nodes.values()) {
     const order = geom.get(n.file ?? '')?.order;
-    if (!order) continue;
+    if (!order) {
+      continue;
+    }
     const ids = order.map(p => byPath.get(p)).filter((id): id is string => !!id);
-    if (ids.length) n.kidOrder = ids;
+    if (ids.length) {
+      n.kidOrder = ids;
+    }
   }
 }
 
@@ -158,7 +186,9 @@ export function resolveOrder(byPath: Map<string | null, string>): void {
 async function readJSON(path: string): Promise<Record<string, unknown> | null> {
   try {
     const blob = await store.readBlob(path);
-    if (!blob) return null;
+    if (!blob) {
+      return null;
+    }
     const data = JSON.parse(await blob.text());
     return (data && typeof data === 'object') ? data as Record<string, unknown> : null;
   } catch { return null; }        // missing or malformed → the caller's defaults stand
@@ -167,19 +197,31 @@ async function readJSON(path: string): Promise<Record<string, unknown> | null> {
 // Both shapes land here: board.json nests these under `settings`, the legacy settings.json had them
 // at the top level, and the keys are the same either way.
 function applySettings(d: Record<string, unknown> | null | undefined): void {
-  if (!d) return;
-  if (GRID_STYLES.includes(d.grid as never)) state.gridStyle = d.grid as never;
-  if (GRID_SIZES.includes(d.gridSize as never)) state.gridSize = d.gridSize as never;
+  if (!d) {
+    return;
+  }
+  if (GRID_STYLES.includes(d.grid as never)) {
+    state.gridStyle = d.grid as never;
+  }
+  if (GRID_SIZES.includes(d.gridSize as never)) {
+    state.gridSize = d.gridSize as never;
+  }
   // Validated the same way a node's own colour is (colorFill resolves a palette key OR a hex, and
   // nothing else), so a hand-edited board.json can't paint the canvas an arbitrary CSS value.
-  if (typeof d.canvasColor === 'string' && colorFill(d.canvasColor)) state.canvasColor = d.canvasColor;
+  if (typeof d.canvasColor === 'string' && colorFill(d.canvasColor)) {
+    state.canvasColor = d.canvasColor;
+  }
 }
 
 function applyGeom(v: unknown): void {
-  if (!v || typeof v !== 'object') return;
+  if (!v || typeof v !== 'object') {
+    return;
+  }
   const num = (x: unknown): number | undefined => typeof x === 'number' && isFinite(x) ? x : undefined;
   for (const [path, raw] of Object.entries(v as Record<string, StoredGeom>)) {
-    if (!raw || typeof raw !== 'object') continue;
+    if (!raw || typeof raw !== 'object') {
+      continue;
+    }
     geom.set(path, {
       x: num(raw.x), y: num(raw.y), w: num(raw.w), h: num(raw.h),
       clip: raw.clip === true,
@@ -195,11 +237,19 @@ function applyGeom(v: unknown): void {
 // ending at one can be recognised and flattened into card-to-card lines (resolveEdges).
 let legacyJunctions = new Set<string>();
 function applyJunctions(v: unknown): void {
-  if (!Array.isArray(v)) return;
-  for (const raw of v as Array<{ id?: unknown }>) if (raw && typeof raw.id === 'string' && raw.id) legacyJunctions.add(raw.id);
+  if (!Array.isArray(v)) {
+    return;
+  }
+  for (const raw of v as Array<{ id?: unknown }>) {
+    if (raw && typeof raw.id === 'string' && raw.id) {
+      legacyJunctions.add(raw.id);
+    }
+  }
 }
 function applyEdges(v: unknown): void {
-  if (!Array.isArray(v)) return;
+  if (!Array.isArray(v)) {
+    return;
+  }
   const cap = (c: unknown, fallback: EdgeCap): EdgeCap =>
     (c === 'none' || c === 'dot' || c === 'arrow') ? c : fallback;
   // An edge written before the two caps existed carries the old single `arrows` axis instead. It maps
@@ -213,12 +263,16 @@ function applyEdges(v: unknown): void {
   const port = (s: unknown): EdgeSide | undefined =>
     s === 'up' || s === 'down' || s === 'left' || s === 'right' ? s : undefined;
   for (const raw of v as StoredEdge[]) {
-    if (!raw || typeof raw.from !== 'string' || typeof raw.to !== 'string') continue;
+    if (!raw || typeof raw.from !== 'string' || typeof raw.to !== 'string') {
+      continue;
+    }
     // A legacy junction end is already an id — it needs no path lookup, so it goes straight into
     // `from`/`to` and leaves the matching *Path undefined for resolveEdges to skip.
     const fromJ = typeof raw.fromJ === 'string' ? raw.fromJ : '';
     const toJ = typeof raw.toJ === 'string' ? raw.toJ : '';
-    if ((fromJ && !legacyJunctions.has(fromJ)) || (toJ && !legacyJunctions.has(toJ))) continue;   // point is gone: so is the edge
+    if ((fromJ && !legacyJunctions.has(fromJ)) || (toJ && !legacyJunctions.has(toJ))) {
+      continue;   // point is gone: so is the edge
+    }
     state.edges.push({
       id: typeof raw.id === 'string' && raw.id ? raw.id : newEdgeId(),
       from: fromJ, to: toJ,
@@ -255,7 +309,9 @@ export async function loadBoard(): Promise<void> {
   const legacy = await readJSON(SETTINGS_FILE);
   // A brand-new map (no board, no old settings) starts on a dotted board — the paper-and-sticky look
   // (docs/PRODUCT.md). An existing map keeps whatever grid it saved.
-  if (!legacy) state.gridStyle = 'dot';
+  if (!legacy) {
+    state.gridStyle = 'dot';
+  }
   applySettings(legacy);
 }
 
@@ -269,15 +325,23 @@ export function resolveEdges(byPath: Map<string | null, string>, standIn: (path:
   state.edges = state.edges.filter(e => {
     // A legacy junction end has no path; only the note ends go through the index.
     const end = (path: string | undefined, id: string): [string | null | undefined, boolean] => {
-      if (path == null) return [id, false];
+      if (path == null) {
+        return [id, false];
+      }
       const real = byPath.get(path);
       return real ? [real, false] : [standIn(path), true];
     };
     const [from, fromParked] = end(e.fromPath, e.from), [to, toParked] = end(e.toPath, e.to);
-    if (!from || !to || (from === to && !fromParked && !toParked)) return false;
+    if (!from || !to || (from === to && !fromParked && !toParked)) {
+      return false;
+    }
     e.from = from; e.to = to;
-    if (!fromParked) delete e.fromPath;
-    if (!toParked) delete e.toPath;
+    if (!fromParked) {
+      delete e.fromPath;
+    }
+    if (!toParked) {
+      delete e.toPath;
+    }
     return true;
   });
   // …and lines that met at a junction become plain card-to-card lines (utils/edge-graph.ts). The next
@@ -312,7 +376,9 @@ export function parkEdges(gone: Map<string, string>, standIn: string): void {
 // edge restyle must not touch a note at all.
 let boardTimer: number | undefined;
 export function scheduleSaveBoard(): void {
-  if (state.readOnly || !store.isOpen) return;   // read-only / demo mode: never write
+  if (state.readOnly || !store.isOpen) {
+    return;   // read-only / demo mode: never write
+  }
   clearTimeout(boardTimer);
   boardTimer = window.setTimeout(flushBoard, 400);
 }
@@ -322,7 +388,9 @@ let boardFailed = false;
 export function boardSavePending(): boolean { return boardTimer != null || boardFailed; }
 export async function flushBoard(): Promise<void> {
   clearTimeout(boardTimer); boardTimer = undefined;
-  if (state.readOnly || !store.isOpen) return;
+  if (state.readOnly || !store.isOpen) {
+    return;
+  }
   try {
     await store.write(BOARD_FILE, boardJSON());
     state.lastSelfWrite = Date.now();            // so the focus-reload ignores our own write

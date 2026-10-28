@@ -23,7 +23,9 @@ document.body.appendChild(importInput);
 importInput.addEventListener('change', async () => {
   const files = [...(importInput.files || [])];
   importInput.value = '';
-  if (files.length) await importFiles(files);
+  if (files.length) {
+    await importFiles(files);
+  }
 });
 export function openImportPicker(): void { importInput.click(); }
 
@@ -34,9 +36,13 @@ interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
 async function importFiles(files: File[]): Promise<void> {
   const entries: ImportEntry[] = [];
   for (const f of files){
-    if (/\.zip$/i.test(f.name)) { try { entries.push(...await unzip(await f.arrayBuffer())); } catch { setStatus('That .zip could not be read.'); } }
-    else if (/\.(md|markdown)$/i.test(f.name)) entries.push({ name: f.name, text: await f.text() });
-    else if (IMAGE_FILE_RE.test(f.name)) entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    if (/\.zip$/i.test(f.name)) {
+      try { entries.push(...await unzip(await f.arrayBuffer())); } catch { setStatus('That .zip could not be read.'); }
+    } else if (/\.(md|markdown)$/i.test(f.name)) {
+      entries.push({ name: f.name, text: await f.text() });
+    } else if (IMAGE_FILE_RE.test(f.name)) {
+      entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    }
   }
   let md  = entries.filter(e => /\.(md|markdown)$/i.test(e.name) && !e.name.endsWith('/'));
   let img = entries.filter(e => e.bytes && IMAGE_FILE_RE.test(e.name) && !e.name.endsWith('/'));
@@ -55,11 +61,17 @@ async function importFiles(files: File[]): Promise<void> {
     md  = md.map(e => ({ ...e, name: e.name.slice(top.length) }));
     img = img.map(e => e.name.startsWith(top) ? { ...e, name: e.name.slice(top.length) } : e);
   }
-  for (const e of md)  await store.write(e.name, e.text ?? '');
-  for (const e of img) await store.write(e.name, new Blob([e.bytes! as BlobPart]));
+  for (const e of md) {
+    await store.write(e.name, e.text ?? '');
+  }
+  for (const e of img) {
+    await store.write(e.name, new Blob([e.bytes! as BlobPart]));
+  }
   // carry over the board file if the archive included one (matching the note top-folder strip)
   const board = entries.find(e => e.text != null && (e.name === BOARD_FILE || e.name === top + BOARD_FILE));
-  if (board?.text != null) await store.write(BOARD_FILE, board.text);
+  if (board?.text != null) {
+    await store.write(BOARD_FILE, board.text);
+  }
   hideStart();
   await loadFromDir();
   setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}.`);
@@ -78,20 +90,32 @@ export async function exportZip(): Promise<void> {
     // A node that has never been saved has no file yet; name it the way desiredFileFor would, off
     // its title or (untitled) off its first line — hence the shared slugStem.
     let name = n.file || (slugStem(n) + '.md');
-    while (used.has(name.toLowerCase())) name = name.replace(/(\.md)?$/, '') + '-1.md';
+    while (used.has(name.toLowerCase())) {
+      name = name.replace(/(\.md)?$/, '') + '-1.md';
+    }
     used.add(name.toLowerCase());
     return { name, data: serializeMd(n) };
   });
   // collect every vault-relative image referenced in a body, and pack the files alongside the notes
   const refs = new Set<string>();
-  for (const n of nodes) for (const { src } of bodyImages(n.body)) if (!/^(https?:|data:)/i.test(src)) refs.add(src);
+  for (const n of nodes) {
+    for (const { src } of bodyImages(n.body)) {
+      if (!/^(https?:|data:)/i.test(src)) {
+        refs.add(src);
+      }
+    }
+  }
   // read every referenced image concurrently, then pack the ones that resolved
   const images = await Promise.all([...refs].map(async path => {
     const blob = await store.readBlob(path);
     return blob ? { name: path, bytes: new Uint8Array(await blob.arrayBuffer()) } : null;
   }));
   const attached = images.filter(Boolean).length;
-  for (const img of images) if (img) files.push(img);
+  for (const img of images) {
+    if (img) {
+      files.push(img);
+    }
+  }
   // Always: the board file now carries every node's position and size, so a zip without it would
   // unpack as a pile of notes with no layout.
   files.push({ name: BOARD_FILE, data: boardJSON() });

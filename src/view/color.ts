@@ -71,6 +71,8 @@ export function applyColorVars(el: HTMLElement, c: string): void {
     el.style.setProperty('--ink', inkFor(c));
     el.style.setProperty('--scrim', scrimFor(c));
   } else {
-    for (const prop of ['--card', '--ink', '--scrim']) el.style.removeProperty(prop);
+    for (const prop of ['--card', '--ink', '--scrim']) {
+      el.style.removeProperty(prop);
+    }
   }
 }

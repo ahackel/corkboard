@@ -35,15 +35,22 @@ export function leadEdge(): BoardEdge | null {
 // Selecting an edge clears the card selection and vice versa — see AppState.selEdges. `add` is the
 // ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (features/selection.ts selectNode).
 function selectEdge(id: string | null, add = false): void {
-  if (id == null) state.selEdges.clear();
-  else if (!add) { state.selEdges.clear(); state.selEdges.add(id); }
-  else if (!state.selEdges.delete(id)) state.selEdges.add(id);
+  if (id == null) {
+    state.selEdges.clear();
+  } else if (!add) {
+    state.selEdges.clear();
+    state.selEdges.add(id);
+  } else if (!state.selEdges.delete(id)) {
+    state.selEdges.add(id);
+  }
   if (state.selEdges.size) { state.sel.clear(); state.selId = null; }
   paintAll();
   syncEdgeBar();
 }
 export function clearEdgeSelection(): void {
-  if (!state.selEdges.size) return;
+  if (!state.selEdges.size) {
+    return;
+  }
   state.selEdges.clear();
   paintFreeEdges();
   syncEdgeBar();
@@ -58,13 +65,19 @@ function edgeBetween(a: string, b: string, pa?: EdgeSide, pb?: EdgeSide): BoardE
 }
 // `fromPort`/`toPort` pin the ends to those faces (BoardEdge); left out, an end picks its face itself.
 function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
-  if (fromId === toId || !connectable(fromId) || !connectable(toId)) return null;
+  if (fromId === toId || !connectable(fromId) || !connectable(toId)) {
+    return null;
+  }
   const dup = edgeBetween(fromId, toId, fromPort, toPort);
   if (dup) { selectEdge(dup.id); return dup; }
   touchEdges();
   const e = makeEdge(fromId, toId);
-  if (fromPort) e.fromPort = fromPort;
-  if (toPort) e.toPort = toPort;
+  if (fromPort) {
+    e.fromPort = fromPort;
+  }
+  if (toPort) {
+    e.toPort = toPort;
+  }
   state.edges.push(e);
   scheduleSaveBoard();
   return e;
@@ -74,12 +87,18 @@ function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: Edg
 // which is what a flow usually wants), as ONE undo step. This is also the TOUCH path — iOS never
 // fires contextmenu on long-press, so a ring drag can't be the only way in.
 export function connectSelection(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = [...state.sel];
   if (ids.length < 2) { setStatus('Select two cards to connect — or drag from a ring on the selected card.'); return; }
   let made = 0;
   touchEdges();
-  for (let i = 0; i < ids.length - 1; i++) if (addEdge(ids[i], ids[i+1])) made++;
+  for (let i = 0; i < ids.length - 1; i++) {
+    if (addEdge(ids[i], ids[i+1])) {
+      made++;
+    }
+  }
   paintAll();
   commitStep();
   setStatus(made ? `Connected ${made + 1} cards` : 'Already connected');
@@ -91,11 +110,17 @@ export function connectSelection(): void {
 function dropAt(p: Pt, exclude: string): { id: string; side?: EdgeSide } | null {
   let hit: { id: string; side?: EdgeSide } | null = null;
   for (const n of state.nodes.values()) {
-    if (n.id === exclude || isHidden(n) || !connectable(n.id)) continue;
+    if (n.id === exclude || isHidden(n) || !connectable(n.id)) {
+      continue;
+    }
     const side = portAt(n, p);
     if (side) { hit = { id: n.id, side }; continue; }
-    if (p.x < n.x || p.y < n.y || p.x > n.x + nodeW(n) || p.y > n.y + nodeH(n)) continue;
-    if (!hit?.side) hit = { id: n.id };      // later nodes paint over earlier ones; take the last match
+    if (p.x < n.x || p.y < n.y || p.x > n.x + nodeW(n) || p.y > n.y + nodeH(n)) {
+      continue;
+    }
+    if (!hit?.side) {
+      hit = { id: n.id };      // later nodes paint over earlier ones; take the last match
+    }
   }
   return hit;
 }
@@ -107,7 +132,9 @@ function dropAt(p: Pt, exclude: string): { id: string; side?: EdgeSide } | null 
 export function installEdgeTools(): void {
   stage.addEventListener('pointerdown', (ev: PointerEvent) => {
     const t = ev.target as Element | null;
-    if (!t) return;
+    if (!t) {
+      return;
+    }
     const socket = t.closest('[data-socket]') as SVGElement | null;
     const handle = t.closest('[data-handle]') as SVGElement | null;
     const hit    = t.closest('[data-edge]') as SVGElement | null;
@@ -119,7 +146,9 @@ export function installEdgeTools(): void {
     }
     if (handle && !state.readOnly) {
       const edge = state.edges.find(e => e.id === handle.getAttribute('data-edge'));
-      if (!edge) return;
+      if (!edge) {
+        return;
+      }
       const end = handle.getAttribute('data-handle') as 'from' | 'to';
       // The end you are NOT dragging is the anchor the draft hangs off.
       beginDraw(ev, { sourceId: end === 'to' ? edge.from : edge.to, to: screenToWorld(ev.clientX, ev.clientY),
@@ -177,7 +206,9 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
   const up = (e: PointerEvent): void => {
     stop();
     const draw = ui.edgeDraw; ui.edgeDraw = null;
-    if (draw) finishDraw(draw, screenToWorld(e.clientX, e.clientY));
+    if (draw) {
+      finishDraw(draw, screenToWorld(e.clientX, e.clientY));
+    }
   };
   const stop = trackPointer({ move, up, cancel: abort, key });
 }
@@ -221,7 +252,10 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
 // commits it), so an abandoned empty card takes its line with it (crud.ts discardNewCard).
 const CONNECT_GAP = 80;
 function spawnConnected(srcId: string, side: EdgeSide): void {
-  const src = state.nodes.get(srcId); if (!src || state.readOnly) return;
+  const src = state.nodes.get(srcId);
+  if (!src || state.readOnly) {
+    return;
+  }
   const isCard = src.type !== 'frame';
   const w = isCard ? nodeW(src) : 240, h = isCard ? nodeH(src) : 64;
   const sw = nodeW(src), sh = nodeH(src);
@@ -231,11 +265,19 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   // Step past whatever already stands there: down a column on the left/right, along a row up/down.
   const blocked = (): boolean => [...state.nodes.values()].some(o => o.parent === src.parent && o !== src && !isHidden(o)
     && x < o.x + nodeW(o) && x + w > o.x && y < o.y + nodeH(o) && y + h > o.y);
-  for (let i = 0; i < 50 && blocked(); i++) { if (horiz) y += h + SPACING; else x += w + SPACING; }
+  for (let i = 0; i < 50 && blocked(); i++) {
+    if (horiz) {
+      y += h + SPACING;
+    } else {
+      x += w + SPACING;
+    }
+  }
   const at = snapPt({ x, y });
   const n = createNode({ ...at, parent: src.parent, color: isCard ? src.color : '',
                          w: isCard ? src.w : undefined, h: isCard ? src.h : undefined });
-  if (!n) return;
+  if (!n) {
+    return;
+  }
   const opposite: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
   addEdge(srcId, n.id, side, opposite[side]);
   paintFreeEdges();
@@ -245,7 +287,9 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
 // of them go in ONE undo step: the selection was the unit the user acted on.
 export function deleteSelectedEdge(): boolean {
   const ids = [...state.selEdges];
-  if (!ids.length) return false;
+  if (!ids.length) {
+    return false;
+  }
   touchEdges();
   state.edges = state.edges.filter(e => !state.selEdges.has(e.id));
   state.selEdges.clear();

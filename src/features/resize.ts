@@ -42,7 +42,9 @@ type FrameDir = typeof FRAME_DIRS[number];
 export function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): void {
   const el = n.el!;
   const key = dirs.join('');
-  if (el.dataset.fhDirs === key) return;   // keyed by the direction SET, so a type flip rebuilds
+  if (el.dataset.fhDirs === key) {
+    return;   // keyed by the direction SET, so a type flip rebuilds
+  }
   clearResizeHandles(el);
   for (const dir of dirs) {
     const h = document.createElement('div');
@@ -53,7 +55,9 @@ export function ensureResizeHandles(n: MindNode, dirs: readonly FrameDir[]): voi
   el.dataset.fhDirs = key;
 }
 export function clearResizeHandles(el: HTMLElement): void {
-  if (!el.dataset.fhDirs) return;   // no handles to remove — skip the query, this runs every repaint
+  if (!el.dataset.fhDirs) {
+    return;   // no handles to remove — skip the query, this runs every repaint
+  }
   el.querySelectorAll(':scope > .fh').forEach(x => x.remove());
   delete el.dataset.fhDirs;
 }
@@ -66,12 +70,16 @@ export function clearResizeHandles(el: HTMLElement): void {
 // before the blob URL loads).
 function imageAspect(n: MindNode): number {
   const img = n.el?.querySelector('img.md-img') as HTMLImageElement | null;
-  if (img && img.naturalWidth && img.naturalHeight) return img.naturalWidth / img.naturalHeight;
+  if (img && img.naturalWidth && img.naturalHeight) {
+    return img.naturalWidth / img.naturalHeight;
+  }
   const w = n.w ?? IMAGE_W, h = n.h ?? IMAGE_H;
   return w / (h || 1);
 }
 function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
-  if (state.readOnly || isLockedEffective(n)) return;
+  if (state.readOnly || isLockedEffective(n)) {
+    return;
+  }
   e.stopPropagation(); e.preventDefault();
   // Is this a BOX (its size is exactly what's dragged) or a card (its height is a minimum over what
   // its text measures)? A FOLDED image card counts as a box here even though isBoxNode says no: its
@@ -155,11 +163,19 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     // this same drag reversing or the chip unfolding it tomorrow.
     if (aspect) {
       const fold = Math.min(right - left, bottom - top) <= IMAGE_FOLD;
-      if (fold !== n.collapsed) n.collapsed = fold;
+      if (fold !== n.collapsed) {
+        n.collapsed = fold;
+      }
       if (fold) { n.dirty = true; return; }
     }
     n.x = left; n.w = right - left;
-    if (sizeH || north || south) { n.y = top; n.h = bottom - top; if (!sizeH) n.clip = n.h < natural0 - 1 || undefined; }
+    if (sizeH || north || south) {
+      n.y = top;
+      n.h = bottom - top;
+      if (!sizeH) {
+        n.clip = n.h < natural0 - 1 || undefined;
+      }
+    }
     n.dirty = true;
   };
   const move = (ev: PointerEvent): void => {
@@ -169,20 +185,29 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     paintFreeEdges();
     // A width-only kind re-wraps its text at the new width, which changes its measured HEIGHT — let
     // everything that reads it (edges, the selection bar) settle as the drag goes, once per frame.
-    if (!sizeH && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
-      subtreeRAF = null;
-      relayout();
-    });
+    if (!sizeH && !subtreeRAF) {
+      subtreeRAF = requestAnimationFrame(() => {
+        subtreeRAF = null;
+        relayout();
+      });
+    }
     // A north/west resize shifts the frame's own x/y, which shifts its content wrapper's origin —
     // repaint the whole subtree (not just direct children) so every hosted descendant's live,
     // wrapper-relative position compensates and stays put in absolute space as the box resizes
     // around it (an east/south-only resize doesn't move the origin, so this is skipped entirely).
     // subtreeIds walks the whole node map, so coalesce it to once per animation frame rather than
     // once per raw pointermove (which can fire far faster than the screen repaints).
-    else if ((north || west) && !subtreeRAF) subtreeRAF = requestAnimationFrame(() => {
-      subtreeRAF = null;
-      for (const id of subtreeIds(n.id)) { const k = state.nodes.get(id); if (k) paintNode(k); }
-    });
+    else if ((north || west) && !subtreeRAF) {
+      subtreeRAF = requestAnimationFrame(() => {
+        subtreeRAF = null;
+        for (const id of subtreeIds(n.id)) {
+          const k = state.nodes.get(id);
+          if (k) {
+            paintNode(k);
+          }
+        }
+      });
+    }
   };
   const up = (): void => {
     stop();
@@ -192,14 +217,22 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: FrameDir): void {
     hideGuides();
     // Back at (or under) the natural width → drop the authored width entirely rather than persisting
     // a redundant mm_w on every card the user so much as nudges.
-    if (!sizeH && n.w != null && Math.round(n.w) <= minW) n.w = undefined;
+    if (!sizeH && n.w != null && Math.round(n.w) <= minW) {
+      n.w = undefined;
+    }
     // …and the same for a card's height: no taller than its text → it has no authored height.
     // Shorter than its text (at the width it ended at) → it clips; else it's a minimum again.
     if (!sizeH && n.h != null) {
       paintNode(n);
       const nat = natural();
-      if (Math.round(n.h) < nat - 1) n.clip = true;
-      else { n.clip = undefined; if (Math.round(n.h) <= nat + 1) n.h = undefined; }
+      if (Math.round(n.h) < nat - 1) {
+        n.clip = true;
+      } else {
+        n.clip = undefined;
+        if (Math.round(n.h) <= nat + 1) {
+          n.h = undefined;
+        }
+      }
     }
     // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
     // the DOM has it.

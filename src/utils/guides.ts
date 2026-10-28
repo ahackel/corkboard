@@ -32,14 +32,22 @@ const shift = (b: Box, a: Axis, d: number): Box => a === 'x' ? { ...b, x: b.x + 
 // The neighbour just BEFORE `b` along `a` (facing it, ending before its middle), and just AFTER.
 function before(b: Box, all: Box[], a: Axis): Box | null {
   let best: Box | null = null;
-  for (const o of all) if (o !== b && facing(o, b, a) && hi(o, a) <= mid(b, a)
-    && (!best || hi(o, a) > hi(best, a))) best = o;
+  for (const o of all) {
+    if (o !== b && facing(o, b, a) && hi(o, a) <= mid(b, a)
+      && (!best || hi(o, a) > hi(best, a))) {
+      best = o;
+    }
+  }
   return best;
 }
 function after(b: Box, all: Box[], a: Axis): Box | null {
   let best: Box | null = null;
-  for (const o of all) if (o !== b && facing(o, b, a) && lo(o, a) >= mid(b, a)
-    && (!best || lo(o, a) < lo(best, a))) best = o;
+  for (const o of all) {
+    if (o !== b && facing(o, b, a) && lo(o, a) >= mid(b, a)
+      && (!best || lo(o, a) < lo(best, a))) {
+      best = o;
+    }
+  }
   return best;
 }
 
@@ -47,7 +55,9 @@ interface Pull { d: number; gaps: (box: Box) => Gap[]; }
 function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
   let best: Pull | null = null;
   const offer = (d: number, gaps: Pull['gaps'] = () => []): void => {
-    if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, gaps };
+    if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) {
+      best = { d, gaps };
+    }
   };
   for (const o of others) {
     for (const e of [lo(o, a), hi(o, a)]) { offer(e - lo(box, a)); offer(e - hi(box, a)); }
@@ -59,9 +69,11 @@ function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
     at: (Math.max(lo(p, o), lo(q, o)) + Math.min(hi(p, o), hi(q, o))) / 2 });
   // the house spacing: an edge SPACING away from a facing neighbour's edge, so cards are easy to set
   // a standard distance apart
-  for (const n of others) if (facing(n, box, a)) {
-    offer(hi(n, a) + SPACING - lo(box, a), bx => [gap(n, bx)]);
-    offer(lo(n, a) - SPACING - hi(box, a), bx => [gap(bx, n)]);
+  for (const n of others) {
+    if (facing(n, box, a)) {
+      offer(hi(n, a) + SPACING - lo(box, a), bx => [gap(n, bx)]);
+      offer(lo(n, a) - SPACING - hi(box, a), bx => [gap(bx, n)]);
+    }
   }
   const A = before(box, others, a), B = after(box, others, a);
   if (A) {
@@ -72,8 +84,9 @@ function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
     const B2 = after(B, others, a);
     if (B2) { const g = lo(B2, a) - hi(B, a); offer(lo(B, a) - g - hi(box, a), bx => [gap(bx, B), gap(B, B2)]); }
   }
-  if (A && B && lo(B, a) - hi(A, a) >= len(box, a))
+  if (A && B && lo(B, a) - hi(A, a) >= len(box, a)) {
     offer((hi(A, a) + lo(B, a) - len(box, a)) / 2 - lo(box, a), bx => [gap(A, bx), gap(bx, B)]);
+  }
   return best;
 }
 
@@ -84,12 +97,20 @@ function alignGuides(box: Box, others: Box[], a: Axis): Guide[] {
   const mine = [lo(box, a), mid(box, a), hi(box, a)];
   for (const n of others) {
     const theirs = [lo(n, a), mid(n, a), hi(n, a)];
-    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
-      if ((i === 1) !== (j === 1) || Math.abs(mine[i] - theirs[j]) > 0.5) continue;   // centre↔centre, edge↔edge
-      const at = Math.round(theirs[j] * 2) / 2, g = out.get(at);
-      const from = Math.min(lo(box, o), lo(n, o)), to = Math.max(hi(box, o), hi(n, o));
-      if (g) { g.from = Math.min(g.from, from); g.to = Math.max(g.to, to); }
-      else out.set(at, { axis: a, at, from, to });
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        if ((i === 1) !== (j === 1) || Math.abs(mine[i] - theirs[j]) > 0.5) {
+          continue;   // centre↔centre, edge↔edge
+        }
+        const at = Math.round(theirs[j] * 2) / 2, g = out.get(at);
+        const from = Math.min(lo(box, o), lo(n, o)), to = Math.max(hi(box, o), hi(n, o));
+        if (g) {
+          g.from = Math.min(g.from, from);
+          g.to = Math.max(g.to, to);
+        } else {
+          out.set(at, { axis: a, at, from, to });
+        }
+      }
     }
   }
   // Cards of one width share left, centre AND right — three rules through the text say no more than
@@ -117,16 +138,27 @@ export type Side = 'lo' | 'hi';
 function edgePull(box: Box, others: Box[], a: Axis, side: Side, tol: number): Pull | null {
   let best: Pull | null = null;
   const offer = (d: number, gaps: Pull['gaps'] = () => []): void => {
-    if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, gaps };
+    if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) {
+      best = { d, gaps };
+    }
   };
   const at = side === 'lo' ? lo(box, a) : hi(box, a);
-  for (const o of others) for (const e of [lo(o, a), hi(o, a)]) offer(e - at);
+  for (const o of others) {
+    for (const e of [lo(o, a), hi(o, a)]) {
+      offer(e - at);
+    }
+  }
   const o = other(a);
   const gap = (p: Box, q: Box): Gap => ({ axis: a, from: hi(p, a), to: lo(q, a),
     at: (Math.max(lo(p, o), lo(q, o)) + Math.min(hi(p, o), hi(q, o))) / 2 });
-  for (const n of others) if (facing(n, box, a)) {
-    if (side === 'lo') offer(hi(n, a) + SPACING - at, bx => [gap(n, bx)]);
-    else offer(lo(n, a) - SPACING - at, bx => [gap(bx, n)]);
+  for (const n of others) {
+    if (facing(n, box, a)) {
+      if (side === 'lo') {
+        offer(hi(n, a) + SPACING - at, bx => [gap(n, bx)]);
+      } else {
+        offer(lo(n, a) - SPACING - at, bx => [gap(bx, n)]);
+      }
+    }
   }
   if (side === 'lo') {
     const A = before(box, others, a), A2 = A && before(A, others, a);
@@ -146,13 +178,17 @@ export function snapEdges(box: Box, edges: { x?: Side; y?: Side }, others: Box[]
   const py = edges.y ? edgePull(box, others, 'y', edges.y, tol) : null;
   const dx = px?.d ?? 0, dy = py?.d ?? 0;
   const grow = (b: Box, a: Axis, side: Side | undefined, d: number): Box => {
-    if (!side || !d) return b;
+    if (!side || !d) {
+      return b;
+    }
     const moved = side === 'lo' ? shift(b, a, d) : b;
     return a === 'x' ? { ...moved, w: b.w + (side === 'lo' ? -d : d) } : { ...moved, h: b.h + (side === 'lo' ? -d : d) };
   };
   const fin = grow(grow(box, 'x', edges.x, dx), 'y', edges.y, dy);
   const through = (a: Axis, side: Side | undefined): Guide[] => {
-    if (!side) return [];
+    if (!side) {
+      return [];
+    }
     const at = Math.round((side === 'lo' ? lo(fin, a) : hi(fin, a)) * 2) / 2;
     return alignGuides(fin, others, a).filter(g => g.at === at);
   };

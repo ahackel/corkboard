@@ -12,13 +12,19 @@ const TOL = 6;   // screen px: close enough to pull
 
 let layer: HTMLElement | null = null;
 function guideLayer(): HTMLElement {
-  if (layer) return layer;
+  if (layer) {
+    return layer;
+  }
   layer = document.createElement('div');
   layer.id = 'guides';
   world.appendChild(layer);
   return layer;
 }
-export function hideGuides(): void { if (layer) layer.replaceChildren(); }
+export function hideGuides(): void {
+  if (layer) {
+    layer.replaceChildren();
+  }
+}
 
 export const boxOf = (n: MindNode, x = n.x, y = n.y): Box => ({ x, y, w: nodeW(n), h: nodeH(n) });
 
@@ -30,9 +36,13 @@ function neighbours(act: MindNode, moving: Set<string>): Box[] {
   const view = { x: a.x, y: a.y, w: z.x - a.x, h: z.y - a.y };
   const out: Box[] = [];
   for (const n of state.nodes.values()) {
-    if (moving.has(n.id) || parentOf(n) !== space || isHidden(n)) continue;
+    if (moving.has(n.id) || parentOf(n) !== space || isHidden(n)) {
+      continue;
+    }
     const b = boxOf(n);
-    if (b.x > view.x + view.w || b.x + b.w < view.x || b.y > view.y + view.h || b.y + b.h < view.y) continue;
+    if (b.x > view.x + view.w || b.x + b.w < view.x || b.y > view.y + view.h || b.y + b.h < view.y) {
+      continue;
+    }
     out.push(b);
   }
   return out;
@@ -76,13 +86,16 @@ function draw(snap: Snap): void {
     return d;
   };
   const parts: HTMLElement[] = [];
-  for (const g of snap.guides)
+  for (const g of snap.guides) {
     parts.push(g.axis === 'x' ? line(g.at - t / 2, g.from, t, g.to - g.from, 'guide')
                               : line(g.from, g.at - t / 2, g.to - g.from, t, 'guide'));
+  }
   // a gap: a bar along the gap with a tick at each end — "these two spaces are the same"
   const tick = 6 * t;
   for (const g of snap.gaps) {
-    if (g.to - g.from < 1) continue;
+    if (g.to - g.from < 1) {
+      continue;
+    }
     if (g.axis === 'y') {
       parts.push(line(g.at - t / 2, g.from, t, g.to - g.from, 'guide gap'));
       parts.push(line(g.at - tick / 2, g.from, tick, t, 'guide gap'), line(g.at - tick / 2, g.to - t, tick, t, 'guide gap'));

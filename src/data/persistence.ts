@@ -46,7 +46,9 @@ export async function switchToDeviceMap(ref: MapRef): Promise<void> {
 // Open a registry-backed map for URL/history restoration. Device maps can always be reopened;
 // local folders only switch when their existing permission grant can be resumed silently.
 export async function openMapRef(ref: MapRef): Promise<boolean> {
-  if (currentMap?.kind === ref.kind && currentMap.id === ref.id && store.isOpen) return true;
+  if (currentMap?.kind === ref.kind && currentMap.id === ref.id && store.isOpen) {
+    return true;
+  }
   if (ref.kind === 'device') {
     await switchToDeviceMap(ref);
     await loadFromDir();
@@ -75,29 +77,51 @@ export function updateMapTitle(): void {
 // ---------- reload on focus ----------
 let reloading = false;
 async function reloadFromDisk(): Promise<void> {
-  if (!store.isOpen) return;
+  if (!store.isOpen) {
+    return;
+  }
   // A single refocus dispatches BOTH window 'focus' and 'visibilitychange'. Guard re-entry.
-  if (reloading) return;
+  if (reloading) {
+    return;
+  }
   // if we just wrote, the focus event is almost certainly our own round-trip — skip
-  if (Date.now() - (state.lastSelfWrite || 0) < 600) return;
+  if (Date.now() - (state.lastSelfWrite || 0) < 600) {
+    return;
+  }
   const selBefore = state.selId;
   // Don't yank the rug out while the user is actively typing in a card or renaming a frame.
-  if (inPlaceEditActive() || isTypingInField()) return;
+  if (inPlaceEditActive() || isTypingInField()) {
+    return;
+  }
   reloading = true;
   try {
     // loadFromDir REPLACES every note with what's on disk, so whatever is still queued must reach the
     // disk first — this used to cancel the pending save instead, and an edit made just before
     // switching away was read over. If a write fails, memory holds the only copy: keep it, don't reload.
     await settleSave();
-    if (hasUnsavedChanges()) return;
-    if (inPlaceEditActive() || isTypingInField()) return;   // began during the write
+    if (hasUnsavedChanges()) {
+      return;
+    }
+    if (inPlaceEditActive() || isTypingInField()) {
+      return;   // began during the write
+    }
     // What was there before, by PATH (ids are minted fresh each load) — and how many unread notes each
     // folded frame held — so a note that came in from outside (the phone inbox) can be pointed out.
     const known = new Set<string>(), unread = new Map<string, number>();
-    for (const n of state.nodes.values()) if (n.file) { known.add(n.file); if (n.lazy != null) unread.set(n.file, n.lazy); }
+    for (const n of state.nodes.values()) {
+      if (n.file) {
+        known.add(n.file);
+        if (n.lazy != null) {
+          unread.set(n.file, n.lazy);
+        }
+      }
+    }
     await loadFromDir({ keepView:true });
-    if (selBefore && state.nodes.has(selBefore)) selectNode(selBefore);
-    else selectNode(null);
+    if (selBefore && state.nodes.has(selBefore)) {
+      selectNode(selBefore);
+    } else {
+      selectNode(null);
+    }
     flashArrived([...state.nodes.values()]
       .filter(n => n.file && (!known.has(n.file) || (n.lazy ?? 0) > (unread.get(n.file) ?? n.lazy ?? 0)))
       .map(n => n.id));

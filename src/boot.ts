@@ -44,7 +44,9 @@ async function openFolderMap(key: string): Promise<boolean> {
     return false;
   }
   if (r === 'denied') { alert('Write permission was denied for this folder.'); return false; }
-  if (r !== 'ok') return false;
+  if (r !== 'ok') {
+    return false;
+  }
   await loadFolder(fsaStore.currentKey!);   // openRecent re-remembers under a fresh key
   return true;
 }
@@ -54,18 +56,31 @@ async function pickFolder(): Promise<void> {
   const r = await fsaStore.pick();   // the picker needs this click as its user gesture
   if (r === 'unsupported') { setStatus('This browser can’t open a local folder — use Chrome or Edge.'); return; }
   if (r === 'denied') { setStatus('Folder permission denied.'); alert('Write permission was denied.\nReopen the folder and choose “Edit”/“Allow”.'); return; }
-  if (r !== 'ok') { if (r === 'error') setStatus('Could not open folder.'); return; }
+  if (r !== 'ok') {
+    if (r === 'error') {
+      setStatus('Could not open folder.');
+    }
+    return;
+  }
   await loadFolder(fsaStore.currentKey!);
   hideStart();
 }
 
 // ---------- the map list ----------
 function timeAgo(ts: number): string {
-  if (!ts) return '';                       // migrated entries carry no last-opened time yet
+  if (!ts) {
+    return '';                       // migrated entries carry no last-opened time yet
+  }
   const s = (Date.now()-ts)/1000;
-  if (s<60) return 'just now';
-  if (s<3600) return Math.floor(s/60)+'m ago';
-  if (s<86400) return Math.floor(s/3600)+'h ago';
+  if (s<60) {
+    return 'just now';
+  }
+  if (s<3600) {
+    return Math.floor(s/60)+'m ago';
+  }
+  if (s<86400) {
+    return Math.floor(s/3600)+'h ago';
+  }
   return Math.floor(s/86400)+'d ago';
 }
 // the map currently open on the canvas — runtime state, not the persisted last-map key
@@ -107,17 +122,25 @@ function renderMapList(): void {
   box.querySelectorAll<HTMLElement>('.map-item').forEach((row, i) => {
     const m = list[i]!;   // rows are rendered in list order
     row.onclick = e => {
-      if ((e.target as HTMLElement).closest('.mi-more, .mi-name-input')) return;
+      if ((e.target as HTMLElement).closest('.mi-more, .mi-name-input')) {
+        return;
+      }
       openRow(m);
     };
-    row.onkeydown = e => { if (e.key === 'Enter' && e.target === row) openRow(m); };
+    row.onkeydown = e => {
+      if (e.key === 'Enter' && e.target === row) {
+        openRow(m);
+      }
+    };
     // map actions live in a context menu: the ⋮ button (tap-friendly) or a desktop right-click
     const more = row.querySelector<HTMLButtonElement>('.mi-more');
-    if (more) more.onclick = e => {
-      e.stopPropagation();
-      const r = more.getBoundingClientRect();
-      openMapMenu(m, r.left, r.bottom + 4);
-    };
+    if (more) {
+      more.onclick = e => {
+        e.stopPropagation();
+        const r = more.getBoundingClientRect();
+        openMapMenu(m, r.left, r.bottom + 4);
+      };
+    }
     row.oncontextmenu = e => {
       e.preventDefault(); e.stopPropagation();   // keep the canvas ctx-menu handler out of it
       openMapMenu(m, e.clientX, e.clientY);
@@ -126,11 +149,17 @@ function renderMapList(): void {
     if (inp) {
       inp.focus(); inp.select();
       inp.onkeydown = e => {
-        if (e.key === 'Enter') inp.blur();
-        else if (e.key === 'Escape') { renaming = null; renderMapList(); }
+        if (e.key === 'Enter') {
+          inp.blur();
+        } else if (e.key === 'Escape') {
+          renaming = null;
+          renderMapList();
+        }
       };
       inp.onblur = () => {
-        if (renaming !== m.id) return;   // Escape already cancelled (re-render detached us)
+        if (renaming !== m.id) {
+          return;   // Escape already cancelled (re-render detached us)
+        }
         renaming = null;
         commitRename(m, inp.value);
       };
@@ -153,27 +182,41 @@ function openMapMenu(m: MapRef, x: number, y: number): void {
 
 async function openRow(m: MapRef): Promise<void> {
   if (isCurrent(m)) { hideStart(); return; }          // already on the canvas
-  if (m.kind === 'device') { await openDeviceMap(m); hideStart(); }
-  else if (await openFolderMap(m.id)) hideStart();
+  if (m.kind === 'device') {
+    await openDeviceMap(m);
+    hideStart();
+  } else if (await openFolderMap(m.id)) {
+    hideStart();
+  }
 }
 
 async function commitRename(m: MapRef, name: string): Promise<void> {
   await renameDeviceMap(await resolveOnDeviceStore(), m.id, name);
-  if (isCurrent(m)) updateMapTitle();   // the open map's name shows in the toolbar + tab title
+  if (isCurrent(m)) {
+    updateMapTitle();   // the open map's name shows in the toolbar + tab title
+  }
   renderMapList();
 }
 
 async function removeFolder(m: MapRef): Promise<void> {
-  if (!confirm(`Remove “${m.name}” from this list?\nThe folder and its files stay on disk.`)) return;
+  if (!confirm(`Remove “${m.name}” from this list?\nThe folder and its files stay on disk.`)) {
+    return;
+  }
   await forgetRecent(m.id);
   renderMapList();
 }
 async function deleteMap(m: MapRef): Promise<void> {
-  if (!confirm(`Delete “${m.name}” and all its notes from this device?\nThis cannot be undone.`)) return;
+  if (!confirm(`Delete “${m.name}” and all its notes from this device?\nThis cannot be undone.`)) {
+    return;
+  }
   const wasCurrent = isCurrent(m);
-  if (wasCurrent) await settleSave();   // settle any pending autosave before the dir vanishes
+  if (wasCurrent) {
+    await settleSave();   // settle any pending autosave before the dir vanishes
+  }
   await deleteDeviceMap(await resolveOnDeviceStore(), m.id);
-  if (wasCurrent) await commitDevice();   // fall back to the next map (or a fresh one)
+  if (wasCurrent) {
+    await commitDevice();   // fall back to the next map (or a fresh one)
+  }
   renderMapList();
 }
 
@@ -203,7 +246,11 @@ byId('newBtn').onclick = async () => {
 byId('importBtn').onclick = () => openImportPicker();
 byId('startClose').onclick = () => hideStart();
 // clicking the canvas area beside the sidebar closes it
-startScreen.addEventListener('click', e => { if (e.target === startScreen) hideStart(); });
+startScreen.addEventListener('click', e => {
+  if (e.target === startScreen) {
+    hideStart();
+  }
+});
 setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
 byId('appVersion').textContent = `v${__APP_VERSION__}`;
 
@@ -223,21 +270,29 @@ async function commitDevice(): Promise<void> {
 // instead so the session opens somewhere legible (search / focus take it from there). Selects
 // nothing, so the edit bottom-sheet stays closed on boot.
 function orientForPhone(): void {
-  if (!phoneMode() || !state.nodes.size) return;
+  if (!phoneMode() || !state.nodes.size) {
+    return;
+  }
   let best: MindNode | undefined, bestCount = -1;
   for (const n of state.nodes.values()){
-    if (!isRoot(n)) continue;
+    if (!isRoot(n)) {
+      continue;
+    }
     const c = descendantCount(n.id);
     if (c > bestCount){ bestCount = c; best = n; }
   }
-  if (best) frameBox(subtreeIds(best.id).map(id => state.nodes.get(id)));
+  if (best) {
+    frameBox(subtreeIds(best.id).map(id => state.nodes.get(id)));
+  }
 }
 
 export async function boot(): Promise<void> {
   applyView();
   hideStart();
   // one-time legacy migration / rebuild — the store probe is skipped once the registry exists
-  if (!readMaps().length) await ensureMapRegistry(await resolveOnDeviceStore());
+  if (!readMaps().length) {
+    await ensureMapRegistry(await resolveOnDeviceStore());
+  }
   // resume a local folder only if we can do it silently (permission still granted); else on-device
   const last = getLastMap();
   if (HAS_FSA && last?.kind === 'folder' && await fsaStore.resume(last.id)) {

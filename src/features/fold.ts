@@ -49,7 +49,9 @@ function foldableSelection(ids: Iterable<string>): MindNode[] {
 // Apply one shared fold state to a whole set, as ONE undo step and one animated reflow. Unfolding a
 // frame whose notes are still on disk reads them first (data/lazy.ts).
 function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
-  if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) return;
+  if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) {
+    return;
+  }
   record(cards.map(n => n.id),
     () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
@@ -60,7 +62,9 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
 }
 export function toggleCollapseSelection(ids: Iterable<string>): void {
   const cards = foldableSelection(ids);
-  if (!cards.length) return;
+  if (!cards.length) {
+    return;
+  }
   applyCollapsed(cards, !cards.every(n => n.collapsed));   // all collapsed → expand; else collapse all
 }
 // What "Collapse/Expand all" (⌘P) act on: the selected frames and everything inside them when frames
@@ -78,13 +82,17 @@ export function foldScope(): MindNode[] {
 // (data/lazy.ts) — and the set is taken again after, since what was read holds more to unfold.
 export function expandAll(): void {
   const go = (): void => setCollapsedSelection(foldScope().map(n => n.id), false);
-  if (!afterReading(foldScope().map(n => n.id), go)) go();
+  if (!afterReading(foldScope().map(n => n.id), go)) {
+    go();
+  }
 }
 // The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
 // leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
 // selection lands on one state in a single press instead of needing two.
 export function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean): void {
   const cards = foldableSelection(ids).filter(n => !!n.collapsed !== collapsed);
-  if (!cards.length) return;
+  if (!cards.length) {
+    return;
+  }
   applyCollapsed(cards, collapsed);
 }

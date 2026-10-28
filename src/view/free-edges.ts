@@ -49,7 +49,9 @@ function centre(n: MindNode | Rect): Pt {
 function rimPoint(n: MindNode | Rect, p: Pt): Pt {
   const r = 'id' in n ? rimRect(n) : n, c = centre(r);
   const dx = p.x - c.x, dy = p.y - c.y;
-  if (!dx && !dy) return c;
+  if (!dx && !dy) {
+    return c;
+  }
   const tx = dx ? (r.w/2) / Math.abs(dx) : Infinity, ty = dy ? (r.h/2) / Math.abs(dy) : Infinity;
   const t = Math.min(tx, ty, 1);
   return { x: c.x + dx * t, y: c.y + dy * t };
@@ -99,8 +101,12 @@ function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   // inside out would be worse than one that touches.
   const trimTail = n === 2 ? lenOf(0) > (trimA + trimB) * 1.5 : lenOf(0) > trimA * 1.5;
   const trimTip = n === 2 ? trimTail : lenOf(n-2) > trimB * 1.5;
-  if (trimTail) pts[0] = { x: pts[0].x - tailU.x * trimA, y: pts[0].y - tailU.y * trimA };
-  if (trimTip) pts[n-1] = { x: pts[n-1].x - tipU.x * trimB, y: pts[n-1].y - tipU.y * trimB };
+  if (trimTail) {
+    pts[0] = { x: pts[0].x - tailU.x * trimA, y: pts[0].y - tailU.y * trimA };
+  }
+  if (trimTip) {
+    pts[n-1] = { x: pts[n-1].x - tipU.x * trimB, y: pts[n-1].y - tipU.y * trimB };
+  }
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 1; i < n - 1; i++) {
     const p = pts[i], uin = unit(pts[i-1], p), uout = unit(p, pts[i+1]);
@@ -110,7 +116,10 @@ function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   }
   d += ` L ${pts[n-1].x} ${pts[n-1].y}`;
   // The label's spot: halfway along the line, which on an elbow is the middle of its middle leg.
-  let half = 0; for (let i = 0; i < n - 1; i++) half += lenOf(i);
+  let half = 0;
+  for (let i = 0; i < n - 1; i++) {
+    half += lenOf(i);
+  }
   half /= 2;
   let mid = pts[0];
   for (let i = 0; i < n - 1; i++) {
@@ -132,7 +141,9 @@ function route(ra: Rect, rb: Rect): Pt[] {
   const ca = centre(ra), cb = centre(rb);
   const gapX = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w));
   const gapY = Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h));
-  if (gapX < 0 && gapY < 0) return [rimPoint(ra, cb), rimPoint(rb, ca)];
+  if (gapX < 0 && gapY < 0) {
+    return [rimPoint(ra, cb), rimPoint(rb, ca)];
+  }
   if (gapX >= gapY) {
     const right = cb.x > ca.x;
     const ax = right ? ra.x + ra.w : ra.x, bx = right ? rb.x : rb.x + rb.w;
@@ -164,51 +175,77 @@ function facePoint(r: Rect, s: EdgeSide): Pt {
 // Drop repeated points and the middle of three in a row; null if the path doubles back on itself.
 function simplify(pts: Pt[]): Pt[] | null {
   const out: Pt[] = [];
-  for (const p of pts) if (!out.length || Math.hypot(p.x - out[out.length-1].x, p.y - out[out.length-1].y) > 0.5) out.push(p);
+  for (const p of pts) {
+    if (!out.length || Math.hypot(p.x - out[out.length-1].x, p.y - out[out.length-1].y) > 0.5) {
+      out.push(p);
+    }
+  }
   for (let i = 1; i < out.length - 1;) {
     const a = out[i-1], b = out[i], c = out[i+1];
     if ((Math.abs(a.x - b.x) < 0.5 && Math.abs(b.x - c.x) < 0.5) || (Math.abs(a.y - b.y) < 0.5 && Math.abs(b.y - c.y) < 0.5)) {
-      if ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) return null;
+      if ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) {
+        return null;
+      }
       out.splice(i, 1);
-    } else i++;
+    } else {
+      i++;
+    }
   }
   return out.length >= 2 ? out : null;
 }
 // Does the axis-aligned segment p→q pass through the INSIDE of r (touching its rim is fine)?
 function crosses(p: Pt, q: Pt, r: Rect): boolean {
-  if (r.w < 2 || r.h < 2) return false;
+  if (r.w < 2 || r.h < 2) {
+    return false;
+  }
   const x0 = Math.min(p.x, q.x), x1 = Math.max(p.x, q.x), y0 = Math.min(p.y, q.y), y1 = Math.max(p.y, q.y);
   return x1 > r.x + 1 && x0 < r.x + r.w - 1 && y1 > r.y + 1 && y0 < r.y + r.h - 1;
 }
 function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
   let best: Pt[] | null = null, bestScore = Infinity;
-  for (const a of sa ? [sa] : SIDES) for (const b of sb ? [sb] : SIDES) {
-    const pa = facePoint(ra, a), pb = facePoint(rb, b), da = DIR[a], db = DIR[b];
-    const qa = { x: pa.x + da.x * STUB, y: pa.y + da.y * STUB }, qb = { x: pb.x + db.x * STUB, y: pb.y + db.y * STUB };
-    const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
-    const xs = [qa.x, qb.x, Math.min(ra.x, rb.x) - STUB, Math.max(ra.x + ra.w, rb.x + rb.w) + STUB];
-    const ys = [qa.y, qb.y, Math.min(ra.y, rb.y) - STUB, Math.max(ra.y + ra.h, rb.y + rb.h) + STUB];
-    const shapes: Pt[][] = [[pa, pb], [pa, { x: pb.x, y: pa.y }, pb], [pa, { x: pa.x, y: pb.y }, pb],
-      [pa, { x: mx, y: pa.y }, { x: mx, y: pb.y }, pb], [pa, { x: pa.x, y: my }, { x: pb.x, y: my }, pb]];
-    for (const X of xs) shapes.push([pa, qa, { x: X, y: qa.y }, { x: X, y: qb.y }, qb, pb]);
-    for (const Y of ys) shapes.push([pa, qa, { x: qa.x, y: Y }, { x: qb.x, y: Y }, qb, pb]);
-    for (const raw of shapes) {
-      const pts = simplify(raw); if (!pts) continue;
-      let ok = true, len = 0;
-      for (let i = 0; i < pts.length - 1 && ok; i++) {
-        const p = pts[i], q = pts[i+1];
-        if (Math.abs(p.x - q.x) > 0.5 && Math.abs(p.y - q.y) > 0.5) ok = false;   // not orthogonal
-        else if (crosses(p, q, ra) || crosses(p, q, rb)) ok = false;
-        len += Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
+  for (const a of sa ? [sa] : SIDES) {
+    for (const b of sb ? [sb] : SIDES) {
+      const pa = facePoint(ra, a), pb = facePoint(rb, b), da = DIR[a], db = DIR[b];
+      const qa = { x: pa.x + da.x * STUB, y: pa.y + da.y * STUB }, qb = { x: pb.x + db.x * STUB, y: pb.y + db.y * STUB };
+      const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
+      const xs = [qa.x, qb.x, Math.min(ra.x, rb.x) - STUB, Math.max(ra.x + ra.w, rb.x + rb.w) + STUB];
+      const ys = [qa.y, qb.y, Math.min(ra.y, rb.y) - STUB, Math.max(ra.y + ra.h, rb.y + rb.h) + STUB];
+      const shapes: Pt[][] = [[pa, pb], [pa, { x: pb.x, y: pa.y }, pb], [pa, { x: pa.x, y: pb.y }, pb],
+        [pa, { x: mx, y: pa.y }, { x: mx, y: pb.y }, pb], [pa, { x: pa.x, y: my }, { x: pb.x, y: my }, pb]];
+      for (const X of xs) {
+        shapes.push([pa, qa, { x: X, y: qa.y }, { x: X, y: qb.y }, qb, pb]);
       }
-      if (!ok) continue;
-      // leaves A along its face's normal, and arrives at B moving INTO it
-      const u0 = unit(pts[0], pts[1]), u1 = unit(pts[pts.length-2], pts[pts.length-1]);
-      if (u0.x * da.x + u0.y * da.y < 0.99 || u1.x * db.x + u1.y * db.y > -0.99) continue;
-      const score = len + (pts.length - 2) * BEND_COST;
-      // A tie goes to the shape tried FIRST — the Z through the middle of the gap is listed before the
-      // detours, so equal-length routes turn halfway across rather than hugging one card.
-      if (score < bestScore - 0.5) { bestScore = score; best = pts; }
+      for (const Y of ys) {
+        shapes.push([pa, qa, { x: qa.x, y: Y }, { x: qb.x, y: Y }, qb, pb]);
+      }
+      for (const raw of shapes) {
+        const pts = simplify(raw);
+        if (!pts) {
+          continue;
+        }
+        let ok = true, len = 0;
+        for (let i = 0; i < pts.length - 1 && ok; i++) {
+          const p = pts[i], q = pts[i+1];
+          if (Math.abs(p.x - q.x) > 0.5 && Math.abs(p.y - q.y) > 0.5) {
+            ok = false;   // not orthogonal
+          } else if (crosses(p, q, ra) || crosses(p, q, rb)) {
+            ok = false;
+          }
+          len += Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
+        }
+        if (!ok) {
+          continue;
+        }
+        // leaves A along its face's normal, and arrives at B moving INTO it
+        const u0 = unit(pts[0], pts[1]), u1 = unit(pts[pts.length-2], pts[pts.length-1]);
+        if (u0.x * da.x + u0.y * da.y < 0.99 || u1.x * db.x + u1.y * db.y > -0.99) {
+          continue;
+        }
+        const score = len + (pts.length - 2) * BEND_COST;
+        // A tie goes to the shape tried FIRST — the Z through the middle of the gap is listed before the
+        // detours, so equal-length routes turn halfway across rather than hugging one card.
+        if (score < bestScore - 0.5) { bestScore = score; best = pts; }
+      }
     }
   }
   return best ?? [facePoint(ra, sa ?? 'right'), facePoint(rb, sb ?? 'left')];
@@ -222,13 +259,18 @@ function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | u
 // A line to a card tucked inside a FOLDED frame attaches to that frame's pill instead (firstVisible), and
 // its pinned port there is dropped — the pill's faces aren't the card's. Ends the open frame hides map to null.
 function edgeEnd(id: string): MindNode | null {
-  const n = state.nodes.get(id); if (!n) return null;
+  const n = state.nodes.get(id);
+  if (!n) {
+    return null;
+  }
   const v = firstVisible(n);
   return isHidden(v) ? null : v;
 }
 export function edgeGeometry(e: BoardEdge): Geometry | null {
   const from = edgeEnd(e.from), to = edgeEnd(e.to);
-  if (!from || !to) return null;
+  if (!from || !to) {
+    return null;
+  }
   const pa = from.id === e.from ? e.fromPort : undefined, pb = to.id === e.to ? e.toPort : undefined;
   return polyline(routeFor(rimRect(from), pa, rimRect(to), pb), trim(e.fromCap), trim(e.toCap));
 }
@@ -287,13 +329,19 @@ export function edgeVisible(e: BoardEdge): boolean {
 const LINK_INK = '#fff';
 function linkEdges(n: MindNode): string {
   const links = n.el?.querySelectorAll<HTMLElement>('a.wikilink');
-  if (!links?.length) return '';
+  if (!links?.length) {
+    return '';
+  }
   let out = '';
   for (const a of links) {
     const target = resolveWikilink(a.dataset.target ?? '')[0];
-    if (!target || target.id === n.id || isHidden(target) || !connectable(target.id)) continue;
+    if (!target || target.id === n.id || isHidden(target) || !connectable(target.id)) {
+      continue;
+    }
     const r = a.getBoundingClientRect();
-    if (!r.width) continue;
+    if (!r.width) {
+      continue;
+    }
     const p1 = screenToWorld(r.left, r.top), p2 = screenToWorld(r.right, r.bottom);
     const y = clamp((p1.y + p2.y) / 2, n.y, n.y + nodeH(n));
     const toRight = centre(target).x >= (p1.x + p2.x) / 2;
@@ -315,8 +363,13 @@ export function paintFreeEdges(): void {
   // The edge whose end is being moved is not drawn in its OLD place — the draft below IS that edge.
   const moving = ui.edgeDraw?.edgeId;
   for (const e of state.edges) {
-    if (e.id === moving || !edgeVisible(e)) continue;
-    const g = edgeGeometry(e); if (!g) continue;
+    if (e.id === moving || !edgeVisible(e)) {
+      continue;
+    }
+    const g = edgeGeometry(e);
+    if (!g) {
+      continue;
+    }
     const ink = colorFill(e.color) ?? 'var(--edge)';
     const sel = state.selEdges.has(e.id);
     const dash = e.dashed ? ' stroke-dasharray="7 6"' : '';
@@ -325,7 +378,9 @@ export function paintFreeEdges(): void {
     // underneath, so a selected edge reads as outlined rather than merely recoloured.
     // With ONE edge selected its two end handles say so (FigJam); a multi-selection has no handles, so
     // there each line wears the ring instead.
-    if (sel && state.selEdges.size > 1) svg += `<path class="fe-selring" d="${g.d}"/>`;
+    if (sel && state.selEdges.size > 1) {
+      svg += `<path class="fe-selring" d="${g.d}"/>`;
+    }
     svg += `<path class="fe" style="stroke:${ink}"${dash} d="${g.d}"/>`;
     svg += endCap(e.toCap, g.b, g.tipTan, ink) + endCap(e.fromCap, g.a, g.tailTan, ink);
     // The label sits ON the line at its midpoint, on a plate so the line doesn't strike it through.
@@ -351,14 +406,18 @@ export function paintFreeEdges(): void {
   // The four rings on the selected card. On SELECTION, never on hover: a ring that only appears once
   // you've said which card you mean can't be hit by accident while you drag past.
   const one = state.sel.size === 1 ? state.nodes.get(state.selId ?? '') : null;
-  if (one && !isHidden(one)) svg += linkEdges(one);
-  if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one))
-    for (const { side, p } of socketPoints(one))
+  if (one && !isHidden(one)) {
+    svg += linkEdges(one);
+  }
+  if (one && connectable(one.id) && !state.selEdges.size && !ui.drag && !isHidden(one)) {
+    for (const { side, p } of socketPoints(one)) {
       tools += `<g class="fe-socket" data-socket="${side}" data-node="${one.id}">`
         + `<circle class="fe-port-hit" cx="${p.x}" cy="${p.y}" r="${SOCKET_HIT_R}"/>`
         + `<circle class="fe-port-dot" cx="${p.x}" cy="${p.y}" r="${SOCKET_R}"/>`
         + `<g class="fe-port-plus"><circle cx="${p.x}" cy="${p.y}" r="${SOCKET_HOVER_R}"/>`
         + `<path d="M ${p.x - 5} ${p.y} H ${p.x + 5} M ${p.x} ${p.y - 5} V ${p.y + 5}"/></g></g>`;
+    }
+  }
   // The edge being drawn right now, in its FINAL style and route: from the fixed card to the pointer,
   // or — once the pointer is over a card — all the way to that card, exactly where it will land.
   const draw = ui.edgeDraw;
@@ -369,8 +428,9 @@ export function paintFreeEdges(): void {
       const r = rimRect(over);
       tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`;
       // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot
-      for (const { side, p } of socketPoints(over))
+      for (const { side, p } of socketPoints(over)) {
         tools += `<circle class="fe-drop-port${side === draw.overSide ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${side === draw.overSide ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
+      }
     }
     const edge = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';

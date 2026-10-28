@@ -51,7 +51,9 @@ async function imageSize(file: File): Promise<{ w: number; h: number }> {
     const bmp = await createImageBitmap(file);
     const { width: w, height: h } = bmp;
     bmp.close();
-    if (w > 0 && h > 0) return { w, h };
+    if (w > 0 && h > 0) {
+      return { w, h };
+    }
   } catch { /* fall through to the <img> decode */ }
   // SVG: createImageBitmap REFUSES an SVG blob (it decodes raster formats), so without this every
   // vector image landed as a generic IMAGE_W×IMAGE_H box instead of its own shape. An <img> decodes
@@ -62,7 +64,9 @@ async function imageSize(file: File): Promise<{ w: number; h: number }> {
   try {
     const img = new Image();
     await new Promise<void>((ok, fail) => { img.onload = () => ok(); img.onerror = fail; img.src = url; });
-    if (img.naturalWidth > 0 && img.naturalHeight > 0) return { w: img.naturalWidth, h: img.naturalHeight };
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      return { w: img.naturalWidth, h: img.naturalHeight };
+    }
   } catch { /* fall through to the default box */ }
   finally { URL.revokeObjectURL(url); }
   return { w: IMAGE_W, h: IMAGE_H };
@@ -121,9 +125,14 @@ async function appendImagesToNode(id: string, files: FileList | File[]): Promise
 // Insert images at the caret in the in-card body editor (used by paste / drop onto it).
 async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
   const imgs = imageFiles(files);
-  if (!imgs.length || !canAttach()) return;
+  if (!imgs.length || !canAttach()) {
+    return;
+  }
   if (!ui.bodyEdit){ return; }                          // only meaningful while editing a body in place
-  const n = state.nodes.get(ui.bodyEdit.id); if (!n) return;
+  const n = state.nodes.get(ui.bodyEdit.id);
+  if (!n) {
+    return;
+  }
   const ta = ui.bodyEdit.ta;
   touch(n.id);   // inside an open body-edit session — merges into (and commits with) that step
   setStatus('Adding image…');
@@ -144,7 +153,9 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
 // never shown or editable. Shared by a canvas/card drop AND a clipboard paste (⌘V or the context
 // menu's Paste) — both land an image as a card of its own rather than inline body markdown.
 async function createImageCards(imgs: File[], sx: number | null, sy: number | null, parent: string | null): Promise<void> {
-  if (!imgs.length || !canAttach()) return;
+  if (!imgs.length || !canAttach()) {
+    return;
+  }
   setStatus('Adding image…');
   const p = worldAtOrCentre(sx, sy);
   let i = 0;
@@ -185,12 +196,16 @@ filePicker.addEventListener('change', () => {
   const files = imageFiles(filePicker.files);
   filePicker.value = '';                              // allow re-picking the same file next time
   const req = pickTarget; pickTarget = null;
-  if (!req || !files.length) return;
+  if (!req || !files.length) {
+    return;
+  }
   void createImageCards(files, req.sx, req.sy, req.parent);
 });
 // Drop a new image card at a canvas point.
 export function pickImagesAt(sx: number | null, sy: number | null, parent: string | null): void {
-  if (!canAttach()) return;
+  if (!canAttach()) {
+    return;
+  }
   pickTarget = { sx, sy, parent };
   filePicker.click();
 }
@@ -230,14 +245,20 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   if (/^https?:\/\/\S+$/i.test(text)){
     const isImg = IMAGE_URL_RE.test(text);
     const n = createNode({ ...opts, body: isImg ? `![](${text})` : text });
-    if (n) setStatus(isImg ? 'Pasted image link' : 'Pasted link');
-    if (n && !isImg) void probeImage(text).then(ok => {
+    if (n) {
+      setStatus(isImg ? 'Pasted image link' : 'Pasted link');
+    }
+    if (n && !isImg) {
+      void probeImage(text).then(ok => {
       const cur = state.nodes.get(n.id);
-      if (!ok || !cur || cur.body !== text) return;   // gone or edited meanwhile → leave it alone
+      if (!ok || !cur || cur.body !== text) {
+        return;   // gone or edited meanwhile → leave it alone
+      }
       record([cur.id], () => { cur.body = `![](${text})`; cur.dirty = true; });
       relayout(); scheduleSave();
       setStatus('Pasted image link');
     });
+    }
     return;
   }
   // A LIST — bullets, numbers, or bare short lines — is many thoughts: one card per item, in a column
@@ -246,7 +267,9 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   if (items){
     const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(worldAtOrCentre());
     const made = createCards(items, at, opts.parent);
-    if (made.length) setStatus(`Pasted ${made.length} cards`);
+    if (made.length) {
+      setStatus(`Pasted ${made.length} cards`);
+    }
     return;
   }
   // Pasted text is a card's text, so it splits the way a card's own does (splitHeading): a leading
@@ -254,22 +277,33 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   // hand-roll its own first-line-as-title read here, complete with a second copy of the marker strip.
   const { title, body } = splitHeading(text);
   const n = createNode({ ...opts, title, body });
-  if (n) setStatus(`Pasted “${nodeLabel(n)}”`);
+  if (n) {
+    setStatus(`Pasted “${nodeLabel(n)}”`);
+  }
 }
 document.addEventListener('paste', (e) => {
-  if (isTypingInField()) return;                 // field/editor pastes keep their native behaviour
+  if (isTypingInField()) {
+    return;                 // field/editor pastes keep their native behaviour
+  }
   if (state.readOnly){ setStatus('Read-only — can’t paste'); return; }
-  const cd = e.clipboardData; if (!cd) return;
+  const cd = e.clipboardData;
+  if (!cd) {
+    return;
+  }
   const imgs = imageFiles(cd.files);
   const text = cd.getData('text/plain').trim();
-  if (!imgs.length && !text) return;
+  if (!imgs.length && !text) {
+    return;
+  }
   e.preventDefault();
   // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card. Either
   // way it lands where the pointer is — in the frame under it, like a drop (view/layout.ts frameAt).
   const mx = ui.lastMouse?.x ?? null, my = ui.lastMouse?.y ?? null;
   const w = mx != null && my != null ? screenToWorld(mx, my) : null;
   const into = w ? frameAt(w.x, w.y, new Set())?.id ?? null : null;
-  if (text && tryPasteCards(text, { sx: mx, sy: my, parent: into })) return;
+  if (text && tryPasteCards(text, { sx: mx, sy: my, parent: into })) {
+    return;
+  }
   createCardFromClipboard(imgs, text, mx, my, cardOptsAt(mx, my, into));
 });
 // Context-menu Paste: no ClipboardEvent to read from, so ask the async clipboard API (may prompt
@@ -281,8 +315,11 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
     const items = await navigator.clipboard.read();
     for (const it of items){
       const imgType = it.types.find(t => t.startsWith('image/'));
-      if (imgType) imgs.push(new File([await it.getType(imgType)], 'pasted' + imageExtFor(imgType), { type: imgType }));
-      else if (it.types.includes('text/plain')) text = await (await it.getType('text/plain')).text();
+      if (imgType) {
+        imgs.push(new File([await it.getType(imgType)], 'pasted' + imageExtFor(imgType), { type: imgType }));
+      } else if (it.types.includes('text/plain')) {
+        text = await (await it.getType('text/plain')).text();
+      }
     }
   } catch {
     try { text = await navigator.clipboard.readText(); }        // read() unsupported → text-only fallback
@@ -290,7 +327,9 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
   }
   text = text.trim();
   if (!imgs.length && !text){ setStatus('Clipboard is empty'); return; }
-  if (text && tryPasteCards(text, { sx, sy, parent })) return;   // copied cards reconstruct as cards
+  if (text && tryPasteCards(text, { sx, sy, parent })) {
+    return;   // copied cards reconstruct as cards
+  }
   createCardFromClipboard(imgs, text, sx, sy, cardOptsAt(sx, sy, parent));
 }
 
@@ -298,7 +337,9 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
 // level so we can both highlight the target and stop the browser from navigating to the dropped file.
 const setImgDropTarget = classMarker('img-drop');
 document.addEventListener('dragover', (e) => {
-  if (!dragHasFiles(e)) return;
+  if (!dragHasFiles(e)) {
+    return;
+  }
   e.preventDefault();
   if (state.readOnly){ setImgDropTarget(null); return; }
   const t = e.target as HTMLElement;
@@ -306,9 +347,15 @@ document.addEventListener('dragover', (e) => {
   if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint
   setImgDropTarget(t.closest?.('.body-edit') || cardNode?.el || null);
 });
-document.addEventListener('dragleave', (e) => { if (e.relatedTarget == null) setImgDropTarget(null); });
+document.addEventListener('dragleave', (e) => {
+  if (e.relatedTarget == null) {
+    setImgDropTarget(null);
+  }
+});
 document.addEventListener('drop', async (e) => {
-  if (!dragHasFiles(e)) return;
+  if (!dragHasFiles(e)) {
+    return;
+  }
   e.preventDefault();
   const t = e.target as HTMLElement;
   const onEditor = !!t.closest?.('.body-edit');
@@ -330,11 +377,21 @@ document.addEventListener('drop', async (e) => {
     tryPasteCards(cardsToPayload(cards), { sx: e.clientX, sy: e.clientY, parent: (cardIsImage || cardIsLocked) ? null : cardId });
   }
   const imgs = imageFiles(e.dataTransfer!.files);
-  if (!imgs.length) return;
-  if (onEditor && ui.bodyEdit){ await insertImagesAtCursor(imgs); }   // drop on the open editor → at the caret
+  if (!imgs.length) {
+    return;
+  }
+  if (onEditor && ui.bodyEdit) {
+    await insertImagesAtCursor(imgs);
+  }   // drop on the open editor → at the caret
   // a frame is a container, not a text card — its body never renders, so dropped images become
   // new image-card CHILDREN of the frame instead of (invisibly) appending to its hidden body
-  else if (cardEl && cardIsFrame && !cardIsLocked){ selectNode(cardId); await createImageCards(imgs, e.clientX, e.clientY, cardId); }
-  else if (cardEl && !cardIsImage && !cardIsLocked){ selectNode(cardId); await appendImagesToNode(cardId!, imgs); }
-  else if (!cardEl || !cardIsLocked) await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
+  else if (cardEl && cardIsFrame && !cardIsLocked) {
+    selectNode(cardId);
+    await createImageCards(imgs, e.clientX, e.clientY, cardId);
+  } else if (cardEl && !cardIsImage && !cardIsLocked) {
+    selectNode(cardId);
+    await appendImagesToNode(cardId!, imgs);
+  } else if (!cardEl || !cardIsLocked) {
+    await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
+  }
 });

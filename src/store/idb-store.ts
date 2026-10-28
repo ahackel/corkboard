@@ -31,11 +31,18 @@ export const idbStore = (() => {
     get isOpen(){ return _opened; },
     get name(){ return _mapName; },
 
-    openMap(id: string, name?: string){ _mapId = id; if (name) _mapName = name; },
+    openMap(id: string, name?: string){
+      _mapId = id;
+      if (name) {
+        _mapName = name;
+      }
+    },
     async createMap(id: string, name: string){ await put(prefixOf(id) + MAP_META_FILE, serializeMapMeta(name)); },
     async renameMap(id: string, name: string){
       await this.createMap(id, name);   // rename IS a meta rewrite
-      if (id === _mapId) _mapName = name;
+      if (id === _mapId) {
+        _mapName = name;
+      }
     },
     async deleteMap(id: string){
       await dbEach(await db(), 'files', 'readwrite', row => {
@@ -53,7 +60,9 @@ export const idbStore = (() => {
         ids.add(id);
         if (k === prefixOf(id) + MAP_META_FILE && typeof v === 'string'){
           const name = parseMapMetaName(v);
-          if (name) names.set(id, name);
+          if (name) {
+            names.set(id, name);
+          }
         }
       });
       return [...ids].map(id => ({ id, name: names.get(id) ?? (id === 'vault' ? 'My map' : id) }));
@@ -64,9 +73,13 @@ export const idbStore = (() => {
       // A flat key space: every file is already in hand, so the plan simply picks which texts to keep.
       const p = prefixOf(_mapId), all = new Map<string, unknown>();
       await eachKey((k, v) => {
-        if (!ownedBy(k, _mapId)) return;
+        if (!ownedBy(k, _mapId)) {
+          return;
+        }
         const path = k.slice(p.length);
-        if (path.startsWith(under) && !path.split('/').some(s => s.startsWith('.'))) all.set(path, v);
+        if (path.startsWith(under) && !path.split('/').some(s => s.startsWith('.'))) {
+          all.set(path, v);
+        }
       });
       const plan = planTree([...all.keys()], under, fold);
       return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign };

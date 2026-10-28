@@ -13,19 +13,26 @@ import { scheduleSave } from '../data/save.js';
 
 // Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {
-  if (!target) return;
+  if (!target) {
+    return;
+  }
   const before = layoutSnapshot();             // pre-reveal frame to glide away from
   // Unfold the frames it's tucked inside (and, when openTarget, the card itself) so it's on the canvas.
   const toReveal = [...ancestors(target)].filter(p => p.collapsed);
-  if (openTarget && target.collapsed) toReveal.push(target);
+  if (openTarget && target.collapsed) {
+    toReveal.push(target);
+  }
   let revealed = false;
-  if (toReveal.length)
+  if (toReveal.length) {
     record(toReveal.map(m => m.id), () => { for (const m of toReveal){ m.collapsed = false; m.dirtyLayout = true; } revealed = true; });
+  }
   selectNode(target.id);                       // select → the card shows its full body (grows)
   relayout();                  // reflow siblings around the now-taller selection
   animateReflow(before);                       // one glide from the pre-reveal frame to the final
   frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
-  if (revealed && store.isOpen) scheduleSave();
+  if (revealed && store.isOpen) {
+    scheduleSave();
+  }
 }
 // Follow a [[wikilink]] and focus its target. Map-wide, on purpose — a link that only worked inside the
 // frame you happened to be in would be a broken link — so it comes out of as many scope levels as it
@@ -48,20 +55,26 @@ export function focusByTitle(title: string, from?: MindNode): void {
       setStatus(`No node titled “${title}” in this map`); return;
     }
     const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
-    if (createNode({ x: at.x, y: at.y, title, edit: false })) setStatus(`Created “${title}”`);
+    if (createNode({ x: at.x, y: at.y, title, edit: false })) {
+      setStatus(`Created “${title}”`);
+    }
     return;
   }
   popScopeFor(target);
   focusNode(target);
-  if (hits.length > 1)
+  if (hits.length > 1) {
     setStatus(`${hits.length} cards are titled “${title}” — went to the one in ${target.file ?? 'this map'}`);
+  }
 }
 // The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
 // frame the whole map when nothing is selected — both glide with the same easing. While a frame is
 // OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free.
 export function focusOrFit(): void {
-  if (state.selId && state.nodes.has(state.selId)) focusNode(state.nodes.get(state.selId));
-  else focusScope();
+  if (state.selId && state.nodes.has(state.selId)) {
+    focusNode(state.nodes.get(state.selId));
+  } else {
+    focusScope();
+  }
 }
 // Re-frame whatever is ON the canvas right now: the open frame's contents while scoped (isHidden
 // does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of

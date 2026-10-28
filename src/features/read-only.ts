@@ -22,14 +22,18 @@ export function applyReadOnly(): void {
   scheduleUrlSync();
 }
 export async function setReadOnly(on: boolean): Promise<void> {
-  if (on === state.readOnly) return;
+  if (on === state.readOnly) {
+    return;
+  }
   if (on){
     await flushSave();                                   // persist anything pending before locking (clears the save timer)
     state.readOnly = true;
     selectNode(null);                                    // close any open edit
   } else {
     state.readOnly = false;
-    if (store.isOpen) await loadFromDir({ keepView:true }); // discard in-memory collapses, restore disk state
+    if (store.isOpen) {
+      await loadFromDir({ keepView:true }); // discard in-memory collapses, restore disk state
+    }
   }
   applyReadOnly();
 }

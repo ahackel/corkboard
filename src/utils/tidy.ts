@@ -20,7 +20,9 @@ export function rowsOf(items: Box[]): Box[][] {
     if (row && overlap > 0 && row.items.every(o => sideBySide(o, it))) {
       row.items.push(it);
       row.top = Math.min(row.top, it.y); row.bottom = Math.max(row.bottom, it.y + it.h);
-    } else rows.push({ top: it.y, bottom: it.y + it.h, items: [it] });
+    } else {
+      rows.push({ top: it.y, bottom: it.y + it.h, items: [it] });
+    }
   }
   return rows.map(r => r.items.sort((a, b) => a.x - b.x));
 }
@@ -31,7 +33,9 @@ export function rowsOf(items: Box[]): Box[][] {
 // A single row lines up across, a single column stacks down — the same rule, no special case.
 export function tidyGrid(items: Box[], gap: number, origin?: Pt): Map<string, Pt> {
   const out = new Map<string, Pt>();
-  if (!items.length) return out;
+  if (!items.length) {
+    return out;
+  }
   const rows = rowsOf(items);
   const cols = Math.max(...rows.map(r => r.length));
   const colW = Array.from({ length: cols }, (_, c) => Math.max(0, ...rows.map(r => r[c]?.w ?? 0)));
@@ -64,7 +68,9 @@ export function align(items: Box[], edge: AlignEdge): Map<string, Pt> {
 // ones between slide (in their current order) so every gap is the same. Fewer than three: nothing to do.
 export function distribute(items: Box[], axis: 'x' | 'y'): Map<string, Pt> {
   const out = new Map<string, Pt>(items.map(b => [b.id, { x: b.x, y: b.y }]));
-  if (items.length < 3) return out;
+  if (items.length < 3) {
+    return out;
+  }
   const size = (b: Box): number => axis === 'x' ? b.w : b.h;
   const sorted = [...items].sort((a, b) => a[axis] - b[axis]);
   const first = sorted[0], last = sorted[sorted.length - 1];

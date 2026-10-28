@@ -26,10 +26,16 @@ function endGhostDrag(): MindNode | null {
   stopGhostDrag = null;
   return n;
 }
-function onMove(e: PointerEvent): void { if (newNode) feedDragMove(e.clientX, e.clientY); }
+function onMove(e: PointerEvent): void {
+  if (newNode) {
+    feedDragMove(e.clientX, e.clientY);
+  }
+}
 function onUp(e: PointerEvent): void {
   const n = endGhostDrag();
-  if (!n) return;
+  if (!n) {
+    return;
+  }
   // released back on the ghost card itself -> cancel: discard the new card, create nothing
   const r = ghost.getBoundingClientRect();
   const onGhost = e.clientX >= r.left && e.clientX <= r.right &&
@@ -44,7 +50,9 @@ function onCancel(): void {
 }
 
 ghost.addEventListener('pointerdown', (e: PointerEvent) => {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   e.preventDefault();
   endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
   // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
@@ -52,7 +60,9 @@ ghost.addEventListener('pointerdown', (e: PointerEvent) => {
   const r = ghost.getBoundingClientRect();
   const w = screenToWorld(r.left, r.top);
   newNode = createDetachedNode(w.x, w.y) ?? null;
-  if (!newNode) return;
+  if (!newNode) {
+    return;
+  }
   try { ghost.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
   startNodeDrag(newNode, e.clientX, e.clientY);
   stopGhostDrag = trackPointer({ move: onMove, up: onUp, cancel: onCancel });

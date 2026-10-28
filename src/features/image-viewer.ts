@@ -28,11 +28,17 @@ let token = 0;      // guards the async resolve below: only the newest step may 
 // its pictures are no less part of the set for that.
 function siblingRun(nodeId: string): Shot[] {
   const n = state.nodes.get(nodeId);
-  if (!n) return [];
+  if (!n) {
+    return [];
+  }
   const sibs = childrenOf(n.parent);
   sibs.sort((a, b) => (a.y - b.y) || (a.x - b.x));
   const out: Shot[] = [];
-  for (const s of sibs) for (const { src, alt } of bodyImages(s.body)) out.push({ nodeId: s.id, path: src, alt });
+  for (const s of sibs) {
+    for (const { src, alt } of bodyImages(s.body)) {
+      out.push({ nodeId: s.id, path: src, alt });
+    }
+  }
   return out;
 }
 function build(): void {
@@ -48,7 +54,9 @@ function build(): void {
     if (t.closest('.iv-prev')) { step(-1); return; }
     if (t.closest('.iv-next')) { step(1); return; }
     // click on the backdrop (not the image itself) closes
-    if (t === overlay || t.classList.contains('iv-close')) closeImageViewer();
+    if (t === overlay || t.classList.contains('iv-close')) {
+      closeImageViewer();
+    }
   });
   document.body.appendChild(overlay);
 }
@@ -63,12 +71,16 @@ function build(): void {
 function onKey(e: KeyboardEvent): void {
   if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); return; }
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeImageViewer(); return; }
-  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
+    return;
+  }
   e.preventDefault(); e.stopPropagation();
   step(e.key === 'ArrowLeft' ? -1 : 1);
 }
 function onKeyUp(e: KeyboardEvent): void {
-  if (e.key !== ' ') return;
+  if (e.key !== ' ') {
+    return;
+  }
   e.preventDefault(); e.stopPropagation();
   closeImageViewer();
 }
@@ -76,27 +88,39 @@ function onKeyUp(e: KeyboardEvent): void {
 // (features/images.ts), so paging back and forth reads each file once.
 function show(): void {
   const shot = run[at];
-  if (!shot || !imgEl) return;
+  if (!shot || !imgEl) {
+    return;
+  }
   const mine = ++token;
   void imageUrl(shot.path).then(url => {
-    if (mine !== token || !imgEl || !url) return;   // stepped again while this one was loading
+    if (mine !== token || !imgEl || !url) {
+      return;   // stepped again while this one was loading
+    }
     imgEl.src = url; imgEl.alt = shot.alt;
   });
 }
 function step(d: number): void {
-  if (run.length < 2) return;
+  if (run.length < 2) {
+    return;
+  }
   at = (at + d + run.length) % run.length;          // wrap: a set of pictures is a loop, not a strip
   show();
 }
 // `from` is the image that was clicked — its card and its path, which is what the run is built
 // around. Without it (a caller that only has a URL) the viewer still opens, just without paging.
 export function openImageViewer(src: string, alt = '', from?: { nodeId: string; path: string }): void {
-  if (!src) return;
-  if (!overlay) build();
+  if (!src) {
+    return;
+  }
+  if (!overlay) {
+    build();
+  }
   imgEl!.src = src; imgEl!.alt = alt;
   run = from ? siblingRun(from.nodeId) : [];
   at = from ? run.findIndex(s => s.nodeId === from.nodeId && s.path === from.path) : -1;
-  if (at < 0) run = [];                              // couldn't place it → no run to page through
+  if (at < 0) {
+    run = [];                              // couldn't place it → no run to page through
+  }
   // One picture is not a sequence; hiding the arrows keeps that honest rather than offering two
   // buttons that do nothing.
   overlay!.classList.toggle('iv-paged', run.length > 1);
@@ -105,9 +129,13 @@ export function openImageViewer(src: string, alt = '', from?: { nodeId: string; 
   window.addEventListener('keyup', onKeyUp, true);
 }
 function closeImageViewer(): void {
-  if (!overlay) return;
+  if (!overlay) {
+    return;
+  }
   overlay.classList.remove('open');
-  if (imgEl) imgEl.removeAttribute('src');
+  if (imgEl) {
+    imgEl.removeAttribute('src');
+  }
   // You come back out onto the card you were LOOKING at, not the one you came in from: page three
   // pictures along and close, and the selection is that third card — so the next thing you do (move it,
   // colour it, delete it) lands where your eyes already were. Selection only; the camera stays put.
@@ -115,5 +143,7 @@ function closeImageViewer(): void {
   run = []; at = -1; token++;
   window.removeEventListener('keydown', onKey, true);
   window.removeEventListener('keyup', onKeyUp, true);
-  if (last && state.nodes.has(last.nodeId)) selectNode(last.nodeId);
+  if (last && state.nodes.has(last.nodeId)) {
+    selectNode(last.nodeId);
+  }
 }

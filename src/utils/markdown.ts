@@ -18,7 +18,9 @@ export function esc(s: unknown): string {
 function mdEmphasis(s: string): string {
   let out = '', last = 0;
   for (const m of s.matchAll(INLINE_TAG)){
-    if (/^[\d/]+$/.test(m[2])) continue;   // `#12` is a number, not a tag
+    if (/^[\d/]+$/.test(m[2])) {
+      continue;   // `#12` is a number, not a tag
+    }
     const at = m.index + m[1].length;
     out += mdStyle(s.slice(last, at)) + `<span class="md-tag" data-tag="${esc(m[2])}">#${esc(m[2])}</span>`;
     last = at + 1 + m[2].length;
@@ -46,10 +48,13 @@ function mdLinks(text: string): string {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))){
     out += mdEmphasis(text.slice(last, m.index));
-    if (m[2])      out += imgTag(m[2], m[1]);                                                         // ![alt](src)
-    else if (m[4]) out += `<a class="lk" href="${esc(m[4])}" target="_blank" rel="noopener">${mdEmphasis(m[3])}</a>`;
-    else if (m[5]) out += `<a class="lk wikilink" data-target="${esc(m[5].trim())}">${esc((m[6]||m[5]).trim())}</a>`;
-    else { const u = m[7] ?? m[8];                                                                    // <url> or a bare one
+    if (m[2]) {
+      out += imgTag(m[2], m[1]);                                                         // ![alt](src)
+    } else if (m[4]) {
+      out += `<a class="lk" href="${esc(m[4])}" target="_blank" rel="noopener">${mdEmphasis(m[3])}</a>`;
+    } else if (m[5]) {
+      out += `<a class="lk wikilink" data-target="${esc(m[5].trim())}">${esc((m[6]||m[5]).trim())}</a>`;
+    } else { const u = m[7] ?? m[8];                                                                    // <url> or a bare one
            out += `<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`; }
     last = re.lastIndex;
   }
@@ -70,7 +75,9 @@ export function soleImage(body: string | null | undefined): SoleImage | null {
 }
 // Every `![alt](src)` in a note, in reading order — the one spelling of "the pictures in a body".
 export function* bodyImages(body: string | null | undefined): Generator<SoleImage> {
-  for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) yield { alt: m[1].trim(), src: m[2] };
+  for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) {
+    yield { alt: m[1].trim(), src: m[2] };
+  }
 }
 // A note with `md` added at its end, a blank line between.
 export function appendMd(body: string, md: string): string {
@@ -147,9 +154,13 @@ export interface LinkPaste { text: string; start: number; end: number }
 // what you selected is still what you see) — or null to let the paste happen natively.
 export function linkPaste(text: string, start: number, end: number, url: string): LinkPaste | null {
   const u = url.trim();
-  if (start === end || !URL_ONLY.test(u)) return null;
+  if (start === end || !URL_ONLY.test(u)) {
+    return null;
+  }
   const sel = text.slice(start, end);
-  if (sel.includes('\n')) return null;               // a label is one line; wrapping two would break it
+  if (sel.includes('\n')) {
+    return null;               // a label is one line; wrapping two would break it
+  }
   // An existing link the selection touches gets its URL REPLACED, label intact — whether the
   // selection is the label, the whole `[…](…)`, or a stretch of text containing one. That last case
   // could equally mean "link all of this", but a link inside a label is invalid markdown, and
@@ -157,16 +168,24 @@ export function linkPaste(text: string, start: number, end: number, url: string)
   LINK_SCAN.lastIndex = 0;
   for (let m: RegExpExecArray | null; (m = LINK_SCAN.exec(text)); ){
     const ms = m.index, me = ms + m[0].length;
-    if (me <= start || ms >= end) continue;          // no overlap with the selection
-    if (m[1] !== undefined) return null;             // an image: its src isn't a link to update
-    if (m[5]) return { text: text.slice(0, ms) + u + text.slice(me), start: ms, end: ms + u.length };
+    if (me <= start || ms >= end) {
+      continue;          // no overlap with the selection
+    }
+    if (m[1] !== undefined) {
+      return null;             // an image: its src isn't a link to update
+    }
+    if (m[5]) {
+      return { text: text.slice(0, ms) + u + text.slice(me), start: ms, end: ms + u.length };
+    }
     const label = m[3];
     return { text: text.slice(0, ms) + `[${label}](${u})` + text.slice(me), start: ms + 1, end: ms + 1 + label.length };
   }
   // Otherwise wrap what was selected, leaving any whitespace it caught outside the brackets.
   const lead = sel.length - sel.trimStart().length;
   const label = sel.trim();
-  if (!label) return null;
+  if (!label) {
+    return null;
+  }
   const at = start + lead;
   return { text: text.slice(0, at) + `[${label}](${u})` + text.slice(at + label.length),
            start: at + 1, end: at + 1 + label.length };
@@ -218,8 +237,12 @@ const UNESCAPED_PIPE = /(?:^|[^\\])\|/;
 // `| a | |` has a genuine empty last cell.
 export function tableRow(line: string): string[] {
   let s = line.trim();
-  if (s.startsWith('|')) s = s.slice(1);
-  if (UNESCAPED_PIPE.test(s) && s.endsWith('|')) s = s.slice(0, -1);
+  if (s.startsWith('|')) {
+    s = s.slice(1);
+  }
+  if (UNESCAPED_PIPE.test(s) && s.endsWith('|')) {
+    s = s.slice(0, -1);
+  }
   const cells: string[] = [];
   let cur = '';
   for (let i = 0; i < s.length; i++){
@@ -233,10 +256,16 @@ export function tableRow(line: string): string[] {
 // Column count if a table starts at line i, else 0 (so it's falsy at the call sites).
 export function tableAt(lines: string[], i: number): number {
   const head = lines[i], delim = lines[i+1];
-  if (head == null || delim == null) return 0;
-  if (!UNESCAPED_PIPE.test(head) || !UNESCAPED_PIPE.test(delim)) return 0;
+  if (head == null || delim == null) {
+    return 0;
+  }
+  if (!UNESCAPED_PIPE.test(head) || !UNESCAPED_PIPE.test(delim)) {
+    return 0;
+  }
   const dc = tableRow(delim);
-  if (!dc.every(c => TABLE_DELIM_CELL.test(c))) return 0;
+  if (!dc.every(c => TABLE_DELIM_CELL.test(c))) {
+    return 0;
+  }
   return tableRow(head).length === dc.length ? dc.length : 0;
 }
 // text-align from a delimiter cell's colons; left is the default, so it needs no style.
@@ -257,7 +286,9 @@ function renderTable(lines: string[], start: number, cols: number): { html: stri
     return out + '</tr>';
   };
   let i = start + 2, body = '';
-  while (i < lines.length && lines[i].trim() && UNESCAPED_PIPE.test(lines[i])) body += row(tableRow(lines[i++]), 'td');
+  while (i < lines.length && lines[i].trim() && UNESCAPED_PIPE.test(lines[i])) {
+    body += row(tableRow(lines[i++]), 'td');
+  }
   return { html: `<table><thead>${row(tableRow(lines[start]), 'th')}</thead><tbody>${body}</tbody></table>`, next: i };
 }
 
@@ -279,15 +310,19 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
     tag === 'ol' && parseInt(marker, 10) !== 1 ? `<ol start="${parseInt(marker, 10)}">` : `<${tag}>`;
   const li = (body: string, tag: 'ul' | 'ol'): string => {
     const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(\S.*)$/);
-    if (tm) return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
+    if (tm) {
+      return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
                  + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}><span class="task-text">${mdInline(tm[2])}</span>`;
+    }
     return `<li>${mdInline(body)}`;
   };
   for (const line of lines){
     const m = line.match(/^(\s*)([-*+]|\d+\.)\s+(.*)$/)!;
     const indent = m[1].replace(/\t/g, '  ').length;
     const tag = /\d/.test(m[2]) ? 'ol' : 'ul';
-    while (open.length > 1 && indent < open[open.length - 1].indent) html += `</li></${open.pop()!.tag}>`;
+    while (open.length > 1 && indent < open[open.length - 1].indent) {
+      html += `</li></${open.pop()!.tag}>`;
+    }
     const top = open[open.length - 1];
     if (!top || indent > top.indent){                         // a new level, inside the open item
       html += opener(tag, m[2]); open.push({ indent, tag });
@@ -297,7 +332,9 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
     }
     html += li(m[3], tag);
   }
-  while (open.length) html += `</li></${open.pop()!.tag}>`;
+  while (open.length) {
+    html += `</li></${open.pop()!.tag}>`;
+  }
   return { html, taskIdx };
 }
 
@@ -309,7 +346,9 @@ const HR = /^\s*(?:[-*_]\s*){3,}$/;
 // Block-level pass: headings, lists, blockquotes, fenced code, rules, tables, paragraphs.
 export function renderBodyHTML(md: string | null | undefined): string {
   const src = (md || '').replace(/\r\n?/g, '\n').trim();
-  if (!src) return '';                 // empty body → nothing (no stray blank line under the title)
+  if (!src) {
+    return '';                 // empty body → nothing (no stray blank line under the title)
+  }
   const lines = src.split('\n');
   let html = '', i = 0, taskIdx = 0;   // taskIdx: nth checkbox in the body, for write-back on toggle
   const BLOCK = /^(#{1,6}\s|```|~~~|\s*>|\s*[-*+]\s|\s*\d+\.\s)/;
@@ -318,7 +357,9 @@ export function renderBodyHTML(md: string | null | undefined): string {
     const fence = line.match(/^(```|~~~)/);
     if (fence){                                               // fenced code block, ``` or ~~~
       i++; const code: string[] = [];
-      while (i < lines.length && !lines[i].startsWith(fence[1])) code.push(lines[i++]);
+      while (i < lines.length && !lines[i].startsWith(fence[1])) {
+        code.push(lines[i++]);
+      }
       i++;                                                    // skip closing fence
       html += `<pre><code>${esc(code.join('\n'))}</code></pre>`; continue;
     }
@@ -331,12 +372,16 @@ export function renderBodyHTML(md: string | null | undefined): string {
     if (cols){ const t = renderTable(lines, i, cols); html += t.html; i = t.next; continue; }
     if (/^\s*>/.test(line)){                                   // blockquote
       const q: string[] = [];
-      while (i < lines.length && /^\s*>/.test(lines[i])) q.push(lines[i++].replace(/^\s*>\s?/, ''));
+      while (i < lines.length && /^\s*>/.test(lines[i])) {
+        q.push(lines[i++].replace(/^\s*>\s?/, ''));
+      }
       html += `<blockquote>${q.map(mdInline).join('<br>')}</blockquote>`; continue;
     }
     if (LIST_ITEM.test(line)){                                 // list: bullets, numbers, [ ]/[x] tasks, nested
       const items: string[] = [];
-      while (i < lines.length && LIST_ITEM.test(lines[i]) && !HR.test(lines[i])) items.push(lines[i++]);
+      while (i < lines.length && LIST_ITEM.test(lines[i]) && !HR.test(lines[i])) {
+        items.push(lines[i++]);
+      }
       const r = renderList(items, taskIdx);
       html += r.html; taskIdx = r.taskIdx; continue;
     }
@@ -350,13 +395,23 @@ export function renderBodyHTML(md: string | null | undefined): string {
     // Within a paragraph a single newline still breaks the line (<br>), which is the one place the
     // author's Return is taken literally, and the behaviour every card on every existing map has.
     const run: string[] = [];
-    while (i < lines.length && !BLOCK.test(lines[i]) && !HR.test(lines[i]) && !tableAt(lines, i)) run.push(lines[i++]);
+    while (i < lines.length && !BLOCK.test(lines[i]) && !HR.test(lines[i]) && !tableAt(lines, i)) {
+      run.push(lines[i++]);
+    }
     let para: string[] = [];
     const flushPara = (): void => {
-      if (para.length) html += `<p>${para.map(mdInline).join('<br>')}</p>`;
+      if (para.length) {
+        html += `<p>${para.map(mdInline).join('<br>')}</p>`;
+      }
       para = [];
     };
-    for (const l of run) { if (l.trim()) para.push(l); else flushPara(); }
+    for (const l of run) {
+      if (l.trim()) {
+        para.push(l);
+      } else {
+        flushPara();
+      }
+    }
     flushPara();
   }
   return html;

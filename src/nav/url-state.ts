@@ -52,20 +52,30 @@ export function updateDocumentTitle(): void {
 }
 
 function buildHash(): string {
-  if (!store.isOpen) return '';
+  if (!store.isOpen) {
+    return '';
+  }
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
   // A store with no registry entry keeps a name segment for its own in-tab navigation.
   const parts = currentMap ? [currentMap.kind, encodeURIComponent(currentMap.id)] : [slugify(store.name)];
-  if (node?.file) parts.push(encodeFilePath(node.file));
+  if (node?.file) {
+    parts.push(encodeFilePath(node.file));
+  }
   const params = new URLSearchParams();
   const open = scopeRootFile();
-  if (open) params.set('open', encodeFilePath(open));
+  if (open) {
+    params.set('open', encodeFilePath(open));
+  }
   params.set('x', Math.round(state.view.x).toString());
   params.set('y', Math.round(state.view.y).toString());
   params.set('k', state.view.k.toFixed(2));
   const q = searchQuery();
-  if (q) params.set('q', q);
-  if (state.readOnly) params.set('ro', '1');
+  if (q) {
+    params.set('q', q);
+  }
+  if (state.readOnly) {
+    params.set('ro', '1');
+  }
   return '#/' + parts.join('/') + '?' + params.toString();
 }
 
@@ -77,12 +87,19 @@ let lastHash: string | null = null;
 let replaceTimer: ReturnType<typeof setTimeout> | undefined;
 
 function writeHash(kind: 'push' | 'replace'): void {
-  if (applying) return;
+  if (applying) {
+    return;
+  }
   const hash = buildHash();
-  if (!hash || hash === lastHash) return;
+  if (!hash || hash === lastHash) {
+    return;
+  }
   lastHash = hash;
-  if (kind === 'push') history.pushState(null, '', hash);
-  else history.replaceState(null, '', hash);
+  if (kind === 'push') {
+    history.pushState(null, '', hash);
+  } else {
+    history.replaceState(null, '', hash);
+  }
 }
 
 // Node selection changed: a discrete navigation step, pushes a new history entry.
@@ -92,7 +109,9 @@ export function syncUrl(): void {
 // Everything else (mode/camera/search/read-only) — debounced, replaces the current entry
 // rather than creating a new back-stop for every drag frame or keystroke.
 export function scheduleUrlSync(): void {
-  if (applying) return;
+  if (applying) {
+    return;
+  }
   clearTimeout(replaceTimer);
   replaceTimer = setTimeout(() => writeHash('replace'), 350);
 }
@@ -102,11 +121,15 @@ export function scheduleUrlSync(): void {
 // switch to their map first, while legacy name-based hashes work only for the map already open.
 export async function applyUrlFromHash(): Promise<void> {
   const hash = location.hash;
-  if (!hash || hash.length < 2) return;
+  if (!hash || hash.length < 2) {
+    return;
+  }
   const [pathPart, queryPart = ''] = hash.slice(2).split('?');   // drop the leading '#/'
   const segs = pathPart.split('/').filter(Boolean);
   const [mapPart, mapId, ...rest] = segs;
-  if (!mapPart || !store.isOpen) return;
+  if (!mapPart || !store.isOpen) {
+    return;
+  }
 
   let pathSegs: string[];
   if ((mapPart === 'device' || mapPart === 'folder') && mapId) {
@@ -123,7 +146,9 @@ export async function applyUrlFromHash(): Promise<void> {
     pathSegs = rest;
   } else {
     // Backward compatibility for pre-ID hashes: restore only when their named map is already open.
-    if (slugify(store.name) !== mapPart) return;
+    if (slugify(store.name) !== mapPart) {
+      return;
+    }
     pathSegs = mapId ? [mapId, ...rest] : [];
   }
 
@@ -137,13 +162,19 @@ export async function applyUrlFromHash(): Promise<void> {
     const open = params.get('open');
     // A link may point INTO a folded frame whose notes haven't been read (data/lazy.ts): read the
     // folders on the way first, so there is a node there to stand in or select.
-    if (open) await revealPath(decodeFilePath(open));
-    if (pathSegs.length) await revealPath(decodeFilePath(pathSegs.join('/')));
+    if (open) {
+      await revealPath(decodeFilePath(open));
+    }
+    if (pathSegs.length) {
+      await revealPath(decodeFilePath(pathSegs.join('/')));
+    }
     restoreScopeFromFile(open ? decodeFilePath(open) : null);
     if (pathSegs.length) {
       const file = decodeFilePath(pathSegs.join('/'));
       const target = nodeByFile(file);
-      if (target) selectNode(target.id);
+      if (target) {
+        selectNode(target.id);
+      }
     }
     const x = Number(params.get('x')), y = Number(params.get('y')), k = Number(params.get('k'));
     if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(k) && k > 0) {
@@ -151,7 +182,9 @@ export async function applyUrlFromHash(): Promise<void> {
       applyView();
     }
     const q = params.get('q');
-    if (q) setSearchQuery(q);
+    if (q) {
+      setSearchQuery(q);
+    }
     // read-only is only ever forced ON from a link, never OFF — disabling it has real
     // side effects (reloads from disk, discards in-memory-only collapses) that shouldn't
     // happen silently just because a URL lacks `ro=1`.

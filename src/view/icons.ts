@@ -18,7 +18,9 @@ export function chevron(): string { return `<span class="ic fb-chev">${ICONS.che
 export function mountIcons(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>('[data-icon]').forEach(el => {
     const name = el.dataset.icon;
-    if (name && ICONS[name]) el.innerHTML = ICONS[name];
+    if (name && ICONS[name]) {
+      el.innerHTML = ICONS[name];
+    }
   });
 }
 

@@ -31,9 +31,13 @@ const FAR_ZOOM = 0.5;
 const RASTER_SETTLE = 180;
 let rasterK = -1, rasterTimer: number | null = null;
 function refreshRaster(): void {
-  if (state.view.k === rasterK) return;
+  if (state.view.k === rasterK) {
+    return;
+  }
   rasterK = state.view.k;
-  if (rasterTimer) clearTimeout(rasterTimer);
+  if (rasterTimer) {
+    clearTimeout(rasterTimer);
+  }
   rasterTimer = window.setTimeout(() => {
     rasterTimer = null;
     world.style.willChange = 'auto';
@@ -62,9 +66,15 @@ export const labelScale = (): number => Math.max(1, 1 / state.view.k);
 let paintedLs = 1;
 function applyLabelScale(): void {
   const ls = labelScale();
-  if (ls === paintedLs) return;
+  if (ls === paintedLs) {
+    return;
+  }
   paintedLs = ls;
-  for (const n of state.nodes.values()) if (n.type === 'frame') n.el?.style.setProperty('--ls', String(ls));
+  for (const n of state.nodes.values()) {
+    if (n.type === 'frame') {
+      n.el?.style.setProperty('--ls', String(ls));
+    }
+  }
 }
 export function applyView(): void {
   world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
@@ -130,7 +140,9 @@ export function stageSize(): { width: number; height: number } {
 
 export function fit(): void {
   const ns = [...state.nodes.values()].filter(n => !isHidden(n));
-  if (!ns.length) return;
+  if (!ns.length) {
+    return;
+  }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of ns) {
     minX = Math.min(minX, n.x);          minY = Math.min(minY, n.y);
@@ -159,7 +171,9 @@ function bottomInset(): number {
 const FOCUS_MIN_K = 0.2, FOCUS_MAX_K = 1.0, FOCUS_PAD = 80;
 export function frameBox(nodes: ReadonlyArray<MindNode | undefined>): void {
   const group = nodes.filter((n): n is MindNode => !!n && !isHidden(n));
-  if (!group.length) return;
+  if (!group.length) {
+    return;
+  }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of group){
     minX = Math.min(minX, n.x);            minY = Math.min(minY, n.y);

@@ -68,17 +68,31 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : FRA
 // authors only this axis (its height comes from its content). A folded frame's tab shrink-wraps its
 // title instead.
 export function nodeW(n: MindNode): number {
-  if (isBoxNode(n)) return n.w ?? boxDefaultW(n);
-  if (isImageFold(n)) return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
-  if (isFrameFold(n)) return (n.el && n.el.offsetWidth) || NODE_W;   // the pill shrink-wraps its label
-  if (n.collapsed && n.el && n.el.offsetWidth) return n.el.offsetWidth;   // a folded card's chip, likewise
+  if (isBoxNode(n)) {
+    return n.w ?? boxDefaultW(n);
+  }
+  if (isImageFold(n)) {
+    return IMAGE_FOLD;   // folded to its icon — a fixed square, never measured
+  }
+  if (isFrameFold(n)) {
+    return (n.el && n.el.offsetWidth) || NODE_W;   // the pill shrink-wraps its label
+  }
+  if (n.collapsed && n.el && n.el.offsetWidth) {
+    return n.el.offsetWidth;   // a folded card's chip, likewise
+  }
   return n.w ?? NODE_W;
 }
 // live height (falls back pre-render). An expanded frame/image card's height is its box (n.h).
 export function nodeH(n: MindNode): number {
-  if (isBoxNode(n)) return n.h ?? boxDefaultH(n);
-  if (isImageFold(n)) return IMAGE_FOLD;
-  if (isFrameFold(n)) return FRAME_TAB_H;   // just the pill — one fixed line, never measured
+  if (isBoxNode(n)) {
+    return n.h ?? boxDefaultH(n);
+  }
+  if (isImageFold(n)) {
+    return IMAGE_FOLD;
+  }
+  if (isFrameFold(n)) {
+    return FRAME_TAB_H;   // just the pill — one fixed line, never measured
+  }
   return (n.el && n.el.offsetHeight) || 64;
 }
 // Height used for LAYOUT geometry. Identical to nodeH for every kind whose height is DECLARED

@@ -37,9 +37,15 @@ export function isHexColor(c: string): boolean { return c.startsWith('#') && par
 // gradient) — callers treat that as "not a fill we can reason about" and keep the default ink.
 function parseHex(c: string): [number, number, number] | null {
   const h = c.trim().replace(/^#/, '');
-  if (!/^[0-9a-f]+$/i.test(h)) return null;
-  if (h.length === 3) return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
-  if (h.length === 6) return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  if (!/^[0-9a-f]+$/i.test(h)) {
+    return null;
+  }
+  if (h.length === 3) {
+    return [parseInt(h[0] + h[0], 16), parseInt(h[1] + h[1], 16), parseInt(h[2] + h[2], 16)];
+  }
+  if (h.length === 6) {
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
   return null;
 }
 // A frame's PALE fill: its colour washed most of the way to white — what styles.css paints the box in
@@ -47,7 +53,10 @@ function parseHex(c: string): [number, number, number] | null {
 // that frame is open (features/canvas-color.ts canvasFill). A fill it can't read comes back unchanged.
 export const FRAME_WASH = 0.32;
 export function paleFill(c: string): string {
-  const rgb = parseHex(c); if (!rgb) return c;
+  const rgb = parseHex(c);
+  if (!rgb) {
+    return c;
+  }
   return '#' + rgb.map(v => Math.round(255 - (255 - v) * FRAME_WASH).toString(16).padStart(2, '0')).join('');
 }
 // WCAG 2.1 relative luminance: gamma-expand each channel, then weight them by the eye's
@@ -55,7 +64,9 @@ export function paleFill(c: string): string {
 // exactly why a naive average picks the wrong ink on teal and violet.
 function luminance(hex: string): number | null {
   const rgb = parseHex(hex);
-  if (!rgb) return null;
+  if (!rgb) {
+    return null;
+  }
   const lin = (v: number): number => { const s = v / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
   return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
 }
@@ -63,12 +74,16 @@ function luminance(hex: string): number | null {
 // contrast established" — the pessimistic answer.
 export function contrastRatio(a: string, b: string): number {
   const la = luminance(a), lb = luminance(b);
-  if (la == null || lb == null) return 1;
+  if (la == null || lb == null) {
+    return 1;
+  }
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 // The ink for a background fill. See INK_MIN above for why this isn't simply the higher contrast.
 export function inkFor(bg: string): string {
-  if (luminance(bg) == null) return INK_LIGHT;   // not a fill we can measure — keep the default look
+  if (luminance(bg) == null) {
+    return INK_LIGHT;   // not a fill we can measure — keep the default look
+  }
   return contrastRatio(bg, INK_LIGHT) >= INK_MIN ? INK_LIGHT : INK_DARK;
 }
 // The scrim that pairs with that ink.

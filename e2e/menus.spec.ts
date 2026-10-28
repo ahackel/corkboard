@@ -60,7 +60,9 @@ test('the browser theme colour follows the canvas colour', async ({ page }) => {
   await expect.poll(theme).not.toBe('rgb(245, 245, 245)');
   const got = await theme();
   expect(await page.evaluate(([w]) => { const i = document.createElement('i'); i.style.color = w; document.body.append(i); const c = getComputedStyle(i).color; i.remove(); return c; }, [want])).toBe(got);
-  if (!(await page.locator('#canvasColors').isVisible())) await page.locator('#canvasColorBtn').click();
+  if (!(await page.locator('#canvasColors').isVisible())) {
+    await page.locator('#canvasColorBtn').click();
+  }
   await page.locator('#canvasColors .swatch[data-color=""]').click();
   await expect.poll(theme).toBe('rgb(245, 245, 245)');
 });

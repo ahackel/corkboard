@@ -39,7 +39,9 @@ export function openPalette(): void {
   input.focus();
 }
 export function closePalette(): void {
-  if (!paletteOpen()) return;
+  if (!paletteOpen()) {
+    return;
+  }
   root.hidden = true;
   returnFocus?.focus?.();
   returnFocus = null;
@@ -50,7 +52,9 @@ export function closePalette(): void {
 function matches(q: string): Command[] {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const all = source().filter(c => !c.when || c.when());
-  if (!words.length) return all;
+  if (!words.length) {
+    return all;
+  }
   const hay = (c: Command) => (c.label + ' ' + (c.keywords ?? '')).toLowerCase();
   const hits = all.filter(c => words.every(w => hay(c).includes(w)));
   const lead = q.trim().toLowerCase();
@@ -60,7 +64,9 @@ function matches(q: string): Command[] {
 function render(): void {
   shown = matches(input.value);
   active = Math.min(active, Math.max(0, shown.length - 1));
-  if (!input.value) active = 0;
+  if (!input.value) {
+    active = 0;
+  }
   list.innerHTML = shown.length
     ? shown.map((c, i) => `<div class="pal-item${i === active ? ' active' : ''}" role="option" data-i="${i}">`
         + `<span>${esc(c.label)}</span>${c.shortcut ? `<kbd>${esc(c.shortcut)}</kbd>` : ''}</div>`).join('')
@@ -68,7 +74,10 @@ function render(): void {
   list.querySelector('.pal-item.active')?.scrollIntoView({ block: 'nearest' });
 }
 function run(i: number): void {
-  const c = shown[i]; if (!c) return;
+  const c = shown[i];
+  if (!c) {
+    return;
+  }
   closePalette();          // first, so the command acts on the canvas rather than on the palette's input
   c.run();
 }
@@ -87,7 +96,13 @@ list.addEventListener('pointermove', (e) => {
 });
 list.addEventListener('click', (e) => {
   const item = (e.target as Element).closest('.pal-item') as HTMLElement | null;
-  if (item) run(+item.dataset.i!);
+  if (item) {
+    run(+item.dataset.i!);
+  }
 });
 // A press on the dimmed backdrop (not the box) closes it.
-root.addEventListener('pointerdown', (e) => { if (e.target === root) closePalette(); });
+root.addEventListener('pointerdown', (e) => {
+  if (e.target === root) {
+    closePalette();
+  }
+});

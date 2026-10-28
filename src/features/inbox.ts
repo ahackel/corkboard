@@ -21,18 +21,24 @@ export const inboxFrame = (): MindNode | undefined =>
 export function goToInbox(): void {
   const f = inboxFrame();
   if (f) {
-    if (f.collapsed && !isLockedEffective(f) && afterReading([f.id], goToInbox, false)) return;
+    if (f.collapsed && !isLockedEffective(f) && afterReading([f.id], goToInbox, false)) {
+      return;
+    }
     popScopeFor(f);
     focusNode(f, true);
     return;
   }
   if (state.readOnly || !store.isOpen) { setStatus('This map has no Inbox frame'); return; }
-  while (scopeActive()) exitScope();
+  while (scopeActive()) {
+    exitScope();
+  }
   const tops = [...state.nodes.values()].filter(n => !n.parent);
   const left = tops.reduce((x, n) => Math.min(x, n.x), Infinity), top = tops.reduce((y, n) => Math.min(y, n.y), Infinity);
   const at = tops.length ? snapPt({ x: left - FRAME_W - 80, y: top }) : centredAt(worldAtOrCentre());
   const n = createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, title: 'Inbox', parent: null, edit: false });
-  if (!n) return;
+  if (!n) {
+    return;
+  }
   focusNode(n);
   setStatus('Made the Inbox — notes saved into its folder show up here (docs/inbox.md)');
 }

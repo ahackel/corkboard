@@ -10,12 +10,20 @@ export interface ZipEntry { name: string; text: string; bytes: Uint8Array; }
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
-  for (let n=0;n<256;n++){ let c=n; for (let k=0;k<8;k++) c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1); t[n]=c>>>0; }
+  for (let n=0;n<256;n++){
+    let c=n;
+    for (let k=0;k<8;k++) {
+      c = (c&1) ? (0xEDB88320 ^ (c>>>1)) : (c>>>1);
+    }
+    t[n]=c>>>0;
+  }
   return t;
 })();
 function crc32(bytes: Uint8Array): number {
   let c = 0xFFFFFFFF;
-  for (let i=0;i<bytes.length;i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  for (let i=0;i<bytes.length;i++) {
+    c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  }
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
 // The archive as raw bytes — synchronous (store, no compression), so callers that need the
@@ -44,13 +52,19 @@ export function zipBytes(files: ZipInput[]): Uint8Array {
     ]), name);
     offset += local.length + name.length + data.length;
   }
-  let centralSize = 0; for (const c of central) centralSize += c.length;
+  let centralSize = 0;
+  for (const c of central) {
+    centralSize += c.length;
+  }
   const eocd = new Uint8Array([
     ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
     ...u32(centralSize), ...u32(offset), ...u16(0),
   ]);
   const parts = [...body, ...central, eocd];
-  let size = 0; for (const p of parts) size += p.length;
+  let size = 0;
+  for (const p of parts) {
+    size += p.length;
+  }
   const out = new Uint8Array(size);
   let at = 0; for (const p of parts){ out.set(p, at); at += p.length; }
   return out;
@@ -62,7 +76,9 @@ export async function unzip(buf: ArrayBuffer): Promise<ZipEntry[]> {
   const u8 = new Uint8Array(buf), dv = new DataView(buf), dec = new TextDecoder();
   let eocd = -1;
   for (let i = u8.length - 22; i >= 0; i--){ if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; } }
-  if (eocd < 0) throw new Error('Not a .zip file');
+  if (eocd < 0) {
+    throw new Error('Not a .zip file');
+  }
   const count = dv.getUint16(eocd + 10, true);
   let off = dv.getUint32(eocd + 16, true);
   const out: ZipEntry[] = [];
@@ -78,9 +94,14 @@ export async function unzip(buf: ArrayBuffer): Promise<ZipEntry[]> {
     const start = localOff + 30 + lName + lExtra;
     const comp = u8.subarray(start, start + compSize);
     let data: Uint8Array | null = null;
-    if (method === 0) data = comp;
-    else if (method === 8) data = await inflateRaw(comp);
-    if (data) out.push({ name, text: dec.decode(data), bytes: data });   // bytes kept for binary entries (images)
+    if (method === 0) {
+      data = comp;
+    } else if (method === 8) {
+      data = await inflateRaw(comp);
+    }
+    if (data) {
+      out.push({ name, text: dec.decode(data), bytes: data });   // bytes kept for binary entries (images)
+    }
     off += 46 + nameLen + extraLen + commentLen;
   }
   return out;

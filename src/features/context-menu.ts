@@ -38,7 +38,9 @@ function addItem(label: string, shortcut: string, run: () => void, opts: ItemOpt
   b.className = 'cm-item' + (opts.danger ? ' cm-danger' : ''); b.type = 'button';
   const l = document.createElement('span'); l.textContent = label; b.appendChild(l);
   if (shortcut){ const k = document.createElement('kbd'); k.textContent = shortcut; b.appendChild(k); }
-  if (opts.disabled) b.disabled = true;
+  if (opts.disabled) {
+    b.disabled = true;
+  }
   b.addEventListener('click', () => { closeMenu(); run(); });
   menu.appendChild(b);
 }
@@ -48,13 +50,20 @@ export type MenuEntry = 'sep' | { label: string; shortcut?: string; run: () => v
 export function openMenu(entries: MenuEntry[], x: number, y: number): void {
   menu.innerHTML = '';
   for (const e of entries){
-    if (e === 'sep') addSep();
-    else addItem(e.label, e.shortcut ?? '', e.run, e);
+    if (e === 'sep') {
+      addSep();
+    } else {
+      addItem(e.label, e.shortcut ?? '', e.run, e);
+    }
   }
-  if (menu.childElementCount) openMenuAt(x, y);
+  if (menu.childElementCount) {
+    openMenuAt(x, y);
+  }
 }
 function addSep(): void {
-  if (!menu.lastElementChild || menu.lastElementChild.className === 'cm-sep') return;
+  if (!menu.lastElementChild || menu.lastElementChild.className === 'cm-sep') {
+    return;
+  }
   const s = document.createElement('div'); s.className = 'cm-sep'; menu.appendChild(s);
 }
 
@@ -62,7 +71,10 @@ function addSep(): void {
 // "reveal in Finder" — neither FSA handles nor OPFS expose absolute paths. Exported for
 // buildCardMenu (float-bar.ts), shared by the kebab menu and this file's own right-click menu.
 export function copyFilePath(n: MindNode): void {
-  const path = n.file; if (!path) return;
+  const path = n.file;
+  if (!path) {
+    return;
+  }
   navigator.clipboard.writeText(path)
     .then(() => setStatus(`Copied “${path}”`))
     .catch(() => setStatus('Couldn’t copy path'));
@@ -143,7 +155,9 @@ function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
   const path = img.dataset.path ?? '';
   const loaded = !!img.src && !img.classList.contains('md-img-missing');
   const entries: MenuEntry[] = [];
-  if (!state.readOnly) entries.push({ label:'Remove image', run: () => removeImage(n, path), disabled: !path });
+  if (!state.readOnly) {
+    entries.push({ label:'Remove image', run: () => removeImage(n, path), disabled: !path });
+  }
   entries.push({ label:'Copy image', run: () => { void copyImage(img); }, disabled: !loaded });
   entries.push({ label:'Show image in new tab', run: () => showImageInTab(img), disabled: !loaded });
   entries.push('sep');
@@ -158,7 +172,9 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   const open = scopeRootNode();
   if (open){
     entries.push({ label:`Leave “${nodeLabel(open)}”`, shortcut:'↓', run: () => exitScope() });
-    if (scope.stack.length > 1) entries.push({ label:'Back to the whole map', run: () => goToScopeDepth(0) });
+    if (scope.stack.length > 1) {
+      entries.push({ label:'Back to the whole map', run: () => goToScopeDepth(0) });
+    }
     entries.push('sep');
   }
   if (!state.readOnly){
@@ -193,10 +209,16 @@ canvasMenuBtn.addEventListener('click', (e) => {
 document.addEventListener('contextmenu', (e: MouseEvent) => {
   const t = e.target as Element | null;
   closeMenu();
-  if (!t || !t.closest('#stage')) return;                 // toolbar / sidebar / dialogs: native menu
+  if (!t || !t.closest('#stage')) {
+    return;                 // toolbar / sidebar / dialogs: native menu
+  }
   // an active in-place editor keeps the native menu (spellcheck, copy/paste)
-  if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) return;
-  if (ui.titleEdit && t.closest('.title.editing')) return;
+  if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) {
+    return;
+  }
+  if (ui.titleEdit && t.closest('.title.editing')) {
+    return;
+  }
   e.preventDefault();
   const nodeEl = t.closest('.node[data-id]') as HTMLElement | null;
   const id = nodeEl?.dataset.id;
@@ -214,7 +236,9 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
 
 // dismiss: click/tap anywhere outside, Escape (before the global deselect handler), scroll/zoom, blur
 document.addEventListener('pointerdown', (e) => {
-  if (menu.classList.contains('open') && !menu.contains(e.target as Node)) closeMenu();
+  if (menu.classList.contains('open') && !menu.contains(e.target as Node)) {
+    closeMenu();
+  }
 }, true);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && menu.classList.contains('open')){

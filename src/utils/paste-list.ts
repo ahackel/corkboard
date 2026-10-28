@@ -14,9 +14,15 @@ const MAX_LINE = 200;   // a bare line longer than this is a paragraph, not an i
 
 export function splitPastedList(text: string): string[] | null {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  while (lines.length && !lines[0].trim()) lines.shift();
-  while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
-  if (lines.length < 2) return null;
+  while (lines.length && !lines[0].trim()) {
+    lines.shift();
+  }
+  while (lines.length && !lines[lines.length - 1].trim()) {
+    lines.pop();
+  }
+  if (lines.length < 2) {
+    return null;
+  }
   const indent = (l: string): number => l.length - l.trimStart().length;
   const base = indent(lines[0]);
   if (ITEM.test(lines[0].trimStart())) {
@@ -25,18 +31,30 @@ export function splitPastedList(text: string): string[] | null {
       if (!l.trim()) { items[items.length - 1].push(''); continue; }
       if (indent(l) <= base) {
         const t = l.trimStart();
-        if (!ITEM.test(t)) return null;      // a top-level line that is not an item: it's a note
+        if (!ITEM.test(t)) {
+          return null;      // a top-level line that is not an item: it's a note
+        }
         items.push([t.replace(ITEM, '')]);
-      } else items[items.length - 1].push(l);
+      } else {
+        items[items.length - 1].push(l);
+      }
     }
-    if (items.length < 2) return null;
+    if (items.length < 2) {
+      return null;
+    }
     return items.map(([head, ...rest]) => {
-      while (rest.length && !rest[rest.length - 1].trim()) rest.pop();
+      while (rest.length && !rest[rest.length - 1].trim()) {
+        rest.pop();
+      }
       const cut = Math.min(...rest.filter(l => l.trim()).map(indent));
       return [head.trim(), ...rest.map(l => l.slice(cut))].join('\n');
     }).filter(t => t.trim());
   }
-  if (lines.some(l => !l.trim() || l.trim().length > MAX_LINE || /^#{1,6}\s/.test(l.trim()))) return null;
-  if (lines.some(l => ITEM.test(l.trimStart()) || indent(l) > base)) return null;   // structured: a note
+  if (lines.some(l => !l.trim() || l.trim().length > MAX_LINE || /^#{1,6}\s/.test(l.trim()))) {
+    return null;
+  }
+  if (lines.some(l => ITEM.test(l.trimStart()) || indent(l) > base)) {
+    return null;   // structured: a note
+  }
   return lines.map(l => l.trim());
 }

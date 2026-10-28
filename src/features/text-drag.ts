@@ -41,11 +41,21 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
   // A card's own element is what a drop hits: .frame-content is pointer-events:none, so the empty
   // interior of a frame resolves to the FRAME, and a card inside it to that card.
   const n = nodeAtTarget(t);
-  if (n?.id === sourceId) return null;                   // its own card (editor or not): a native move
-  if (!n) return { container: null };                    // open canvas → the top level
-  if (isLockedEffective(n)) return null;                 // locked: no drop, no hint
-  if (canMerge(n)) return { into: n };                    // a card swallows the text
-  if (isFrame(n)) return { container: n };               // a frame takes a card of its own
+  if (n?.id === sourceId) {
+    return null;                   // its own card (editor or not): a native move
+  }
+  if (!n) {
+    return { container: null };                    // open canvas → the top level
+  }
+  if (isLockedEffective(n)) {
+    return null;                 // locked: no drop, no hint
+  }
+  if (canMerge(n)) {
+    return { into: n };                    // a card swallows the text
+  }
+  if (isFrame(n)) {
+    return { container: n };               // a frame takes a card of its own
+  }
   // Anything else under the cursor (an image card or a folded frame) has no
   // note to take the text and no interior to hold a card, so it counts as canvas — the new card
   // simply lands over it.
@@ -78,11 +88,17 @@ function showHint(dest: Dest | null): void {
 // the Range measurement and the whole draggable dance went with it. Dragging a card's NAME out still
 // works — the name is the `# ` line inside this very selection.
 export function cardTextDrag(target: EventTarget | null): TextSource | null {
-  if (state.readOnly || !(target instanceof Element)) return null;
+  if (state.readOnly || !(target instanceof Element)) {
+    return null;
+  }
   const be = ui.bodyEdit;
-  if (!be || be.ta.selectionStart === be.ta.selectionEnd) return null;
+  if (!be || be.ta.selectionStart === be.ta.selectionEnd) {
+    return null;
+  }
   const n = state.nodes.get(be.id);
-  if (!n || !n.el || isLockedEffective(n) || !n.el.contains(target)) return null;
+  if (!n || !n.el || isLockedEffective(n) || !n.el.contains(target)) {
+    return null;
+  }
   return { id: be.id, start: be.ta.selectionStart, end: be.ta.selectionEnd };
 }
 
@@ -120,29 +136,43 @@ function buildGhost(source: MindNode, text: string): HTMLElement {
 // the one drop we DON'T handle — the selection dragged back into its own note.
 document.addEventListener('dragstart', (e) => {
   pending = cardTextDrag(e.target);
-  if (!pending) return;
+  if (!pending) {
+    return;
+  }
   const source = state.nodes.get(pending.id);
   const text = cardText(pending);
-  if (!e.dataTransfer || !source || !text) return;
+  if (!e.dataTransfer || !source || !text) {
+    return;
+  }
   const ghost = buildGhost(source, text);
   e.dataTransfer.setDragImage(ghost, 28, 22);   // cursor near the ghost's title, as if held by it
   setTimeout(() => ghost.remove(), 0);
 });
 document.addEventListener('dragover', (e) => {
-  if (!pending) return;
+  if (!pending) {
+    return;
+  }
   const dest = destAt(e.target, pending.id);
   showHint(dest);
-  if (!dest) return;              // no preventDefault → the browser keeps the drop (or refuses it)
+  if (!dest) {
+    return;              // no preventDefault → the browser keeps the drop (or refuses it)
+  }
   e.preventDefault();
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  if (e.dataTransfer) {
+    e.dataTransfer.dropEffect = 'move';
+  }
 });
 document.addEventListener('drop', (e) => {
   const p = pending;
-  if (!p) return;
+  if (!p) {
+    return;
+  }
   pending = null;
   const dest = destAt(e.target, p.id);
   showHint(null);
-  if (!dest) return;
+  if (!dest) {
+    return;
+  }
   e.preventDefault();
   dropCardText(p,
     'into' in dest ? dest : { container: dest.container, at: centredAt(screenToWorld(e.clientX, e.clientY)) });

@@ -65,7 +65,9 @@ function popIn(n: MindNode): void {
   if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
 }
 export function createNode(opts: CreateOpts = {}): MindNode | undefined {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   // No parent asked for means "the top level", and while a frame is OPEN its interior IS the top
   // level (detachParentId, nav/scope.ts) — a genuine root would land outside the scope and simply
   // vanish. That's what makes this ONE line cover every create path: the canvas double-click, Space,
@@ -93,11 +95,16 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   state.nodes.set(id, n);
   relayout();
   // a card made past its frame's edge is shown, not clipped; a new FRAME takes in what it covers
-  if (growFramesToHold([id, ...(n.type === 'frame' ? settleFrames([id]) : [])])) relayout();
+  if (growFramesToHold([id, ...(n.type === 'frame' ? settleFrames([id]) : [])])) {
+    relayout();
+  }
   selectNode(id);
   popIn(n);
-  if (opts.edit !== false) startInlineEdit(n, { isNew: opts.isNew ?? true });
-  else commitStep();   // no rename session follows, so the create step ends here
+  if (opts.edit !== false) {
+    startInlineEdit(n, { isNew: opts.isNew ?? true });
+  } else {
+    commitStep();   // no rename session follows, so the create step ends here
+  }
   scheduleSave();
   return n;
 }
@@ -107,13 +114,17 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
 // height, then restack with an even gap. Under a parent the cards become its children, in order.
 const LIST_GAP = SPACING;   // the house spacing, the same one the smart guides pull to
 export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
-  if (state.readOnly || !texts.length) return [];
+  if (state.readOnly || !texts.length) {
+    return [];
+  }
   const parentId = parent ? holderOf(parent) : detachParentId();
   const p = parentId ? state.nodes.get(parentId) : undefined;
   if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return []; }
   const made: MindNode[] = [];
   record([parentId], () => {
-    if (p?.collapsed) p.collapsed = false;   // reveal the new cards
+    if (p?.collapsed) {
+      p.collapsed = false;   // reveal the new cards
+    }
     texts.forEach((t, i) => {
       const { title, body } = splitHeading(t);
       const n = mkNode({ x: at.x, y: at.y + i * (NEW_CARD_H + LIST_GAP), parent: parentId, title, body });
@@ -135,7 +146,9 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
 // caller drives it (e.g. the ghost-card drag rides it under the cursor, then renames on drop or
 // deletes it on cancel). Kept save-free so an abandoned drag never writes a file.
 export function createDetachedNode(x: number, y: number): MindNode | undefined {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   // …parented to the open frame while there is one, so the ghost card rides the ordinary frame-child
   // machinery instead of being dragged onto a canvas that can't show it.
   const n = mkNode({ x, y, parent: detachParentId() });
@@ -189,8 +202,9 @@ function copyNext(s: MindNode): MindNode {
   const { x } = slidePast({ x: s.x + w + gap, y: s.y, w, h }, sibs.map(o => boxOf(o)), 'x', gap);
   const at = snapPt({ x, y: s.y });
   const c = cloneNodeAt(s, at.x, at.y);
-  if (c.title.trim()) c.title = advanceTitle(c.title);
-  else {
+  if (c.title.trim()) {
+    c.title = advanceTitle(c.title);
+  } else {
     const nl = c.body.indexOf('\n');
     c.body = advanceTitle(nl < 0 ? c.body : c.body.slice(0, nl)) + (nl < 0 ? '' : c.body.slice(nl));
   }
@@ -201,16 +215,24 @@ function copyNext(s: MindNode): MindNode {
 // `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor. `next` is the
 // smart duplicate (copyNext above); without it the copy is exact, just below its source.
 export function duplicateSelection({ next = false }: { next?: boolean } = {}): MindNode[] | undefined {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = selectedIds();
   // A folded frame's notes may still be on disk: duplicating it copies them, so they're read first.
-  if (afterReading(ids, () => duplicateSelection({ next }))) return;
+  if (afterReading(ids, () => duplicateSelection({ next }))) {
+    return;
+  }
   const srcs = nodesOf(ids);
-  if (!srcs.length) return;
+  if (!srcs.length) {
+    return;
+  }
   const copies = srcs.map(next ? copyNext : copyNode);
   // paint first so the new cards get real DOM heights, then settle and commit.
   remeasure();
-  if (next && growFramesToHold(copies.map(c => c.id))) relayout();
+  if (next && growFramesToHold(copies.map(c => c.id))) {
+    relayout();
+  }
   const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
     : `${next ? 'Made the next of' : 'Duplicated'} ${copies.length} cards`;
   if (copies.length === 1){
@@ -237,14 +259,22 @@ export function leaveClone(s: MindNode, pos: Pt): MindNode {
 // which passes where the user pointed as `at`). Without a point it goes under whatever the frame
 // already holds, at the interior's left edge, so Tab-Tab-Tab fills a frame top to bottom.
 export function addCardInside(frameId: string, at?: Pt): void {
-  if (state.readOnly) return;
-  const f = state.nodes.get(frameId); if (!f || f.type !== 'frame') return;
+  if (state.readOnly) {
+    return;
+  }
+  const f = state.nodes.get(frameId);
+  if (!f || f.type !== 'frame') {
+    return;
+  }
   if (isLockedEffective(f)) { setStatus('Locked — can’t add a card'); return; }
   touch(frameId);   // the reveal below belongs to the create step
-  if (f.collapsed) f.collapsed = false;
+  if (f.collapsed) {
+    f.collapsed = false;
+  }
   let pos: Pt;
-  if (at) pos = centredAt(at);
-  else {
+  if (at) {
+    pos = centredAt(at);
+  } else {
     const box = frameInterior(f);
     const kids = childrenOf(frameId);
     const bottom = kids.reduce((y, k) => Math.max(y, k.y + nodeH(k)), -Infinity);
@@ -254,7 +284,9 @@ export function addCardInside(frameId: string, at?: Pt): void {
 }
 // A new, empty FRAME centred on a world point, its name editor open — the palette's "New frame".
 export function newFrameAt(p: Pt): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const at = snapPt({ x: p.x - FRAME_W / 2, y: p.y - FRAME_H / 2 });
   // in the frame under the pointer, if any — the same drop rule a card gets
   createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, parent: frameAt(p.x, p.y, new Set())?.id });
@@ -263,8 +295,13 @@ export function newFrameAt(p: Pt): void {
 // below it, or below whatever already sits under it — Enter, Enter, Enter down a column of cards
 // appends to it rather than stacking on the card underneath.
 export function createSibling(refId: string){
-  if (state.readOnly) return;
-  const ref = state.nodes.get(refId); if (!ref) return;
+  if (state.readOnly) {
+    return;
+  }
+  const ref = state.nodes.get(refId);
+  if (!ref) {
+    return;
+  }
   const parent = parentOf(ref);
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t add a card here'); return; }
   const others = childrenOf(ref.parent).filter(o => o !== ref).map(o => boxOf(o));
@@ -312,8 +349,13 @@ function appendToBody(t: MindNode, md: string): void {
 // Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
 // drop it into a fresh card right beside it, in the same place the source lives.
 export function extractToCard(): void {
-  if (state.readOnly || !ui.bodyEdit) return;
-  const n = state.nodes.get(ui.bodyEdit.id); if (!n) return;
+  if (state.readOnly || !ui.bodyEdit) {
+    return;
+  }
+  const n = state.nodes.get(ui.bodyEdit.id);
+  if (!n) {
+    return;
+  }
   const ta = ui.bodyEdit.ta;
   const s = ta.selectionStart, e = ta.selectionEnd;
   if (s === e){ setStatus('Select some body text to extract'); return; }
@@ -345,15 +387,27 @@ export function cardText(src: TextSource): string | null {
 // below). features/text-drag.ts resolves which; canMerge says what counts as a note here.
 export type TextDrop = { into: MindNode } | { container: MindNode | null; at: Pt };
 export function dropCardText(src: TextSource, dest: TextDrop): void {
-  if (state.readOnly) return;
-  const n = state.nodes.get(src.id); if (!n) return;
-  const value = liveText(src); if (value == null) return;   // the editor closed under the drag
-  if (src.start >= src.end || src.end > value.length) return;
+  if (state.readOnly) {
+    return;
+  }
+  const n = state.nodes.get(src.id);
+  if (!n) {
+    return;
+  }
+  const value = liveText(src);
+  if (value == null) {
+    return;   // the editor closed under the drag
+  }
+  if (src.start >= src.end || src.end > value.length) {
+    return;
+  }
   // Resolve (and refuse) the landing BEFORE cutting, so a drop that can't be honoured leaves the
   // card's text alone rather than removing it with nowhere to put it.
   if ('into' in dest){
     const t = dest.into;
-    if (t.id === src.id || !canMerge(t)) return;
+    if (t.id === src.id || !canMerge(t)) {
+      return;
+    }
     const text = cutCardText(n, src.start, src.end, value);
     touch(t.id);
     appendToBody(t, text.trim());
@@ -391,13 +445,19 @@ export const canMerge = (n: MindNode): boolean =>
 // Runs INSIDE the live drag undo step — it touches + mutates only, and the caller (dragPointerUp)
 // commits. Returns how many cards were folded in.
 export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): number {
-  if (state.readOnly) return 0;
+  if (state.readOnly) {
+    return 0;
+  }
   const target = state.nodes.get(targetId);
-  if (!target || !canMerge(target)) return 0;
+  if (!target || !canMerge(target)) {
+    return 0;
+  }
   const cards = [...sourceIds]
     .map(id => state.nodes.get(id))
     .filter((n): n is MindNode => !!n && n.id !== targetId && canMerge(n));
-  if (!cards.length) return 0;
+  if (!cards.length) {
+    return 0;
+  }
   touch(targetId);
   // An UNTITLED card contributes just its text: `n.title` is empty exactly when the
   // note carries no `# ` line, and inventing a heading here (from its first line, say) would put words
@@ -406,12 +466,18 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
   const section = (c: MindNode): string => {
     const body = (c.body || '').trim();
     const title = c.title.trim();
-    if (!title) return body;
+    if (!title) {
+      return body;
+    }
     return body ? `## ${title}\n\n${body}` : `## ${title}`;
   };
   appendToBody(target, cards.map(section).filter(Boolean).join('\n\n'));
   const tags = new Set(target.tags);
-  for (const c of cards) for (const t of c.tags) tags.add(t);
+  for (const c of cards) {
+    for (const t of c.tags) {
+      tags.add(t);
+    }
+  }
   target.tags = [...tags];
   target.dirty = true;
   deleteNodes(cards.map(c => c.id));
@@ -425,11 +491,16 @@ function deleteNodes(ids: Iterable<string>): void {
   const gone = new Set(ids);
   touch(...gone);   // single choke point: every removal's before-image lands in the step
   for (const id of gone){
-    const n = state.nodes.get(id); if (!n) continue;
+    const n = state.nodes.get(id);
+    if (!n) {
+      continue;
+    }
     // …including its container wrapper: a frame's clipping wrapper is hung off the node, not marked
     // with its data-id, so nothing else would ever reach it again.
     state.nodes.delete(id); n.el?.remove(); n.frameContentEl?.remove();
-    if (n.file) state.toDelete.push(n.file);
+    if (n.file) {
+      state.toDelete.push(n.file);
+    }
   }
   // Prune the free edges that pointed at any of them. An edge with a missing end is already
   // invisible (edgeVisible) and unsaveable (serializeEdge drops it), so leaving it would only make
@@ -443,12 +514,18 @@ function deleteNodes(ids: Iterable<string>): void {
   }
 }
 export function deleteNode(id: string): void {
-  if (state.readOnly) return;
-  if (!state.nodes.has(id)) return;
+  if (state.readOnly) {
+    return;
+  }
+  if (!state.nodes.has(id)) {
+    return;
+  }
   if (subtreeHasLocked(id)) { setStatus('Locked — can’t delete'); return; }
   // Deleting a folded frame deletes the notes in its folder, so they're read first — that way they
   // go through the history like any other delete, and one ⌘Z brings them all back.
-  if (afterReading([id], () => deleteNode(id))) return;
+  if (afterReading([id], () => deleteNode(id))) {
+    return;
+  }
   record([], () => {                 // ids are touched inside deleteNodes
     deleteNodes(subtreeIds(id));
     selectNode(null); relayout();
@@ -466,14 +543,20 @@ export function deleteNode(id: string): void {
 export function discardNewCard(id: string, status?: string): void {
   deleteNode(id);
   commitStep();
-  if (status) setStatus(status);
+  if (status) {
+    setStatus(status);
+  }
 }
 // Delete every selected card and their entire subtrees.
 export function deleteSelection(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = [...state.sel].filter(id => !subtreeHasLocked(id));
   if (!ids.length) { setStatus('Locked — can’t delete'); return; }
-  if (afterReading(ids, deleteSelection)) return;   // a folded frame's notes first (see deleteNode)
+  if (afterReading(ids, deleteSelection)) {
+    return;   // a folded frame's notes first (see deleteNode)
+  }
   record([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
     deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
@@ -485,10 +568,17 @@ export function deleteSelection(): void {
 // promoted children need to land there), and none of its direct children are locked (a locked
 // child can't be reparented — see drag.ts's own isLockedEffective guard on move).
 function canPromoteDelete(id: string): boolean {
-  const n = state.nodes.get(id); if (!n) return false;
-  if (isLockedEffective(n)) return false;
+  const n = state.nodes.get(id);
+  if (!n) {
+    return false;
+  }
+  if (isLockedEffective(n)) {
+    return false;
+  }
   const parent = parentOf(n);
-  if (parent && isLockedEffective(parent)) return false;
+  if (parent && isLockedEffective(parent)) {
+    return false;
+  }
   return childrenOf(id).every(k => !isLockedEffective(k));
 }
 // UNGROUP: delete every selected frame WITHOUT touching what it holds — its cards move up to ITS OWN

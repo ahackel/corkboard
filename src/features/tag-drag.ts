@@ -30,7 +30,9 @@ function onCanvas(x: number, y: number): boolean {
 
 export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fromCard: string | null,
   offBoard?: (x: number, y: number) => void): void {
-  if (e.button !== 0 || state.readOnly) return;
+  if (e.button !== 0 || state.readOnly) {
+    return;
+  }
   const x0 = e.clientX, y0 = e.clientY;
   let ghost: HTMLElement | null = null;
   const markDrop = classMarker('tag-drop');
@@ -39,7 +41,9 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
   };
   const move = (ev: PointerEvent): void => {
     if (!ghost) {
-      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < SLOP) return;
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < SLOP) {
+        return;
+      }
       ghost = document.createElement('div');
       ghost.className = 'tag-ghost';
       ghost.innerHTML = tagFaceHTML(tag);
@@ -53,24 +57,34 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
   const end = (ev: PointerEvent | null): void => {
     stop();
     target(null);
-    if (!ghost) return;
+    if (!ghost) {
+      return;
+    }
     ghost.remove();
     document.body.classList.remove('tag-dragging');
     chip.classList.remove('lifted');
     // the click that follows a drag is not a click
     chip.dataset.dragged = '1';
     setTimeout(() => { delete chip.dataset.dragged; }, 0);
-    if (ev) drop(ev);
+    if (ev) {
+      drop(ev);
+    }
   };
   const drop = (ev: PointerEvent): void => {
     const to = cardAt(ev.clientX, ev.clientY);
     if (to && to !== fromCard) {
       const ids = state.sel.has(to) ? taggableSelection() : [to];
       const changes: TagChange[] = ids.map(id => ({ id, tag, on: true }));
-      if (fromCard && !ev.shiftKey && !ids.includes(fromCard)) changes.push({ id: fromCard, tag, on: false });
-      if (retag(changes)) pushMru(tag);
+      if (fromCard && !ev.shiftKey && !ids.includes(fromCard)) {
+        changes.push({ id: fromCard, tag, on: false });
+      }
+      if (retag(changes)) {
+        pushMru(tag);
+      }
     } else if (!to && fromCard && onCanvas(ev.clientX, ev.clientY)) {
-      if (retag([{ id: fromCard, tag, on: false }])) puff(ev.clientX, ev.clientY);
+      if (retag([{ id: fromCard, tag, on: false }])) {
+        puff(ev.clientX, ev.clientY);
+      }
     } else if (!to && offBoard && onCanvas(ev.clientX, ev.clientY)) {
       offBoard(ev.clientX, ev.clientY);
     }

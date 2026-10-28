@@ -38,7 +38,9 @@ async function opfsCanWrite(): Promise<boolean> {
 // fallback (Safari < 17.2). Cached so the capability probe runs at most once.
 let _onDeviceStore: DeviceStore | null = null;
 export async function resolveOnDeviceStore(): Promise<DeviceStore> {
-  if (_onDeviceStore) return _onDeviceStore;
+  if (_onDeviceStore) {
+    return _onDeviceStore;
+  }
   _onDeviceStore = await opfsCanWrite() ? opfsStore : idbStore;
   return _onDeviceStore;
 }

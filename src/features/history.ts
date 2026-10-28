@@ -80,12 +80,19 @@ export function historyRefs(): Set<string> {
   const graph = (g?: EdgeGraph): void => { for (const e of g?.edges ?? []) { out.add(e.from); out.add(e.to); } };
   // …and the PARENT each image names: restoring a card into a frame that had been let go of would
   // otherwise hand it a parent id that no longer exists, and drop it at the top level.
-  const images = (m: Images): void => { for (const [id, im] of m) { out.add(id); if (im?.parent) out.add(im.parent); } };
+  const images = (m: Images): void => { for (const [id, im] of m) {
+    out.add(id);
+    if (im?.parent) {
+      out.add(im.parent);
+    }
+  } };
   for (const st of [...undoStack, ...redoStack]) {
     images(st.before); images(st.after);
     graph(st.edges?.before); graph(st.edges?.after);
   }
-  if (pending) images(pending);
+  if (pending) {
+    images(pending);
+  }
   graph(pendingEdges ?? undefined);
   return out;
 }
@@ -93,11 +100,19 @@ export function historyRefs(): Set<string> {
 // BEFORE mutating — and for creations, before state.nodes.set(), so the image is null.
 // Idempotent per id; a no-op in read-only mode (nothing records there).
 export function touch(...ids: Array<string | null | undefined>): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   for (const id of ids) {
-    if (!id) continue;
-    if (!pending) pending = new Map();
-    if (pending.has(id)) continue;
+    if (!id) {
+      continue;
+    }
+    if (!pending) {
+      pending = new Map();
+    }
+    if (pending.has(id)) {
+      continue;
+    }
     const n = state.nodes.get(id);
     pending.set(id, n ? snap(n) : null);
   }
@@ -105,15 +120,23 @@ export function touch(...ids: Array<string | null | undefined>): void {
 // Remember the map's canvas colour before changing it. Idempotent per step, and `=== null` rather
 // than a falsy test: '' (the theme default) is a real value and the commonest before-image there is.
 export function touchCanvas(): void {
-  if (state.readOnly) return;
-  if (pendingCanvas === null) pendingCanvas = state.canvasColor;
+  if (state.readOnly) {
+    return;
+  }
+  if (pendingCanvas === null) {
+    pendingCanvas = state.canvasColor;
+  }
 }
 // Remember the edge list before changing it — drawing, deleting, re-routing, restyling, and the
 // pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
 // no-op in read-only mode, like the rest.
 export function touchEdges(): void {
-  if (state.readOnly) return;
-  if (!pendingEdges) pendingEdges = cloneGraph(liveGraph());
+  if (state.readOnly) {
+    return;
+  }
+  if (!pendingEdges) {
+    pendingEdges = cloneGraph(liveGraph());
+  }
 }
 // Close the pending step: capture after-images, drop untouched-in-practice nodes, and push.
 export function commitStep(): void {
@@ -121,19 +144,29 @@ export function commitStep(): void {
   const canvasBefore = pendingCanvas; pendingCanvas = null;
   const edgesBefore = pendingEdges; pendingEdges = null;
   const step: Step = { before: new Map(), after: new Map() };
-  if (before) for (const [id, b] of before) {
-    const n = state.nodes.get(id);
-    const a = n ? snap(n) : null;
-    if (sameSnap(b, a)) continue;
-    step.before.set(id, b); step.after.set(id, a);
+  if (before) {
+    for (const [id, b] of before) {
+      const n = state.nodes.get(id);
+      const a = n ? snap(n) : null;
+      if (sameSnap(b, a)) {
+        continue;
+      }
+      step.before.set(id, b); step.after.set(id, a);
+    }
   }
-  if (canvasBefore !== null && canvasBefore !== state.canvasColor)
+  if (canvasBefore !== null && canvasBefore !== state.canvasColor) {
     step.canvas = { before: canvasBefore, after: state.canvasColor };
-  if (edgesBefore && !sameGraph(edgesBefore, liveGraph()))
+  }
+  if (edgesBefore && !sameGraph(edgesBefore, liveGraph())) {
     step.edges = { before: edgesBefore, after: cloneGraph(liveGraph()) };
-  if (!step.before.size && !step.canvas && !step.edges) return;   // nothing changed
+  }
+  if (!step.before.size && !step.canvas && !step.edges) {
+    return;   // nothing changed
+  }
   undoStack.push(step);
-  if (undoStack.length > MAX_STEPS) undoStack.shift();
+  if (undoStack.length > MAX_STEPS) {
+    undoStack.shift();
+  }
   redoStack.length = 0;
 }
 // Sugar for one-shot synchronous ops. Re-entrant: called while another step is already
@@ -142,7 +175,9 @@ export function record(ids: Iterable<string | null | undefined>, fn: () => void)
   const owner = !pending;
   touch(...ids);
   fn();
-  if (owner) commitStep();
+  if (owner) {
+    commitStep();
+  }
 }
 export function clearHistory(): void {
   undoStack.length = 0; redoStack.length = 0;
@@ -157,7 +192,9 @@ function applyImages(images: Images): void {
       if (live) {
         state.nodes.delete(id);
         live.el?.remove(); live.el = null;
-        if (live.file) state.toDelete.push(live.file);
+        if (live.file) {
+          state.toDelete.push(live.file);
+        }
       }
     } else if (live) {
       // Keep the CURRENT file path: if a rename already flushed, saveAll's phase 1 must see
@@ -175,14 +212,18 @@ function applyImages(images: Images): void {
 // shouldn't yank the camera around.
 function frameIfOffscreen(ids: string[]): void {
   const nodes = nodesOf(ids);
-  if (!nodes.length) return;
+  if (!nodes.length) {
+    return;
+  }
   const v = state.view, r = stage.getBoundingClientRect();
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const n of nodes) {
     minX = Math.min(minX, n.x * v.k + v.x);            minY = Math.min(minY, n.y * v.k + v.y);
     maxX = Math.max(maxX, (n.x + nodeW(n)) * v.k + v.x); maxY = Math.max(maxY, (n.y + nodeH(n)) * v.k + v.y);
   }
-  if (maxX < 0 || minX > r.width || maxY < 0 || minY > r.height) frameBox(nodes);
+  if (maxX < 0 || minX > r.width || maxY < 0 || minY > r.height) {
+    frameBox(nodes);
+  }
 }
 function applyStep(images: Images, canvas: string | undefined,
                    edges: EdgeGraph | undefined, label: string): void {
@@ -193,7 +234,11 @@ function applyStep(images: Images, canvas: string | undefined,
   if (edges) {
     const g = cloneGraph(edges);
     state.edges = g.edges;
-    for (const id of [...state.selEdges]) if (!state.edges.some(e => e.id === id)) state.selEdges.delete(id);
+    for (const id of [...state.selEdges]) {
+      if (!state.edges.some(e => e.id === id)) {
+        state.selEdges.delete(id);
+      }
+    }
     scheduleSaveBoard();
   }
   // Restored BEFORE the paint below: syncCanvasBackground runs off paintAll, so the canvas repaints
@@ -211,7 +256,9 @@ function applyStep(images: Images, canvas: string | undefined,
   // open frame from the canvas-colour button records a step on exactly that node, so without this
   // skip every ⌘Z would throw you out of the frame you were working in.
   const first = ids.map(id => state.nodes.get(id)).find((n): n is MindNode => !!n && !isScopeRoot(n));
-  if (first) popScopeFor(first);
+  if (first) {
+    popScopeFor(first);
+  }
   setSelectionSet(ids);
   frameIfOffscreen(ids);
   syncEdgeBar();      // the selected edge may have moved, changed, or gone
@@ -219,7 +266,9 @@ function applyStep(images: Images, canvas: string | undefined,
   setStatus(label);
 }
 export function undo(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   endInPlaceEdit();      // an open edit session becomes the step being undone
   commitStep();                        // flush any dangling pending step
   const step = undoStack.pop();
@@ -228,7 +277,9 @@ export function undo(): void {
   applyStep(step.before, step.canvas?.before, step.edges?.before, 'Undo');
 }
 export function redo(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   endInPlaceEdit();
   commitStep();                        // a fresh step clears redo, so this usually empties it
   const step = redoStack.pop();

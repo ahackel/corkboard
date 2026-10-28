@@ -74,17 +74,23 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
   const frames = new Set<MindNode>();
   for (const id of ids) {
     const n = state.nodes.get(id); const p = n ? parentOf(n) : null;
-    if (p && p.type === 'frame' && !p.collapsed && !isScopeRoot(p) && !isLockedEffective(p)) frames.add(p);
+    if (p && p.type === 'frame' && !p.collapsed && !isScopeRoot(p) && !isLockedEffective(p)) {
+      frames.add(p);
+    }
   }
   const snapStep = gridSnap();
   const up = (v: number): number => Math.ceil(v / snapStep) * snapStep;
   const down = (v: number): number => Math.floor(v / snapStep) * snapStep;
   for (const f of frames) {
     const { x0, y0, x1, y1 } = subtreesBox(childrenOf(f.id));
-    if (!isFinite(x0)) continue;
+    if (!isFinite(x0)) {
+      continue;
+    }
     const L = Math.min(f.x, down(x0 - FRAME_FIT_PAD)), T = Math.min(f.y, down(y0 - FRAME_FIT_PAD));
     const R = Math.max(f.x + (f.w ?? FRAME_W), up(x1 + FRAME_FIT_PAD)), B = Math.max(f.y + (f.h ?? FRAME_H), up(y1 + FRAME_FIT_PAD));
-    if (L === f.x && T === f.y && R === f.x + (f.w ?? FRAME_W) && B === f.y + (f.h ?? FRAME_H)) continue;
+    if (L === f.x && T === f.y && R === f.x + (f.w ?? FRAME_W) && B === f.y + (f.h ?? FRAME_H)) {
+      continue;
+    }
     touch(f.id);
     f.x = L; f.y = T; f.w = R - L; f.h = B - T;
     f.dirtyLayout = true;
@@ -96,17 +102,29 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
 // (fitFrameToContent), every selected card drops its authored height — a minimum it was dragged out to,
 // or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
 function canFit(n: MindNode): boolean {
-  if (isLockedEffective(n)) return false;
+  if (isLockedEffective(n)) {
+    return false;
+  }
   return n.type === 'frame' || (n.h != null && !isImageCard(n));
 }
 export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
-  if (!ids.length) return;
+  if (!ids.length) {
+    return;
+  }
   // animated, like a fold: the box glides to its new size (main.ts animateLayout)
   record(ids, () => animateLayout(() => {
     for (const id of ids){
-      const n = state.nodes.get(id); if (!n) continue;
-      if (n.type === 'frame') fitFrameToContent(n); else { n.h = undefined; n.clip = undefined; }
+      const n = state.nodes.get(id);
+      if (!n) {
+        continue;
+      }
+      if (n.type === 'frame') {
+        fitFrameToContent(n);
+      } else {
+        n.h = undefined;
+        n.clip = undefined;
+      }
       n.dirty = true; n.dirtyLayout = true;
     }
   }));
@@ -119,13 +137,17 @@ export function autoSizeSelection(): void {
 // current positions (same fit math as fitFrameToContent). Every selected card is reparented
 // under the new frame, which ends up selected. Shared by the 'G' shortcut and the context menu.
 export function groupSelectionIntoFrame(): void {
-  if (state.readOnly) return;
+  if (state.readOnly) {
+    return;
+  }
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!));
   const nodes = nodesOf(ids);
   if (!nodes.length) { setStatus('Locked — can’t group'); return; }
   const selectedSet = new Set(ids);
   let parentId: string | null = nodes[0].parent;
-  while (parentId && selectedSet.has(parentId)) parentId = state.nodes.get(parentId)?.parent ?? null;
+  while (parentId && selectedSet.has(parentId)) {
+    parentId = state.nodes.get(parentId)?.parent ?? null;
+  }
   const parent = parentId ? state.nodes.get(parentId) : null;
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t group here'); return; }
 
@@ -175,7 +197,10 @@ function markOpen(): void {
 fbTitle.addEventListener('click', (e) => {
   e.stopPropagation();
   closePopovers();
-  const n = anchorNode(); if (n?.type === 'frame') editFrameTitle(n);
+  const n = anchorNode();
+  if (n?.type === 'frame') {
+    editFrameTitle(n);
+  }
 });
 
 // ---------- colour trigger ----------
@@ -186,9 +211,13 @@ function markColorTrigger(): void {
   const active = edColors.querySelector<HTMLElement>('.swatch.active');
   fbColorDot.classList.remove('inherit', 'nofill');
   fbColorDot.style.removeProperty('--sw');
-  if (!active || active.classList.contains('inherit')) fbColorDot.classList.add('inherit');
-  else if (active.classList.contains('nofill')) fbColorDot.classList.add('nofill');
-  else fbColorDot.style.setProperty('--sw', active.style.getPropertyValue('--sw'));
+  if (!active || active.classList.contains('inherit')) {
+    fbColorDot.classList.add('inherit');
+  } else if (active.classList.contains('nofill')) {
+    fbColorDot.classList.add('nofill');
+  } else {
+    fbColorDot.style.setProperty('--sw', active.style.getPropertyValue('--sw'));
+  }
 }
 
 // ---------- lock toggle ----------
@@ -228,7 +257,9 @@ function positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
   const pw = pop.offsetWidth, ph = pop.offsetHeight;
   const left = ar.left + ar.width / 2 - pw / 2;
   let top = br.top - ph - POP_GAP;
-  if (top < 4) top = br.bottom + POP_GAP;
+  if (top < 4) {
+    top = br.bottom + POP_GAP;
+  }
   placeInViewport(pop, left, top);
 }
 function closePopovers(): void {
@@ -245,23 +276,35 @@ fbColor.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(co
 // set the new .active swatch (bubble phase fires the target's listener before this ancestor one).
 colorPop.addEventListener('click', (e) => {
   const sw = (e.target as HTMLElement).closest('.swatch');
-  if (!sw) return;
+  if (!sw) {
+    return;
+  }
   markColorTrigger();
   // …except the custom chip, whose click OPENS the native colour sheet rather than picking anything:
   // closing here would tear the swatch row down while the user is still choosing, and the trigger
   // has nothing to mirror yet. It closes the ordinary way — a tap outside, or Esc.
-  if (sw.classList.contains('custom')) return;
+  if (sw.classList.contains('custom')) {
+    return;
+  }
   closePopovers();
 });
 // …and while that sheet is open, keep the trigger's swatch in step with the live preview.
 colorPop.addEventListener('input', (e) => {
-  if ((e.target as HTMLElement).closest('.swatch.custom')) markColorTrigger();
+  if ((e.target as HTMLElement).closest('.swatch.custom')) {
+    markColorTrigger();
+  }
 });
 document.addEventListener('pointerdown', (e) => {
   const t = e.target as Node;
-  if (activePopover && !colorPop.contains(t) && !fbColor.contains(t)) closePopovers();
+  if (activePopover && !colorPop.contains(t) && !fbColor.contains(t)) {
+    closePopovers();
+  }
 }, true);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && activePopover) closePopovers(); }, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && activePopover) {
+    closePopovers();
+  }
+}, true);
 
 // ---------- card actions menu: rename / edit note / duplicate / export / delete / … ----------
 // Shared by the kebab button here AND the right-click context menu (features/context-menu.ts) —
@@ -280,7 +323,11 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   const isFrame = n.type === 'frame';
   // group actions (Duplicate/Cut/Copy/Export/Share/Auto-size) act on state.sel via selectedIds();
   // when the target isn't already part of the selection, select it first so they act on IT.
-  const selectTargetFirst = () => { if (!multi) selectNode(n.id); };
+  const selectTargetFirst = () => {
+    if (!multi) {
+      selectNode(n.id);
+    }
+  };
   const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
   const someLocked = targetIds.some(id => isLockedEffective(state.nodes.get(id)!));
   const anySubtreeLocked = targetIds.some(id => subtreeHasLocked(id));
@@ -296,27 +343,35 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
     entries.push({ label:'Duplicate as the next one', shortcut:'⇧D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
     entries.push('sep');
     entries.push({ label:'Delete', shortcut:'⌫', run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
-    if (anyFrame)
+    if (anyFrame) {
       entries.push({ label:'Delete frame, keep cards', shortcut:'⌥⌫',
         run: () => { selectTargetFirst(); deleteSelectionKeepChildren(); }, disabled: someLocked });
+    }
   }
   entries.push('sep');
-  if (!ro && !multi)
+  if (!ro && !multi) {
     entries.push(isFrame ? { label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked }
                          : { label:'Edit', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
-  if (!multi && canOpen(n)) entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
-  if (!multi && canFold(n))
+  }
+  if (!multi && canOpen(n)) {
+    entries.push({ label:'Open', shortcut:'↑', run: () => openFrame(n) });
+  }
+  if (!multi && canFold(n)) {
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
+  }
   if (!ro){
     entries.push({ label:'Group into frame', shortcut:'G', run: () => { selectTargetFirst(); groupSelectionIntoFrame(); }, disabled: someLocked });
-    if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }))
+    if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); })) {
       entries.push({ label: 'Fit to contents', shortcut:'⇧A',
         run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
+    }
   }
   entries.push('sep');
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: multi || !n.file });
   entries.push({ label:'Download as Markdown', run: () => { selectTargetFirst(); exportSelection(); } });
-  if (canShareFiles) entries.push({ label:'Share…', run: () => { selectTargetFirst(); void shareSelection(); } });
+  if (canShareFiles) {
+    entries.push({ label:'Share…', run: () => { selectTargetFirst(); void shareSelection(); } });
+  }
   if (!ro){
     entries.push('sep');
     const lockedNow = anyLocked(targetIds);
@@ -334,7 +389,9 @@ fbTidy.addEventListener('click', (e) => {
 fbMore.addEventListener('click', (e) => {
   e.stopPropagation();
   const id = state.selId; const n = id ? state.nodes.get(id) : undefined;
-  if (!n) return;
+  if (!n) {
+    return;
+  }
   const r = fbMore.getBoundingClientRect();
   const entries = buildCardMenu(n, r.left, r.bottom);
   openMenu(entries, r.left, r.bottom + 4);
@@ -377,18 +434,28 @@ function labelRect(n: MindNode): DOMRect {
 // unfolding the branch, or the next real selection, puts it right back over its card.
 function positionBar(): boolean {
   if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return true; }   // CSS docks it to the bottom
-  const n = anchorNode(); const el = n?.el; if (!n || !el) return false;
+  const n = anchorNode(); const el = n?.el;
+  if (!n || !el) {
+    return false;
+  }
   let r: DOMRect | { left: number; top: number; right: number; bottom: number; width: number; height: number } = el.getBoundingClientRect();
-  if (!r.width && !r.height) return false;   // hidden (display:none) — nothing to hang off
+  if (!r.width && !r.height) {
+    return false;   // hidden (display:none) — nothing to hang off
+  }
   let lr: { left: number; top: number; width: number } = labelRect(n);
   // Several selected: over the WHOLE selection (labels included), centred on it — FigJam's — so the
   // bar never sits on one of the cards it acts on.
   if (state.sel.size > 1) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const id of state.sel) {
-      const m = state.nodes.get(id); if (!m?.el) continue;
+      const m = state.nodes.get(id);
+      if (!m?.el) {
+        continue;
+      }
       for (const b of [m.el.getBoundingClientRect(), labelRect(m)]) {
-        if (!b.width && !b.height) continue;
+        if (!b.width && !b.height) {
+          continue;
+        }
         x0 = Math.min(x0, b.left); y0 = Math.min(y0, b.top); x1 = Math.max(x1, b.right); y1 = Math.max(y1, b.bottom);
       }
     }
@@ -405,9 +472,13 @@ function positionBar(): boolean {
   // …flipping below the card when there isn't room above it. Measured from the SAFE top edge, not
   // the window's: under `viewport-fit=cover` the first rows of pixels can be behind the status bar
   // / notch, and a bar that "fits" there would only be clamped back down over its own card.
-  if (top < safeInsets().top + 4) top = r.bottom + GAP;
+  if (top < safeInsets().top + 4) {
+    top = r.bottom + GAP;
+  }
   placeInViewport(bar, left, top);
-  if (activePopover) positionPopover(activePopover.pop, activePopover.anchor);
+  if (activePopover) {
+    positionPopover(activePopover.pop, activePopover.anchor);
+  }
   return true;
 }
 // ---------- hide during drag / pan / zoom ----------
@@ -421,7 +492,9 @@ let wheelBusy = false;
 let wheelIdleTimer: number | null = null;
 function markWheelBusy(): void {
   wheelBusy = true;
-  if (wheelIdleTimer != null) clearTimeout(wheelIdleTimer);
+  if (wheelIdleTimer != null) {
+    clearTimeout(wheelIdleTimer);
+  }
   wheelIdleTimer = window.setTimeout(() => { wheelBusy = false; wheelIdleTimer = null; }, 150);
 }
 stage.addEventListener('wheel', markWheelBusy, { passive: true });
@@ -483,17 +556,23 @@ export function syncFloatBar(): void {
   if (bar.classList.contains('open')) {   // already showing — update in place, no delay needed
     syncControls();
     placeBar();
-    if (raf == null) followLoop();
+    if (raf == null) {
+      followLoop();
+    }
     return;
   }
   showTimer = window.setTimeout(() => {
     showTimer = null;
     // the selection this was scheduled for may already be gone by the time the delay elapses
-    if (!(state.sel.size > 0 && !state.readOnly)) return;
+    if (!(state.sel.size > 0 && !state.readOnly)) {
+      return;
+    }
     bar.classList.add('open');
     syncControls();
     placeBar();
-    if (raf == null) followLoop();
+    if (raf == null) {
+      followLoop();
+    }
   }, SHOW_DELAY);
 }
 // Crossing the narrow breakpoint (resize/rotate) docks or undocks the bar — re-place it directly.

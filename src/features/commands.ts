@@ -69,7 +69,9 @@ function navArrow(key: string): void {
     openFrame(n);          // reports its own refusal for the kinds that can't be opened
     return;
   }
-  if (!n) return;          // ←/→ have nothing to fold
+  if (!n) {
+    return;          // ←/→ have nothing to fold
+  }
   // → unfolds, ← folds — every selected card that isn't already there.
   setCollapsedSelection(selectedIds(), key === 'ArrowLeft');
 }
@@ -138,14 +140,23 @@ window.addEventListener('keydown', (e) => {
   // Esc blurs the active field (so Delete works next), or deselects when not typing.
   if (key === 'Escape'){
     e.preventDefault();
-    if (typing) { active?.blur?.(); }
-    else if (state.selEdges.size) clearEdgeSelection();
-    else if (searchActive()) closeSearch();   // a search left standing over the board, before the selection
-    else if (state.sel.size) selectNode(null);
+    if (typing) {
+      active?.blur?.();
+    } else if (state.selEdges.size) {
+      clearEdgeSelection();
+    } else if (searchActive()) {
+      closeSearch();   // a search left standing over the board, before the selection
+    } else if (state.sel.size) {
+      selectNode(null);
+    }
     return;
   }
-  if (typing) return;
-  if (tidyShortcut(e)) return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
+  if (typing) {
+    return;
+  }
+  if (tidyShortcut(e)) {
+    return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
+  }
   // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
   // arrow combinations are left free for the browser and for later (extend-selection).
   if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey){
@@ -154,7 +165,15 @@ window.addEventListener('keydown', (e) => {
   if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
-  if (key === '#' && !mod){ e.preventDefault(); if (taggableSelection().length) openTagPicker(); else openSearch('#'); return; }
+  if (key === '#' && !mod){
+    e.preventDefault();
+    if (taggableSelection().length) {
+      openTagPicker();
+    } else {
+      openSearch('#');
+    }
+    return;
+  }
   if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
@@ -184,34 +203,56 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
   }
   if (key === 'e' && !mod && state.selId){
-    e.preventDefault(); const n = state.nodes.get(state.selId); if (n) startBodyEdit(n); return;
+    e.preventDefault(); const n = state.nodes.get(state.selId);
+    if (n) {
+      startBodyEdit(n);
+    }
+    return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
   // Tab puts a new card INSIDE the selected frame — the one thing that has an inside.
-  if (key === 'Tab' && state.selId){ e.preventDefault(); if (state.nodes.get(state.selId)?.type === 'frame') addCardInside(state.selId); return; }
+  if (key === 'Tab' && state.selId){
+    e.preventDefault();
+    if (state.nodes.get(state.selId)?.type === 'frame') {
+      addCardInside(state.selId);
+    }
+    return;
+  }
   if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
   // ⌘L connects the selected cards (MindNode's shortcut for the same thing). Bare `l` is lock.
   if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
   if (del && state.sel.size){
     e.preventDefault();
     // ⌥Delete keeps the children, promoting them to the deleted card's parent.
-    if (e.altKey) deleteSelectionKeepChildren(); else deleteSelection();
+    if (e.altKey) {
+      deleteSelectionKeepChildren();
+    } else {
+      deleteSelection();
+    }
   }
 });
 // Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.
 window.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse') ui.lastMouse = { x: e.clientX, y: e.clientY };
+  if (e.pointerType === 'mouse') {
+    ui.lastMouse = { x: e.clientX, y: e.clientY };
+  }
 });
 window.addEventListener('keyup', (e) => {
-  if (e.key !== ' ') return;
+  if (e.key !== ' ') {
+    return;
+  }
   const wasPan = ui.spaceUsedForPan;
   ui.spaceHeld = false; ui.spaceUsedForPan = false;
-  if (isTypingInField() || wasPan || ui.pan) return;
+  if (isTypingInField() || wasPan || ui.pan) {
+    return;
+  }
   // A Space TAP on a lone IMAGE card opens it full-screen — the picture is the whole card, so "look at
   // this properly" is the obvious thing the key can mean there, and the viewer closes on Space too
   // (features/image-viewer.ts). Everything else Space used to do on release (making a card) is `N` now.
   const sole = state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : null;
-  if (sole && isImageCard(sole)) openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
+  if (sole && isImageCard(sole)) {
+    openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
+  }
 });
 // ---------- the ⌘P command palette's list ----------
 // Every action the app has, with the shortcut that does the same — built here because every action
@@ -231,7 +272,12 @@ function paletteCommands(): Command[] {
     { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomStep(1.2) },
     { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomStep(1 / 1.2) },
     { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
-    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
+    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => {
+      const n = oneSel();
+      if (n) {
+        startBodyEdit(n);
+      }
+    } },
     { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
     { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
     { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || editable(), run: goToInbox },
@@ -258,4 +304,11 @@ function paletteCommands(): Command[] {
 }
 setPaletteSource(paletteCommands);
 byId('paletteBtn').title = `Actions (${MOD.trim() === '⌘' ? '⌘P' : 'Ctrl+P'})`;
-byId('paletteBtn').onclick = (e) => { e.stopPropagation(); if (paletteOpen()) closePalette(); else openPalette(); };
+byId('paletteBtn').onclick = (e) => {
+  e.stopPropagation();
+  if (paletteOpen()) {
+    closePalette();
+  } else {
+    openPalette();
+  }
+};

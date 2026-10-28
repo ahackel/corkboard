@@ -61,7 +61,9 @@ const foldedLevels = (): number[] =>
 export function renderCrumbs(): void {
   const sig = !scopeActive() ? store.name
     : store.name + '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i)).join('/');
-  if (bar.dataset.sig === sig) return;
+  if (bar.dataset.sig === sig) {
+    return;
+  }
   bar.dataset.sig = sig;
   document.body.classList.toggle('scoped', scopeActive());
   // The map is the first segment either way — it's just the CURRENT one (and so inert) when there's
@@ -86,12 +88,16 @@ export function renderCrumbs(): void {
 // frame segments share it.
 homeBar.addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('.sc-crumb');
-  if (!btn) return;
+  if (!btn) {
+    return;
+  }
   // `…` → a menu of the levels it swallowed, reusing the canvas/card menu's own chrome.
   if (btn.dataset.more) {
     const r = btn.getBoundingClientRect();
     const entries: MenuEntry[] = foldedLevels().map(i => ({ label: levelTitle(i), run: () => goToScopeDepth(i + 1) }));
-    if (entries.length) openMenu(entries, r.left, r.bottom + 4);
+    if (entries.length) {
+      openMenu(entries, r.left, r.bottom + 4);
+    }
     return;
   }
   // …and the CURRENT level can't get here at all: it's inert (styles.css takes its pointer-events),

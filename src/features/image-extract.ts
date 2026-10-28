@@ -34,8 +34,13 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   return { el: node.el, id: node.id };
 }
 export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, sx: number, sy: number): void {
-  if (state.readOnly) return;
-  const path = img.dataset.path; if (!path) return;
+  if (state.readOnly) {
+    return;
+  }
+  const path = img.dataset.path;
+  if (!path) {
+    return;
+  }
   extracting = true;
   const alt = img.alt || '';
   const nw = img.naturalWidth || IMAGE_W, nh = img.naturalHeight || IMAGE_H;
@@ -59,16 +64,21 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
     extracting = false;
   };
   const onMove = (ev: PointerEvent): void => {
-    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) moved = true;
+    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) {
+      moved = true;
+    }
     place(ev.clientX, ev.clientY);
     setHover(moveTargetAt(ev.clientX, ev.clientY, source.id, preview)?.el ?? null);
   };
   const onUp = (ev: PointerEvent): void => {
     const t = moveTargetAt(ev.clientX, ev.clientY, source.id, preview);
     cleanup();
-    if (!moved) return;                                   // a plain Alt-click on the image: no change
-    if (t) extractImage(source.id, path, alt, { toCardId: t.id });
-    else {
+    if (!moved) {
+      return;                                   // a plain Alt-click on the image: no change
+    }
+    if (t) {
+      extractImage(source.id, path, alt, { toCardId: t.id });
+    } else {
       const p = screenToWorld(ev.clientX, ev.clientY);
       const at = snapPt({ x: p.x - cardW / 2, y: p.y - cardH / 2 });   // on the grid, like any placed card
       extractImage(source.id, path, alt, { x: at.x, y: at.y, w: cardW, h: cardH });

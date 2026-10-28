@@ -20,7 +20,9 @@ import { arrangeFrames } from './load.js';
 // Pure function of what's on disk, so a failed save simply migrates again next time.
 export function foldCardsIntoFrames(): number {
   const cards = [...state.nodes.values()].filter(n => n.type === 'card' && childrenOf(n.id).length);
-  if (!cards.length) return 0;
+  if (!cards.length) {
+    return 0;
+  }
   const was = new Set(cards.map(n => n.id));
   const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
     && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
@@ -54,27 +56,47 @@ export function flattenLegacyBranches(wasStack: Set<string>): number {
   const outlined = new Set<string>();
   const wasOutlined = (n: MindNode): boolean => {
     for (let p = parentOf(n); p; p = parentOf(p)) {
-      if (wasStack.has(p.id)) return true;
-      if (p.type !== 'card' && p.type !== 'frame') return false;
+      if (wasStack.has(p.id)) {
+        return true;
+      }
+      if (p.type !== 'card' && p.type !== 'frame') {
+        return false;
+      }
     }
     return false;
   };
-  for (const n of state.nodes.values()) if (wasOutlined(n)) outlined.add(n.id);
+  for (const n of state.nodes.values()) {
+    if (wasOutlined(n)) {
+      outlined.add(n.id);
+    }
+  }
   const collapsedAbove = (n: MindNode): boolean => {
-    for (let p = parentOf(n); p; p = parentOf(p)) if (p.collapsed) return true;
+    for (let p = parentOf(n); p; p = parentOf(p)) {
+      if (p.collapsed) {
+        return true;
+      }
+    }
     return false;
   };
   // The container this card should belong to once its branch is cut: the nearest FRAME above it, or
   // the world. Never a card — that is the whole point of the migration.
   const containerAbove = (n: MindNode): MindNode | null => {
-    for (let p = parentOf(n); p; p = parentOf(p)) if (p.type === 'frame') return p;
+    for (let p = parentOf(n); p; p = parentOf(p)) {
+      if (p.type === 'frame') {
+        return p;
+      }
+    }
     return null;
   };
   let made = 0;
   for (const n of [...state.nodes.values()]) {
     const p = parentOf(n);
-    if (!p || p.type !== 'card') continue;          // roots, and frame children, stay as they are
-    if (outlined.has(n.id) || collapsedAbove(n)) continue;
+    if (!p || p.type !== 'card') {
+      continue;          // roots, and frame children, stay as they are
+    }
+    if (outlined.has(n.id) || collapsedAbove(n)) {
+      continue;
+    }
     const host = containerAbove(n);
     n.parent = host ? host.id : null;
     // x/y are already absolute and final; re-derive the stored offset against the NEW anchor so the

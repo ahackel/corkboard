@@ -17,17 +17,25 @@ import { foreignDirs, readFolder } from './load.js';
 // comparison. Lowercased because that is how the filesystem collides (see below).
 function filesInUse(): Map<string, string> {
   const m = new Map<string, string>();
-  for (const o of state.nodes.values()) if (o.file) m.set(o.file.toLowerCase(), o.id);
+  for (const o of state.nodes.values()) {
+    if (o.file) {
+      m.set(o.file.toLowerCase(), o.id);
+    }
+  }
   return m;
 }
 // Re-point inbound [[wikilinks]] across every note (utils/filenames.ts retargetLinks), returning the
 // ids whose body changed, for phase 2 to write.
 function retargetWikilinks(renames: Map<string, string>): string[] {
-  if (!renames.size) return [];
+  if (!renames.size) {
+    return [];
+  }
   const touched: string[] = [];
   for (const n of state.nodes.values()) {
     const body = retargetLinks(n.body, renames);
-    if (body === n.body) continue;
+    if (body === n.body) {
+      continue;
+    }
     n.body = body; n.dirty = true; touched.push(n.id);
   }
   return touched;
@@ -46,14 +54,18 @@ function planPaths(): Map<string, string> {
     const p = parentOf(n);
     const pFile = p ? out.get(p.id) ?? p.file : null;
     const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs);
-    if (n.file) inUse.delete(n.file.toLowerCase());
+    if (n.file) {
+      inUse.delete(n.file.toLowerCase());
+    }
     inUse.set(target.toLowerCase(), n.id);
     out.set(n.id, target);
   }
   return out;
 }
 async function saveAll(): Promise<void> {
-  if (state.readOnly) return;        // read-only mode never writes to disk
+  if (state.readOnly) {
+    return;        // read-only mode never writes to disk
+  }
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
   // Phase 0 — a FOLDED frame whose notes were never read can't move them without reading them: one
   // that is about to move (renamed, retyped, dropped into another frame, or inside one that is) reads
@@ -63,9 +75,15 @@ async function saveAll(): Promise<void> {
     const plan = planPaths();
     const moving = [...state.nodes.values()].filter(n => n.lazy != null && n.file && plan.get(n.id) !== n.file);
     const holding = [...state.nodes.values()].filter(n => n.lazy != null && childrenOf(n.id).length);
-    if (!moving.length && !holding.length) break;
-    for (const f of moving) await readFolder(f, true);
-    for (const f of holding) await readFolder(f, false);
+    if (!moving.length && !holding.length) {
+      break;
+    }
+    for (const f of moving) {
+      await readFolder(f, true);
+    }
+    for (const f of holding) {
+      await readFolder(f, false);
+    }
   }
   commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
   // Each step below records its progress AS it lands, so a save that throws half-way (quota, a revoked
@@ -77,7 +95,11 @@ async function saveAll(): Promise<void> {
   // order live in board.json now, so `dirtyLayout` alone is not a reason to touch a .md. Moving a
   // card therefore writes one small JSON file instead of one .md per moved card.
   const needWrite = new Set<string>();
-  for (const n of state.nodes.values()) if (n.dirty || !n.file) needWrite.add(n.id);
+  for (const n of state.nodes.values()) {
+    if (n.dirty || !n.file) {
+      needWrite.add(n.id);
+    }
+  }
 
   // Phase 1 — settle every note's final path IN MEMORY first (planPaths). A frame is a folder, so a
   // renamed or moved frame moves every note inside it: each one is a rename of its own here.
@@ -96,15 +118,21 @@ async function saveAll(): Promise<void> {
 
   // Phase 1b — a rename drags its INBOUND links along: a path recorded elsewhere in the vault must not
   // outlive the path it records.
-  for (const id of retargetWikilinks(renames)) needWrite.add(id);
+  for (const id of retargetWikilinks(renames)) {
+    needWrite.add(id);
+  }
   // Everything phase 1 decided must be written is now DIRTY, not just in this call's set: n.file has
   // already moved to its new name, so a retry would see no rename and forget it had to write it.
-  for (const id of needWrite) state.nodes.get(id)!.dirty = true;
+  for (const id of needWrite) {
+    state.nodes.get(id)!.dirty = true;
+  }
 
   // Phase 2 — write everything that changed, now that all paths are final.
   let written = 0;
   for (const n of state.nodes.values()) {
-    if (!needWrite.has(n.id)) continue;
+    if (!needWrite.has(n.id)) {
+      continue;
+    }
     await store.write(n.file!, serializeMd(n));
     n.dirty = false;
     written++;
@@ -126,8 +154,12 @@ async function saveAll(): Promise<void> {
 
   // …and the board follows, AWAITED: it is keyed by path, so after a move it must land before anything
   // else does — a reload in between would find the notes in their new folders and no layout for them.
-  if (pathsMoved) await flushBoard();
-  for (const n of state.nodes.values()) n.dirtyLayout = false;   // the board write carries these
+  if (pathsMoved) {
+    await flushBoard();
+  }
+  for (const n of state.nodes.values()) {
+    n.dirtyLayout = false;   // the board write carries these
+  }
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
   releaseFolded();   // a folded frame whose notes are all safely on disk can let go of them (data/lazy.ts)
@@ -149,8 +181,12 @@ export function resetSaveState(): void {
 let saveTimer: number | undefined, saveAgain = false;
 let savePromise: Promise<void> | null = null;   // non-null while a save chain is in flight
 export function scheduleSave(): void {
-  if (state.readOnly) return;         // read-only mode never writes to disk
-  if (!store.isOpen) return;          // demo mode: nothing to write
+  if (state.readOnly) {
+    return;         // read-only mode never writes to disk
+  }
+  if (!store.isOpen) {
+    return;          // demo mode: nothing to write
+  }
   // Geometry lives in board.json, so the two files settle together: every mutation path in the app
   // ends in scheduleSave(), and a great many of them move something.
   scheduleSaveBoard();
@@ -159,7 +195,9 @@ export function scheduleSave(): void {
   saveTimer = window.setTimeout(flushSave, 400);
 }
 export function flushSave(): Promise<void> {
-  if (!store.isOpen) return Promise.resolve();
+  if (!store.isOpen) {
+    return Promise.resolve();
+  }
   clearTimeout(saveTimer); saveTimer = undefined;
   if (savePromise) { saveAgain = true; return savePromise; }   // coalesce overlapping writes
   savePromise = (async () => {
@@ -178,19 +216,33 @@ export function flushSave(): Promise<void> {
 // completion. MUST be called before retargeting the store at another map/folder — a straggling
 // autosave firing after the switch would write the old map's files into the new one.
 export async function settleSave(): Promise<void> {
-  if (boardSavePending()) await flushBoard();
-  if (saveTimer != null || savePromise || notesUnsaved()) await flushSave();
+  if (boardSavePending()) {
+    await flushBoard();
+  }
+  if (saveTimer != null || savePromise || notesUnsaved()) {
+    await flushSave();
+  }
 }
 // Is there anything in memory the disk doesn't have yet — queued, in flight, or left over by a write
 // that failed? Read-only and demo mode never write, so they never have anything unsaved.
 function notesUnsaved(): boolean {
-  if (state.readOnly || !store.isOpen) return false;
-  if (state.toDelete.length || pendingRemovals.size) return true;
-  for (const n of state.nodes.values()) if (n.dirty || !n.file) return true;
+  if (state.readOnly || !store.isOpen) {
+    return false;
+  }
+  if (state.toDelete.length || pendingRemovals.size) {
+    return true;
+  }
+  for (const n of state.nodes.values()) {
+    if (n.dirty || !n.file) {
+      return true;
+    }
+  }
   return false;
 }
 export function hasUnsavedChanges(): boolean {
-  if (state.readOnly || !store.isOpen) return false;
+  if (state.readOnly || !store.isOpen) {
+    return false;
+  }
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();
 }
 
@@ -199,10 +251,16 @@ export function hasUnsavedChanges(): boolean {
 // closed or reloaded would otherwise die with it. Hiding is the dependable signal (it fires before
 // unload, and is the LAST one iOS gives a backgrounded page); beforeunload also asks the browser to
 // hold the page while anything is still unwritten.
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') void settleSave(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    void settleSave();
+  }
+});
 window.addEventListener('pagehide', () => { void settleSave(); });
 window.addEventListener('beforeunload', e => {
-  if (!hasUnsavedChanges()) return;
+  if (!hasUnsavedChanges()) {
+    return;
+  }
   void settleSave();
   e.preventDefault();
 });

@@ -28,10 +28,21 @@ export const taggableSelection = (): string[] => selectedIds().filter(id => wear
 // stale) and the new selection. A click used to repaint the whole map. A mutation that also selects
 // still ends in its own relayout()/remeasure().
 export function applySelection(): void {
-  if (state.sel.size && state.selEdges.size) clearEdgeSelection();
+  if (state.sel.size && state.selEdges.size) {
+    clearEdgeSelection();
+  }
   const ids = new Set(state.sel);
-  world.querySelectorAll<HTMLElement>('.node.sel').forEach(el => { if (el.dataset.id) ids.add(el.dataset.id); });
-  for (const id of ids) { const n = state.nodes.get(id); if (n) paintNode(n); }
+  world.querySelectorAll<HTMLElement>('.node.sel').forEach(el => {
+    if (el.dataset.id) {
+      ids.add(el.dataset.id);
+    }
+  });
+  for (const id of ids) {
+    const n = state.nodes.get(id);
+    if (n) {
+      paintNode(n);
+    }
+  }
   paintFreeEdges(); syncFloatBar(); syncUrl(); updateDocumentTitle();
 }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
@@ -45,18 +56,26 @@ function isSelectable(id: string): boolean {
 // Replace the whole selection with `ids` (a Set or array), recomputing the primary.
 export function setSelectionSet(ids: Iterable<string>): void {
   state.sel = new Set([...ids].filter(isSelectable));
-  if (state.sel.size === 0) state.selId = null;
-  else if (state.sel.size === 1) state.selId = [...state.sel][0];
-  else if (!state.selId || !state.sel.has(state.selId)) state.selId = [...state.sel].pop() ?? null;
+  if (state.sel.size === 0) {
+    state.selId = null;
+  } else if (state.sel.size === 1) {
+    state.selId = [...state.sel][0];
+  } else if (!state.selId || !state.sel.has(state.selId)) {
+    state.selId = [...state.sel].pop() ?? null;
+  }
   applySelection();
 }
 // ⌘/Ctrl-click: add or remove one card from the selection.
 export function toggleSel(id: string): void {
   if (state.sel.has(id)){
     state.sel.delete(id);
-    if (state.selId === id) state.selId = state.sel.size ? ([...state.sel].pop() ?? null) : null;
+    if (state.selId === id) {
+      state.selId = state.sel.size ? ([...state.sel].pop() ?? null) : null;
+    }
   } else {
-    if (!isSelectable(id)) return;
+    if (!isSelectable(id)) {
+      return;
+    }
     state.sel.add(id); state.selId = id;
   }
   applySelection();
@@ -65,7 +84,9 @@ export function toggleSel(id: string): void {
 export function selectNode(id: string | null): void {
   if (id == null){ state.sel.clear(); state.selId = null; }
   else {
-    if (!isSelectable(id)) return;
+    if (!isSelectable(id)) {
+      return;
+    }
     state.sel = new Set([id]); state.selId = id;
   }
   applySelection();

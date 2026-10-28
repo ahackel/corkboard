@@ -30,7 +30,9 @@ export function upsertMap(ref: MapRef): void {
 export function removeMapRef(id: string): void { writeMaps(readMaps().filter(m => m.id !== id)); }
 export function touchMap(id: string): void {
   const m = readMaps().find(m => m.id === id);
-  if (m) upsertMap({ ...m, when: Date.now() });
+  if (m) {
+    upsertMap({ ...m, when: Date.now() });
+  }
 }
 
 export function getLastMap(): { kind: MapKind; id: string } | null {
@@ -43,7 +45,12 @@ export function setLastMap(kind: MapKind, id: string): void { writeJSON(LAST_MAP
 export const MAP_META_FILE = 'map.json';
 export function serializeMapMeta(name: string): string { return JSON.stringify({ name }); }
 export function parseMapMetaName(text: string): string | null {
-  try { const j = JSON.parse(text); if (typeof j?.name === 'string' && j.name) return j.name; } catch {}
+  try {
+    const j = JSON.parse(text);
+    if (typeof j?.name === 'string' && j.name) {
+      return j.name;
+    }
+  } catch {}
   return null;
 }
 
@@ -53,9 +60,13 @@ function newMapId(): string {
 }
 // "Untitled", "Untitled 2", … — auto-number against the given names (default: the registry).
 function uniqueMapName(base: string, names = new Set(readMaps().map(m => m.name))): string {
-  if (!names.has(base)) return base;
+  if (!names.has(base)) {
+    return base;
+  }
   let i = 2;
-  while (names.has(`${base} ${i}`)) i++;
+  while (names.has(`${base} ${i}`)) {
+    i++;
+  }
   return `${base} ${i}`;
 }
 
@@ -74,10 +85,14 @@ export async function deleteDeviceMap(s: DeviceStore, id: string): Promise<void>
 }
 export async function renameDeviceMap(s: DeviceStore, id: string, name: string): Promise<void> {
   const finalName = name.trim();
-  if (!finalName) return;
+  if (!finalName) {
+    return;
+  }
   await s.renameMap(id, finalName);
   const m = readMaps().find(m => m.id === id);
-  if (m) upsertMap({ ...m, name: finalName });
+  if (m) {
+    upsertMap({ ...m, name: finalName });
+  }
 }
 
 // ---- one-time migration + rebuild ----
@@ -91,15 +106,21 @@ const LEGACY_RECENTS_KEY = 'corkboard.recentFolders';
 const LEGACY_LAST_STORE_KEY = 'corkboard.lastStore';
 
 export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
-  if (readMaps().length) return;
+  if (readMaps().length) {
+    return;
+  }
   const refs: MapRef[] = [];
   // legacy FSA recents → folder refs (handle keys unchanged, so resume keeps working)
-  for (const r of readJSON<Array<{ key: string; name: string; when: number }>>(LEGACY_RECENTS_KEY, []))
+  for (const r of readJSON<Array<{ key: string; name: string; when: number }>>(LEGACY_RECENTS_KEY, [])) {
     refs.push({ id: r.key, kind: 'folder', name: r.name, when: r.when });
+  }
   // on-device maps found on disk (legacy vault/ included)
-  for (const m of await s.listMaps())
+  for (const m of await s.listMaps()) {
     refs.push({ id: m.id, kind: 'device', name: uniqueMapName(m.name, new Set(refs.map(r => r.name))), when: 0 });
-  if (!refs.length) return;
+  }
+  if (!refs.length) {
+    return;
+  }
   writeMaps(refs);
   try { localStorage.removeItem(LEGACY_RECENTS_KEY); } catch {}
   // legacy last-store → last-map, so boot() reopens what the user last had open
@@ -108,6 +129,8 @@ export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
     try { legacy = localStorage.getItem(LEGACY_LAST_STORE_KEY); } catch {}
     const first = (kind: MapKind) => refs.find(m => m.kind === kind);
     const pick = legacy === 'folder' ? (first('folder') ?? first('device')) : (first('device') ?? null);
-    if (pick) setLastMap(pick.kind, pick.id);
+    if (pick) {
+      setLastMap(pick.kind, pick.id);
+    }
   }
 }

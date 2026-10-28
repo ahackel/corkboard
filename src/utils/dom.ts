@@ -60,7 +60,9 @@ export interface Insets { top: number; right: number; bottom: number; left: numb
 let insets: Insets | null = null;
 let probe: HTMLElement | null = null;
 export function safeInsets(): Insets {
-  if (insets) return insets;
+  if (insets) {
+    return insets;
+  }
   if (!probe){ probe = document.createElement('div'); probe.className = 'safe-probe'; document.body.appendChild(probe); }
   const cs = getComputedStyle(probe);
   insets = { top: parseFloat(cs.paddingTop) || 0, right: parseFloat(cs.paddingRight) || 0,
