@@ -46,19 +46,19 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
   setStatus(what);
 }
 
-export function tidyUp(): void {
+function tidyUp(): void {
   // from the selection's top-left, on the grid, with the house spacing — the same one guides pull to
   apply('Tidied up', boxes => tidyGrid(boxes, SPACING,
     snapPt({ x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)) })));
 }
 const ALIGN_NAME: Record<AlignEdge, string> = { left: 'left', center: 'centres', right: 'right', top: 'top', middle: 'middles', bottom: 'bottom' };
-export function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edge]}`, boxes => align(boxes, edge)); }
-export function distributeSelection(axis: 'x' | 'y'): void {
+function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edge]}`, boxes => align(boxes, edge)); }
+function distributeSelection(axis: 'x' | 'y'): void {
   apply(axis === 'x' ? 'Spaced evenly across' : 'Spaced evenly down', boxes => distribute(boxes, axis), 3);
 }
 // Same width: every selected plain CARD takes the widest one's width (frames and pictures size
 // themselves; a card's text re-wraps, so its height is re-measured).
-export function sameWidth(): void {
+function sameWidth(): void {
   if (state.readOnly) return;
   const cards = targets().filter(n => n.type !== 'frame' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }

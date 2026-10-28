@@ -38,7 +38,7 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
 }
 // The height a FRESH card lays out at, before it has an element to measure (layoutH's own fallback is
 // the same number). Only useful as half of the centring below — a card's real height is measured.
-export const NEW_CARD_H = 64;
+const NEW_CARD_H = 64;
 // Centre a fresh card on a world point — the ONE spelling of it. Every "new card HERE" gesture (the
 // canvas double-click, the canvas ⋯ menu, Space, a dropped file, a card double-clicked into a
 // container) lands the card under the pointer rather than hanging down-right of it, so the default
@@ -338,8 +338,6 @@ export function extractToCard(): void {
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
   setStatus(`Extracted “${nodeLabel(card)}”`);
 }
-const nodeOrNull = (id: string | null | undefined): MindNode | null =>
-  (id ? state.nodes.get(id) ?? null : null);
 // WHICH TEXT is being dragged: a range of the card's one editor (features/text-drag.ts captures this
 // at dragstart; the offsets are into that editor's live text, which is why the drop re-reads it rather
 // than trusting n.title/n.body). It used to carry a `part: 'title' | 'body'` too, with a contenteditable
@@ -378,7 +376,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   }
   // WHERE THE NEW CARD BELONGS: the frame it was dropped in (text-drag.ts resolves it with the same
   // frameAt every drop uses), else the top level — the open frame while there is one.
-  const parent = dest.container ?? nodeOrNull(detachParentId());
+  const parent = dest.container ?? state.nodes.get(detachParentId() ?? '') ?? null;
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
   const { title, body } = splitHeading(text);

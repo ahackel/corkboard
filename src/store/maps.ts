@@ -48,11 +48,11 @@ export function parseMapMetaName(text: string): string | null {
 }
 
 // Mint a new on-device map id (also its OPFS dir name under maps/).
-export function newMapId(): string {
+function newMapId(): string {
   return 'm' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 // "Untitled", "Untitled 2", … — auto-number against the given names (default: the registry).
-export function uniqueMapName(base: string, names = new Set(readMaps().map(m => m.name))): string {
+function uniqueMapName(base: string, names = new Set(readMaps().map(m => m.name))): string {
   if (!names.has(base)) return base;
   let i = 2;
   while (names.has(`${base} ${i}`)) i++;

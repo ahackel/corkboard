@@ -25,7 +25,7 @@ import { SPACING } from '../utils/guides.js';
 import { refreshGrid } from '../view/grid.js';
 import { isTypingInField, inPlaceEditActive, frozenFileNodeId } from '../core/ui-state.js';
 import { hideStart } from '../boot.js';
-import { releaseFolded, readAll } from './lazy.js';
+import { releaseFolded, readAll, unreadFrameHolding } from './lazy.js';
 import { byId } from '../utils/dom.js';
 import { saveFailed, saveSucceeded } from './save-alert.js';
 import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge, unparkEdges } from './board.js';
@@ -70,7 +70,7 @@ export async function openMapRef(ref: MapRef): Promise<boolean> {
     return true;
   }
   await settleSave();
-  if (!fsaStore.resume || !(await fsaStore.resume(ref.id))) return false;
+  if (!(await fsaStore.resume(ref.id))) return false;
   useStore(fsaStore, { kind: 'folder', id: ref.id });
   await loadFromDir();
   return true;
@@ -94,17 +94,16 @@ export function openImportPicker(): void { importInput.click(); }
 // which needs it for the files an OS drop hands over with no MIME type at all (an .svg dragged out of
 // a file manager is the common one).
 export const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
-const IMG_RE = IMAGE_FILE_RE;
 interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
-export async function importFiles(files: File[]): Promise<void> {
+async function importFiles(files: File[]): Promise<void> {
   const entries: ImportEntry[] = [];
   for (const f of files){
     if (/\.zip$/i.test(f.name)) { try { entries.push(...await unzip(await f.arrayBuffer())); } catch { setStatus('That .zip could not be read.'); } }
     else if (/\.(md|markdown)$/i.test(f.name)) entries.push({ name: f.name, text: await f.text() });
-    else if (IMG_RE.test(f.name)) entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    else if (IMAGE_FILE_RE.test(f.name)) entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
   }
   let md  = entries.filter(e => /\.(md|markdown)$/i.test(e.name) && !e.name.endsWith('/'));
-  let img = entries.filter(e => e.bytes && IMG_RE.test(e.name) && !e.name.endsWith('/'));
+  let img = entries.filter(e => e.bytes && IMAGE_FILE_RE.test(e.name) && !e.name.endsWith('/'));
   if (!md.length){ setStatus('No Markdown files found to import.'); return; }
   // An import always ADDS a new on-device map, never merges into the current one — named
   // after the .zip when there is one.
@@ -152,7 +151,7 @@ export async function exportZip(): Promise<void> {
   for (const n of nodes) for (const { src } of bodyImages(n.body)) if (!/^(https?:|data:)/i.test(src)) refs.add(src);
   // read every referenced image concurrently, then pack the ones that resolved
   const images = await Promise.all([...refs].map(async path => {
-    const blob = store.readBlob ? await store.readBlob(path) : null;
+    const blob = await store.readBlob(path);
     return blob ? { name: path, bytes: new Uint8Array(await blob.arrayBuffer()) } : null;
   }));
   const attached = images.filter(Boolean).length;
@@ -311,10 +310,7 @@ function settle(added: MindNode[], seeds: Seeds): Map<string | null, string> {
 // The frame an unread note sits in, for a line that ends on it: the deepest folded frame in memory
 // whose folder holds the path (data/board.ts resolveEdges).
 function standInFor(path: string): string | null {
-  let best: MindNode | null = null;
-  for (const n of state.nodes.values())
-    if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) best = n;
-  return best?.id ?? null;
+  return unreadFrameHolding(path)?.id ?? null;
 }
 // Which folders a read leaves UNREAD (store/tree.ts): a frame folded in board.json, and a folder the
 // board has never seen — it arrives as a folded pill. Never one on the way to a path in `keep` (the
@@ -581,7 +577,7 @@ function planPaths(): Map<string, string> {
   }
   return out;
 }
-export async function saveAll(): Promise<void> {
+async function saveAll(): Promise<void> {
   if (state.readOnly) return;        // read-only mode never writes to disk
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
   // Phase 0 — a FOLDED frame whose notes were never read can't move them without reading them: one
@@ -713,7 +709,7 @@ function notesUnsaved(): boolean {
   for (const n of state.nodes.values()) if (n.dirty || !n.file) return true;
   return false;
 }
-export function hasUnsavedChanges(): boolean {
+function hasUnsavedChanges(): boolean {
   if (state.readOnly || !store.isOpen) return false;
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();
 }
@@ -733,7 +729,7 @@ window.addEventListener('beforeunload', e => {
 
 // ---------- reload on focus ----------
 let reloading = false;
-export async function reloadFromDisk(): Promise<void> {
+async function reloadFromDisk(): Promise<void> {
   if (!store.isOpen) return;
   // A single refocus dispatches BOTH window 'focus' and 'visibilitychange'. Guard re-entry.
   if (reloading) return;
@@ -764,4 +760,3 @@ export async function reloadFromDisk(): Promise<void> {
     reloading = false;
   }
 }
-store.watch(reloadFromDisk);   // re-read on external change (FSA: window-focus / tab-visible)

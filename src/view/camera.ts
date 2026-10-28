@@ -16,7 +16,7 @@ import { clamp } from '../utils/num.js';
 // (styles.css), which also takes their layout and paint work out of every frame of a pinch/pan at the
 // zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's
 // own geometry depends on it, so crossing the line needs no repaint of the canvas.
-export const FAR_ZOOM = 0.5;
+const FAR_ZOOM = 0.5;
 
 // #world carries `will-change:transform` (styles.css) so a pan/pinch is a compositor-only move and
 // never repaints the cards. The cost is that Chrome then PINS that layer's raster scale: it keeps

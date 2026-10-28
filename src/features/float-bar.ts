@@ -54,7 +54,7 @@ function props(): PropertyControls {
 // (data/persistence.ts).
 // The frame's label hangs outside the box (above it), so the margin is the same on all four sides.
 const FRAME_FIT_PAD = 16;
-export function fitFrameToContent(n: MindNode, orDefault = false): void {
+function fitFrameToContent(n: MindNode, orDefault = false): void {
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
   const { x0, y0, x1, y1 } = subtreesBox(childrenOf(n.id));
@@ -94,7 +94,7 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
 // FIT — the float bar's ↔, ⇧A and the menu's "Fit to contents": every selected frame hugs its cards
 // (fitFrameToContent), every selected card drops its authored height — a minimum it was dragged out to,
 // or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
-export function canFit(n: MindNode): boolean {
+function canFit(n: MindNode): boolean {
   if (isLockedEffective(n)) return false;
   return n.type === 'frame' || (n.h != null && !isImageCard(n));
 }
@@ -151,9 +151,9 @@ export function groupSelectionIntoFrame(): void {
   relayout(); selectNode(frameId); scheduleSave();
   setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a frame`);
 }
-// Open (→]) go IN: shown only when the selection can be opened (canOpenSelection below).
+// Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
 function markOpen(): void {
-  fbOpen.style.display = canOpenSelection() ? '' : 'none';
+  fbOpen.style.display = canEnter(anchorNode()) ? '' : 'none';
   fbFit.style.display = selectedIds().some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }) ? '' : 'none';
   // Collapse / expand: THE fold button (cards carry none of their own). It shows the state it would make:
   // expand once everything foldable in the selection is folded, collapse otherwise — what X does.
@@ -341,14 +341,11 @@ fbMore.addEventListener('click', (e) => {
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
+
 // Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
 // desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (main.ts navArrow): you can only stand
 // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
 // kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
-export function canOpenSelection(): boolean {
-  const n = anchorNode();
-  return canEnter(n);
-}
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
 fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
 fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });

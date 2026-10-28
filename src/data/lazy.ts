@@ -52,13 +52,28 @@ export function afterReading(ids: Iterable<string>, fn: () => void, deep = true)
   })();
   return true;
 }
+// The innermost UNREAD frame whose folder holds `path`.
+export function unreadFrameHolding(path: string): MindNode | null {
+  let best: MindNode | null = null;
+  for (const n of state.nodes.values()) {
+    if (n.lazy != null && n.file && path.startsWith(dirOf(n.file)) && (!best || n.file.length > best.file!.length)) {
+      best = n;
+    }
+  }
+  return best;
+}
+
 // A path you were sent to (a link, the URL): read the folded frames on the way to it, outermost first,
 // until it is in memory or there is nothing left on the way to read.
 export async function revealPath(path: string): Promise<void> {
   for (let guard = 0; guard < 64; guard++) {
-    if (nodeByFile(path)) return;
-    const f = [...state.nodes.values()].find(n => n.lazy != null && n.file && path.startsWith(dirOf(n.file)));
-    if (!f) return;
+    if (nodeByFile(path)) {
+      return;
+    }
+    const f = unreadFrameHolding(path);
+    if (!f) {
+      return;
+    }
     await readFolder(f, false);
   }
 }

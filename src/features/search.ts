@@ -23,7 +23,7 @@ import { byId } from '../utils/dom.js';
 import { tagText, tagChipHTML } from './tags.js';
 import { boardTags } from './tag-picker.js';
 
-export const searchBox = byId<HTMLInputElement>('searchBox');
+const searchBox = byId<HTMLInputElement>('searchBox');
 const searchWrap = byId('searchWrap');
 const searchResults = byId('searchResults');
 const searchClear = byId<HTMLButtonElement>('searchClear');
@@ -121,7 +121,7 @@ function matches(n: MindNode, text: string): boolean {
 }
 
 // The query changed: recompute, and rebuild the dropdown (when the field has the focus).
-export function runSearch(showList = true): void {
+function runSearch(showList = true): void {
   const { text, typing } = parts();
   if (!searchActive()) { clearResults(); paintAll(); scheduleUrlSync(); return; }
   paintAll();   // → refreshSearch

@@ -212,7 +212,7 @@ export const isNodeControlAt = (cx: number, cy: number): boolean => !!hitAt(cx, 
 // (spelled as numbers, not off FRAME_BORDER: this sits above that declaration, and it is a TOLERANCE
 // around the border rather than the border itself — 4px of rim plus 4 of slack, 8px of handle outside.)
 const RIM_IN = 8, RIM_OUT = 8;
-export function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
+function onFrameRim(n: MindNode, cx: number, cy: number): boolean {
   const el = n.el; if (!el) return false;
   const r = el.getBoundingClientRect();
   const k = state.view.k, inB = RIM_IN * k, outB = RIM_OUT * k;
@@ -603,7 +603,7 @@ export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world p
 function isFrameFold(n: MindNode): boolean { return n.type === 'frame' && !!n.collapsed; }
 // Height of a folded frame's pill (styles.css .frame-folded: 20px line + 9px padding + 1px border, top
 // and bottom). A constant, so the pill is one ellipsised line and never measured.
-export const FRAME_TAB_H = 40;
+const FRAME_TAB_H = 40;
 // What CAN fold: every FRAME (to its label pill), a card with something below its first line to tuck
 // away (to a one-line chip), or an image card (to a 40px icon of itself). The one rule the arrow, X,
 // ←/→, the menus and ⌘P's Collapse all ask.
@@ -641,7 +641,7 @@ function imageLook(n: MindNode): boolean { return isImageCard(n) && ui.bodyEdit?
 function isImageBox(n: MindNode): boolean { return imageLook(n) && !n.collapsed; }
 // …and folded, an image card is a small square of the picture itself — the icon a folded card with no
 // title would otherwise have nothing to show.
-export const IMAGE_FOLD = 40;
+const IMAGE_FOLD = 40;
 function isImageFold(n: MindNode): boolean { return imageLook(n) && n.collapsed; }
 // Any 2D box — authors BOTH axes, so it gets the full 8-handle set and shares the sizing plumbing
 // below.
@@ -1031,7 +1031,7 @@ export function remeasure(): void { paintAll(); applyLayouts(); paintAll(); }
 // The first-run hint ("Drag to create a card") shows only on an empty canvas.
 // "Empty" means empty OF WHAT'S ON SCREEN, so an open frame with nothing in it gets the hints too —
 // opening an empty folder to start filling it is the whole point of being able to open one.
-export function updateEmptyHints(): void {
+function updateEmptyHints(): void {
   const empty = scopeActive() ? ![...state.nodes.values()].some(n => !isHidden(n)) : state.nodes.size === 0;
   document.body.classList.toggle('empty-canvas', empty);
 }
@@ -1041,8 +1041,6 @@ function prefersReducedMotion(): boolean { try { return matchMedia('(prefers-red
 // The animation writes left/top itself (that's what it interpolates), so it must go through the SAME
 // placement authority paintNode's own final branch uses — placeSelf, not a bare place() — so a hosted
 // card stays in its container's wrapper for the duration.
-function placeNodeEl(n: MindNode): void { if (n.el) placeSelf(n, n.x, n.y); }
-function setNodeElXY(n: MindNode, x: number, y: number): void { if (n.el) placeSelf(n, x, y); }
 // Newly revealed cards emanate from the nearest ancestor that was already on screen.
 function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
   for (const p of ancestors(node)){ const b = before.get(p.id); if (b) return b; }
@@ -1144,7 +1142,7 @@ function animateSizes(before: Map<HTMLElement, Size>): void {
 function animateReflow(before: Map<string, Pt>): void {
   const visible = [...state.nodes.values()].filter(m => m.el && !isHidden(m));
   const tok = ++ui.animToken;                           // supersede any in-flight animation
-  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeNodeEl(m); } document.body.classList.remove('layout-anim'); paintFreeEdges(); return; }
+  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeSelf(m, m.x, m.y); } document.body.classList.remove('layout-anim'); paintFreeEdges(); return; }
   // While cards glide and change size (this and animateSizes), the ports and resize handles would sit at
   // stale spots and sizes: they stand down until the glide ends (styles.css body.layout-anim).
   document.body.classList.add('layout-anim');
@@ -1167,7 +1165,7 @@ function animateReflow(before: Map<string, Pt>): void {
   for (const m of visible){
     m.el!.classList.remove('lt-anim');
     const s = stays(m) ? { x: m.x, y: m.y } : before.get(m.id) || ancestorStart(m, before);
-    setNodeElXY(m, s.x, s.y);
+    placeSelf(m, s.x, s.y);
     if (!before.has(m.id)) m.el!.style.opacity = '0';
     const w = m.frameContentEl;
     if (w?.isConnected && (s.x !== m.x || s.y !== m.y)) {
@@ -1180,7 +1178,7 @@ function animateReflow(before: Map<string, Pt>): void {
   void document.body.offsetWidth;                    // commit the start positions before transitioning
   // 2) turn on the transition and move every card to its FINAL spot → the browser animates left/top
   const DUR = LAYOUT_ANIM_MS;
-  for (const m of visible){ if (!stays(m)) m.el!.classList.add('lt-anim'); placeNodeEl(m); m.el!.style.opacity = ''; }
+  for (const m of visible){ if (!stays(m)) m.el!.classList.add('lt-anim'); placeSelf(m, m.x, m.y); m.el!.style.opacity = ''; }
   for (const [w, left, top] of clips){ w.classList.add('lt-anim'); w.style.left = left; w.style.top = top; }
   // 3) edges follow the moving cards; drop the transition class once it's done
   followEdges(tok, DUR + 20);
@@ -1245,7 +1243,7 @@ export function toggleCollapseSelection(ids: Iterable<string>): void {
 // are selected, else every frame and card in the place you're looking at (the open frame's interior, or
 // the map) — cards tucked inside a folded frame included, so Expand all brings back the whole lot. Never
 // the open node itself: it's the canvas.
-export function foldScope(): MindNode[] {
+function foldScope(): MindNode[] {
   const frames = [...state.sel].map(id => state.nodes.get(id)).filter((n): n is MindNode => n?.type === 'frame');
   const pool = frames.length
     ? frames.flatMap(f => subtreeIds(f.id).map(id => state.nodes.get(id)!))
@@ -1261,7 +1259,7 @@ function expandAll(): void {
 // The DIRECTIONAL form, for ←/→: fold (or unfold) every selected card that isn't already there, and
 // leave the ones that are alone — so pressing → twice can't fold what it just unfolded, and a mixed
 // selection lands on one state in a single press instead of needing two.
-export function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean): void {
+function setCollapsedSelection(ids: Iterable<string>, collapsed: boolean): void {
   const cards = foldableSelection(ids).filter(n => !!n.collapsed !== collapsed);
   if (!cards.length) return;
   applyCollapsed(cards, collapsed);
@@ -1395,7 +1393,7 @@ function focusOrFit(): void {
 // Re-frame whatever is ON the canvas right now: the open frame's contents while scoped (isHidden
 // does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
 // this", shared by F-with-nothing-selected, every open/exit and the current crumb.
-export function focusScope(): void { frameBox([...state.nodes.values()]); }
+function focusScope(): void { frameBox([...state.nodes.values()]); }
 
 // ---------- OPENING a frame: the scoped canvas ----------
 // The ACTIONS; nav/scope.ts holds the model and the reasoning. They sit beside focusNode because
@@ -1606,7 +1604,7 @@ export const canvasOwner = (): MindNode | null => scopeRootNode();
 // rather than to nothing: what's behind an uncoloured frame is whatever is behind IT. Standing inside a frame nobody coloured
 // used to discard the canvas colour the map itself was painted in — so
 // going in turned a teal board grey, and coming out turned it teal again.
-export function canvasFill(): string | null {
+function canvasFill(): string | null {
   const owner = canvasOwner();
   if (!owner || !hasAuthoredColor(owner)) return colorFill(state.canvasColor);
   const fill = colorFill(effectiveColor(owner));
@@ -1677,7 +1675,7 @@ window.addEventListener('resize', () => {
 // drift apart.
 // Every key a note may carry. `slate` predates FigJam's palette: it still paints, but the picker no
 // longer offers it.
-export const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black',
+const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black',
   'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink'];
 // …and what the picker OFFERS, FigJam's two rows of eleven: the strong hues framed by black and white,
 // then the pastels — the sticky colours — framed by two greys (the custom chip ends that row).

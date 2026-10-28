@@ -11,16 +11,6 @@ for (const [path, svg] of Object.entries(modules)) {
   ICONS[name] = svg as string;
 }
 
-// The folder outline the FRAME kind wears. A frame renders as a box with a folder TAB above its
-// top-left corner, so every icon that stands for one is a folder: the kind chip and all three of its
-// layout chips (features/float-bar.ts), and every
-// crumb of the open-frame path (features/breadcrumbs.ts). Kept here — a module none of those can
-// cycle with — as the ONE spelling of the shape, and as a bare path so each caller can drop its own
-// content blocks inside it. Its interior (below the tab, inside the stroke) is roughly x 5.5…19,
-// y 9.5…18. It fills 3.5…20.5 × 4…20 — the full width the image/query icons take, so a folder
-// doesn't read as the small one of the set.
-export const FOLDER_PATH = '<path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h3.4l2 2.5h8.6A1.5 1.5 0 0 1 20.5 8v10A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5Z"/>';
-
 // The dropdown chevron EVERY toolbar button that opens a menu or popover carries after its face (styles
 // .fb-dd), for the buttons whose face is rebuilt in JS and so can't take a data-icon placeholder.
 export function chevron(): string { return `<span class="ic fb-chev">${ICONS.chevron ?? ''}</span>`; }

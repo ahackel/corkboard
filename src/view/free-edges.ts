@@ -23,8 +23,8 @@ import { esc } from '../utils/markdown.js';
 
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.
-export const HIT_W = 18;
-export const HANDLE_R = 8;          // endpoint grab handles (FigJam's white disc, thick blue rim), one edge selected
+const HIT_W = 18;
+const HANDLE_R = 8;          // endpoint grab handles (FigJam's white disc, thick blue rim), one edge selected
 // The four PORTS on a selected card you drag a new line from — FigJam's: a small blue dot in a white
 // rim, floating SOCKET_OUT outside each side, that becomes a ⊕ under the pointer (styles.css).
 const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
@@ -56,7 +56,7 @@ function rimPoint(n: MindNode | Rect, p: Pt): Pt {
 // The four dots on a selected card — only where a NEW line starts from, floating a little OUTSIDE each
 // side the way FigJam's do, clear of the resize handles. The finished line doesn't remember which one:
 // it is routed from where the two cards are, like every other (`route`).
-export function socketPoints(n: MindNode): Array<{ side: EdgeSide; p: Pt }> {
+function socketPoints(n: MindNode): Array<{ side: EdgeSide; p: Pt }> {
   const r = rimRect(n), o = SOCKET_OUT;
   return [
     { side: 'up',    p: { x: r.x + r.w/2,   y: r.y - o } },

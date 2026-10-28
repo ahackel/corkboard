@@ -32,7 +32,7 @@ export function leadEdge(): BoardEdge | null {
 }
 // Selecting an edge clears the card selection and vice versa — see AppState.selEdges. `add` is the
 // ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (main.ts selectNode).
-export function selectEdge(id: string | null, add = false): void {
+function selectEdge(id: string | null, add = false): void {
   if (id == null) state.selEdges.clear();
   else if (!add) { state.selEdges.clear(); state.selEdges.add(id); }
   else if (!state.selEdges.delete(id)) state.selEdges.add(id);
@@ -55,7 +55,7 @@ function edgeBetween(a: string, b: string, pa?: EdgeSide, pb?: EdgeSide): BoardE
                             || (e.from === b && e.to === a && e.fromPort === pb && e.toPort === pa));
 }
 // `fromPort`/`toPort` pin the ends to those faces (BoardEdge); left out, an end picks its face itself.
-export function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
+function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
   if (fromId === toId || !connectable(fromId) || !connectable(toId)) return null;
   const dup = edgeBetween(fromId, toId, fromPort, toPort);
   if (dup) { selectEdge(dup.id); return dup; }

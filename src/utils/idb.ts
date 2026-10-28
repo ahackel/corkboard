@@ -33,6 +33,20 @@ export function dbDel(db: IDBDatabase, store: string, key: IDBValidKey): Promise
   return done(tx);
 }
 
+// Every row, in one transaction. In 'readwrite' mode `visit` may delete the row it is on.
+export function dbEach(db: IDBDatabase, store: string, mode: IDBTransactionMode,
+    visit: (row: IDBCursorWithValue) => void): Promise<void> {
+  const tx = db.transaction(store, mode);
+  tx.objectStore(store).openCursor().onsuccess = e => {
+    const row = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+    if (row) {
+      visit(row);
+      row.continue();
+    }
+  };
+  return done(tx);
+}
+
 // ---- one-time rename migration (mindmap → Corkboard) ----
 // An IndexedDB database can't be renamed, so the FIRST open of the new name copies every
 // entry out of the old one. Guarded on the new store being EMPTY, so it runs exactly once
@@ -63,12 +77,7 @@ async function dbExists(name: string): Promise<boolean> {
 // transactions on two databases; interleaving them lets the write tx auto-commit mid-walk.
 async function dbCopyAll(from: IDBDatabase, to: IDBDatabase, store: string): Promise<void> {
   const rows: Array<{ key: IDBValidKey; value: unknown }> = [];
-  const readTx = from.transaction(store, 'readonly');
-  readTx.objectStore(store).openCursor().onsuccess = e => {
-    const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-    if (c){ rows.push({ key: c.key, value: c.value }); c.continue(); }
-  };
-  await done(readTx);
+  await dbEach(from, store, 'readonly', row => rows.push({ key: row.key, value: row.value }));
   if (!rows.length) return;
   const writeTx = to.transaction(store, 'readwrite');
   const os = writeTx.objectStore(store);

@@ -22,7 +22,7 @@ export const tagText = (t: string): string => isEmojiTag(t) ? t : '#' + t;
 // is a round STAMP, a word a paper LABEL, at a small tilt that is the tag's own (tagTilt) — nothing about
 // it is stored. A tag written in the note's text has a dashed edge: it's the text's. Lit while it is in
 // the search.
-export function tagClass(t: string, inText = false): string {
+function tagClass(t: string, inText = false): string {
   const lit = searchTags().some(f => tagKey(f) === tagKey(t));
   return `tag ${isEmojiTag(t) ? 'stamp' : 'label'}${inText ? ' in-text' : ''}${lit ? ' lit' : ''}`;
 }

@@ -27,7 +27,7 @@ let showing: string | null = null;   // the card id the panel is for
 let timer: number | null = null;
 
 function cancel(): void { if (timer != null) { clearTimeout(timer); timer = null; } }
-export function hidePeek(): void {
+function hidePeek(): void {
   cancel();
   showing = null;
   panel.classList.remove('open');

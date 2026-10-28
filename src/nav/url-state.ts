@@ -41,7 +41,7 @@ function decodeFilePath(encoded: string): string {
   return encoded.split('/').map(decodeURIComponent).join('/') + '.md';
 }
 
-export function currentDocumentTitle(): string {
+function currentDocumentTitle(): string {
   const node = state.selId ? state.nodes.get(state.selId) : undefined;
   return node ? `${nodeLabel(node)} — ${store.name}` : `Corkboard — ${store.name}`;
 }

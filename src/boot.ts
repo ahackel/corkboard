@@ -241,7 +241,7 @@ export async function boot(): Promise<void> {
   // resume a local folder only if we can do it silently (permission still granted); else on-device
   const last = getLastMap();
   if (HAS_FSA && last?.kind === 'folder'){
-    if (fsaStore.resume && await fsaStore.resume(last.id)){
+    if (await fsaStore.resume(last.id)){
       useStore(fsaStore, { kind: 'folder', id: last.id });
       await loadFromDir();
       orientForPhone();

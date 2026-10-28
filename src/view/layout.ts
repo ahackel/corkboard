@@ -38,7 +38,7 @@ export function commitRel(): void {
 // Bounding box over a node + its VISIBLE descendants. A FRAME is bounded by its OWN box (mm_w/mm_h):
 // its children live INSIDE it, so we count the frame's box and don't descend into its content — plus
 // the label hanging above it (frameLabelH), so a frame fitted around one leaves its name room.
-export function subtreeBox(node: MindNode){
+function subtreeBox(node: MindNode){
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const walk = (n: MindNode): void => {
     if (isHidden(n)) return;
@@ -152,7 +152,7 @@ export function frameInterior(f: MindNode): { x: number; y: number; w: number; h
 export function frameLabelled(f: MindNode): boolean { return !!(f.title.trim() || f.body.trim()); }
 // How far an expanded frame's label reaches ABOVE its box (0 for anything else): the pill's measured
 // height plus its 7px gap (styles.css `.node.frame > .title-row`), or a one-line pill's before paint.
-export const FRAME_LABEL_GAP = 7;
+const FRAME_LABEL_GAP = 7;
 export function frameLabelH(f: MindNode): number {
   if (!isFrame(f) || !frameLabelled(f)) return 0;
   const row = f.el?.querySelector(':scope > .title-row') as HTMLElement | null;

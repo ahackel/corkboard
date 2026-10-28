@@ -24,13 +24,13 @@ export const BOARD_FILE = 'board.json';
 // "placed BESIDE this card, joined by a branch line"; 2 = they mean "inside it, as outline rows".
 // data/persistence.ts flattenLegacyBranches converts the first into the second, once, and the write
 // that follows stamps this. Bump it only for another migration of the same kind.
-export const BOARD_MODEL = 2;
+const BOARD_MODEL = 2;
 let loadedModel = BOARD_MODEL;
 // Did the map we just loaded predate containment? Only meaningful between loadBoard and the
 // migration that reads it.
 export function boardIsLegacy(): boolean { return loadedModel < BOARD_MODEL; }
 // Superseded sidecar: read once when there is no board.json yet, never written.
-export const SETTINGS_FILE = 'settings.json';
+const SETTINGS_FILE = 'settings.json';
 // The ink of the retired sketch layer (docs/PRODUCT.md, "Cut"). Nothing draws it any more, but a
 // board that has some keeps it, verbatim and untouched, so cutting the feature never deletes a drawing.
 let keptStrokes: unknown;
@@ -80,7 +80,7 @@ function serializeEdge(e: BoardEdge): StoredEdge | null {
 }
 
 // A persisted id, unlike a node's — a node is identified by its file and an edge has no file.
-export function newEdgeId(): string {
+function newEdgeId(): string {
   return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
@@ -157,7 +157,7 @@ export function resolveOrder(byPath: Map<string | null, string>): void {
 // ---------- reading ----------
 async function readJSON(path: string): Promise<Record<string, unknown> | null> {
   try {
-    const blob = store.readBlob ? await store.readBlob(path) : null;
+    const blob = await store.readBlob(path);
     if (!blob) return null;
     const data = JSON.parse(await blob.text());
     return (data && typeof data === 'object') ? data as Record<string, unknown> : null;

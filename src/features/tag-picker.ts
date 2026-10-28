@@ -53,7 +53,7 @@ let targets: string[] = [];
 let rows: Row[] = [];       // the actionable rows, in screen order — what ↑↓ walk
 let active = 0;
 
-export const tagPickerOpen = (): boolean => pop.classList.contains('open');
+const tagPickerOpen = (): boolean => pop.classList.contains('open');
 
 const row = (act: Act | null, tag: string, meta = '', ticked = false, name = tagText(tag)): Row => ({ act, tag, name, meta, ticked });
 const plural = (n: number): string => `${n} card${n === 1 ? '' : 's'}`;
@@ -144,7 +144,7 @@ list.addEventListener('click', (e) => {
 });
 function onOutside(e: PointerEvent): void { if (!pop.contains(e.target as Node)) closeTagPicker(); }
 
-export function closeTagPicker(): void {
+function closeTagPicker(): void {
   if (!tagPickerOpen()) return;
   pop.classList.remove('open');
   document.removeEventListener('pointerdown', onOutside, true);

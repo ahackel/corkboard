@@ -160,10 +160,6 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
   }
   setStatus(addedMsg(imgs.length));
 }
-// Drop on empty canvas (or onto an existing image card): new image card(s) at the drop point.
-async function createImageNode(sx: number, sy: number, files: File[]): Promise<void> {
-  await createImageCards(imageFiles(files), sx, sy, null);
-}
 
 // Paste an image straight into the in-card body editor (bound per-textarea in startBodyEdit).
 export function onBodyPaste(e: ClipboardEvent): void {
@@ -344,5 +340,5 @@ document.addEventListener('drop', async (e) => {
   // new image-card CHILDREN of the frame instead of (invisibly) appending to its hidden body
   else if (cardEl && cardIsFrame && !cardIsLocked){ selectNode(cardId); await createImageCards(imgs, e.clientX, e.clientY, cardId); }
   else if (cardEl && !cardIsImage && !cardIsLocked){ selectNode(cardId); await appendImagesToNode(cardId!, imgs); }
-  else if (!cardEl || !cardIsLocked) await createImageNode(e.clientX, e.clientY, imgs);   // empty canvas (or onto an image card) → new card(s) at the drop point
+  else if (!cardEl || !cardIsLocked) await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
 });

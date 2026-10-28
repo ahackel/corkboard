@@ -637,7 +637,7 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
 // Move one card into a frame, or out to the top level (null). Mutates the parent only — no paint or
 // status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or
 // frame, and a frame into its own contents. Returns whether it moved.
-export function reparentOnly(childId: string, newParentId: string | null): boolean {
+function reparentOnly(childId: string, newParentId: string | null): boolean {
   if (state.readOnly) return false;
   const child = state.nodes.get(childId);
   const newParent = newParentId ? state.nodes.get(newParentId) : null;

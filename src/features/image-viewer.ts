@@ -104,7 +104,7 @@ export function openImageViewer(src: string, alt = '', from?: { nodeId: string; 
   window.addEventListener('keydown', onKey, true);
   window.addEventListener('keyup', onKeyUp, true);
 }
-export function closeImageViewer(): void {
+function closeImageViewer(): void {
   if (!overlay) return;
   overlay.classList.remove('open');
   if (imgEl) imgEl.removeAttribute('src');

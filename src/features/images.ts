@@ -34,13 +34,12 @@ export function typedImageBlob(blob: Blob, path: string): Blob {
 // A referenced path -> its resolved URL, through the shared cache: vault paths become blob URLs read
 // from the store (once), remote/data URLs map to themselves. Exported for the full-screen viewer,
 // which pages through images that may not be on screen — and so may not have been hydrated yet.
-export function imageUrl(path: string): Promise<string | null> { return loadImgUrl(path); }
-function loadImgUrl(path: string): Promise<string | null> {
+export function imageUrl(path: string): Promise<string | null> {
   if (imgUrlCache.has(path)) return Promise.resolve(imgUrlCache.get(path)!);
   if (/^(https?:|data:)/i.test(path)){ imgUrlCache.set(path, path); return Promise.resolve(path); }
   if (imgInflight.has(path)) return imgInflight.get(path)!;
   const p = (async () => {
-    const raw = store.readBlob ? await store.readBlob(path) : null;
+    const raw = await store.readBlob(path);
     const blob = raw ? typedImageBlob(raw, path) : null;
     const url = blob ? URL.createObjectURL(blob) : null;
     if (url) imgUrlCache.set(path, url);
@@ -73,7 +72,7 @@ export function hydrateImages(el: ParentNode): void {
     if (!path) return;
     img.removeAttribute('data-img-src');                 // claim it so repaints don't re-trigger
     if (imgUrlCache.has(path)){ img.src = imgUrlCache.get(path)!; return; }   // known → set, no relayout
-    loadImgUrl(path).then(url => {
+    imageUrl(path).then(url => {
       if (!url){ img.classList.add('md-img-missing'); img.alt = '⚠ ' + (img.alt || path); return; }
       img.addEventListener('load',  scheduleImgRelayout, { once:true });     // first real load reflows once
       img.addEventListener('error', () => img.classList.add('md-img-missing'), { once:true });

@@ -100,7 +100,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
 // mouse can't select text inside a contenteditable while it holds. (A <textarea> is the exception — a
 // text control with a selection outranks the ancestor — which is why the CARD editor needs none of
 // this.) Every teardown path puts it back; exporting a frame mid-rename isn't a gesture anyone is making.
-export function setCardDraggable(n: MindNode | undefined, on: boolean): void {
+function setCardDraggable(n: MindNode | undefined, on: boolean): void {
   if (n?.el) n.el.draggable = on;
 }
 // Live: reflow as the label grows. n.title is untouched (layout uses the live DOM), so a half-typed
@@ -167,7 +167,7 @@ export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 
 // nothing but the textarea and then dispatches `input`, so each editor's own live path runs — the
 // card's reflow, the outline's write-through — and none of them needs to know this happened.
 // Returns whether it handled the event, so an image paste still gets its turn.
-export function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
+function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   if (state.readOnly) return false;
   const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
   if (!r) return false;

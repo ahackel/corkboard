@@ -5,7 +5,7 @@
 // (mirroring the OPFS adapter's legacy vault/ dir). `<id>::map.json` carries the display name.
 import type { DeviceStore, PickResult, TreeListing } from './types.js';
 import { planTree, type FoldTest } from './tree.js';
-import { openRenamed, dbPut, dbGet, dbDel } from '../utils/idb.js';
+import { openRenamed, dbPut, dbGet, dbDel, dbEach } from '../utils/idb.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 
 export const idbStore = (() => {
@@ -21,17 +21,9 @@ export const idbStore = (() => {
     id === 'vault' ? !key.includes('::') : key.startsWith(prefixOf(id));
 
   async function eachKey(cb: (key: string, value: unknown) => void): Promise<void> {
-    const d = await db();
-    return new Promise<void>((res, rej) => {
-      const tx = d.transaction('files', 'readonly');
-      tx.objectStore('files').openCursor().onsuccess = e => {
-        const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-        if (c){ cb(c.key as string, c.value); c.continue(); }
-        else res();
-      };
-      tx.onerror = e => rej((e.target as IDBTransaction).error);
-    });
+    return dbEach(await db(), 'files', 'readonly', row => cb(row.key as string, row.value));
   }
+
   const put = async (key: string, data: string | Blob): Promise<void> => dbPut(await db(), 'files', key, data);
   const del = async (key: string): Promise<void> => dbDel(await db(), 'files', key);
 
@@ -46,15 +38,10 @@ export const idbStore = (() => {
       if (id === _mapId) _mapName = name;
     },
     async deleteMap(id: string){
-      // one readwrite cursor pass: delete the map's keys inside a single transaction
-      const d = await db();
-      await new Promise<void>((res, rej) => {
-        const tx = d.transaction('files', 'readwrite');
-        tx.objectStore('files').openCursor().onsuccess = e => {
-          const c = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-          if (c){ if (ownedBy(c.key as string, id)) c.delete(); c.continue(); }
-        };
-        tx.oncomplete = () => res(); tx.onerror = e => rej((e.target as IDBTransaction).error);
+      await dbEach(await db(), 'files', 'readwrite', row => {
+        if (ownedBy(row.key as string, id)) {
+          row.delete();
+        }
       });
     },
     async listMaps(){
@@ -73,7 +60,6 @@ export const idbStore = (() => {
     },
 
     async pick(): Promise<PickResult> { try { await db(); _opened = true; return 'ok'; } catch { return 'error'; } },
-    async openRecent(): Promise<PickResult> { return this.pick(); },
     async listTree(under: string, fold: FoldTest): Promise<TreeListing> {
       // A flat key space: every file is already in hand, so the plan simply picks which texts to keep.
       const p = prefixOf(_mapId), all = new Map<string, unknown>();

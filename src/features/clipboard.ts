@@ -64,7 +64,7 @@ const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
 
 // The given cards INCLUDING their subtrees as one .md file per card, parent refs payload-local.
 // Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
-export function filesFor(ids: string[]): CardFile[] {
+function filesFor(ids: string[]): CardFile[] {
   // dedupe: a card inside another given card's subtree is already covered
   const roots = outermost(nodesOf(ids)).map(n => n.id);
   const all = roots.flatMap(id => subtreeIds(id));   // preorder per root → parents precede kids
@@ -75,7 +75,7 @@ export function filesFor(ids: string[]): CardFile[] {
     return { name: payloadName(n), text: withParentRef(serializeMd(n), p ? payloadName(p) : null) };
   });
 }
-export function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
+function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
 // Files → the marker-separated text payload tryPasteCards understands. Also used by the
 // .md-file drop importer (a dropped note IS one of these chunks).
 export const cardsToPayload = (files: CardFile[]): string =>

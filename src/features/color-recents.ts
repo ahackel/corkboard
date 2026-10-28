@@ -23,7 +23,7 @@ const SHOWN_MAX = 6;  // what fits on the row (see .swatches in styles.css)
 // Everything compares and de-duplicates on this form. The native input always yields lowercase
 // `#rrggbb`, but a hand-authored or imported note can carry `#FFF` or `#FFE9A8` — without folding
 // those together the same colour shows up as two chips.
-export function normalizeColor(c: string): string {
+function normalizeColor(c: string): string {
   const h = c.trim().toLowerCase();
   if (!isHexColor(h)) return '';
   const d = h.slice(1);

@@ -16,6 +16,14 @@ interface Permable {
 type DirectoryPicker = (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle>;
 const showDirectoryPicker = (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
 
+async function rememberedHandle(key: string): Promise<FileSystemDirectoryHandle | undefined> {
+  try {
+    return await idbGet<FileSystemDirectoryHandle>(key);
+  } catch {
+    return undefined;
+  }
+}
+
 export const fsaStore = {
   _dir: null as FileSystemDirectoryHandle | null,   // FSA directory handle
   _key: null as string | null,                      // the open folder's registry/handle key
@@ -56,18 +64,19 @@ export const fsaStore = {
 
   // Reopen a REMEMBERED source by its recents key (the click is the gesture).
   async openRecent(key?: string): Promise<PickResult> {
-    if (!key) return 'gone';
-    let handle: FileSystemDirectoryHandle | undefined;
-    try { handle = await idbGet<FileSystemDirectoryHandle>(key); } catch {}
-    if (!handle) return 'gone';
+    const handle = key ? await rememberedHandle(key) : undefined;
+    if (!handle) {
+      return 'gone';
+    }
     return this._adopt(handle);
   },
 
   // Silent reopen at boot — only succeeds if permission is ALREADY granted (no prompt/gesture).
   async resume(key: string): Promise<boolean> {
-    let handle: FileSystemDirectoryHandle | undefined;
-    try { handle = await idbGet<FileSystemDirectoryHandle>(key); } catch {}
-    if (!handle) return false;
+    const handle = await rememberedHandle(key);
+    if (!handle) {
+      return false;
+    }
     try { if ((await (handle as unknown as Permable).queryPermission({ mode:'readwrite' })) !== 'granted') return false; } catch { return false; }
     this._dir = handle; this._key = key; return true;
   },

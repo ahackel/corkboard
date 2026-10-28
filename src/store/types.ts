@@ -14,8 +14,6 @@ export interface Store {
   readonly isOpen: boolean;
   readonly name: string;
   pick(): Promise<PickResult>;
-  openRecent(key?: string): Promise<PickResult>;
-  resume?(key: string): Promise<boolean>;   // FSA only: silent reopen if permission persists
   // The notes under the folder `under` ('' = all), leaving unread every folder `fold` says is folded
   // (store/tree.ts) — what the load and the unfold of a frame read through.
   listTree(under: string, fold: FoldTest): Promise<TreeListing>;
