@@ -42,6 +42,10 @@ function mdStyle(s: string): string {
 //   [text](url) / <https://…> / bare https?:// → external link (new tab)
 //   [[Note]] or [[Note|alias]]   → wikilink → focuses that node in the map
 // NOTE: the image alternative comes first so ![..](..) isn't mis-read as a link with a stray "!".
+// A link may go to the web, to mail, or to a relative path — never to a scheme that RUNS something
+// (`javascript:`), since notes arrive from outside the app: the phone inbox, a zip, Obsidian.
+const SAFE_HREF = /^(https?:|mailto:|[^:]*$)/i;
+
 function mdLinks(text: string): string {
   const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s)]+)/g;
   let out = '', last = 0;
@@ -50,6 +54,8 @@ function mdLinks(text: string): string {
     out += mdEmphasis(text.slice(last, m.index));
     if (m[2]) {
       out += imgTag(m[2], m[1]);                                                         // ![alt](src)
+    } else if (m[4] && !SAFE_HREF.test(m[4])) {
+      out += mdEmphasis(m[3]);                                                           // javascript: etc. — text only
     } else if (m[4]) {
       out += `<a class="lk" href="${esc(m[4])}" target="_blank" rel="noopener">${mdEmphasis(m[3])}</a>`;
     } else if (m[5]) {

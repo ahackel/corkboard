@@ -34,7 +34,7 @@ export function openImportPicker(): void { importInput.click(); }
 // a file manager is the common one).
 interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
 async function importFiles(files: File[]): Promise<void> {
-  const entries: ImportEntry[] = [];
+  let entries: ImportEntry[] = [];
   for (const f of files){
     if (/\.zip$/i.test(f.name)) {
       try { entries.push(...await unzip(await f.arrayBuffer())); } catch { setStatus('That .zip could not be read.'); }
@@ -44,6 +44,10 @@ async function importFiles(files: File[]): Promise<void> {
       entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
     }
   }
+  // What Finder's Compress adds (`__MACOSX/._Note.md`) and other hidden files are not notes — and a
+  // stray one would stop the common top folder below from being found.
+  const junk = (name: string): boolean => name.split('/').some(p => p.startsWith('.') || p === '__MACOSX');
+  entries = entries.filter(e => !junk(e.name));
   let md  = entries.filter(e => /\.(md|markdown)$/i.test(e.name) && !e.name.endsWith('/'));
   let img = entries.filter(e => e.bytes && IMAGE_FILE_RE.test(e.name) && !e.name.endsWith('/'));
   if (!md.length){ setStatus('No Markdown files found to import.'); return; }

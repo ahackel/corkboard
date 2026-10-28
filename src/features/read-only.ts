@@ -8,7 +8,7 @@ import { syncFloatBar } from './float-bar.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { store } from '../data/persistence.js';
 import { selectNode } from './selection.js';
-import { flushSave } from '../data/save.js';
+import { settleSave } from '../data/save.js';
 import { loadFromDir } from '../data/load.js';
 
 const roBadge = byId<HTMLButtonElement>('roBadge');
@@ -26,7 +26,7 @@ export async function setReadOnly(on: boolean): Promise<void> {
     return;
   }
   if (on){
-    await flushSave();                                   // persist anything pending before locking (clears the save timer)
+    await settleSave();                                  // persist anything pending (notes AND board.json) before locking
     state.readOnly = true;
     selectNode(null);                                    // close any open edit
   } else {

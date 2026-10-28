@@ -18,6 +18,11 @@ describe('renderBodyHTML', () => {
   it('links an <autolink> without its brackets', () => {
     expect(renderBodyHTML('see <https://x.y/a>')).toBe('<p>see <a class="lk" href="https://x.y/a" target="_blank" rel="noopener">https://x.y/a</a></p>');
   });
+  it('links only to addresses that cannot run code', () => {
+    expect(renderBodyHTML('[go](javascript:alert(1))')).toBe('<p>go)</p>');
+    expect(renderBodyHTML('[w](https://x.y)')).toContain('href="https://x.y"');
+    expect(renderBodyHTML('[m](mailto:a@b.c)')).toContain('href="mailto:a@b.c"');
+  });
   it('highlights ==text==, and leaves a lone == alone', () => {
     expect(renderBodyHTML('a ==hot== b')).toBe('<p>a <mark>hot</mark> b</p>');
     expect(renderBodyHTML('a == b')).toBe('<p>a == b</p>');
