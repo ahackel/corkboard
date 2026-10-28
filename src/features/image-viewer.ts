@@ -8,10 +8,10 @@
 // from the NOTES rather than the rendered DOM, so a folded sibling's images are in the run too, and
 // wrapping at both ends, since a handful of pictures read as a loop rather than a strip with ends.
 import { state } from '../core/state.js';
-import { selectNode } from '../main.js';
 import { imageUrl } from './images.js';
 import { childrenOf } from '../utils/model.js';
 import { bodyImages } from '../utils/markdown.js';
+import { selectNode } from './selection.js';
 
 let overlay: HTMLElement | null = null;
 let imgEl: HTMLImageElement | null = null;

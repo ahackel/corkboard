@@ -5,7 +5,7 @@ import { scope, type ScopeBack, type ScopeLevel, openPathTo, isScopeRoot, outOfS
 import { growFramesToHold } from '../features/float-bar.js';
 import { childrenOf, nodeLabel, nodeByFile } from '../utils/model.js';
 import { endInPlaceEdit } from '../features/inline-edit.js';
-import { animateLayout, setSelectionSet, selectNode } from '../main.js';
+import { animateLayout } from '../main.js';
 import { record } from '../features/history.js';
 import { syncUrl } from './url-state.js';
 import { scheduleSave } from '../data/persistence.js';
@@ -13,6 +13,7 @@ import { afterReading } from '../data/lazy.js';
 import { renderCrumbs } from '../features/breadcrumbs.js';
 import { syncCanvasBackground } from '../features/canvas-color.js';
 import { focusScope } from './focus.js';
+import { setSelectionSet, selectNode } from '../features/selection.js';
 
 // ---------- OPENING a frame: the scoped canvas ----------
 // The ACTIONS; nav/scope.ts holds the model and the reasoning. They sit beside focusNode because

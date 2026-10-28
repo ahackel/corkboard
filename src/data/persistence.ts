@@ -19,7 +19,7 @@ import { clearHistory } from '../features/history.js';
 import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, createDeviceMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import type { TreeListing } from '../store/types.js';
 import type { FoldTest } from '../store/tree.js';
-import { paintNode, remeasure, flashArrived, selectNode } from '../main.js';
+import { paintNode, remeasure, flashArrived } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { resolveScopeAfterLoad, scope } from '../nav/scope.js';
 import { SPACING } from '../utils/guides.js';
@@ -32,6 +32,7 @@ import { saveFailed, saveSucceeded } from './save-alert.js';
 import { BOARD_FILE, boardJSON, loadBoard, resolveEdges, resolveOrder, boardGeom, flushBoard, scheduleSaveBoard, boardSavePending, boardIsLegacy, makeEdge, unparkEdges } from './board.js';
 import { nodeW, nodeH, snapPt, NODE_W, FRAME_BORDER } from '../view/geometry.js';
 import { MIN_FRAME_W } from '../features/resize.js';
+import { selectNode } from '../features/selection.js';
 
 // Everything that is about the BOARD rather than about a note — the free edges, the ink layer, the
 // per-map view prefs — lives in one board.json beside the notes; see data/board.ts, which owns its

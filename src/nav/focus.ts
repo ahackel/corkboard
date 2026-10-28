@@ -1,6 +1,6 @@
 // ---------- focus: bring a card (or everything on the canvas) into view ----------
 import { type MindNode, state, setStatus } from '../core/state.js';
-import { layoutSnapshot, selectNode, relayout, animateReflow } from '../main.js';
+import { layoutSnapshot, relayout, animateReflow } from '../main.js';
 import { ancestors, subtreeIds, resolveWikilink } from '../utils/model.js';
 import { record } from '../features/history.js';
 import { frameBox } from '../view/camera.js';
@@ -8,6 +8,7 @@ import { store, scheduleSave } from '../data/persistence.js';
 import { snapPt, nodeW } from '../view/geometry.js';
 import { createNode } from '../features/crud.js';
 import { popScopeFor } from './frames.js';
+import { selectNode } from '../features/selection.js';
 
 // Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {

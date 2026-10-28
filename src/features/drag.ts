@@ -17,7 +17,7 @@ import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { paintAll, paintNode, selectNode, setSelectionSet, toggleSel, activateNode, isNodeControlAt, relayout, remeasure } from '../main.js';
+import { paintAll, paintNode, activateNode, isNodeControlAt, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -27,6 +27,7 @@ import { guidePull, hideGuides } from './guides.js';
 import { growFramesToHold } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
+import { selectNode, setSelectionSet, toggleSel } from './selection.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along

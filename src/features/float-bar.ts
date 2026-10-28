@@ -21,12 +21,15 @@ import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, relayout, animateLayout } from '../main.js';
+import { labelEl, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, FRAME_W, FRAME_H } from '../view/geometry.js';
 import { MIN_FRAME_W, MIN_FRAME_H } from './resize.js';
 import { toggleCollapse, toggleCollapseSelection } from './fold.js';
 import { openFrame } from '../nav/frames.js';
+import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
+import { selectedIds, selectNode } from './selection.js';
+import { setLockedSelection, anyLocked } from './lock.js';
 
 
 const bar = byId('floatBar');

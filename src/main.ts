@@ -1,8 +1,7 @@
-// The render + selection core. The interactive subsystems (drag / inline-edit / crud / gestures /
-// attachments) live in features/ and share live state via the `ui` holder; this file owns the
-// render pipeline (paintNode/paintAll/paintEdges), selection + edit-panel, read-only mode, focus,
-// and the global keyboard/toolbar wiring. It exports the render kernels the feature modules call
-// back into. Fully strict-typed and covered by `npm run typecheck`.
+// The entry and the RENDER CORE: paintNode/paintAll, where a card's element sits (placeSelf), the
+// animated relayout, and effectiveColor. Everything interactive lives in features/ and shares live
+// state via the `ui` holder; the keyboard and the ⌘P list are features/commands.ts. Its imports below
+// also wire the features up, in order, before boot().
 /* ============================================================
    Corkboard — hierarchy + collapse + add-child
    Storage: one .md per node, and a frame is a FOLDER holding its cards (`_index.md` is its own
@@ -14,50 +13,48 @@ import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStor
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
-import { isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, descendantCount, nodesOf } from './utils/model.js';
-import { state, world, dragLayer, setStatus, isImageCard } from './core/state.js';
-import { setupGrid, openGridMenu } from './view/grid.js';
-import { mountIcons } from './view/icons.js';
-import { zoomAt, screenToWorld, worldAtOrCentre, labelScale } from './view/camera.js';
+import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, descendantCount } from './utils/model.js';
+import { state, world, dragLayer } from './core/state.js';
+import { setupGrid } from './view/grid.js';
+import { mountIcons, LOCK_BADGE_SVG } from './view/icons.js';
+import { screenToWorld, labelScale } from './view/camera.js';
 import { applyLayouts, hostFrame, frameInterior, isFrame, frameLabelled, frameDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
-import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
-import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
-import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
-import { openSearch, closeSearch, refreshSearch, searchActive, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
-import { syncFloatBar, autoSizeSelection, groupSelectionIntoFrame } from './features/float-bar.js';   // also registers the float bar's own listeners
+import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-ghost gesture
+import './features/commands.js';   // the keyboard shortcuts and the ⌘P palette's list of every action
+import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
+import { addCardInside } from './features/crud.js';
+import { bindNodeDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
+import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
+import { syncFloatBar } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
-import { copySelection, cutSelection, bindCardFileDrag } from './features/clipboard.js';
+import { bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTags, tagChipHTML } from './features/tags.js';
-import { openTagPicker } from './features/tag-picker.js';
-import { refreshTray, toggleTray, trayOpen } from './features/tag-tray.js';
+import { refreshTray } from './features/tag-tray.js';
 import { noteTags, wearsTags } from './utils/tags.js';
-import { commitStep, record, undo, redo } from './features/history.js';
+import { record } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
-import { store, scheduleSave, flushSave, loadFromDir, exportZip } from './data/persistence.js';
-import { FRAME_NOTE } from './utils/filenames.js';
-import { afterReading, readOpenUnread } from './data/lazy.js';
+import { scheduleSave } from './data/persistence.js';
+import { readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
-import { syncUrl, scheduleUrlSync, updateDocumentTitle } from './nav/url-state.js';
-import { scopeActive, isScopeRoot, canOpen, canEnter, outOfScope } from './nav/scope.js';
+import { scopeActive, isScopeRoot, canOpen } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
-import { tidyShortcut, TIDY_ACTIONS } from './features/tidy.js';
-import { installEdgeTools, connectSelection, deleteSelectedEdge, clearEdgeSelection } from './features/edge-tools.js';
-import { ui, isTypingInField, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
-import { byId, trackPointer } from './utils/dom.js';
-import { openPalette, closePalette, paletteOpen, setPaletteSource, type Command } from './features/palette.js';
+import { installEdgeTools } from './features/edge-tools.js';
+import { ui, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
+import { byId } from './utils/dom.js';
 import { applyColorVars, colorClass } from './view/color.js';
-import { snapPt, FRAME_W, FRAME_H, canFold, isFrameFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
+import { canFold, isFrameFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
 import { ensureResizeHandles, FRAME_DIRS, clearResizeHandles } from './features/resize.js';
-import { toggleCollapse, setCollapsedSelection, toggleCollapseSelection, foldScope, expandAll } from './features/fold.js';
-import { popScopeFor, exitScope, openFrame, syncScopeChrome } from './nav/frames.js';
-import { focusByTitle, focusNode, focusOrFit } from './nav/focus.js';
+import { toggleCollapse } from './features/fold.js';
+import { openFrame, syncScopeChrome } from './nav/frames.js';
+import { focusByTitle } from './nav/focus.js';
+import { applyReadOnly } from './features/read-only.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();
@@ -67,9 +64,6 @@ setupGrid();
 setupCanvasColor();
 
 // ---------- rendering ----------
-// small closed-padlock badge shown at a locked card's upper-left corner; exported for the
-// float bar's lock toggle (features/float-bar.ts), which shares this one glyph.
-export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) return n.el;
   const el = document.createElement('div');
@@ -146,52 +140,12 @@ function nodeEl(n: MindNode): HTMLElement {
   });
   return el;
 }
-// A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
-// what a Space tap used to.
-function newCardAtPointer(): void {
-  createNode(centredAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y)));
-}
 
-// …and an empty FRAME there, named on the spot — the palette's "New frame".
-function newFrameAtPointer(): void {
-  newFrameAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y));
-}
-
-// Zoom about the middle of the screen — ⌘+/⌘− and the palette's Zoom in/out.
-function zoomStep(factor: number): void {
-  zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
-}
-
-// The phone INBOX (docs/inbox.md) is the top-level frame whose folder is `Inbox/`: a note saved into
-// that folder from elsewhere shows up on the next reload (data/persistence.ts reloadFromDisk). The
-// palette's "Inbox" goes to it, unfolded, and makes it first — to the left of the board's top-level
-// content, so it never lands on anything — when there is none.
-const INBOX_NOTE = 'inbox/' + FRAME_NOTE;
-const inboxFrame = (): MindNode | undefined =>
-  [...state.nodes.values()].find(n => n.type === 'frame' && n.file?.toLowerCase() === INBOX_NOTE);
-function goToInbox(): void {
-  const f = inboxFrame();
-  if (f) {
-    if (f.collapsed && !isLockedEffective(f) && afterReading([f.id], goToInbox, false)) return;
-    popScopeFor(f);
-    focusNode(f, true);
-    return;
-  }
-  if (state.readOnly || !store.isOpen) { setStatus('This map has no Inbox frame'); return; }
-  while (scopeActive()) exitScope();
-  const tops = [...state.nodes.values()].filter(n => !n.parent);
-  const left = tops.reduce((x, n) => Math.min(x, n.x), Infinity), top = tops.reduce((y, n) => Math.min(y, n.y), Infinity);
-  const at = tops.length ? snapPt({ x: left - FRAME_W - 80, y: top }) : centredAt(worldAtOrCentre());
-  const n = createNode({ ...at, type: 'frame', w: FRAME_W, h: FRAME_H, title: 'Inbox', parent: null, edit: false });
-  if (!n) return;
-  focusNode(n);
-  setStatus('Made the Inbox — notes saved into its folder show up here (docs/inbox.md)');
-}
 // Open one of a card's images full-screen. The RESOLVED src comes off the rendered <img> (hydrateImages
 // has already put it there), and `n` + the image's own path give the viewer its run: every image in the
 // cards that share this card's parent, paged with ‹ / › (features/image-viewer.ts). Shared by the
 // magnifier button and the Space tap below, so both open the same view of the same set.
-function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
+export function openImageAt(n: MindNode, img: HTMLImageElement | null): boolean {
   if (!img || !img.src || img.classList.contains('md-img-missing')) return false;
   openImageViewer(img.src, img.alt, { nodeId: n.id, path: img.dataset.path ?? '' });
   return true;
@@ -871,66 +825,6 @@ export function animateReflow(before: Map<string, Pt>): void {
 }
 
 
-// ---------- arrow keys: go IN and OUT of frames, fold and unfold branches ----------
-//   ↑  open the selected frame (nav/scope.ts)        ↓  leave the open one
-//   →  unfold                                        ←  fold
-// The four keys are about DEPTH, in the two senses this map has: which folder you're standing in,
-// and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
-// that, deliberately — opening a frame is now the primary way to navigate a big map, and clicking
-// covers moving between siblings.
-// They were never geometric and still aren't — a child now lives INSIDE its parent, so there is no
-// direction from one to the other for an arrow key to mean.
-// ←/→ are DIRECTIONAL, unlike the chip / X / the ⋯ menu, which all toggle: pressing → twice can't
-// fold what it just unfolded. They act on the WHOLE selection (setCollapsedSelection), like the chip
-// and X do — a fold is something you do to cards, and there's no reason a keyboard fold should reach
-// fewer of them than a click does.
-function navArrow(key: string): void {
-  // ↓ reads the SCOPE, not the selection, so it still works right after clicking empty space to
-  // deselect — which is exactly when you want to go back up. Inert at the top level, silently: a
-  // status line there would nag on every repeat press.
-  if (key === 'ArrowDown') { exitScope(); return; }
-  const n = state.selId ? state.nodes.get(state.selId) : null;
-  if (key === 'ArrowUp') {
-    // ↑ stays single: you can only stand in one place, so it acts on the anchor.
-    if (!n) { setStatus('Select a frame to open it'); return; }
-    openFrame(n);          // reports its own refusal for the kinds that can't be opened
-    return;
-  }
-  if (!n) return;          // ←/→ have nothing to fold
-  // → unfolds, ← folds — every selected card that isn't already there.
-  setCollapsedSelection(selectedIds(), key === 'ArrowLeft');
-}
-// Lock/unlock every selected card (the float bar's lock toggle / L). Locking freezes that card in place — no move,
-// (un)collapse, rename/body/color/type/layout edit, add-child, or delete — and cascades so its
-// whole subtree becomes unselectable too (see utils/model.ts). Unlocking never touches descendants
-// (lock is per-card, not stored on them). A descendant of a locked ancestor can't be selected, so
-// it never reaches this function as a target; only cards actually selectable can be (un)locked.
-// Does a selection count as LOCKED for toggle purposes? A mixed selection does, so the toggle
-// unlocks all. Lives next to the mutator because both the L shortcut and the float bar's lock
-// button need it, and the two must never disagree on the mixed-selection rule — that button is the
-// only escape hatch out of a locked selection.
-export function anyLocked(ids: Iterable<string>): boolean {
-  return nodesOf(ids).some(isLockedEffective);
-}
-
-function toggleLockSelection(): void {
-  setLockedSelection(state.sel, !anyLocked(state.sel));
-}
-
-export function setLockedSelection(ids: Iterable<string>, locked: boolean): void {
-  if (state.readOnly) {
-    return;
-  }
-  const cards = nodesOf(ids).filter(n => n.locked !== locked);
-  if (!cards.length) {
-    return;
-  }
-  record(cards.map(n => n.id), () => { for (const n of cards){ n.locked = locked; n.dirty = true; } });
-  paintAll();
-  syncFloatBar();   // the bar collapses to just its lock toggle while the selection is locked
-  scheduleSave();
-  setStatus(`${locked ? 'Locked' : 'Unlocked'} ${cards.length} card${cards.length===1?'':'s'}`);
-}
 // Flip the idx-th task checkbox in a node's body and write the change back to disk.
 function toggleTask(n: MindNode, idx: number): void {
   if (state.readOnly || isLockedEffective(n)) {
@@ -944,361 +838,13 @@ function toggleTask(n: MindNode, idx: number): void {
   paintNode(n); scheduleSave();
 }
 
-
-
-// ---------- selection + editor ----------
-// Selection and the edit panel are decoupled: a node can stay selected while the
-// panel is closed (press Esc). That closed-but-selected state is when Delete works.
-
-// Select everything ON THE CANVAS — which, inside an open frame, is that frame's contents and nothing
-// else. It needs no scope test of its own: isHidden already means "on the canvas right now", covering
-// both the open frame and folded branches, and setSelectionSet drops whatever isn't selectable (a
-// locked card's descendants). Shared by ⌘A and the canvas context menu, so the two can't diverge.
-export function selectAll(): void {
-  setSelectionSet([...state.nodes.values()].filter(n => !isHidden(n)).map(n => n.id));
-  setStatus(state.sel.size ? `Selected ${state.sel.size} card${state.sel.size > 1 ? 's' : ''}` : 'Nothing to select');
-}
-// the ids currently being edited (one or many) — colour and lock apply to all of them
-export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
-// …the ones of them that can wear tags (no frames).
-export const taggableSelection = (): string[] => selectedIds().filter(id => wearsTags(state.nodes.get(id)));
-// reflect state.sel in the canvas + the floating edit bar (features/float-bar.ts)
-// Selecting a CARD ends any edge selection — the two never coexist (core/state.ts selEdges). Enforced
-// here, at the one funnel every card-selection path runs through, rather than at each of them.
-// Only the cards whose ring changes repaint — the ones wearing it now (`.sel` in the DOM, so it can't go
-// stale) and the new selection. A click used to repaint the whole map. A mutation that also selects
-// still ends in its own relayout()/remeasure().
-export function applySelection(): void {
-  if (state.sel.size && state.selEdges.size) clearEdgeSelection();
-  const ids = new Set(state.sel);
-  world.querySelectorAll<HTMLElement>('.node.sel').forEach(el => { if (el.dataset.id) ids.add(el.dataset.id); });
-  for (const id of ids) { const n = state.nodes.get(id); if (n) paintNode(n); }
-  paintFreeEdges(); syncFloatBar(); syncUrl(); updateDocumentTitle();
-}
-// A descendant of a locked card can't be selected at all — the locked card itself still can be
-// (see utils/model.ts hasLockedAncestor). Nor can anything outside the frame you're standing in:
-// it isn't on the canvas, so a selection ring would be invisible and every action on it would look
-// dead. The deliberately unscoped jumps (wikilinks, query results, undo) come out of their scope
-// first — see popScopeFor. Shared by every selection entry point below.
-function isSelectable(id: string): boolean {
-  const n = state.nodes.get(id); return !n || (!hasLockedAncestor(n) && !outOfScope(n));
-}
-// Replace the whole selection with `ids` (a Set or array), recomputing the primary.
-export function setSelectionSet(ids: Iterable<string>): void {
-  state.sel = new Set([...ids].filter(isSelectable));
-  if (state.sel.size === 0) state.selId = null;
-  else if (state.sel.size === 1) state.selId = [...state.sel][0];
-  else if (!state.selId || !state.sel.has(state.selId)) state.selId = [...state.sel].pop() ?? null;
-  applySelection();
-}
-// ⌘/Ctrl-click: add or remove one card from the selection.
-export function toggleSel(id: string): void {
-  if (state.sel.has(id)){
-    state.sel.delete(id);
-    if (state.selId === id) state.selId = state.sel.size ? ([...state.sel].pop() ?? null) : null;
-  } else {
-    if (!isSelectable(id)) return;
-    state.sel.add(id); state.selId = id;
-  }
-  applySelection();
-}
-
 syncFloatBar();
 
-// ---------- read-only mode ----------
-// View & collapse only: nothing saves, the sidebar hides, editing icons grey out, and the
-// add-child + is hidden. Collapsing is allowed but in-memory only — leaving read-only reloads
-// from disk so the saved collapse state is restored.
-const roBadge = byId<HTMLButtonElement>('roBadge');
-// open padlock (unlocked); the closed one is LOCK_BADGE_SVG up top — one glyph shared by the
-// locked-card badge and the float bar's lock toggle (features/float-bar.ts).
-export const ICON_LOCK_OPEN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;
-export function applyReadOnly(): void {
-  const ro = state.readOnly;
-  document.body.classList.toggle('readonly', ro);
-  roBadge.hidden = !ro;
-  // ghost card visibility is driven by body.readonly CSS rule
-  syncFloatBar();
-  setStatus(ro ? 'Read-only — nothing is saved' : 'Editing enabled');
-  scheduleUrlSync();
-}
 applyReadOnly();
-async function setReadOnly(on: boolean): Promise<void> {
-  if (on === state.readOnly) return;
-  if (on){
-    await flushSave();                                   // persist anything pending before locking (clears the save timer)
-    state.readOnly = true;
-    selectNode(null);                                    // close any open edit
-  } else {
-    state.readOnly = false;
-    if (store.isOpen) await loadFromDir({ keepView:true }); // discard in-memory collapses, restore disk state
-  }
-  applyReadOnly();
-}
-roBadge.onclick = () => setReadOnly(false);
-
-// Select exactly one node (or clear with null), replacing any multi-selection.
-export function selectNode(id: string | null): void {
-  if (id == null){ state.sel.clear(); state.selId = null; }
-  else {
-    if (!isSelectable(id)) return;
-    state.sel = new Set([id]); state.selId = id;
-  }
-  applySelection();
-}
-// Colour and lock apply live via the floating bar (features/float-bar.ts). The TITLE and BODY are edited on the canvas (F2 / double-click → inline edit).
 
 
-// ---------- image attachments live in features/attachments.ts ----------
-// ---------- in-place card editing lives in features/inline-edit.ts ----------
-// While a card is being edited, the save loop defers the file rename until editing ends (so the folder
-// isn't littered with M.md, Ma.md, Mag.md…) — it keys off `ui.bodyEdit` directly, which now holds the
-// title too: the card is one text field whose first `# ` line IS its name.
-
-// keyboard:
-//  · N / ⌘N        → new node at the pointer   (Space: hand-pan; on an image card, open the picture)
-//  · Enter          → a new card below the selected one, in the same place
-//  · Tab            → a new card inside the selected frame
-//  · F2             → rename the selected node in place (also: double-click its title)
-//  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
-//  · ← → ↑ ↓        → ↑/↓ open/leave a frame, →/← unfold/fold
-//  · E              → edit the selected node's note/body in place (also: double-click the body)
-//  · #              → tag the selected cards (features/tag-picker.ts), or with none find by tag
-//  · ⌘F or /        → find, by text and #tags (features/search.ts); Esc ends a standing search first
-//  · T              → the tag tray (features/tag-tray.ts)
-//  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
-// A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
-// so these card shortcuts stay out of the way while you're naming something.
-window.addEventListener('keydown', (e) => {
-  // The letter shortcuts below are case-INSENSITIVE (Caps Lock, or a held ⇧ that means something of
-  // its own like ⇧A), so a single printable character is folded down once here rather than tested
-  // twice per line. Named keys keep their own spelling — 'F2' must not become 'f2', nor 'ArrowUp'
-  // 'arrowup' — hence the length test rather than a blanket toLowerCase.
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-  const mod = e.metaKey || e.ctrlKey;
-  const del = key === 'Delete' || key === 'Backspace';
-
-  // Intercept browser zoom shortcuts (Cmd/Ctrl +/-/0) so they drive the canvas, not the viewport.
-  // Must be checked before the `typing` guard so they work even while a text field is focused.
-  if (mod) {
-    if (key === '=' || key === '+') { e.preventDefault(); zoomStep(1.2); return; }
-    if (key === '-')                { e.preventDefault(); zoomStep(1 / 1.2); return; }
-    if (key === '0')                { e.preventDefault(); focusOrFit(); return; }
-    // ⌘F is FIND here, the way it is on every canvas app — not the browser's find-in-page
-    if (key === 'f' && !e.shiftKey && !e.altKey) { e.preventDefault(); openSearch(); return; }
-    if (key === 's') {
-      e.preventDefault();
-      flushSave();
-      return;
-    }
-
-    // ⌘P is FigJam's quick actions. Never the browser's print dialog, even while typing in a card.
-    if (key === 'p') {
-      e.preventDefault();
-      if (!isTypingInField()) {
-        openPalette();
-      }
-      return;
-    }
-
-    // While typing, ⌘A and ⌘Z/⌘Y belong to the field (its own select-all and native undo).
-    if (!isTypingInField() && (key === 'a' || key === 'z' || key === 'y')) {
-      e.preventDefault();
-      if (key === 'a') {
-        selectAll();
-      } else if (key === 'z' && !e.shiftKey) {
-        undo();
-      } else {
-        redo();
-      }
-      return;
-    }
-  }
-
-  const active = document.activeElement as HTMLElement | null;
-  const typing = isTypingInField();
-  // Esc blurs the active field (so Delete works next), or deselects when not typing.
-  if (key === 'Escape'){
-    e.preventDefault();
-    if (typing) { active?.blur?.(); }
-    else if (state.selEdges.size) clearEdgeSelection();
-    else if (searchActive()) closeSearch();   // a search left standing over the board, before the selection
-    else if (state.sel.size) selectNode(null);
-    return;
-  }
-  if (typing) return;
-  if (tidyShortcut(e)) return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
-  // ←→↑↓ walk / fold the tree (navArrow). No modifiers — ⇧/⌘
-  // arrow combinations are left free for the browser and for later (extend-selection).
-  if (key.startsWith('Arrow') && !e.shiftKey && !mod && !e.altKey){
-    e.preventDefault(); navArrow(key); return;
-  }
-  if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
-  if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
-  // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
-  if (key === '#' && !mod){ e.preventDefault(); if (taggableSelection().length) openTagPicker(); else openSearch('#'); return; }
-  if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
-  // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
-  // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
-  // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).
-  // Both are bound: whichever the browser lets through does the same thing.
-  if (key === 'n' && !e.shiftKey && !e.altKey){ e.preventDefault(); newCardAtPointer(); return; }
-  // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
-  if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
-  if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
-  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: the SMART duplicate (crud.ts copyNext)
-  if (key === 'a' && e.shiftKey && !mod && state.sel.size){ e.preventDefault(); autoSizeSelection(); return; }   // ⇧A: fit selected frames and cards to their contents
-  if (key === 'g' && !mod && state.sel.size){ e.preventDefault(); groupSelectionIntoFrame(); return; }   // G: group selection into a frame
-  // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
-  // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
-  if (key === 'c' && mod && state.sel.size){ e.preventDefault(); void copySelection(); return; }
-  if (key === 'x' && mod && state.sel.size){ e.preventDefault(); void cutSelection(); return; }
-  if (key === 'x' && !mod && state.sel.size){   // don't shadow cut
-    e.preventDefault(); toggleCollapseSelection(state.sel); return;
-  }
-  if (key === 'l' && !mod && state.sel.size && !state.readOnly){
-    e.preventDefault();
-    toggleLockSelection();
-    return;
-  }
-  // image cards have no title/body UI to rename or edit — they're a leaf that shows only the image
-  if (key === 'F2' && state.selId){
-    e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
-  }
-  if (key === 'e' && !mod && state.selId){
-    e.preventDefault(); const n = state.nodes.get(state.selId); if (n) startBodyEdit(n); return;
-  }
-  if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
-  // Tab puts a new card INSIDE the selected frame — the one thing that has an inside.
-  if (key === 'Tab' && state.selId){ e.preventDefault(); if (state.nodes.get(state.selId)?.type === 'frame') addCardInside(state.selId); return; }
-  if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
-  // ⌘L connects the selected cards (MindNode's shortcut for the same thing). Bare `l` is lock.
-  if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
-  if (del && state.sel.size){
-    e.preventDefault();
-    // ⌥Delete keeps the children, promoting them to the deleted card's parent.
-    if (e.altKey) deleteSelectionKeepChildren(); else deleteSelection();
-  }
-});
-// Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.
-window.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse') ui.lastMouse = { x: e.clientX, y: e.clientY };
-});
-window.addEventListener('keyup', (e) => {
-  if (e.key !== ' ') return;
-  const wasPan = ui.spaceUsedForPan;
-  ui.spaceHeld = false; ui.spaceUsedForPan = false;
-  if (isTypingInField() || wasPan || ui.pan) return;
-  // A Space TAP on a lone IMAGE card opens it full-screen — the picture is the whole card, so "look at
-  // this properly" is the obvious thing the key can mean there, and the viewer closes on Space too
-  // (features/image-viewer.ts). Everything else Space used to do on release (making a card) is `N` now.
-  const sole = state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : null;
-  if (sole && isImageCard(sole)) openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
-});
-
-// Ghost-card drag: grab the corner card to spawn a new note that rides the cursor through the same
-// move/drop machinery as dragging an existing card — so the guides and the drop-into-a-frame rule
-// behave identically. Releasing back on the ghost cancels.
-{
-  const ghost = byId('ghostCard');
-  let newNode: MindNode | null = null;
-
-  // Move/up are handled on `window`, not the ghost, so the drop commits no matter where the pointer
-  // is released or whether pointer-capture survived the mid-drag re-renders (a lost capture used to
-  // deliver pointerup to the card underneath, whose handler ignores it — leaving the ghost stuck and
-  // nothing created). setPointerCapture is still requested (best-effort) so the dragged card's own
-  // handlers stay quiet; capture events bubble to window regardless.
-  let stopGhostDrag: (() => void) | null = null;
-  function endGhostDrag(): MindNode | null {
-    const n = newNode;
-    newNode = null;
-    stopGhostDrag?.();
-    stopGhostDrag = null;
-    return n;
-  }
-  function onMove(e: PointerEvent): void { if (newNode) feedDragMove(e.clientX, e.clientY); }
-  function onUp(e: PointerEvent): void {
-    const n = endGhostDrag();
-    if (!n) return;
-    // released back on the ghost card itself -> cancel: discard the new card, create nothing
-    const r = ghost.getBoundingClientRect();
-    const onGhost = e.clientX >= r.left && e.clientX <= r.right &&
-                    e.clientY >= r.top  && e.clientY <= r.bottom;
-    if (onGhost) { abortDrag(); deleteNode(n.id); commitStep(); return; }   // nets null→null, discarded
-    commitDrag();                          // land / reparent exactly where the preview showed
-    startInlineEdit(n, { isNew: true });   // drop straight into renaming; Esc cancels creation
-  }
-  function onCancel(): void {
-    const n = endGhostDrag();
-    if (n) { abortDrag(); deleteNode(n.id); commitStep(); }   // nets null→null, discarded
-  }
-
-  ghost.addEventListener('pointerdown', (e: PointerEvent) => {
-    if (state.readOnly) return;
-    e.preventDefault();
-    endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
-    // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
-    // world space), then drive it with the real drag so it rides the cursor at that same offset
-    const r = ghost.getBoundingClientRect();
-    const w = screenToWorld(r.left, r.top);
-    newNode = createDetachedNode(w.x, w.y) ?? null;
-    if (!newNode) return;
-    try { ghost.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
-    startNodeDrag(newNode, e.clientX, e.clientY);
-    stopGhostDrag = trackPointer({ move: onMove, up: onUp, cancel: onCancel });
-  });
-}
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
 
-// (rename/duplicate/export/delete on-screen actions now live in the floating bar's kebab menu —
-// features/float-bar.ts)
-
-// ---------- the ⌘P command palette's list ----------
-// Every action the app has, with the shortcut that does the same — built here because every action
-// function is in scope here. `when` hides what can't apply right now (features/palette.ts).
-const MOD = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl ';
-const editable = (): boolean => !state.readOnly && store.isOpen;
-const hasSel = (): boolean => state.sel.size > 0 && editable();
-const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : undefined;
-function paletteCommands(): Command[] {
-  return [
-    { label: 'New card', shortcut: 'N', keywords: 'add create note', when: editable, run: newCardAtPointer },
-    { label: 'Find…', shortcut: MOD + 'F', keywords: 'search filter tags card', run: () => openSearch() },
-    { label: trayOpen() ? 'Hide the tag tray' : 'Show the tag tray', shortcut: 'T', keywords: 'tags stickers emoji', run: () => toggleTray() },
-    { label: 'Undo', shortcut: MOD + 'Z', when: editable, run: undo },
-    { label: 'Redo', shortcut: '⇧' + MOD + 'Z', when: editable, run: redo },
-    { label: state.selId ? 'Focus the selection' : 'Fit the map to the screen', shortcut: 'F', keywords: 'zoom view', run: focusOrFit },
-    { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomStep(1.2) },
-    { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomStep(1 / 1.2) },
-    { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
-    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => { const n = oneSel(); if (n) startBodyEdit(n); } },
-    { label: 'Add a card inside the frame', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'frame', run: () => addCardInside(state.selId!) },
-    { label: 'New frame', keywords: 'group box section', when: editable, run: newFrameAtPointer },
-    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxFrame() || editable(), run: goToInbox },
-    { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
-    { label: 'Open', shortcut: '↑', keywords: 'enter frame', when: () => canEnter(oneSel()), run: () => openFrame(oneSel()) },
-    { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
-    { label: 'Group into a frame', shortcut: 'G', when: hasSel, run: groupSelectionIntoFrame },
-    { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
-    { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
-    { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
-    { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
-    ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
-      when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
-    { label: 'Collapse all', keywords: 'fold every card frame', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
-    { label: 'Expand all', keywords: 'unfold every card frame', when: () => foldScope().some(n => n.collapsed), run: expandAll },
-    { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
-    { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
-    { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
-    { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },
-    { label: 'Canvas colour…', keywords: 'background', when: () => !state.readOnly, run: () => byId('canvasColorBtn').click() },
-    { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
-    { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
-  ];
-}
-setPaletteSource(paletteCommands);
-byId('paletteBtn').title = `Actions (${MOD.trim() === '⌘' ? '⌘P' : 'Ctrl+P'})`;
-byId('paletteBtn').onclick = (e) => { e.stopPropagation(); if (paletteOpen()) closePalette(); else openPalette(); };
 
 
 installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan

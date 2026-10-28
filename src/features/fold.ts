@@ -2,12 +2,13 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { isLockedEffective, isHidden, nodesOf, nodeLabel, subtreeIds } from '../utils/model.js';
 import { canFold, canToggleFold } from '../view/geometry.js';
-import { setSelectionSet, animateLayout } from '../main.js';
+import { animateLayout } from '../main.js';
 import { afterReading } from '../data/lazy.js';
 import { record } from './history.js';
 import { syncFloatBar } from './float-bar.js';
 import { scheduleSave } from '../data/persistence.js';
 import { outOfScope } from '../nav/scope.js';
+import { setSelectionSet } from './selection.js';
 
 // Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
 // children, folds them (and everything below) too. A leaf with a body can fold its body alone.

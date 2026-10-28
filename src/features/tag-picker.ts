@@ -15,9 +15,9 @@ import { esc } from '../utils/markdown.js';
 import { placeInViewport } from '../utils/dom.js';
 import { allTags, noteTags, cleanTag, tagKey, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
-import { taggableSelection } from '../main.js';
 import { setTagOnNodes, tagText } from './tags.js';
 import { readStrings, writeJSON, pushRecent } from '../utils/local-json.js';
+import { taggableSelection } from './selection.js';
 
 const MRU_KEY = 'corkboard.tagMru';
 export const loadMru = (): string[] => readStrings(MRU_KEY);
