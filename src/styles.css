@@ -788,15 +788,14 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
-/* Everything at rest lies FLAT on the board; only what's SELECTED is lifted — card, frame, pill or picture
-   wears the selection ring plus FigJam's soft lift (--lift). A card in hand casts a deeper one (.dragging). */
-.node.sel { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
+/* Board nodes NEVER cast a shadow — at rest, selected or in hand. Selection is the ring alone. */
+.node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 /* While a frame's label is being renamed, drop the frame's ring so only the label's own outline shows.
    While a CARD is being edited, the card itself is the field (FigJam): no box inside it, the ring goes
    to a DIMMED blue round the card's border, and the corner handles stand down. */
-.node.sel:has(.title.editing) { box-shadow:var(--lift); }
+.node.sel:has(.title.editing) { box-shadow:none; }
 .node.sel.card-editing:not(.frame):not(.image-card) {
-  box-shadow:0 0 0 3px var(--edit-ring), var(--lift); }
+  box-shadow:0 0 0 3px var(--edit-ring); }
 .node.card-editing > .fh::after { display:none; }
 /* the dragged card (and its subtree) floats above every other card, above every line, and above the
    landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
@@ -808,19 +807,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    cut the animation short on the very next paint (features/crud.ts createNode sets it). */
 @keyframes card-pop { from { scale:.8; opacity:0; } 65% { scale:1.04; opacity:1; } to { scale:1; } }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
-/* The lift is a SHADOW only, never a scale: a card in hand keeps its exact size, so the smart guides
-   (features/guides.ts) line up with the edges you actually see. FigJam's: a short contact shadow plus a
-   long one falling BELOW the card, as if it were held up off the board — and a selected card keeps its
-   ring while it travels (the ports and the toolbar are what stand down). */
-.node { --drag-lift:0 3px 6px rgba(0,0,0,.10), 0 16px 32px -4px rgba(0,0,0,.26); }
-.node.dragging:not(.frame),
-.node.frame.dragging { box-shadow:var(--drag-lift); }
-.node.sel.dragging:not(.frame),
-.node.sel.frame.dragging { box-shadow:0 0 0 2px var(--node-sel), var(--drag-lift); }
-/* A dragged FRAME is what's lifted: the cards it carries ride on it as they rest (flat, or lifted if selected) (main.ts paints
-   them `.carried`), rather than each casting the deep shadow of a card in hand. */
-.node.dragging.carried:not(.frame) { box-shadow:none; }
-.node.sel.dragging.carried:not(.frame) { box-shadow:0 0 0 2px var(--node-sel), var(--lift); }
+/* A card in hand keeps its exact size and stays flat, so the smart guides (features/guides.ts) line up
+   with the edges you actually see; a selected card keeps its ring while it travels. */
 @media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
    .frame-content wrapper at the ordinary card z-index:2 (see the .node.frame comment above), so
@@ -895,7 +883,7 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .tag.lifted { opacity:.3; }
 .tag-ghost { position:fixed; left:0; top:0; z-index:60; pointer-events:none; margin:-13px 0 0 -13px; }
 .tag-ghost .tag { transform:rotate(var(--tilt, 0deg)) scale(1.15); box-shadow:0 4px 12px rgba(0,0,0,.25); }
-.node.tag-drop { box-shadow:0 0 0 3px var(--accent), var(--lift); }
+.node.tag-drop { box-shadow:0 0 0 3px var(--accent); }
 .tag-puff { position:fixed; z-index:60; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%; pointer-events:none;
   background:radial-gradient(circle, rgba(160,160,160,.55) 0 30%, transparent 62%); animation:tag-puff .45s ease-out forwards; }
 @keyframes tag-puff { from { transform:scale(.4); opacity:1; } to { transform:scale(2.2); opacity:0; } }

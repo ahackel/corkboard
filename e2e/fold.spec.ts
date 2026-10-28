@@ -118,14 +118,14 @@ test('a folded card has no resize handles; ports and handles stand down while a 
   await expect(g.locator(':scope > .fh')).not.toHaveCount(0);       // unfolded, resizable again
 });
 
-test('only a selected card is lifted by a shadow', async ({ page }) => {
+test('a card casts no shadow, selected or not', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 400, 300, 'Lift me');
   await clickAway(page);
   const shadow = () => c.evaluate(el => getComputedStyle(el).boxShadow);
   expect(await shadow()).toBe('none');
   await select(page, c);
-  expect(await shadow()).toContain('rgba(0, 0, 0');
+  expect(await shadow()).not.toContain('rgba(0, 0, 0');
 });
 
 test('a card resized taller than its text still folds to a 40px chip, and unfolds to its size', async ({ page }) => {

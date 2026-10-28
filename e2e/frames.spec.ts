@@ -96,7 +96,7 @@ test('an untitled frame gets its name back from the T button', async ({ page }) 
   await expect(frame(page, 'Renamed')).toBeVisible();
 });
 
-test('a dragged frame is what lifts: it casts the shadow, its cards keep their resting one', async ({ page }) => {
+test('a dragged frame and its cards cast no shadow', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, BOARD);
   const todo = frame(page, 'Todo');
@@ -105,8 +105,8 @@ test('a dragged frame is what lifts: it casts the shadow, its cards keep their r
   await page.mouse.down();
   await page.mouse.move(lb.x + 60, lb.y + 40, { steps: 6 });
   const shadow = (sel: string) => page.locator(sel).first().evaluate(el => getComputedStyle(el).boxShadow);
-  expect(await shadow('#world .node.frame.dragging')).toContain('32px');
-  expect(await shadow('#world .node.carried')).not.toContain('32px');
+  expect(await shadow('#world .node.frame.dragging')).not.toContain('rgba(0, 0, 0');
+  expect(await shadow('#world .node:not(.frame)')).not.toContain('rgba(0, 0, 0');
   await page.mouse.up();
 });
 

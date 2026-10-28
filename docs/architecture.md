@@ -557,7 +557,7 @@ delta — `snappedDelta` keys off `drag.active` for that reason.
 RAW pointer position and, per axis, pulls it within 6 screen px to the nearest edge-on-edge or
 centre-on-centre alignment, exactly `SPACING` (20px) from a neighbour it faces, the gap of the pair it
 continues, or the middle between two neighbours. `SPACING` is the house gap: a pasted list and an
-Enter column use it too (`LIST_GAP`). A card in hand lifts by SHADOW only, never scale, so the
+Enter column use it too (`LIST_GAP`). A card in hand keeps its exact size (no scale, no shadow), so the
 edges the guides align are the edges you see.
 Neighbours are the drag's siblings in the same space, on screen. `features/guides.ts` draws one
 pink rule per aligned position (the centre rule only when no edge lines up) and a ticked bar per equal
@@ -940,11 +940,10 @@ button's rect, so none of them knows where the dock is.
 
 **The look: a FigJam board of sticky notes** (docs/PRODUCT.md). Type is the system's rounded face, else Nunito
 (bundled latin subset, `src/assets/fonts`, OFL). A sticky is near-square-cornered (`--r-card`, 3px) and lies FLAT
-at rest: only a SELECTED node (card, frame, pill or picture) wears FigJam's soft lift (`--lift`), so the
-shadow itself says "picked up"; a card in hand casts a deeper one (`.dragging`). Motion uses the `scale` property, never `transform` (the drag and
+always: board nodes NEVER cast a shadow — selected or in hand, the selection ring alone says so. Motion uses the `scale` property, never `transform` (the drag and
 the relayout animation own that): a new card pops in via a `data-pop` attribute (a class would be wiped by
-paintNode's wholesale `className` rewrite), and a card in hand lifts by a SHADOW only (never a scale, so
-the smart guides line up with the edges you see). The pop stands down under reduced motion.
+paintNode's wholesale `className` rewrite), and a card in hand is never scaled (so the smart guides line
+up with the edges you see). The pop stands down under reduced motion.
 
 **A card's text colour is DERIVED from its fill, never authored.** The palette hexes are the `--pal-*` custom
 properties in `styles.css` (one source of truth, read into JS as `SWATCH_BG`), but the **ink** each demands is

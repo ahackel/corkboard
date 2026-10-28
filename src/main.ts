@@ -347,7 +347,6 @@ export function paintNode(n: MindNode): void {
     + (hasBody ? '' : ' no-body')
     + (tags.length ? '' : ' no-tags')
     + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
-    + (ui.drag && n.hostFrameId != null && ui.drag.targets.has(n.hostFrameId) ? ' carried' : '')   // riding a dragged frame
     + (state.searchMatch && !state.searchMatch.has(n.id) ? ' search-dim' : '')
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   // Which frame (if any) hosts this card's element — settled outside gestures (see settledHost).
