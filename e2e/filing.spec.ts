@@ -64,3 +64,28 @@ test('search counts its matches, folded ones too, and the chevrons step through 
   await expect(page.locator('#searchWrap')).toHaveClass(/open/);   // stepping doesn't end the search
   expect(errors).toEqual([]);
 });
+
+test('leaving a section never moves it, even when a card inside was dragged past its edge', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const shelf = section(page, 'Shelf');
+  const at = async () => { const b = (await shelf.boundingBox())!; return [Math.round(b.x), Math.round(b.y)]; };
+  const before = await at();
+  await shelf.locator(':scope > .title-row').click();
+  await page.keyboard.press('ControlOrMeta+ArrowDown');
+  await page.waitForTimeout(300);
+  // inside, the canvas is the section's interior: drag its card up and to the left, past where the box was
+  const c = (await card(page, 'Inner card').boundingBox())!;
+  await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(c.x + c.width / 2 - 250, c.y + c.height / 2 - 120, { steps: 10 });
+  await page.mouse.up();
+  await page.keyboard.press('ControlOrMeta+ArrowUp');
+  await page.waitForTimeout(300);
+  expect(await at()).toEqual(before);
+  // …and the card came back inside it
+  const box = (await shelf.boundingBox())!, inner = (await card(page, 'Inner card').boundingBox())!;
+  expect(inner.x).toBeGreaterThanOrEqual(box.x); expect(inner.y).toBeGreaterThanOrEqual(box.y);
+  expect(errors).toEqual([]);
+});

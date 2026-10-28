@@ -343,7 +343,9 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   (`isHidden` asks about the open section before the fold; `containerHost` and paintNode's nesting treat it as
   the canvas too), and leaving lands you back at the same pill. The one thing that IS recorded is the
   grow-to-fit on the way out — measured against the BOX a folded section unfolds to, never its pill, so a
-  visit that moved nothing moves nothing — and ⌘Z un-grows it without teleporting you between scopes. Allowed in
+  visit that moved nothing moves nothing — and ⌘Z un-grows it without teleporting you between scopes. It is
+  PINNED (`growSectionsToHold` with `pin`): the box grows only right and down, and cards that stuck out past its
+  left or top edge are brought in as one group instead, so the section you step back out to is never moved. Allowed in
   read-only and on a LOCKED section (`activateTab`'s exemption: looking inside the box isn't changing it) —
   though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
   `⌘↓`, the float bar's Open and the right-click menu as the ways in (and a folded pill's double-click).

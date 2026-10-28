@@ -77,7 +77,8 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
 // A FREE section you were INSIDE had the whole viewport to arrange things in, so a card can easily end
 // up outside the box it goes back to being on the way out — where its wrapper's overflow:hidden would
 // clip it clean away. So grow the box to hold what's in it as you leave (growSectionsToHold), and only
-// when something really does stick out, so a visit that moved nothing still writes nothing.
+// when something really does stick out, so a visit that moved nothing still writes nothing. PINNED: the box
+// never moves — it grows right and down, and what sticks out left or up comes in to meet it.
 // A locked section is out: it refuses to be resized at all.
 // A FOLDED section is measured as the box it unfolds to, not its pill: unfolded for the measurement
 // only, and folded straight back, so leaving it moves nothing unless a card really sticks out.
@@ -87,7 +88,7 @@ function growToFitContents(f: MindNode): void {
   }
   const folded = f.collapsed;
   f.collapsed = false;
-  try { growSectionsToHold(childrenOf(f.id).map(k => k.id)); }
+  try { growSectionsToHold(childrenOf(f.id).map(k => k.id), { pin: true }); }
   finally { f.collapsed = folded; }
 }
 

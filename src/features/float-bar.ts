@@ -8,7 +8,7 @@
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
-import { subtreesBox } from '../view/layout.js';
+import { subtreesBox, moveSubtreeTo } from '../view/layout.js';
 import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
 import { settleSections } from './drag.js';
@@ -17,7 +17,7 @@ import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelec
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
-import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf } from '../utils/model.js';
+import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf, subtreeIds } from '../utils/model.js';
 import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
 import { labelEl, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets } from '../utils/dom.js';
@@ -69,7 +69,9 @@ function fitSectionToContent(n: MindNode, orDefault = false): void {
 // already clears its contents. A section clips (overflow:hidden), so a card dropped, pasted, created or
 // typed past its edge would otherwise be in the section and out of sight. Not the open section: its box is
 // the window. Each grown section is touched, so it rides the caller's undo step.
-export function growSectionsToHold(ids: Iterable<string>): boolean {
+// `pin` keeps the box's top-left where it is: what sticks out past its left or top edge comes IN instead, as
+// one group. Leaving a section asks for it — the box is what you see as you step back, and must not move.
+export function growSectionsToHold(ids: Iterable<string>, { pin = false }: { pin?: boolean } = {}): boolean {
   let grew = false;
   const sections = new Set<MindNode>();
   for (const id of ids) {
@@ -82,11 +84,20 @@ export function growSectionsToHold(ids: Iterable<string>): boolean {
   const up = (v: number): number => Math.ceil(v / snapStep) * snapStep;
   const down = (v: number): number => Math.floor(v / snapStep) * snapStep;
   for (const f of sections) {
-    const { x0, y0, x1, y1 } = subtreesBox(childrenOf(f.id));
+    const kids = childrenOf(f.id);
+    let { x0, y0, x1, y1 } = subtreesBox(kids);
     if (!isFinite(x0)) {
       continue;
     }
-    const L = Math.min(f.x, down(x0 - SECTION_FIT_PAD)), T = Math.min(f.y, down(y0 - SECTION_FIT_PAD));
+    if (pin && (x0 < f.x || y0 < f.y)) {
+      const dx = x0 < f.x ? up(f.x + SECTION_FIT_PAD - x0) : 0, dy = y0 < f.y ? up(f.y + SECTION_FIT_PAD - y0) : 0;
+      for (const k of kids) {
+        touch(...subtreeIds(k.id));
+        moveSubtreeTo(k, k.x + dx, k.y + dy);
+      }
+      x0 += dx; x1 += dx; y0 += dy; y1 += dy;
+    }
+    const L = pin ? f.x : Math.min(f.x, down(x0 - SECTION_FIT_PAD)), T = pin ? f.y : Math.min(f.y, down(y0 - SECTION_FIT_PAD));
     const R = Math.max(f.x + (f.w ?? SECTION_W), up(x1 + SECTION_FIT_PAD)), B = Math.max(f.y + (f.h ?? SECTION_H), up(y1 + SECTION_FIT_PAD));
     if (L === f.x && T === f.y && R === f.x + (f.w ?? SECTION_W) && B === f.y + (f.h ?? SECTION_H)) {
       continue;
