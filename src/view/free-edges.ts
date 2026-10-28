@@ -378,14 +378,18 @@ export function paintFreeEdges(): void {
     // underneath, so a selected edge reads as outlined rather than merely recoloured.
     // With ONE edge selected its two end handles say so (FigJam); a multi-selection has no handles, so
     // there each line wears the ring instead.
-    if (sel && state.selEdges.size > 1) {
+    // A one-way arrow between cards nearly touching is just its head: a stub of line under it is noise.
+    const headOnly = (e.toCap === 'arrow') !== (e.fromCap === 'arrow') && Math.hypot(g.b.x - g.a.x, g.b.y - g.a.y) < ARROW_LEN * 2;
+    if (sel && state.selEdges.size > 1 && !headOnly) {
       svg += `<path class="fe-selring" d="${g.d}"/>`;
     }
-    svg += `<path class="fe" style="stroke:${ink}"${dash} d="${g.d}"/>`;
+    if (!headOnly) {
+      svg += `<path class="fe" style="stroke:${ink}"${dash} d="${g.d}"/>`;
+    }
     svg += endCap(e.toCap, g.b, g.tipTan, ink) + endCap(e.fromCap, g.a, g.tailTan, ink);
     // The label sits ON the line at its midpoint, on a plate so the line doesn't strike it through.
     // Width is estimated from the character count: a real measurement would cost a layout flush per
-    // edge per section.
+    // edge per frame.
     if (e.label) {
       const w = e.label.length * 8 + 12, h = 19;
       svg += `<rect class="fe-label-plate" style="fill:${plate}" x="${g.mid.x - w/2}" y="${g.mid.y - h/2}" width="${w}" height="${h}" rx="4"/>`

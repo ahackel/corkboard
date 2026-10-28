@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, makeCard, drawLine, select, clickPort, clickAway, reload, card, watchErrors } from './helpers';
+import { openBoard, seedBoard, note, makeCard, drawLine, select, clickPort, clickAway, reload, card, watchErrors } from './helpers';
 
 const lines = (page: import('@playwright/test').Page) => page.locator('#freeEdgeHits path.fe-hit');
 
@@ -98,4 +98,17 @@ test('a line toolbar\'s picker stays on screen at the window edge, and Esc close
   expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
   await page.keyboard.press('Escape');
   await expect(pop).not.toHaveClass(/open/);
+});
+
+test('a one-way arrow between cards nearly touching is drawn as just its head', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, {
+    'A.md': note('A'), 'B.md': note('B'), 'C.md': note('C'),
+    'board.json': JSON.stringify({ version: 1, model: 2, nodes: {
+      'A.md': { x: 0, y: 0 }, 'B.md': { x: 220, y: 0 }, 'C.md': { x: 900, y: 0 } },
+      edges: [{ id: 'near', from: 'A.md', to: 'B.md' }, { id: 'far', from: 'B.md', to: 'C.md' }] }),
+  });
+  await expect(lines(page)).toHaveCount(2);
+  await expect(page.locator('#freeEdges path.fe-arrow')).toHaveCount(2);
+  await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);   // only the far one keeps its line
 });

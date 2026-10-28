@@ -83,7 +83,7 @@ test('an untitled section gets its name back from the T button', async ({ page }
   await seedBoard(page, BOARD);
   const todo = section(page, 'Todo');
   await todo.locator(':scope > .title-row').dblclick();
-  await page.keyboard.press('Control+a');
+  await page.keyboard.press('ControlOrMeta+a');
   await page.keyboard.press('Backspace');
   await page.keyboard.press('Enter');
   await clickAway(page);

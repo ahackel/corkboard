@@ -16,7 +16,7 @@ test('the arrow folds a card to a one-line chip that says how much it hides', as
   await expect(page.locator('#fbFold')).toHaveAttribute('title', 'Expand (X)');
   await expect(g.locator('.fold-more')).toHaveText('+3');
   await expect(g.locator('.fold-more')).toHaveAttribute('title', '3 more lines');
-  expect((await g.boundingBox())!.width).toBeLessThan(200);   // shrink-wrapped to its line
+  await expect.poll(async () => (await g.boundingBox())!.width).toBeLessThan(200);   // shrink-wrapped to its line, once the fold glide ends
   await g.dblclick();                                           // a double-click unfolds it
   await expect(g).not.toHaveClass(/collapsed/);
   await page.keyboard.press('x');
