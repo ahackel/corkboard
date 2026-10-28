@@ -12,7 +12,7 @@
 
 import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
-import { renderBodyHTML, taskProgress } from './utils/markdown.js';
+import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, firstTextLine } from './utils/frontmatter.js';
 import { inkFor, scrimFor, isHexColor, paleFill } from './utils/ink.js';
 import { childrenOf, isHidden, nodeLabel, hasLockedAncestor, isLockedEffective, parentOf, ancestors, resolveWikilink, descendantCount, nodesOf, nodeByFile } from './utils/model.js';
@@ -26,7 +26,7 @@ import './features/gestures.js';   // registers the canvas pan/zoom/marquee gest
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
-import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown } from './features/inline-edit.js';
+import { startInlineEdit, startBodyEdit, endTitleEdit, endInPlaceEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
 import { createNode, createDetachedNode, createSibling, addCardInside, newFrameAt, duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, centredAt } from './features/crud.js';
 import { bindNodeDrag, startNodeDrag, feedDragMove, commitDrag, abortDrag, settleFrames } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { guideResize, hideGuides } from './features/guides.js';
@@ -1319,14 +1319,14 @@ export function setLockedSelection(ids: Iterable<string>, locked: boolean): void
 }
 // Flip the idx-th task checkbox in a node's body and write the change back to disk.
 function toggleTask(n: MindNode, idx: number): void {
-  if (state.readOnly || isLockedEffective(n)) return;
-  let i = 0;
+  if (state.readOnly || isLockedEffective(n)) {
+    return;
+  }
   record([n.id], () => {
-    n.body = n.body.replace(/^(\s*[-*+]\s+)\[([ xX])\]/gm, (m, pre, mark) =>
-      i++ === idx ? pre + (mark === ' ' ? '[x]' : '[ ]') : m);
+    n.body = toggleTaskAt(n.body, idx);
     n.dirty = true;
   });
-  if (ui.bodyEdit && ui.bodyEdit.id === n.id) ui.bodyEdit.ta.value = n.body;   // keep an open in-card editor in sync
+  syncOpenEditor(n);
   paintNode(n); scheduleSave();
 }
 

@@ -31,6 +31,12 @@ import { touch, commitStep } from './history.js';
 // blank line under a heading and the editor must not put it back on the next open.
 const cardEditText = (n: MindNode): string => joinHeading(n.title, n.body, n.titleGap !== false);
 
+export function syncOpenEditor(n: MindNode): void {
+  if (ui.bodyEdit?.id === n.id) {
+    ui.bodyEdit.ta.value = cardEditText(n);
+  }
+}
+
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
 // single rename FUNNEL, so the outline-mode

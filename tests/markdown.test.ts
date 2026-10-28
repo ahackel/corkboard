@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderBodyHTML, taskProgress } from '../src/utils/markdown.js';
+import { renderBodyHTML, taskProgress, toggleTaskAt } from '../src/utils/markdown.js';
 
 describe('renderBodyHTML', () => {
   it('draws a rule for ---, ***, ___ — even straight under a line of text', () => {
@@ -31,5 +31,24 @@ describe('taskProgress', () => {
   it('leaves out numbered items, empty boxes, plain bullets and fenced code', () => {
     expect(taskProgress('1. [x] no\n- [ ]\n- plain\n```\n- [x] sample\n```\n- [ ] yes')).toEqual({ done: 0, total: 1 });
     expect(taskProgress('')).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe('toggleTaskAt', () => {
+  const checkboxes = (md: string): number => (renderBodyHTML(md).match(/data-ti=/g) ?? []).length;
+
+  it('ticks the task its checkbox stands for, past a sample in fenced code', () => {
+    const md = '```\n- [ ] sample\n```\n- [ ] first\n- [ ] second';
+    expect(toggleTaskAt(md, 1)).toBe('```\n- [ ] sample\n```\n- [ ] first\n- [x] second');
+  });
+
+  it('skips an empty box, which draws no checkbox', () => {
+    expect(toggleTaskAt('- [ ]\n- [x] done', 0)).toBe('- [ ]\n- [ ] done');
+  });
+
+  it('numbers exactly the checkboxes the card draws', () => {
+    for (const md of ['- [x] a\n- [ ] b', '1. [ ] no\n- [ ]\n- [ ] yes', '~~~\n- [ ] x\n~~~\n* [X] y', '- [ ]  \n- [ ] b']) {
+      expect(checkboxes(md)).toBe(taskProgress(md).total);
+    }
   });
 });

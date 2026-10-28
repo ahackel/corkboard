@@ -11,6 +11,7 @@ import { createNode, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
 import { record } from './history.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
+import { syncOpenEditor } from './inline-edit.js';
 import { esc, stripImageRef } from '../utils/markdown.js';
 import { scheduleSave } from '../data/persistence.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
@@ -74,14 +75,17 @@ export function copyFilePath(n: MindNode): void {
 // vault-local attachment anywhere in the map, queue the file itself for deletion on the next save
 // (same mechanism deleting a whole card uses for its file).
 function removeImage(n: MindNode, path: string): void {
-  if (state.readOnly || !path) return;
+  if (state.readOnly || !path) {
+    return;
+  }
   record([n.id], () => {
     n.body = stripImageRef(n.body, path);
     n.dirty = true;
   });
-  if (ui.bodyEdit && ui.bodyEdit.id === n.id) ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor
-  if (path.startsWith('attachments/') && ![...state.nodes.values()].some(m => m.body.includes(path)))
+  syncOpenEditor(n);
+  if (path.startsWith('attachments/') && ![...state.nodes.values()].some(m => m.body.includes(path))) {
     state.toDelete.push(path);
+  }
   relayout(); scheduleSave();
   setStatus('Image removed');
 }

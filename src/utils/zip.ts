@@ -24,18 +24,21 @@ export function zipBytes(files: ZipInput[]): Uint8Array {
   const enc = new TextEncoder();
   const u16 = (v: number) => [v & 0xFF, (v>>>8) & 0xFF];
   const u32 = (v: number) => [v & 0xFF, (v>>>8) & 0xFF, (v>>>16) & 0xFF, (v>>>24) & 0xFF];
+
+  // General-purpose flag bit 11: names are UTF-8. Without it Windows reads them as CP437.
+  const UTF8_NAMES = 0x0800;
   const body: (Uint8Array)[] = [], central: Uint8Array[] = [];
   let offset = 0;
   for (const f of files){
     // f.bytes (a Uint8Array, e.g. an image) is stored verbatim; otherwise f.data is UTF-8 text.
     const name = enc.encode(f.name), data = f.bytes || enc.encode(f.data ?? ''), crc = crc32(data);
     const local = [
-      ...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(0x04034b50), ...u16(20), ...u16(UTF8_NAMES), ...u16(0), ...u16(0), ...u16(0),
       ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0),
     ];
     body.push(new Uint8Array(local), name, data);
     central.push(new Uint8Array([
-      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(UTF8_NAMES), ...u16(0), ...u16(0), ...u16(0),
       ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length),
       ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
     ]), name);

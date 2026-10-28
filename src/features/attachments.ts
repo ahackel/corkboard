@@ -12,7 +12,7 @@ import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { nodeLabel } from '../utils/model.js';
-import { autosizeBody } from './inline-edit.js';
+import { autosizeBody, syncOpenEditor } from './inline-edit.js';
 import { touch, record } from './history.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
 import { isFrame, frameAt } from '../view/layout.js';
@@ -93,16 +93,24 @@ function canAttach(): boolean {
 // Append images to the end of a card's body (used by drops onto a card).
 async function appendImagesToNode(id: string, files: FileList | File[]): Promise<void> {
   const imgs = imageFiles(files);
-  if (!imgs.length || !canAttach()) return;
-  const n = state.nodes.get(id); if (!n) return;
-  if (isLockedEffective(n)) { setStatus('Locked — can’t add images'); return; }
+  if (!imgs.length || !canAttach()) {
+    return;
+  }
+  const n = state.nodes.get(id);
+  if (!n) {
+    return;
+  }
+  if (isLockedEffective(n)) {
+    setStatus('Locked — can’t add images');
+    return;
+  }
   setStatus('Adding image…');
   const md = await markdownForImages(imgs);
   record([id], () => {
     n.body = (n.body && n.body.trim()) ? n.body.replace(/\s*$/, '') + '\n\n' + md : md;
     n.dirty = true;
   });
-  if (ui.bodyEdit && ui.bodyEdit.id === id) ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor
+  syncOpenEditor(n);
   remeasure(); scheduleSave();
   setStatus(addedMsg(imgs.length));
 }

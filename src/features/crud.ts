@@ -13,7 +13,7 @@ import { screenToWorld } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { scheduleSave } from '../data/persistence.js';
 import { paintAll, selectNode, setSelectionSet, applySelection, selectedIds, nodeH, nodeW, subtreeIds, snapPt, NODE_W, FRAME_W, FRAME_H, relayout, remeasure } from '../main.js';
-import { startInlineEdit, dropBodyEdit } from './inline-edit.js';
+import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep, record } from './history.js';
 import { SPACING } from '../utils/guides.js';
 import { growFramesToHold } from './float-bar.js';
@@ -315,10 +315,12 @@ function cutCardText(n: MindNode, start: number, end: number, value: string): st
 // editor that happens to be open on the target, which is easy to forget and leaves the next commit
 // writing the pre-merge text straight back over it.
 function appendToBody(t: MindNode, md: string): void {
-  if (!md) return;
+  if (!md) {
+    return;
+  }
   t.body = (t.body && t.body.trim()) ? t.body.replace(/\s*$/, '') + '\n\n' + md : md;
   t.dirty = true;
-  if (ui.bodyEdit && ui.bodyEdit.id === t.id) ui.bodyEdit.ta.value = t.body;
+  syncOpenEditor(t);
 }
 // Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
 // drop it into a fresh card right beside it, in the same place the source lives.
@@ -539,12 +541,17 @@ export function deleteSelectionKeepChildren(): void {
 // mutates and commits it (image extraction is its own gesture, not nested in a live drag).
 export function extractImage(sourceId: string, path: string, alt: string,
     target: { toCardId: string } | { x: number; y: number; w: number; h: number }): void {
-  if (state.readOnly || !path) return;
-  const source = state.nodes.get(sourceId); if (!source) return;
+  if (state.readOnly || !path) {
+    return;
+  }
+  const source = state.nodes.get(sourceId);
+  if (!source) {
+    return;
+  }
   touch(sourceId);
   source.body = stripImageRef(source.body, path);
   source.dirty = true;
-  if (ui.bodyEdit && ui.bodyEdit.id === sourceId) ui.bodyEdit.ta.value = source.body;
+  syncOpenEditor(source);
   const md = `![${alt}](${path})`;
   if ('toCardId' in target){
     const tgt = state.nodes.get(target.toCardId);
@@ -552,7 +559,7 @@ export function extractImage(sourceId: string, path: string, alt: string,
       touch(tgt.id);
       tgt.body = (tgt.body && tgt.body.trim()) ? tgt.body.replace(/\s*$/, '') + '\n\n' + md : md;
       tgt.dirty = true;
-      if (ui.bodyEdit && ui.bodyEdit.id === tgt.id) ui.bodyEdit.ta.value = tgt.body;
+      syncOpenEditor(tgt);
     }
     setStatus('Image moved');
   } else {

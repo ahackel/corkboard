@@ -91,7 +91,10 @@ export const idbStore = (() => {
     async readBlob(path: string): Promise<Blob | null> {
       try {
         const v = await dbGet<string | Blob>(await db(), 'files', prefixOf(_mapId) + path);
-        return v ? new Blob([v], { type: 'text/plain' }) : null;
+        if (!v) {
+          return null;
+        }
+        return v instanceof Blob ? v : new Blob([v], { type: 'text/plain' });
       } catch { return null; }
     },
     watch(){ },
