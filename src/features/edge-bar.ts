@@ -15,10 +15,9 @@ import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { touchEdges, commitStep } from './history.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { byId } from '../utils/dom.js';
 import { isInteracting } from './float-bar.js';
 import { paletteChipsHTML } from './properties.js';
-import { safeInsets } from '../utils/dom.js';
+import { byId, safeInsets, placeInViewport, placePopover, closeOnOutside } from '../utils/dom.js';
 import { chevron } from '../view/icons.js';
 import { colorFill } from '../view/color.js';
 
@@ -155,18 +154,9 @@ function wire(): void {
     }
     closeColorPop(); commit(); commitStep();
   };
-  document.addEventListener('pointerdown', (ev) => {
-    const t = ev.target as Node;
-    if (colorPop.classList.contains('open') && !colorPop.contains(t) && !colorBtn.contains(t)) {
-      closeColorPop();
-    }
-    if (arrowPop.classList.contains('open') && !arrowPop.contains(t) && !arrowsBtn.contains(t)) {
-      closeArrowPop();
-    }
-    if (dashPop.classList.contains('open') && !dashPop.contains(t) && !dashBtn.contains(t)) {
-      closeDashPop();
-    }
-  }, true);
+  closeOnOutside(colorPop, colorBtn, closeColorPop);
+  closeOnOutside(arrowPop, arrowsBtn, closeArrowPop);
+  closeOnOutside(dashPop, dashBtn, closeDashPop);
 }
 function commit(): void {
   scheduleSaveBoard();
@@ -206,11 +196,7 @@ function closeDashPop(): void { dashPop.classList.remove('open'); }
 // A picker opens on the side of the bar AWAY from the line (barAbove, set by place()), so it never
 // covers what it's changing either.
 let barAbove = true;
-function placePop(pop: HTMLElement, anchor: HTMLElement): void {
-  const r = anchor.getBoundingClientRect(), br = bar.getBoundingClientRect();
-  pop.style.left = Math.max(8, r.left + r.width / 2 - pop.offsetWidth / 2) + 'px';
-  pop.style.top = (barAbove ? br.top - pop.offsetHeight - 8 : br.bottom + 8) + 'px';
-}
+const placePop = (pop: HTMLElement, anchor: HTMLElement): void => placePopover(pop, anchor, bar, !barAbove);
 function placeColorPop(): void { placePop(colorPop, colorBtn); }
 
 function syncControls(): void {
@@ -253,9 +239,7 @@ function place(): boolean {
   if (!barAbove) {
     top = b.y1 + GAP;
   }
-  const left = Math.min(Math.max(8, (b.x0 + b.x1) / 2 - bw / 2), window.innerWidth - bw - 8);
-  bar.style.left = left + 'px';
-  bar.style.top = Math.min(top, window.innerHeight - bh - 8) + 'px';
+  placeInViewport(bar, (b.x0 + b.x1) / 2 - bw / 2, top, 8);
   if (colorPop.classList.contains('open')) {
     placeColorPop();
   }

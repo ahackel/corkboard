@@ -88,3 +88,31 @@ export function placeInViewport(el: HTMLElement, left: number, top: number, marg
   el.style.top = `${t}px`;
   return { left: l, top: t };
 }
+
+// A popover is a free-floating island POP_GAP off its toolbar (`bar`, else its own button), centred on
+// the button that opened it: above, or below when there's no room — or when `below` says so (the line
+// toolbar's pickers open on the side away from the line). Every popover in the app is placed by this.
+const POP_GAP = 8;
+export function placePopover(pop: HTMLElement, anchor: HTMLElement, bar: HTMLElement = anchor, below = false): void {
+  const ar = anchor.getBoundingClientRect(), br = bar.getBoundingClientRect();
+  let top = below ? br.bottom + POP_GAP : br.top - pop.offsetHeight - POP_GAP;
+  if (top < 4) {
+    top = br.bottom + POP_GAP;
+  }
+  placeInViewport(pop, ar.left + ar.width / 2 - pop.offsetWidth / 2, top);
+}
+
+// …and every one closes the same way: a press anywhere outside it and its button, or Esc.
+export function closeOnOutside(pop: HTMLElement, trigger: HTMLElement, close: () => void): void {
+  document.addEventListener('pointerdown', (e) => {
+    const t = e.target as Node;
+    if (pop.classList.contains('open') && !pop.contains(t) && !trigger.contains(t)) {
+      close();
+    }
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && pop.classList.contains('open')) {
+      close();
+    }
+  }, true);
+}

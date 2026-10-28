@@ -85,3 +85,17 @@ test('Esc on a line\'s label puts the old label back', async ({ page }) => {
   await editLabel('dropped', 'Escape');
   await expect(page.locator('#freeEdges .fe-label')).toHaveText('kept');
 });
+
+test('a line toolbar\'s picker stays on screen at the window edge, and Esc closes it', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 1150, 250, 'Upper');
+  const b = await makeCard(page, 1150, 400, 'Lower');
+  await drawLine(page, b, 'up', a);
+  await page.locator('#ebColor').click();
+  const pop = page.locator('#ebColorPop');
+  await expect(pop).toHaveClass(/open/);
+  const box = (await pop.boundingBox())!;
+  expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await page.keyboard.press('Escape');
+  await expect(pop).not.toHaveClass(/open/);
+});

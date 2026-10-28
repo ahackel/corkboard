@@ -22,7 +22,7 @@ import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { paintAll, effectiveColor } from '../main.js';
-import { placeInViewport } from '../utils/dom.js';
+import { placePopover, closeOnOutside } from '../utils/dom.js';
 import { colorFill, THEME_BG } from '../view/color.js';
 import { scopeRootNode } from '../nav/scope.js';
 import { paleFill, inkFor } from '../utils/ink.js';
@@ -31,9 +31,6 @@ import { scheduleSave } from '../data/save.js';
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
 const pop = document.getElementById('canvasColorPop');
 const colors = document.getElementById('canvasColors');
-// 12px — the same margin every floating button keeps from the window edge, so the popover sits the
-// same "distance away" from the button as the button does from the corner.
-const POP_GAP = 8;
 let built = false;
 
 // The value the button would overwrite: the open frame's own authored colour, or the map's.
@@ -190,29 +187,15 @@ function bindCustom(): void {
     setColor(input.value);
   });
 }
-// Anchored above its own button (which lives in the bottom-right corner), clamped into the viewport.
-function position(): void {
-  if (!pop || !btn) {
-    return;
-  }
-  const r = btn.getBoundingClientRect();
-  const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  const left = r.left + r.width / 2 - pw / 2;
-  let top = r.top - ph - POP_GAP;
-  if (top < 4) {
-    top = r.bottom + POP_GAP;
-  }
-  placeInViewport(pop, left, top);
-}
 function close(): void { pop?.classList.remove('open'); }
 function toggle(): void {
-  if (!pop) {
+  if (!pop || !btn) {
     return;
   }
   if (pop.classList.contains('open')) { close(); return; }
   build();
   pop.classList.add('open');
-  position();
+  placePopover(pop, btn);   // above its own button, in the bottom-right corner
 }
 
 export function setupCanvasColor(): void {
@@ -220,17 +203,7 @@ export function setupCanvasColor(): void {
     return;
   }
   btn.onclick = (e) => { e.stopPropagation(); toggle(); };
-  document.addEventListener('pointerdown', (e) => {
-    const t = e.target as Node;
-    if (pop.classList.contains('open') && !pop.contains(t) && !btn.contains(t)) {
-      close();
-    }
-  }, true);
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      close();
-    }
-  }, true);
+  closeOnOutside(pop, btn, close);
   // Deliberately NOT marking the chip here: no map is loaded yet, the static `.swatch.inherit` in
   // index.html is already the right default, and the first paintAll marks it for real
   // (syncCanvasBackground).

@@ -21,7 +21,7 @@ import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
 import { labelEl, relayout, animateLayout } from '../main.js';
-import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
+import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, FRAME_W, FRAME_H } from '../view/geometry.js';
 import { MIN_FRAME_W, MIN_FRAME_H } from './resize.js';
 import { toggleCollapse, toggleCollapseSelection } from './fold.js';
@@ -246,22 +246,7 @@ function syncControls(): void {
 }
 
 // ---------- the colour popover ----------
-// A free-floating island 8px off the bar, as FigJam's is — no stem joining the two.
-const POP_GAP = 8;
 let activePopover: { pop: HTMLElement; anchor: HTMLElement } | null = null;
-function positionPopover(pop: HTMLElement, anchor: HTMLElement): void {
-  const ar = anchor.getBoundingClientRect();
-  // vertical offset comes from the BAR's own rect, not the trigger's — fbColor's swatch button is
-  // a smaller box than the bar, so anchoring to its own rect would hang the popover a few px low.
-  const br = bar.getBoundingClientRect();
-  const pw = pop.offsetWidth, ph = pop.offsetHeight;
-  const left = ar.left + ar.width / 2 - pw / 2;
-  let top = br.top - ph - POP_GAP;
-  if (top < 4) {
-    top = br.bottom + POP_GAP;
-  }
-  placeInViewport(pop, left, top);
-}
 function closePopovers(): void {
   colorPop.classList.remove('open');
   activePopover = null;
@@ -269,7 +254,7 @@ function closePopovers(): void {
 function togglePopover(pop: HTMLElement, anchor: HTMLElement): void {
   const willOpen = activePopover?.pop !== pop;
   closePopovers();
-  if (willOpen){ pop.classList.add('open'); activePopover = { pop, anchor }; positionPopover(pop, anchor); }
+  if (willOpen){ pop.classList.add('open'); activePopover = { pop, anchor }; placePopover(pop, anchor, bar); }
 }
 fbColor.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(colorPop, fbColor); });
 // a colour pick updates the trigger's own swatch look and closes the popover. Runs after properties.ts's own listener has already
@@ -294,17 +279,7 @@ colorPop.addEventListener('input', (e) => {
     markColorTrigger();
   }
 });
-document.addEventListener('pointerdown', (e) => {
-  const t = e.target as Node;
-  if (activePopover && !colorPop.contains(t) && !fbColor.contains(t)) {
-    closePopovers();
-  }
-}, true);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && activePopover) {
-    closePopovers();
-  }
-}, true);
+closeOnOutside(colorPop, fbColor, closePopovers);
 
 // ---------- card actions menu: rename / edit note / duplicate / export / delete / … ----------
 // Shared by the kebab button here AND the right-click context menu (features/context-menu.ts) —
@@ -477,7 +452,7 @@ function positionBar(): boolean {
   }
   placeInViewport(bar, left, top);
   if (activePopover) {
-    positionPopover(activePopover.pop, activePopover.anchor);
+    placePopover(activePopover.pop, activePopover.anchor, bar);
   }
   return true;
 }
