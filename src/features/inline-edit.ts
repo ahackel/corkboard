@@ -475,13 +475,10 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   const n = state.nodes.get(be.id);
   be.el.classList.remove('editing');
   if (!n) { commitStep(); return; }
-  // A brand-new card committed with NOTHING in it is discarded, exactly as Escape would: it has no
-  // title, no text, and so no name anything could show it under. Clicking away from a card you never typed
-  // into means you didn't want it, which is what Bear and Apple Notes do with an empty note too. Only
-  // when isNew — emptying an EXISTING card is an edit, and it keeps its file, children and position; that
-  // card reads as "No-title N" in a list (nodeLabel) and stays blank across a reload, which is what
-  // serializeMd's `mm_blank` is for.
-  if (be.isNew && !be.ta.value.trim()){
+  // An EMPTY card is allowed: clicking away from a fresh one you never typed into keeps it, a blank
+  // sticky. It reads as "No-title N" in a list (nodeLabel) and stays blank across a reload, which is what
+  // serializeMd's `mm_blank` is for. Only Escape on a fresh, still-empty card cancels the creation.
+  if (be.isNew && cancel && !be.ta.value.trim()){
     discardNewCard(n.id);
     return;
   }

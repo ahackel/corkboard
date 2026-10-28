@@ -13,7 +13,7 @@ test('a card’s right-click menu is grouped like FigJam’s, and Lock works fro
   const b = (await c.boundingBox())!;
   await page.mouse.click(b.x + 30, b.y + 15, { button: 'right' });
   expect(await menuItems(page)).toEqual([
-    'Copy', 'Cut', 'Paste', 'Duplicate', 'Duplicate as the next one', '---', 'Delete', '---', 'Edit', 'Wrap in new section', '---',
+    'Copy', 'Cut', 'Paste', 'Duplicate', 'Duplicate as the next one', '---', 'Delete', '---', 'Edit', 'Wrap in new section', 'Fit to contents', '---',
     'Copy file path', 'Download as Markdown', '---', 'Lock',
   ]);
   await page.locator('#ctxMenu .cm-item', { hasText: /^Lock/ }).click();

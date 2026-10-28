@@ -68,8 +68,8 @@ back as a title and save it as a heading: the name you just deleted, restored on
 on disk separates the two cases (`mm_position_x` predates the title-in-body format by ~100 commits, so its
 presence proves nothing), hence one flag, written by `serializeMd` only while the note has neither title nor
 body and swept away by the stale-`mm_*` pass as soon as anything is typed. `loadFromDir` skips the migration
-when it is set. A blank card is meant to be reachable; only a brand-NEW card committed empty is discarded
-(`endBodyEdit`).
+when it is set. A blank card is meant to be reachable, and a NEW card left empty is kept; only Esc on a fresh, still-empty
+card cancels it (`endBodyEdit`).
 
 **Where a node's name is SHOWN rather than edited, use `nodeLabel`** (`utils/model.ts`): title, else first
 line, else **`No-title N`**. A blank row in search or on a folder tab is never right, so
@@ -494,7 +494,7 @@ item in a column under the pointer, stacked from MEASURED heights with `LIST_GAP
 Anything with a heading, paragraphs or a lead-in line is a note and stays one card. Enter on a
 top-level card puts the next card below it, below whatever already sits there, so Enter-Enter-Enter
 builds a column. Every new card pops in (`popIn`, `data-pop`). Esc on a fresh card with text KEEPS
-it (only an empty fresh card is discarded): Esc means "done typing"; ⌘Z is how a card is unmade.
+it (only Esc on an empty fresh card cancels it): Esc means "done typing"; ⌘Z is how a card is unmade.
 
 **A status message is a TOAST, and most messages are not shown.** `setStatus` (`core/state.ts`) pops
 `#status` at the bottom for about two seconds — for what the canvas can't show by itself: a refusal

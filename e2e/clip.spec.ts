@@ -3,7 +3,7 @@ import { openBoard, makeCard, select, reload, card } from './helpers';
 
 test('a card dragged shorter than its text clips it, keeps that height, and Fit gives it back', async ({ page }) => {
   await openBoard(page);
-  const c = await makeCard(page, 400, 200, '# Long\none\ntwo\nthree\nfour\nfive\nsix\nseven');
+  const c = await makeCard(page, 400, 200, '# Long\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\ntwelve');
   const full = (await c.boundingBox())!.height;
   await select(page, c);
   const s = (await c.locator(':scope > .fh-s').boundingBox())!;

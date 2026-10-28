@@ -39,8 +39,8 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
     ...fields,
   };
 }
-// The height a FRESH card lays out at, before it has an element to measure (layoutH's own fallback is
-// the same number). Only useful as half of the centring below — a card's real height is measured.
+// A pasted list's first-guess row height, before each card has an element to measure (layoutH's own
+// fallback is the same number); createCards restacks from the measured heights.
 const NEW_CARD_H = 64;
 // Centre a fresh card on a world point — the ONE spelling of it. Every "new card HERE" gesture (the
 // canvas double-click, the canvas ⋯ menu, Space, a dropped file, a card double-clicked into a
@@ -50,7 +50,7 @@ const NEW_CARD_H = 64;
 // put on the grid (view/geometry.ts snapPt), which is the one funnel every interactive create runs through: the
 // canvas double-click, Space/N, both "New card here" menus, a dropped image, a dragged-out selection. A
 // card the user positions is on the grid whether it was placed or dragged there.
-export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NEW_CARD_H / 2 }); }
+export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NODE_W / 2 }); }
 // Make a new UNCONNECTED node (parent:null) at the viewport centre (or a given spot).
 interface CreateOpts {
   x?: number; y?: number; parent?: string | null; title?: string; color?: string;
@@ -78,6 +78,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return; }
   }
   const c = centredAt(worldAtOrCentre());
+  const isCard = (opts.type ?? 'card') === 'card';
   const n = mkNode({
     x: opts.x ?? c.x, y: opts.y ?? c.y,
     parent: parentId,
@@ -86,10 +87,11 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
     // where the minted "New Card 1" used to come from: it existed only so the
     // node had a unique filename, which is no longer the title's job.
     title: opts.title ?? '',
-    color: opts.color ?? '',
+    // A new card is a square yellow sticky (amber is the sticky pastel); a section keeps its own look.
+    color: opts.color ?? (isCard ? 'amber' : ''),
     tags: opts.tags ? [...opts.tags] : [], body: opts.body ?? '',
     type: opts.type ?? 'card',
-    w: opts.w, h: opts.h,
+    w: opts.w, h: opts.h ?? (isCard ? NODE_W : undefined),
   });
   const id = n.id;
   state.nodes.set(id, n);
@@ -317,7 +319,7 @@ export function createSibling(refId: string){
   const parent = parentOf(ref);
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t add a card here'); return; }
   const others = childrenOf(ref.parent).filter(o => o !== ref).map(o => boxOf(o));
-  const { y } = slidePast({ x: ref.x, y: ref.y + nodeH(ref) + LIST_GAP, w: nodeW(ref), h: NEW_CARD_H }, others, 'y', LIST_GAP);
+  const { y } = slidePast({ x: ref.x, y: ref.y + nodeH(ref) + LIST_GAP, w: nodeW(ref), h: NODE_W }, others, 'y', LIST_GAP);
   createNode({ x: ref.x, y, parent: ref.parent });
 }
 

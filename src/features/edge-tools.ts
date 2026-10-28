@@ -19,7 +19,7 @@ import { paintAll } from '../main.js';
 import { createNode } from './crud.js';
 import { SPACING } from '../utils/guides.js';
 import { trackPointer } from '../utils/dom.js';
-import { nodeW, nodeH, snapPt } from '../view/geometry.js';
+import { nodeW, nodeH, snapPt, NODE_W } from '../view/geometry.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
@@ -257,7 +257,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
     return;
   }
   const isCard = src.type !== 'section';
-  const w = isCard ? nodeW(src) : 240, h = isCard ? nodeH(src) : 64;
+  const w = isCard ? nodeW(src) : NODE_W, h = isCard ? nodeH(src) : NODE_W;
   const sw = nodeW(src), sh = nodeH(src);
   const horiz = side === 'left' || side === 'right';
   let x = side === 'right' ? src.x + sw + CONNECT_GAP : side === 'left' ? src.x - CONNECT_GAP - w : src.x + (sw - w) / 2;
@@ -273,7 +273,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
     }
   }
   const at = snapPt({ x, y });
-  const n = createNode({ ...at, parent: src.parent, color: isCard ? src.color : '',
+  const n = createNode({ ...at, parent: src.parent, color: isCard ? src.color : undefined,
                          w: isCard ? src.w : undefined, h: isCard ? src.h : undefined });
   if (!n) {
     return;
