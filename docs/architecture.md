@@ -644,7 +644,8 @@ Web Animations on width/height with the content clipped, a section's content wra
   measures the pill. Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
   when the pill is dragged (`moveSubtreeTo`'s `insideSection`). It takes no drops (`isSection` is false while
   folded) and has no resize handles. Anything ADDED inside one — a paste, a new card, a dropped file or
-  text — unfolds it first; `focusNode` (search, links) unfolds the sections above its target.
+  text — unfolds it first; `focusNode` (links) unfolds the sections above its target, up to the open section.
+  A SEARCH hit inside one ENTERS the innermost folded section instead (Finder's way; search.ts `goTo`), so the fold stays.
 - **A line to a card inside a folded section ends on the pill** (`edgeEnd` in view/free-edges.ts:
   `firstVisible`, its pinned port dropped); a line between two cards of the same folded section is hidden.
 

@@ -18,7 +18,8 @@ import { esc } from '../utils/markdown.js';
 import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible, ancestors } from '../utils/model.js';
 import { allTags, hasTag, tagKey, cleanTag, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
-import { outOfScope } from '../nav/scope.js';
+import { outOfScope, isScopeRoot } from '../nav/scope.js';
+import { openSection, popScopeFor } from '../nav/sections.js';
 import { paintAll } from '../main.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { byId } from '../utils/dom.js';
@@ -217,7 +218,25 @@ function stepHit(by: number): void {
   active = (active + by + cardHits.length) % cardHits.length;
   searchResults.classList.remove('open');
   markActive();
-  focusNode(cardHits[active]);
+  goTo(cardHits[active]!, false);
+}
+// Reach a hit the way Finder reaches a file: a folded section on the way is ENTERED, never unfolded,
+// and a section hit is framed as it is. Only a folded CARD hit opens, on confirm.
+function goTo(n: MindNode, confirm: boolean): void {
+  popScopeFor(n);
+  let folded: MindNode | undefined;
+  for (const p of ancestors(n)) {
+    if (isScopeRoot(p)) {
+      break;
+    }
+    if (p.collapsed && !folded) {
+      folded = p;
+    }
+  }
+  if (folded) {
+    openSection(folded);
+  }
+  focusNode(n, confirm && n.type !== 'section');
 }
 // Make the `#word` being typed (or the suggestion picked for it) a chip.
 function chipFromTyping(tag?: string): boolean {
@@ -240,7 +259,7 @@ function gotoHit(id: string): void {
     return;
   }
   closeSearch();   // jumping to a card dismisses the search
-  focusNode(n, true);   // reveal ancestors level by level AND open the hit itself
+  goTo(n, true);
 }
 
 searchBox.addEventListener('input', () => {

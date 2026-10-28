@@ -89,3 +89,18 @@ test('leaving a section never moves it, even when a card inside was dragged past
   expect(inner.x).toBeGreaterThanOrEqual(box.x); expect(inner.y).toBeGreaterThanOrEqual(box.y);
   expect(errors).toEqual([]);
 });
+
+test('going to a search hit inside a folded section enters the section and leaves it folded', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await page.keyboard.press('Control+f');
+  await page.keyboard.type('Second inside');
+  await expect(page.locator('#searchCount')).toHaveText('1/1');   // read out of the folded section
+  await page.keyboard.press('Enter');
+  await expect(page.locator('body')).toHaveClass(/scoped/);
+  await expect(card(page, 'Second inside')).toBeVisible();
+  await page.locator('#folderName').click();                     // back out to the map
+  await expect(page.locator('#world .node.section-folded', { hasText: 'Box' })).toBeVisible();   // never unfolded
+  expect(errors).toEqual([]);
+});

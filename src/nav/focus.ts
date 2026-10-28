@@ -8,6 +8,7 @@ import { store } from '../data/persistence.js';
 import { snapPt, nodeW } from '../view/geometry.js';
 import { createNode } from '../features/crud.js';
 import { popScopeFor } from './sections.js';
+import { isScopeRoot } from './scope.js';
 import { selectNode } from '../features/selection.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -17,8 +18,17 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
     return;
   }
   const before = layoutSnapshot();             // pre-reveal frame to glide away from
-  // Unfold the sections it's tucked inside (and, when openTarget, the card itself) so it's on the canvas.
-  const toReveal = [...ancestors(target)].filter(p => p.collapsed);
+  // Unfold the sections it's tucked inside (and, when openTarget, the card itself) so it's on the canvas —
+  // only up to the open section: what's above it is not on the canvas, folded or not.
+  const toReveal: MindNode[] = [];
+  for (const p of ancestors(target)) {
+    if (isScopeRoot(p)) {
+      break;
+    }
+    if (p.collapsed) {
+      toReveal.push(p);
+    }
+  }
   if (openTarget && target.collapsed) {
     toReveal.push(target);
   }
