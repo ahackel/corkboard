@@ -28,11 +28,11 @@ import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { worldAtOrCentre } from '../view/camera.js';
-import { scheduleSave } from '../data/persistence.js';
 import { readAll, afterReading } from '../data/lazy.js';
 import { remeasure } from '../main.js';
 import { snapPt } from '../view/geometry.js';
 import { setSelectionSet, selectedIds } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or

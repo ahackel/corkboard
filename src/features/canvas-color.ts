@@ -17,7 +17,6 @@
 import { state, setStatus, type MindNode, stage } from '../core/state.js';
 import { nodeLabel, isLockedEffective, ancestors } from '../utils/model.js';
 import { record, touchCanvas, commitStep } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
@@ -27,6 +26,7 @@ import { placeInViewport } from '../utils/dom.js';
 import { colorFill, THEME_BG } from '../view/color.js';
 import { scopeRootNode } from '../nav/scope.js';
 import { paleFill, inkFor } from '../utils/ink.js';
+import { scheduleSave } from '../data/save.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
 const pop = document.getElementById('canvasColorPop');

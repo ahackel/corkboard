@@ -39,7 +39,6 @@ import { noteTags, wearsTags } from './utils/tags.js';
 import { record } from './features/history.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
-import { scheduleSave } from './data/persistence.js';
 import { readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
 import { scopeActive, isScopeRoot, canOpen } from './nav/scope.js';
@@ -55,6 +54,7 @@ import { toggleCollapse } from './features/fold.js';
 import { openFrame, syncScopeChrome } from './nav/frames.js';
 import { focusByTitle } from './nav/focus.js';
 import { applyReadOnly } from './features/read-only.js';
+import { scheduleSave } from './data/save.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();

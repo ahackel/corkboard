@@ -6,8 +6,10 @@ import { byId } from '../utils/dom.js';
 import { state, setStatus } from '../core/state.js';
 import { syncFloatBar } from './float-bar.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
-import { flushSave, store, loadFromDir } from '../data/persistence.js';
+import { store } from '../data/persistence.js';
 import { selectNode } from './selection.js';
+import { flushSave } from '../data/save.js';
+import { loadFromDir } from '../data/load.js';
 
 const roBadge = byId<HTMLButtonElement>('roBadge');
 export function applyReadOnly(): void {

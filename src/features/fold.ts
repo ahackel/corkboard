@@ -6,9 +6,9 @@ import { animateLayout } from '../main.js';
 import { afterReading } from '../data/lazy.js';
 import { record } from './history.js';
 import { syncFloatBar } from './float-bar.js';
-import { scheduleSave } from '../data/persistence.js';
 import { outOfScope } from '../nav/scope.js';
 import { setSelectionSet } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 // Toggle one node's collapse: folds it down to just its title — hides its body and, if it has
 // children, folds them (and everything below) too. A leaf with a body can fold its body alone.

@@ -10,9 +10,9 @@ import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '
 import { SPACING } from '../utils/guides.js';
 import { record } from './history.js';
 import { growFramesToHold } from './float-bar.js';
-import { scheduleSave } from '../data/persistence.js';
 import { relayout, remeasure, animateLayout } from '../main.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
+import { scheduleSave } from '../data/save.js';
 
 // What a tidy acts on: the selected nodes that aren't inside another selected one (a frame carries its
 // own cards along) and aren't locked.

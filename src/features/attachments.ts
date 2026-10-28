@@ -5,7 +5,7 @@
 import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
-import { store, scheduleSave } from '../data/persistence.js';
+import { store } from '../data/persistence.js';
 import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
 import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
 import { relayout, remeasure } from '../main.js';
@@ -21,6 +21,7 @@ import { isFrame, frameAt } from '../view/layout.js';
 import { classMarker } from '../utils/dom.js';
 import { IMAGE_W, IMAGE_H } from '../view/geometry.js';
 import { selectNode } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 function imgExt(file: File): string {
   const m = (file.name || '').match(/\.[a-z0-9]+$/i);

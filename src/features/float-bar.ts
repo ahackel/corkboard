@@ -9,7 +9,6 @@
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { subtreesBox } from '../view/layout.js';
 import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
@@ -30,6 +29,7 @@ import { openFrame } from '../nav/frames.js';
 import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
 import { selectedIds, selectNode } from './selection.js';
 import { setLockedSelection, anyLocked } from './lock.js';
+import { scheduleSave } from '../data/save.js';
 
 
 const bar = byId('floatBar');

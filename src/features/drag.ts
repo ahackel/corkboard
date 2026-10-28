@@ -12,7 +12,6 @@ import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, 
 import { detachParentId } from '../nav/scope.js';
 import { isFrame, collectsCards, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
-import { scheduleSave } from '../data/persistence.js';
 import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
@@ -28,6 +27,7 @@ import { growFramesToHold } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { selectNode, setSelectionSet, toggleSel } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along

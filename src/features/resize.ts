@@ -10,8 +10,8 @@ import { paintNode, relayout } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { settleFrames } from './drag.js';
 import { growFramesToHold, syncFloatBar } from './float-bar.js';
-import { scheduleSave } from '../data/persistence.js';
 import { trackPointer } from '../utils/dom.js';
+import { scheduleSave } from '../data/save.js';
 
 // a frame is never narrower than a normal card
 export const MIN_FRAME_W = NODE_W, MIN_FRAME_H = 120;

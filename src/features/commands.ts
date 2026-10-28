@@ -8,7 +8,7 @@ import { setCollapsedSelection, toggleCollapseSelection, foldScope, expandAll } 
 import { selectedIds, selectAll, selectNode, taggableSelection } from './selection.js';
 import { focusOrFit } from '../nav/focus.js';
 import { openSearch, searchActive, closeSearch } from './search.js';
-import { flushSave, store, exportZip } from '../data/persistence.js';
+import { store } from '../data/persistence.js';
 import { openPalette, type Command, setPaletteSource, paletteOpen, closePalette } from './palette.js';
 import { undo, redo } from './history.js';
 import { clearEdgeSelection, deleteSelectedEdge, connectSelection } from './edge-tools.js';
@@ -26,6 +26,8 @@ import { canEnter } from '../nav/scope.js';
 import { openGridMenu } from '../view/grid.js';
 import { byId } from '../utils/dom.js';
 import { showStart } from '../boot.js';
+import { flushSave } from '../data/save.js';
+import { exportZip } from '../data/zip-io.js';
 
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
 // what a Space tap used to.

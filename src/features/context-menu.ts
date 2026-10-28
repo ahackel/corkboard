@@ -13,7 +13,6 @@ import { record } from './history.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
 import { syncOpenEditor } from './inline-edit.js';
 import { esc, stripImageRef } from '../utils/markdown.js';
-import { scheduleSave } from '../data/persistence.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
 import { relayout } from '../main.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
@@ -25,6 +24,7 @@ import { nodeLabel } from '../utils/model.js';
 import { byId, placeInViewport } from '../utils/dom.js';
 import { exitScope, goToScopeDepth } from '../nav/frames.js';
 import { selectAll } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 const menu = document.createElement('div');
 menu.id = 'ctxMenu';

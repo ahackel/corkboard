@@ -17,7 +17,6 @@ import { cardMarkdown, setNoteText, firstTextLine, headingOnLine } from '../util
 import { linkPaste } from '../utils/markdown.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
-import { scheduleSave } from '../data/persistence.js';
 import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
@@ -25,6 +24,7 @@ import { extractToCard, discardNewCard } from './crud.js';
 import { growFramesToHold, syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 import { selectNode } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 // The text the editor holds is the note with its title back on the front as a heading — exactly the
 // file's own body (utils/frontmatter.ts cardMarkdown), which makes the editor a view of the note rather

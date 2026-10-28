@@ -11,7 +11,7 @@
 // The mechanism (turning a listing into nodes) is persistence.ts readFolder's.
 // ============================================================
 import { state, type MindNode } from '../core/state.js';
-import { store, readFolder } from './persistence.js';
+import { store } from './persistence.js';
 import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
 import { remeasure } from '../main.js';
@@ -22,6 +22,7 @@ import { searchHolds } from '../features/search.js';
 import { forgetImages } from '../features/images.js';
 import { scope } from '../nav/scope.js';
 import { dirOf } from '../utils/filenames.js';
+import { readFolder } from './load.js';
 
 // The folded frames still holding unread notes among `ids` and everything inside them.
 function unreadIn(ids: Iterable<string>): MindNode[] {

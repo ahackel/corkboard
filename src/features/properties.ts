@@ -5,11 +5,11 @@
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
 import { SWATCH_BG, PICKER_ROWS } from '../view/color.js';
+import { scheduleSave } from '../data/save.js';
 
 export interface PropEls {
   colors: HTMLElement;

@@ -4,11 +4,12 @@ import { layoutSnapshot, relayout, animateReflow } from '../main.js';
 import { ancestors, subtreeIds, resolveWikilink } from '../utils/model.js';
 import { record } from '../features/history.js';
 import { frameBox } from '../view/camera.js';
-import { store, scheduleSave } from '../data/persistence.js';
+import { store } from '../data/persistence.js';
 import { snapPt, nodeW } from '../view/geometry.js';
 import { createNode } from '../features/crud.js';
 import { popScopeFor } from './frames.js';
 import { selectNode } from '../features/selection.js';
+import { scheduleSave } from '../data/save.js';
 
 // Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {

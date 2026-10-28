@@ -119,3 +119,21 @@ export function retargetLinks(body: string, renames: Map<string, string>): strin
     return into ? `[[${into}${alias ?? ''}]]` : m;
   });
 }
+
+// The folders to try removing after notes left `emptied` folders: each of those and every folder above
+// it, deepest first (emptying `A/B/` can empty `A/`), but never one that still holds a note in `held`.
+export function prunableDirs(emptied: Iterable<string>, held: Iterable<string | null>): string[] {
+  const live = new Set<string>();
+  for (const f of held) {
+    for (let d = f ? dirOf(f) : ''; d; d = dirOf(d.slice(0, -1))) {
+      live.add(d);
+    }
+  }
+  const dirs = new Set<string>();
+  for (const d0 of emptied) {
+    for (let d = d0; d; d = dirOf(d.slice(0, -1))) {
+      dirs.add(d);
+    }
+  }
+  return [...dirs].filter(d => !live.has(d)).sort((a, b) => b.length - a.length);
+}

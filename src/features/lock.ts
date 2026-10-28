@@ -4,7 +4,7 @@ import { state, setStatus } from '../core/state.js';
 import { record } from './history.js';
 import { paintAll } from '../main.js';
 import { syncFloatBar } from './float-bar.js';
-import { scheduleSave } from '../data/persistence.js';
+import { scheduleSave } from '../data/save.js';
 
 // Lock/unlock every selected card (the float bar's lock toggle / L). Locking freezes that card in place — no move,
 // (un)collapse, rename/body/color/type/layout edit, add-child, or delete — and cascades so its
