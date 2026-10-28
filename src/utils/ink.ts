@@ -50,7 +50,7 @@ function parseHex(c: string): [number, number, number] | null {
 }
 // A frame's PALE fill: its colour washed most of the way to white — what styles.css paints the box in
 // (`.node.frame`'s color-mix, same 32%), spelled here for the one place JS needs it: the canvas while
-// that frame is open (main.ts canvasFill). A fill it can't read comes back unchanged.
+// that frame is open (features/canvas-color.ts canvasFill). A fill it can't read comes back unchanged.
 export const FRAME_WASH = 0.32;
 export function paleFill(c: string): string {
   const rgb = parseHex(c);

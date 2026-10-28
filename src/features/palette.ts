@@ -3,8 +3,8 @@
 // canvas can carry no permanent toolbar (docs/PRODUCT.md, principle 1) without anything becoming
 // unreachable — and so a shortcut is learned by seeing it, every time the action is run from here.
 //
-// The palette only DISPLAYS commands; main.ts builds the list (paletteCommands), since that is where
-// every action function is already in scope. A command's `when` hides it while it can't apply
+// The palette only DISPLAYS commands; features/commands.ts builds the list (paletteCommands), beside
+// the keyboard shortcuts for the same actions. A command's `when` hides it while it can't apply
 // (nothing selected, read-only), rather than listing it disabled: a list of things you can't do is
 // noise in a box you type into.
 // ============================================================

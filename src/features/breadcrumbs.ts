@@ -20,10 +20,10 @@ import { state } from '../core/state.js';
 import { nodeLabel } from '../utils/model.js';
 import { store } from '../data/persistence.js';
 import { scope, scopeActive } from '../nav/scope.js';
-import { goToScopeDepth } from '../main.js';
 import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';
 import { byId } from '../utils/dom.js';
+import { goToScopeDepth } from '../nav/frames.js';
 
 const homeBar = byId('homeBar');
 const mapCrumb = byId('folderName');

@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { openBoard, makeCard, clickAway } from './helpers';
+import { openBoard, makeCard, clickAway, select } from './helpers';
 
 const editor = (c: Locator) => c.locator('textarea.body-edit');
 // Open a fresh card with N and leave its editor open, for the keys under test.
@@ -114,4 +114,23 @@ test('double-clicking a word in a card opens the editor with the caret on it', a
   await expect(ta).toBeFocused();
   const caret = await ta.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart));
   expect(caret).toMatch(/^ta\*\* gamma$|^a\*\* gamma$/);     // mid-"beta", wherever the half falls
+});
+
+test('an image dropped beside the open editor keeps the card\'s title', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Shopping\n\nmilk');
+  await select(page, c);
+  await page.keyboard.press('e');
+  await expect(editor(c)).toBeVisible();
+
+  // onto the card itself, not into its textarea
+  await c.evaluate(el => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(new File([new Uint8Array([137, 80, 78, 71])], 'pic.png', { type: 'image/png' }));
+    el.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+  });
+  await expect(editor(c)).toHaveValue(/^# Shopping\n\nmilk\n\n!\[/);
+
+  await clickAway(page);
+  await expect(c.locator('.body h1')).toHaveText('Shopping');
 });

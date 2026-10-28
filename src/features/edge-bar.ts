@@ -17,10 +17,10 @@ import { touchEdges, commitStep } from './history.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { byId } from '../utils/dom.js';
 import { isInteracting } from './float-bar.js';
-import { colorFill } from '../main.js';
 import { paletteChipsHTML } from './properties.js';
 import { safeInsets } from '../utils/dom.js';
 import { chevron } from '../view/icons.js';
+import { colorFill } from '../view/color.js';
 
 const bar = byId('edgeBar');
 const colorBtn = byId<HTMLButtonElement>('ebColor');
@@ -306,6 +306,7 @@ export function syncEdgeBar(): void {
 // where the result will appear rather than in a bar off to one side.
 const labelEdit = byId<HTMLInputElement>('ebLabelEdit');
 let editingId: string | null = null;
+let labelBefore = '';
 
 export function startLabelEdit(edgeId: string): void {
   if (state.readOnly) {
@@ -317,6 +318,7 @@ export function startLabelEdit(edgeId: string): void {
   }
   editingId = edgeId;
   touchEdges();                       // one undo step for the whole editing session
+  labelBefore = e.label;
   labelEdit.value = e.label;
   labelEdit.classList.add('open');
   placeLabelEdit();
@@ -346,17 +348,23 @@ function placeLabelEdit(): void {
   labelEdit.style.left = (x - labelEdit.offsetWidth / 2) + 'px';
   labelEdit.style.top = (y - labelEdit.offsetHeight / 2) + 'px';
 }
+
 function endLabelEdit(commitIt: boolean): void {
   if (!editingId) {
     return;
   }
   const e = state.edges.find(x => x.id === editingId);
-  const id = editingId; editingId = null;
+  editingId = null;
   labelEdit.classList.remove('open');
-  if (e && commitIt) { e.label = labelEdit.value.trim(); scheduleSaveBoard(); }
+  if (e && commitIt) {
+    e.label = labelEdit.value.trim();
+    scheduleSaveBoard();
+  } else if (e) {
+    // typing wrote the label live, so a cancel has to put it back
+    e.label = labelBefore;
+  }
   paintFreeEdges();
   commitStep();                       // a cancelled edit nets no change, so the step discards itself
-  void id;
 }
 labelEdit.addEventListener('input', () => {
   const e = editingId ? state.edges.find(x => x.id === editingId) : null;

@@ -11,10 +11,10 @@ import { createNode, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
 import { record } from './history.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
+import { syncOpenEditor } from './inline-edit.js';
 import { esc, stripImageRef } from '../utils/markdown.js';
-import { scheduleSave } from '../data/persistence.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
-import { exitScope, goToScopeDepth, selectAll, relayout } from '../main.js';
+import { relayout } from '../main.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
 // — this creates a deliberate two-way import cycle with float-bar.ts (which imports openMenu /
 // copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
@@ -22,6 +22,9 @@ import { exitScope, goToScopeDepth, selectAll, relayout } from '../main.js';
 import { buildCardMenu } from './float-bar.js';
 import { nodeLabel } from '../utils/model.js';
 import { byId, placeInViewport } from '../utils/dom.js';
+import { exitScope, goToScopeDepth } from '../nav/frames.js';
+import { selectAll } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 const menu = document.createElement('div');
 menu.id = 'ctxMenu';
@@ -93,9 +96,7 @@ function removeImage(n: MindNode, path: string): void {
     n.body = stripImageRef(n.body, path);
     n.dirty = true;
   });
-  if (ui.bodyEdit && ui.bodyEdit.id === n.id) {
-    ui.bodyEdit.ta.value = n.body;   // sync an open in-card editor
-  }
+  syncOpenEditor(n);
   if (path.startsWith('attachments/') && ![...state.nodes.values()].some(m => m.body.includes(path))) {
     state.toDelete.push(path);
   }

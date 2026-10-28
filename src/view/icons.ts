@@ -11,16 +11,6 @@ for (const [path, svg] of Object.entries(modules)) {
   ICONS[name] = svg as string;
 }
 
-// The folder outline the FRAME kind wears. A frame renders as a box with a folder TAB above its
-// top-left corner, so every icon that stands for one is a folder: the kind chip and all three of its
-// layout chips (features/float-bar.ts), and every
-// crumb of the open-frame path (features/breadcrumbs.ts). Kept here — a module none of those can
-// cycle with — as the ONE spelling of the shape, and as a bare path so each caller can drop its own
-// content blocks inside it. Its interior (below the tab, inside the stroke) is roughly x 5.5…19,
-// y 9.5…18. It fills 3.5…20.5 × 4…20 — the full width the image/query icons take, so a folder
-// doesn't read as the small one of the set.
-export const FOLDER_PATH = '<path d="M3.5 5.5A1.5 1.5 0 0 1 5 4h3.4l2 2.5h8.6A1.5 1.5 0 0 1 20.5 8v10A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5Z"/>';
-
 // The dropdown chevron EVERY toolbar button that opens a menu or popover carries after its face (styles
 // .fb-dd), for the buttons whose face is rebuilt in JS and so can't take a data-icon placeholder.
 export function chevron(): string { return `<span class="ic fb-chev">${ICONS.chevron ?? ''}</span>`; }
@@ -33,3 +23,10 @@ export function mountIcons(root: ParentNode = document): void {
     }
   });
 }
+
+// small closed-padlock badge shown at a locked card's upper-left corner; exported for the
+// float bar's lock toggle (features/float-bar.ts), which shares this one glyph.
+export const LOCK_BADGE_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
+
+// …and the open one (unlocked), for the float bar's lock toggle.
+export const ICON_LOCK_OPEN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>`;

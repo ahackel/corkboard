@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { snapBox, snapEdges, type Box } from '../src/utils/guides.js';
+import { snapBox, snapEdges, slidePast, type Box } from '../src/utils/guides.js';
 
 const b = (x: number, y: number, w = 100, h = 50): Box => ({ x, y, w, h });
 
@@ -65,5 +65,18 @@ describe('snapEdges', () => {
   it('ignores an axis that is not dragged', () => {
     const s = snapEdges(b(2, 0, 104, 50), { y: 'hi' }, [b(0, 200)], 6);
     expect([s.dx, s.guides.length]).toEqual([0, 0]);
+  });
+});
+
+describe('slidePast', () => {
+  const a = { x: 100, y: 0, w: 50, h: 50 }, b = { x: 160, y: 10, w: 50, h: 50 };
+
+  it('steps past every box in the way, a gap clear of each', () => {
+    expect(slidePast({ x: 90, y: 0, w: 40, h: 40 }, [a, b], 'x', 10)).toEqual({ x: 220, y: 0, w: 40, h: 40 });
+    expect(slidePast({ x: 100, y: 20, w: 40, h: 40 }, [a, b], 'y', 10)).toEqual({ x: 100, y: 60, w: 40, h: 40 });
+  });
+
+  it('stays put when nothing is in the way', () => {
+    expect(slidePast({ x: 0, y: 0, w: 40, h: 40 }, [a, b], 'x', 10)).toEqual({ x: 0, y: 0, w: 40, h: 40 });
   });
 });

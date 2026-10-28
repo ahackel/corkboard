@@ -1,5 +1,5 @@
 // ---------- recently-used custom colours ----------
-// The palette's 11 keys are fixed, but a custom colour (`color: "#ff8800"` — see main.ts's
+// The palette's 11 keys are fixed, but a custom colour (`color: "#ff8800"` — see view/color.ts's
 // colorClass/applyColorVars) is picked from the OS colour sheet and would otherwise be unrepeatable: no
 // chip to click a second time, and no way to give a sibling card the shade you chose a minute ago.
 //
@@ -14,7 +14,7 @@
 // recolour the last card away from a shade and it stops being offered, without a cache to invalidate.
 import { state } from '../core/state.js';
 import { isHexColor } from '../utils/ink.js';
-import { readStrings, writeJSON } from '../utils/local-json.js';
+import { readStrings, pushRecent } from '../utils/local-json.js';
 
 const MRU_KEY = 'corkboard.colorMru';
 const MRU_MAX = 8;    // what's remembered
@@ -23,7 +23,7 @@ const SHOWN_MAX = 6;  // what fits on the row (see .swatches in styles.css)
 // Everything compares and de-duplicates on this form. The native input always yields lowercase
 // `#rrggbb`, but a hand-authored or imported note can carry `#FFF` or `#FFE9A8` — without folding
 // those together the same colour shows up as two chips.
-export function normalizeColor(c: string): string {
+function normalizeColor(c: string): string {
   const h = c.trim().toLowerCase();
   if (!isHexColor(h)) {
     return '';
@@ -38,11 +38,9 @@ const loadMru = (): string[] => readStrings(MRU_KEY);
 // drag's worth of intermediates.
 export function rememberColor(color: string): void {
   const c = normalizeColor(color);
-  if (!c) {
-    return;
+  if (c) {
+    pushRecent(MRU_KEY, c, MRU_MAX);
   }
-  const mru = [c, ...loadMru().filter(x => x !== c)].slice(0, MRU_MAX);
-  writeJSON(MRU_KEY, mru);
 }
 // Every distinct custom colour in the open map, in first-seen order.
 function mapColors(): string[] {

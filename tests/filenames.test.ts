@@ -1,7 +1,7 @@
 // A note's filename tracks its text, never collides (case-insensitively), and a rename carries
 // the [[wikilinks]] that point at it.
 import { describe, expect, it } from 'vitest';
-import { safeName, slugStem, desiredFileFor, retargetLinks, parentFileOf, isFrameNote } from '../src/utils/filenames.js';
+import { safeName, slugStem, desiredFileFor, retargetLinks, parentFileOf, isFrameNote, prunableDirs } from '../src/utils/filenames.js';
 
 const node = (title: string, body = '', file: string | null = null, id = 'me') => ({ id, file, title, body });
 
@@ -82,5 +82,13 @@ describe('a frame is a folder', () => {
   });
   it('never names a card _index', () => {
     expect(desiredFileFor(node('_index'), new Map(), 'A/')).toBe('A/_index 2.md');
+  });
+});
+
+describe('prunableDirs', () => {
+  it('climbs from each emptied folder, deepest first, keeping any folder that still holds a note', () => {
+    expect(prunableDirs(['A/B/C/'], ['A/keep.md'])).toEqual(['A/B/C/', 'A/B/']);
+    expect(prunableDirs(['A/B/', 'X/'], [null, 'Y/n.md'])).toEqual(['A/B/', 'A/', 'X/']);
+    expect(prunableDirs(['A/'], ['A/B/n.md'])).toEqual([]);
   });
 });

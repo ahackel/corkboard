@@ -1,6 +1,6 @@
 // ---------- the canvas colour button (#canvasColorBtn, bottom-right beside the grid controls) ----------
 // ONE button meaning "the colour of the canvas I'm standing on". What that IS depends on where you
-// are, and main.ts's canvasOwner is the single place that decides:
+// are, and features/canvas-color.ts's canvasOwner is the single place that decides:
 //   · at the TOP level there's no frame, so it edits the MAP's own colour — state.canvasColor,
 //     per-map in settings.json beside the grid, so it travels with the vault rather than the browser.
 //   · inside an OPEN frame the canvas already IS that frame's interior and wears its fill, so the
@@ -14,16 +14,19 @@
 // copied. What can't be shared is createProperties itself — that whole factory is defined over node
 // ids, and at the top level the target isn't a node. Hence this module: the same row, a different
 // target, and its own undo bookkeeping for the half that isn't a node (history.ts's touchCanvas).
-import { state, setStatus } from '../core/state.js';
-import { nodeLabel, isLockedEffective } from '../utils/model.js';
+import { state, setStatus, type MindNode, stage } from '../core/state.js';
+import { nodeLabel, isLockedEffective, ancestors } from '../utils/model.js';
 import { record, touchCanvas, commitStep } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { paintAll, colorFill, canvasOwner, syncCanvasBackground, canvasSurface } from '../main.js';
+import { paintAll, effectiveColor } from '../main.js';
 import { placeInViewport } from '../utils/dom.js';
+import { colorFill, THEME_BG } from '../view/color.js';
+import { scopeRootNode } from '../nav/scope.js';
+import { paleFill, inkFor } from '../utils/ink.js';
+import { scheduleSave } from '../data/save.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
 const pop = document.getElementById('canvasColorPop');
@@ -61,7 +64,7 @@ function applyColor(color: string): void {
 }
 // Repainting a frame means repainting the cards that INHERIT from it, so the whole scope. The map's
 // own colour reaches the background — and the free edges' LABELS, whose ink is derived from the fill
-// they sit on (view/free-edges.ts, main.ts canvasSurface), so a label left unpainted keeps ink chosen
+// they sit on (view/free-edges.ts, features/canvas-color.ts canvasSurface), so a label left unpainted keeps ink chosen
 // against the colour the canvas used to be. Still not paintAll: those two are the whole of what a map
 // colour touches, and this runs once per pointer move over the native colour sheet.
 function repaint(): void {
@@ -228,10 +231,84 @@ export function setupCanvasColor(): void {
       close();
     }
   }, true);
-  // Deliberately NOT marking the chip here. setupCanvasColor runs while main.ts's own body is still
-  // evaluating (beside setupTheme/setupGrid), and markCanvasColorBtn reads colorFill → SWATCH_BG,
-  // which main.ts doesn't declare until much further down — reading it now is a TDZ crash that takes
-  // the whole boot with it. The static `.swatch.inherit` in index.html is already the right default,
-  // and the first paintAll marks it for real (syncCanvasBackground). Same shape as setupGrid, whose
-  // first paint likewise waits for the map's settings.json to load.
+  // Deliberately NOT marking the chip here: no map is loaded yet, the static `.swatch.inherit` in
+  // index.html is already the right default, and the first paintAll marks it for real
+  // (syncCanvasBackground).
+}
+
+// While a frame is OPEN the canvas IS its interior, so the canvas takes the frame's own fill — the
+// very colour its box was wearing a moment before, through the same resolver its box used
+// (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no frame and the
+// canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
+// #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
+// the grid still draws over it.
+// A FRAME's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
+// the cards in it, which take its full colour, read on it the same as they did inside the box.
+// …and, for a frame, only when that colour is AUTHORED somewhere up the chain. effectiveColor
+// deliberately falls back to the theme's neutral card fill for a frame nobody has coloured, and
+// painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
+// the light theme, where the near-white fill swallows the floating chrome sitting on the canvas — the
+// ghost-card pill, the status line. The test is authorship, not the hex, so a frame explicitly
+// coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
+function hasAuthoredColor(n: MindNode): boolean {
+  return [n, ...ancestors(n)].some(a => !!a.color);
+}
+// WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the frame you're
+// standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
+// and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
+// writes can't become two different things.
+export const canvasOwner = (): MindNode | null => scopeRootNode();
+// The fill actually behind the cards right now — the one input both the background and the grid ink
+// are derived from. null = none, and the theme's own background shows through as before.
+//
+// An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
+// rather than to nothing: what's behind an uncoloured frame is whatever is behind IT. Standing inside a frame nobody coloured
+// used to discard the canvas colour the map itself was painted in — so
+// going in turned a teal board grey, and coming out turned it teal again.
+function canvasFill(): string | null {
+  const owner = canvasOwner();
+  if (!owner || !hasAuthoredColor(owner)) {
+    return colorFill(state.canvasColor);
+  }
+  const fill = colorFill(effectiveColor(owner));
+  return fill && paleFill(fill);
+}
+// The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
+// free edge's label plate is painted in — a label is a small
+// patch of the canvas laid over the line, so its ink is measured against exactly this.
+export function canvasSurface(): string { return canvasFill() ?? THEME_BG; }
+// The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
+// leaves it either invisible or harsh. So re-derive --grid-pat from the fill that's really behind it,
+// by the theme's own 55/45 recipe with the fill standing in for --grid and, for --text, the direction
+// that HAS contrast against that fill — inkFor, the same call a card's own ink goes through, so an
+// arbitrary picked colour needs no special case. Written on #stage, which is where the fill is set;
+// #grid is its child and declares --grid-ink from it, so one write covers both grid levels.
+export function syncCanvasBackground(): void {
+  const fill = canvasFill();
+  if (fill) {
+    stage.style.setProperty('--canvas-bg', fill);
+    stage.style.setProperty('--grid-pat', `color-mix(in srgb, ${fill} 55%, ${inkFor(fill)} 45%)`);
+  } else {
+    stage.style.removeProperty('--canvas-bg');
+    stage.style.removeProperty('--grid-pat');
+  }
+  markCanvasColorBtn();   // the button's own chip mirrors whatever it would edit
+  syncThemeColor(fill);
+}
+// The browser's theme colour (Safari's bars, an installed app's title bar) is the canvas you're standing
+// on, so the chrome around the board reads as part of it; the board's own grey when it has no colour. A
+// fill can be a palette VARIABLE, which a meta tag can't read, so it is resolved to rgb on a hidden probe
+// — not off #stage, whose background is mid-transition right after a change.
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+let themeProbe: HTMLElement | null = null;
+function syncThemeColor(fill: string | null | undefined): void {
+  if (!themeMeta) {
+    return;
+  }
+  if (!themeProbe) { themeProbe = document.createElement('i'); themeProbe.hidden = true; document.body.append(themeProbe); }
+  themeProbe.style.color = fill || 'var(--bg)';
+  const rgb = getComputedStyle(themeProbe).color;
+  if (themeMeta.getAttribute('content') !== rgb) {
+    themeMeta.setAttribute('content', rgb);
+  }
 }

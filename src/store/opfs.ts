@@ -82,7 +82,6 @@ export const opfsStore = {
   },
 
   async pick(): Promise<PickResult> { try { await this._root(); this._opened = true; return 'ok'; } catch { return 'error'; } },
-  async openRecent(): Promise<PickResult> { return this.pick(); },
   async listTree(under: string, fold: FoldTest){ return listTree(await this._root(), under, fold); },
   async removeDir(dir: string){ return removeEmptyDir(await this._root(), dir); },
   async write(path: string, data: string | Blob){ return writeFile(await this._root(), path, data); },

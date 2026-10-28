@@ -9,9 +9,8 @@
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { subtreesBox } from '../view/layout.js';
-import { createProperties, type PropertyControls } from './properties.js';
+import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editFrameTitle } from './inline-edit.js';
 import { settleFrames } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode } from './crud.js';
@@ -21,8 +20,16 @@ import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
-import { selectedIds, selectNode, toggleCollapse, toggleCollapseSelection, canFold, canToggleFold, openFrame, setLockedSelection, anyLocked, labelEl, LOCK_BADGE_SVG, ICON_LOCK_OPEN, gridSnap, FRAME_W, FRAME_H, MIN_FRAME_W, MIN_FRAME_H, relayout, animateLayout } from '../main.js';
+import { labelEl, relayout, animateLayout } from '../main.js';
 import { byId, placeInViewport, safeInsets } from '../utils/dom.js';
+import { canFold, canToggleFold, gridSnap, FRAME_W, FRAME_H } from '../view/geometry.js';
+import { MIN_FRAME_W, MIN_FRAME_H } from './resize.js';
+import { toggleCollapse, toggleCollapseSelection } from './fold.js';
+import { openFrame } from '../nav/frames.js';
+import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
+import { selectedIds, selectNode } from './selection.js';
+import { setLockedSelection, anyLocked } from './lock.js';
+import { scheduleSave } from '../data/save.js';
 
 
 const bar = byId('floatBar');
@@ -39,13 +46,7 @@ const colorPop = byId('fbColorPop');
 const edColors = byId('edColors');
 
 // colour wiring lives in features/properties.ts. Tags are omitted: no room in the bar.
-// Deferred to first use: createProperties() eagerly builds
-// the swatch row from main.js's PALETTE/SWATCH_BG, which aren't initialized yet while this module
-// is still being imported at main.ts's top — see the main↔features import cycle note in CLAUDE.md.
-let _props: PropertyControls | null = null;
-function props(): PropertyControls {
-  return _props ??= createProperties({ colors: edColors }, () => selectedIds());
-}
+const props = createProperties({ colors: edColors }, () => selectedIds());
 
 // Fit a frame's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
@@ -54,7 +55,7 @@ function props(): PropertyControls {
 // (data/persistence.ts).
 // The frame's label hangs outside the box (above it), so the margin is the same on all four sides.
 const FRAME_FIT_PAD = 16;
-export function fitFrameToContent(n: MindNode, orDefault = false): void {
+function fitFrameToContent(n: MindNode, orDefault = false): void {
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
   const { x0, y0, x1, y1 } = subtreesBox(childrenOf(n.id));
@@ -100,7 +101,7 @@ export function growFramesToHold(ids: Iterable<string>): boolean {
 // FIT — the float bar's ↔, ⇧A and the menu's "Fit to contents": every selected frame hugs its cards
 // (fitFrameToContent), every selected card drops its authored height — a minimum it was dragged out to,
 // or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
-export function canFit(n: MindNode): boolean {
+function canFit(n: MindNode): boolean {
   if (isLockedEffective(n)) {
     return false;
   }
@@ -173,9 +174,9 @@ export function groupSelectionIntoFrame(): void {
   relayout(); selectNode(frameId); scheduleSave();
   setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a frame`);
 }
-// Open (→]) go IN: shown only when the selection can be opened (canOpenSelection below).
+// Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
 function markOpen(): void {
-  fbOpen.style.display = canOpenSelection() ? '' : 'none';
+  fbOpen.style.display = canEnter(anchorNode()) ? '' : 'none';
   fbFit.style.display = selectedIds().some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }) ? '' : 'none';
   // Collapse / expand: THE fold button (cards carry none of their own). It shows the state it would make:
   // expand once everything foldable in the selection is folded, collapse otherwise — what X does.
@@ -238,7 +239,7 @@ fbLock.addEventListener('click', (e) => {
 });
 
 function syncControls(): void {
-  props().sync();
+  props.sync();
   markOpen();
   markColorTrigger();
   markLock();
@@ -398,14 +399,11 @@ fbMore.addEventListener('click', (e) => {
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
+
 // Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
-// desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (main.ts navArrow): you can only stand
+// desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (features/commands.ts navArrow): you can only stand
 // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
 // kinds with no interior and for the card you are already inside, both of which openFrame would refuse.
-export function canOpenSelection(): boolean {
-  const n = anchorNode();
-  return canEnter(n);
-}
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openFrame(anchorNode()); });
 fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
 fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });

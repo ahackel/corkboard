@@ -8,16 +8,15 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds } from '../utils/model.js';
 import { detachParentId } from '../nav/scope.js';
 import { isFrame, collectsCards, frameAt, ancestorDepth, containerBox, centreInFrame } from '../view/layout.js';
 import { cancelViewAnim, applyView } from '../view/camera.js';
-import { scheduleSave } from '../data/persistence.js';
 import { ui, inPlaceEditOn, type Pt, type Drag } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { nodeW, nodeH, gridSnap, paintAll, paintNode, selectNode, setSelectionSet, toggleSel, subtreeIds, activateNode, isNodeControlAt, relayout, remeasure } from '../main.js';
+import { paintAll, paintNode, activateNode, isNodeControlAt, relayout, remeasure } from '../main.js';
 import { endBodyEdit, endTitleEdit } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -25,6 +24,10 @@ import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
 import { guidePull, hideGuides } from './guides.js';
 import { growFramesToHold } from './float-bar.js';
+import { trackPointer } from '../utils/dom.js';
+import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
+import { selectNode, setSelectionSet, toggleSel } from './selection.js';
+import { scheduleSave } from '../data/save.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
@@ -345,9 +348,7 @@ export function bindNodeDrag(n: MindNode): void {
     // gesture (not left permanently on window) so they can't double-fire alongside the ghost-card
     // flow's own window listeners in main.ts, which drives its drag through the same dragPointerMove
     // /dragPointerUp via feedDragMove/commitDrag.
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    const stop = trackPointer({ move: onMove, up: onUp, cancel: onUp });
     // Guard on `ui.drag.n === n` (not just truthiness): there's a single shared `ui.drag` slot, so
     // if a second card's pointerdown ever hijacks it before this gesture's up/cancel arrives (e.g.
     // true two-finger touch on two different cards at once), this stale pair must still remove
@@ -358,9 +359,7 @@ export function bindNodeDrag(n: MindNode): void {
       }
     }
     function onUp(): void {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      stop();
       if (ui.drag && ui.drag.n === n) {
         dragPointerUp();
       }
@@ -769,7 +768,7 @@ export function settleFrames(frameIds: Iterable<string>): string[] {
 // Move one card into a frame, or out to the top level (null). Mutates the parent only — no paint or
 // status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or
 // frame, and a frame into its own contents. Returns whether it moved.
-export function reparentOnly(childId: string, newParentId: string | null): boolean {
+function reparentOnly(childId: string, newParentId: string | null): boolean {
   if (state.readOnly) {
     return false;
   }

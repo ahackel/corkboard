@@ -15,15 +15,15 @@ import { esc } from '../utils/markdown.js';
 import { placeInViewport } from '../utils/dom.js';
 import { allTags, noteTags, cleanTag, tagKey, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
-import { taggableSelection } from '../main.js';
 import { setTagOnNodes, tagText } from './tags.js';
-import { readStrings, writeJSON } from '../utils/local-json.js';
+import { readStrings, writeJSON, pushRecent } from '../utils/local-json.js';
+import { taggableSelection } from './selection.js';
 
 const MRU_KEY = 'corkboard.tagMru';
 export const loadMru = (): string[] => readStrings(MRU_KEY);
 export function dropMru(tag: string): void { writeJSON(MRU_KEY, loadMru().filter(t => tagKey(t) !== tagKey(tag))); }
 export function pushMru(tag: string): void {
-  writeJSON(MRU_KEY, [tag, ...loadMru().filter(t => tagKey(t) !== tagKey(tag))].slice(0, 16));   // private window: no recents
+  pushRecent(MRU_KEY, tag, 16, tagKey);
 }
 
 // Every tag on the board, most used first.
@@ -62,7 +62,7 @@ let targets: string[] = [];
 let rows: Row[] = [];       // the actionable rows, in screen order — what ↑↓ walk
 let active = 0;
 
-export const tagPickerOpen = (): boolean => pop.classList.contains('open');
+const tagPickerOpen = (): boolean => pop.classList.contains('open');
 
 const row = (act: Act | null, tag: string, meta = '', ticked = false, name = tagText(tag)): Row => ({ act, tag, name, meta, ticked });
 const plural = (n: number): string => `${n} card${n === 1 ? '' : 's'}`;
@@ -175,7 +175,7 @@ function onOutside(e: PointerEvent): void {
   }
 }
 
-export function closeTagPicker(): void {
+function closeTagPicker(): void {
   if (!tagPickerOpen()) {
     return;
   }

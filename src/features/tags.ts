@@ -8,12 +8,12 @@
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
-import { scheduleSave } from '../data/persistence.js';
 import { remeasure } from '../main.js';
 import { esc } from '../utils/markdown.js';
 import { isEmojiTag, tagKey, tagTilt, wearsTags, type ShownTag } from '../utils/tags.js';
 import { searchTags, toggleSearchTag } from './search.js';
 import { beginTagDrag } from './tag-drag.js';
+import { scheduleSave } from '../data/save.js';
 
 // How a tag is written for a person: an emoji as itself, a word with its `#`.
 export const tagText = (t: string): string => isEmojiTag(t) ? t : '#' + t;
@@ -22,7 +22,7 @@ export const tagText = (t: string): string => isEmojiTag(t) ? t : '#' + t;
 // is a round STAMP, a word a paper LABEL, at a small tilt that is the tag's own (tagTilt) — nothing about
 // it is stored. A tag written in the note's text has a dashed edge: it's the text's. Lit while it is in
 // the search.
-export function tagClass(t: string, inText = false): string {
+function tagClass(t: string, inText = false): string {
   const lit = searchTags().some(f => tagKey(f) === tagKey(t));
   return `tag ${isEmojiTag(t) ? 'stamp' : 'label'}${inText ? ' in-text' : ''}${lit ? ' lit' : ''}`;
 }

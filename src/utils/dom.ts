@@ -1,3 +1,43 @@
+export interface PointerHandlers {
+  move?: (e: PointerEvent) => void;
+  up?: (e: PointerEvent) => void;
+  cancel?: (e: PointerEvent) => void;
+  key?: (e: KeyboardEvent) => void;
+}
+
+// Follow a gesture on `window` (so a lost pointer capture can't strand it) until the returned stop().
+export function trackPointer(on: PointerHandlers): () => void {
+  const listeners: Array<[string, EventListener]> = [];
+  const add = (type: string, fn: ((e: never) => void) | undefined): void => {
+    if (fn) {
+      listeners.push([type, fn as EventListener]);
+      window.addEventListener(type, fn as EventListener);
+    }
+  };
+  add('pointermove', on.move);
+  add('pointerup', on.up);
+  add('pointercancel', on.cancel);
+  add('keydown', on.key);
+  return () => {
+    for (const [type, fn] of listeners) {
+      window.removeEventListener(type, fn);
+    }
+  };
+}
+
+// One element at a time wearing `cls`, like a drop hint: mark(el) moves the class there, mark(null) clears it.
+export function classMarker(cls: string): (el: Element | null) => void {
+  let marked: Element | null = null;
+  return el => {
+    if (el === marked) {
+      return;
+    }
+    marked?.classList.remove(cls);
+    marked = el;
+    marked?.classList.add(cls);
+  };
+}
+
 // The DOM shell (index.html) is FIXED — every id the app looks up is written there, so the lookup
 // can't miss and the cast is safe. That's the whole helper: it replaces the
 // `document.getElementById('x') as HTMLInputElement` pairs spelled out at ~40 sites, the
