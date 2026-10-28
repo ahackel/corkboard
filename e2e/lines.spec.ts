@@ -111,4 +111,8 @@ test('a one-way arrow between cards nearly touching is drawn as just its head', 
   await expect(lines(page)).toHaveCount(2);
   await expect(page.locator('#freeEdges path.fe-arrow')).toHaveCount(2);
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);   // only the far one keeps its line
+  // …and that head sits centred in the gap between the two cards, not against the target
+  const head = (await page.locator('#freeEdges path.fe-arrow').first().boundingBox())!;
+  const ra = (await card(page, 'A').boundingBox())!, rb = (await card(page, 'B').boundingBox())!;
+  expect(Math.abs(head.x + head.width / 2 - (ra.x + ra.width + rb.x) / 2)).toBeLessThan(1.5);
 });

@@ -386,7 +386,15 @@ export function paintFreeEdges(): void {
     if (!headOnly) {
       svg += `<path class="fe" style="stroke:${ink}"${dash} d="${g.d}"/>`;
     }
-    svg += endCap(e.toCap, g.b, g.tipTan, ink) + endCap(e.fromCap, g.a, g.tailTan, ink);
+    if (headOnly) {
+
+      // …centred in the gap between the two ports rather than pressed against the target.
+      const toArrow = e.toCap === 'arrow', dir = toArrow ? g.tipTan : g.tailTan;
+      const tip = { x: (g.a.x + g.b.x) / 2 + dir.x * ARROW_LEN / 2, y: (g.a.y + g.b.y) / 2 + dir.y * ARROW_LEN / 2 };
+      svg += arrowHead(tip, dir, ink) + (toArrow ? endCap(e.fromCap, g.a, g.tailTan, ink) : endCap(e.toCap, g.b, g.tipTan, ink));
+    } else {
+      svg += endCap(e.toCap, g.b, g.tipTan, ink) + endCap(e.fromCap, g.a, g.tailTan, ink);
+    }
     // The label sits ON the line at its midpoint, on a plate so the line doesn't strike it through.
     // Width is estimated from the character count: a real measurement would cost a layout flush per
     // edge per frame.
