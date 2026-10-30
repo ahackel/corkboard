@@ -337,8 +337,10 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   still lands in A, because A kept its own back and stops the walk.
 - **The path is ONE pill, and the map name is its first segment** (`features/breadcrumbs.ts` + `#homeBar`) —
   `#toolbar`'s pattern, one `--panel` capsule of borderless items, so going into a section ADDS segments rather
-  than swapping loose text for chrome. Segments carry no folder glyph (the `›` separators already say it's a
-  path) and the CURRENT one is inert. A deep path folds its middle into one `…` menu — the only thing that
+  than swapping loose text for chrome. A SECTION's segment is drawn the way that section is drawn FOLDED —
+  a folder in its colour and its name on a pill in that colour (`.sc-section`, `paintCrumbColors`) — so the path
+  reads as the folders you went into; the CURRENT one is inert and full strength, the rest a little faded. The
+  home button and the map name sit close (a 28px button, a 4px lead-in), reading as one item. A deep path folds its middle into one `…` menu — the only thing that
   keeps it clear of the CENTRED `#toolbar`, since capping the pill's width can't (the separators are
   `flex:none` and simply overflow it).
 - **The CANVAS wears the open section's fill** (`syncCanvasBackground` → `--canvas-bg` on `#stage`, under

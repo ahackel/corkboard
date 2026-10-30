@@ -233,9 +233,12 @@ button:disabled { opacity:.45; cursor:default; }
   background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 /* .floating-btn styles the box and the bar owns positioning — but inside the pill the button drops its
    own background, so it reads as one item in a bar rather than a capsule inside a capsule. */
-#homeBar #homeBtn { position:static; flex:none; background:transparent; box-shadow:none; }
+#homeBar #homeBtn { position:static; flex:none; background:transparent; box-shadow:none; width:28px; }
 #homeBar #homeBtn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
 #folderName:empty { display:none; }   /* icon-only until a map is loaded */
+/* The icon and the map's name read as one item: the button is only a little wider than its icon, and the name's
+   hover pill gives up most of its lead-in, so at rest there's no hole between the two. */
+#folderName { padding-left:4px; }
 /* ---------- the open-section path (features/breadcrumbs.ts) ----------
    Segments are like the corner buttons: no border, no fill, hover-highlight only, muted until they're the
    level you're actually in. The map name is the first of them (#folderName), so going into a section ADDS
@@ -257,6 +260,17 @@ body.scoped #scopeBar { display:flex; }
    segment unscoped for the same reason (nothing sits above the whole map). */
 .sc-crumb.sc-cur { color:var(--text); pointer-events:none; }
 .sc-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* A SECTION's segment is drawn the way that section is drawn folded (.node.section-folded): a folder in its
+   colour, then its name on a pill in that colour, in the ink that colour demands. Muted levels you can go back
+   to fade a little; the one you're in is full strength. */
+.sc-crumb.sc-section { gap:4px; padding:2px 4px; color:var(--ink, var(--text)); }
+.sc-crumb.sc-section:not(.sc-cur) { opacity:.75; }
+.sc-crumb.sc-section:not(.sc-cur):hover { opacity:1; }
+.sc-crumb.sc-section > .fold-icon { flex:none; width:18px; height:18px; color:color-mix(in srgb, var(--card, #fff), #000 55%); }
+.sc-crumb.sc-section > .fold-icon svg { width:100%; height:100%; display:block; }
+.sc-crumb.sc-section > .fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff), #000 9%); }
+.sc-crumb.sc-section > .sc-name { padding:1px 7px; border-radius:6px;
+  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
 /* The pill stops short of the CENTRED search / read-only bar (~260px wide, hence half of it plus a gap). */
 @media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }

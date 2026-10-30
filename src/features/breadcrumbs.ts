@@ -23,6 +23,9 @@ import { scope, scopeActive } from '../nav/scope.js';
 import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';
 import { byId } from '../utils/dom.js';
+import { FOLDER_SVG } from '../view/icons.js';
+import { applyColorVars, colorClass } from '../view/color.js';
+import { effectiveColor } from '../main.js';
 import { goToScopeDepth } from '../nav/sections.js';
 
 const homeBar = byId('homeBar');
@@ -34,18 +37,31 @@ const bar = byId('scopeBar');
 // the path, which the map segment already stands in for.
 const TAIL = 2;
 
-// A level's own segment: the name alone, no folder glyph — the `›` separators already say this is a
-// path, and every segment but the map is a section, so an icon on each of them is repeated with no
-// information in it. `depth` is what goToScopeDepth takes: the crumb for scope.stack[i] carries i + 1,
-// i.e. "leave the level below me", which lands you IN this one.
+// A level's own segment, drawn the way that section is drawn FOLDED on the canvas: a folder in its colour, and
+// its name on a pill in that colour (styles.css .sc-section; paintCrumbColors tints it) — so the path reads as
+// the very folders you went into. `depth` is what goToScopeDepth takes: the crumb for scope.stack[i] carries
+// i + 1, i.e. "leave the level below me", which lands you IN this one.
 // The CURRENT level is inert — you are already there, so there is nothing for a click to do and a
 // hover highlight would promise one (styles.css takes its pointer-events away).
 function crumb(depth: number, label: string, current: boolean): string {
   return `<span class="sc-sep" aria-hidden="true">›</span>`
-    + `<button type="button" class="sc-crumb${current ? ' sc-cur' : ''}" data-depth="${depth}"`
+    + `<button type="button" class="sc-crumb sc-section${current ? ' sc-cur' : ''}" data-depth="${depth}"`
     + `${current ? ' aria-current="page"' : ''} title="${esc(label)}">`
-    + `<span class="sc-name">${esc(label)}</span></button>`;
+    + `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(label)}</span></button>`;
 }
+// Each section crumb wears its section's colour, through the one colour path every surface takes.
+function paintCrumbColors(): void {
+  bar.querySelectorAll<HTMLElement>('.sc-section').forEach(el => {
+    const n = state.nodes.get(scope.stack[Number(el.dataset.depth) - 1]?.rootId ?? '');
+    const col = n ? effectiveColor(n) : 'white';
+    el.classList.add(colorClass(col));
+    applyColorVars(el, col);
+  });
+}
+const levelColor = (i: number): string => {
+  const p = state.nodes.get(scope.stack[i]!.rootId);
+  return p ? effectiveColor(p) : '';
+};
 const levelTitle = (i: number): string => {
   const p = state.nodes.get(scope.stack[i]!.rootId);
   return p ? nodeLabel(p) : '…';
@@ -60,7 +76,7 @@ const foldedLevels = (): number[] =>
 // rebuilding this innerHTML per section would be pure waste (cf. queryKey in main.ts).
 export function renderCrumbs(): void {
   const sig = !scopeActive() ? store.name
-    : store.name + '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i)).join('/');
+    : store.name + '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i) + ':' + levelColor(i)).join('/');
   if (bar.dataset.sig === sig) {
     return;
   }
@@ -82,6 +98,7 @@ export function renderCrumbs(): void {
       const i = folded.length + k;
       return crumb(i + 1, levelTitle(i), i === scope.stack.length - 1);
     }).join('');
+  paintCrumbColors();
 }
 
 // One listener for the whole pill, so the map segment (#folderName, a sibling of #scopeBar) and the
