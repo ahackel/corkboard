@@ -29,7 +29,7 @@ import './features/commands.js';   // the keyboard shortcuts and the ⌘P palett
 import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
 import { addCardInside } from './features/crud.js';
 import { bindNodeDrag } from './features/drag.js';
-import { paintPile, syncFan } from './features/stacks.js';
+import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
 import { fanTilt } from './view/pile.js';   // also registers the Alt/Shift drag-modifier listeners
 import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
 import { syncFloatBar } from './features/float-bar.js';   // also registers the float bar's own listeners
@@ -254,8 +254,9 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
 export function effectiveColor(n: MindNode): string {
   // A SECTION wears only its own colour: one nested in a blue section would otherwise turn blue too and
   // vanish into it. Uncoloured, it's the neutral surface below — a box you can see inside any other.
+  // A STACK's colour is its pin's, and an uncoloured pin is red.
   if (n.type === 'section') {
-    return n.color || 'white';
+    return n.color || (n.stack ? STACK_DEFAULT_COLOR : 'white');
   }
   const drag = ui.drag;
   let previewId: string | null = null;

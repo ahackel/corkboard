@@ -262,9 +262,11 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
   `paintNode`), each askew by its PLACE in the pile counted from the bottom (`messAt`: the bottom card square, the
   rest from a fixed list), so a card keeps its angle as more are piled on; and the pin, a plain disc a tag label's size just reaching
-  over the top edge. **A stack's colour is its PIN's** (red until one is picked); its cards don't inherit it —
-  `effectiveColor` walks past a stack. No count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
-  Selected, it's ringed round the whole askew pile (`ringPile`), not its element's box; with cards held over
+  over the top edge. **A stack's colour is its PIN's** (`bold-red` until one is picked — `STACK_DEFAULT_COLOR`, returned by
+  `effectiveColor` so the colour picker rings what the pin shows); its cards don't inherit it — the walk passes a
+  stack by — and its name tab stays neutral grey. No count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
+  Selected, it's ringed with a DASHED line round the whole askew pile (`ringPile`), like the outline a fanned
+  pile leaves, not its element's box; with cards held over
   it, it lifts — scaled, with a soft drop shadow, the one time a board node casts one — and shows no ring.
 - **Where its cards lie is DERIVED, every layout** (`layStacks`, run by `applyLayouts`): all of them at the
   stack's corner, or at their spots in the fan. Never authored, so a position written there is nothing anyone

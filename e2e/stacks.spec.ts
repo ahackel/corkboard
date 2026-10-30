@@ -185,9 +185,12 @@ test('a stack\'s colour is its pin\'s, red by default; its cards keep their own'
   await openBoard(page);
   await seedBoard(page, BOARD);
   const pin = stack(page).locator('.stack-pin');
-  await expect(pin).toHaveCSS('background-color', 'rgb(229, 56, 59)');
+  await expect(pin).toHaveCSS('background-color', 'rgb(242, 72, 34)');
+  // …and the colour picker shows that red for it, not the white of an uncoloured section
+  await select(page, pin);
+  await expect(page.locator('#edColors .swatch.active')).toHaveAttribute('data-color', 'bold-red');
   await seedBoard(page, { ...BOARD, 'Pile/_index.md': note('', { 'mm_type': 'frame', 'mm_blank': 'true', 'color': 'blue' }) });
-  await expect(pin).not.toHaveCSS('background-color', 'rgb(229, 56, 59)');
+  await expect(pin).not.toHaveCSS('background-color', 'rgb(242, 72, 34)');
   await expect(stack(page).locator('.pile-card').last()).toHaveClass(/c-amber/);   // a sticky's own yellow
   expect(errors).toEqual([]);
 });

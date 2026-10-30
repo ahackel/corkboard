@@ -33,6 +33,9 @@ import { scheduleSave } from '../data/save.js';
 // card is just a pass: the cards overlap, as they always have.
 export const PILE_HOVER_MS = 400;
 
+// What an uncoloured stack wears — on its pin, the one thing its colour is for.
+export const STACK_DEFAULT_COLOR = 'bold-red';
+
 // The cards drawn in the pile: the top one, and two peeking out from under it.
 const PILE_SHOWN = 3;
 
@@ -87,9 +90,10 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     }
   });
   el.dataset.cards = String(kids.length);
-  // The stack's colour is its PIN's — red until one is picked (styles.css .stack-pin).
+  // The stack's colour is its PIN's — red until one is picked (STACK_DEFAULT_COLOR, via effectiveColor, so the
+  // colour picker rings what the pin shows).
   const pin = face.querySelector<HTMLElement>(':scope > .stack-pin')!;
-  const fill = colorFill(n.color) ?? '';
+  const fill = colorFill(effectiveColor(n)) ?? '';
   if (pin.style.background !== fill) {
     pin.style.background = fill;
   }
