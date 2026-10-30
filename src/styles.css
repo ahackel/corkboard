@@ -302,10 +302,11 @@ body.scoped #scopeBar { display:flex; }
 }
 /* find — by text and #tags (features/search.ts), opened with ⌘F or /, top centre. #searchClear stays visible
    unconditionally: empty, it closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
-   field IS the bar (see #searchBox), not an inset box floating in one. */
+   field IS the bar (see #searchBox), not an inset box floating in one. Shaped and lifted like every other bar
+   (#homeBar, the dock): the control radius and the UI shadow, not a pill of its own. */
 #searchWrap { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
   display:none; align-items:center; width:300px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
-  background:var(--panel); border-radius:var(--r-full); touch-action:pan-x pan-y; }
+  background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
 body:has(#searchWrap.open) #roBadge { display:none; }
 #searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
@@ -314,7 +315,7 @@ body:has(#searchWrap.open) #roBadge { display:none; }
    reads as one surface (and clicking anywhere in it lands in the input). The bar being the only
    surface is also why the height is spelled out here. */
 #searchBox { flex:1; min-width:0; box-sizing:border-box; height:calc(var(--bar-btn) + 8px);
-  padding:0 34px; border-radius:var(--r-full); font-size:13px;
+  padding:0 34px; border-radius:var(--r-ctl); font-size:13px;
   background:transparent; border:none; color:var(--text); }
 #searchBox:focus { outline:none; box-shadow:none; }
 button#searchClear { display:flex; align-items:center; justify-content:center;
@@ -338,7 +339,7 @@ button#searchClear:hover { color:var(--text); background:color-mix(in srgb, var(
 /* placeholder hint reads as a faint label, not real input */
 input::placeholder { color:var(--muted); opacity:1; }
 #searchResults { position:absolute; top:calc(100% + 4px); left:0; right:0; max-height:50vh; overflow:auto;
-  background:var(--panel); border:1px solid var(--grid); border-radius:var(--r-menu); padding:4px;
+  background:var(--panel); border:none; border-radius:var(--r-menu); box-shadow:var(--shadow-ui); padding:4px;
   display:none; z-index:30; }
 #searchResults.open { display:block; }
 #searchResults .sr-item { display:block; width:100%; text-align:left; padding:6px 9px; border-radius:var(--r-ctl);

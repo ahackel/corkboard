@@ -104,3 +104,38 @@ test('going to a search hit inside a folded section enters the section and leave
   await expect(page.locator('#world .node.section-folded', { hasText: 'Box' })).toBeVisible();   // never unfolded
   expect(errors).toEqual([]);
 });
+
+test('starting a search lets go of the selection, so the float bar is out of the way', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await card(page, 'A loose card').click();
+  await expect(page.locator('#floatBar')).toHaveClass(/open/);
+  await page.keyboard.press('Control+f');
+  await expect(page.locator('#world .node.sel')).toHaveCount(0);
+  await expect(page.locator('#floatBar')).not.toHaveClass(/open/);
+  expect(errors).toEqual([]);
+});
+
+test('stepping through the matches glides the camera to each, selecting nothing', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, {
+    'One.md': note('Alpha one'), 'Two.md': note('Alpha two'),
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: { 'One.md': { x: 0, y: 0 }, 'Two.md': { x: 3000, y: 2000 } } }),
+  });
+  await page.keyboard.press('Control+f');
+  await page.keyboard.type('alpha');
+  const view = (): Promise<string> => page.locator('#world').evaluate(el => el.style.transform);
+  const before = await view();
+  await page.locator('#searchNext').click();
+  await page.waitForTimeout(700);
+  const after = await view();
+  expect(after).not.toBe(before);
+  await page.keyboard.press('ArrowDown');   // the list arrows go there too
+  await page.waitForTimeout(700);
+  expect(await view()).not.toBe(after);
+  await expect(page.locator('#world .node.sel')).toHaveCount(0);
+  await expect(page.locator('#world .node.search-active')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});

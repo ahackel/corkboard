@@ -26,9 +26,12 @@ import { byId } from '../utils/dom.js';
 import { tagText, tagChipHTML } from './tags.js';
 import { boardTags } from './tag-picker.js';
 import { focusNode } from '../nav/focus.js';
+import { frameBox } from '../view/camera.js';
 import { afterReading } from '../data/lazy.js';
 import { ui } from '../core/ui-state.js';
 import { openFan } from './stacks.js';
+import { setSelectionSet } from './selection.js';
+import { clearEdgeSelection } from './edge-tools.js';
 
 const searchBox = byId<HTMLInputElement>('searchBox');
 const searchWrap = byId('searchWrap');
@@ -224,6 +227,8 @@ function stepHit(by: number): void {
 }
 // Reach a hit the way Finder reaches a file: a folded section on the way is ENTERED, never unfolded,
 // and a section hit is framed as it is. Only a folded CARD hit opens, on confirm.
+// Not confirmed — stepping through the matches, FigJam's way — the camera just GLIDES to it: nothing is
+// selected (the search let go of the selection), and the active match wears the search's white outline.
 function goTo(n: MindNode, confirm: boolean): void {
   popScopeFor(n);
   let folded: MindNode | undefined;
@@ -244,7 +249,11 @@ function goTo(n: MindNode, confirm: boolean): void {
   if (isStack(pile) && ui.fan !== pile!.id) {
     openFan(pile!.id);
   }
-  focusNode(n, confirm && n.type !== 'section');
+  if (confirm) {
+    focusNode(n, n.type !== 'section');
+  } else {
+    frameBox([firstVisible(n)]);
+  }
 }
 // Make the `#word` being typed (or the suggestion picked for it) a chip.
 function chipFromTyping(tag?: string): boolean {
@@ -280,7 +289,14 @@ searchBox.addEventListener('input', () => {
   }
   runSearch();
 });
+// Searching starts from a clean board: whatever was selected lets go, so its ring, its ports and the float
+// bar don't sit over the hits being looked for. On focus, so every way in — ⌘F, the palette, a click in the
+// field, a tag clicked — does it.
 searchBox.addEventListener('focus', () => {
+  if (state.sel.size || state.selEdges.size) {
+    clearEdgeSelection();
+    setSelectionSet([]);
+  }
   if (searchActive()) {
     runSearch();
   }
@@ -294,6 +310,11 @@ searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
     }
     active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows) % rows;
     markActive();
+    // a card row: the camera goes to it as you go down the list (a tag row is just a word to pick)
+    const hit = tagRows.length || parts().typing != null ? undefined : cardHits[active];
+    if (hit) {
+      goTo(hit, false);
+    }
   } else if (e.key === 'Enter'){
     e.preventDefault();
     e.stopPropagation();   // don't let Enter reach the window handler (it would create a sibling)
