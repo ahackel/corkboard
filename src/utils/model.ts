@@ -4,6 +4,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
 import { scope } from '../nav/scope.js';
+import { ui } from '../core/ui-state.js';
 
 // The nodes for some ids, skipping any that are gone.
 export function nodesOf(ids: Iterable<string>): MindNode[] {
@@ -51,8 +52,9 @@ export function outermost(nodes: MindNode[]): MindNode[] {
   return nodes.filter(n => ![...ancestors(n)].some(a => ids.has(a.id)));
 }
 export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
-// THE ONE VISIBILITY GATE, with two terms — one ancestor walk answering both. A new term goes IN here,
-// never beside it.
+
+// THE ONE VISIBILITY GATE, with three terms — one ancestor walk answering all of them. A new term goes IN
+// here, never beside it.
 //
 //  1. FOLD (persisted, board.json `collapsed`): a FOLDED SECTION is its label pill and nothing else, so a
 //     node is hidden iff one of its ANCESTORS is folded. (A folded card only tucks away its own text —
@@ -62,6 +64,8 @@ export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.
 //     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS
 //     the open section, which is precisely what stops its box, border, tab and fill from being
 //     painted. No per-kind CSS, no second predicate.
+//  3. PILE (persisted, board.json `stack`): a STACK shows its cards as the pile's own face, so they're
+//     hidden as nodes — unless it's the one FANNED OUT (ephemeral, ui.fan), when they're real cards again.
 //
 // Nothing writes through this function: term 1 is backed by a saved flag while term 2 must never touch
 // disk. The open section is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
@@ -74,7 +78,7 @@ export function isHidden(n: MindNode): boolean {
     if (p.id === scopeId) {
       return false;
     }
-    if (p.collapsed) {
+    if (p.collapsed || (p.stack && ui.fan !== p.id)) {
       return true;
     }
   }

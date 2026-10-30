@@ -12,7 +12,7 @@
 //   · #freeEdgeHits — the same lines as invisible 18px CLICK targets, BEHIND the cards, so the
 //     stretch of a line that crosses a card is still the card's to press (see HIT_W);
 //   · #toggles — the rings and endpoint handles, above every card so they are always grabbable.
-import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, isStack, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, firstVisible, resolveWikilink } from '../utils/model.js';
 import { ui, type Pt } from '../core/ui-state.js';
@@ -310,8 +310,10 @@ function endCap(cap: EdgeCap, at: Pt, dir: Pt, ink: string): string {
 }
 
 // Whether a card can be a line's end at all: one that exists.
+// A STACK takes no line: it's a pile you lift cards off, not a note a line can say anything about.
 export function connectable(id: string): boolean {
-  return state.nodes.has(id);
+  const n = state.nodes.get(id);
+  return !!n && !isStack(n);
 }
 // An edge is drawn when both ENDS are on the canvas — a card itself, or the folded section standing in for
 // it (edgeEnd) — and they aren't the same pill: a line between two cards of one folded section goes with them.

@@ -77,7 +77,7 @@ function ownStem(path: string, section: boolean): string {
 // `dir` is the folder the node belongs in — its parent section's folder, '' at the top level. Left out,
 // the node stays in the folder it is in. `reserved` holds lowercased folders on disk that are NOT
 // sections (`attachments/`, a dot-folder): a section must not move into one of those and adopt its files.
-export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body'> & { type?: MindNode['type'] },
+export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body'> & { type?: MindNode['type']; stack?: boolean },
                                inUse: Map<string, string>, dir?: string, reserved?: Set<string>): string {
   const section = n.type === 'section';
   const at = dir ?? (n.file ? (section && isSectionNote(n.file) ? dirOf(dirOf(n.file).slice(0, -1)) : dirOf(n.file)) : '');
@@ -89,6 +89,8 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
   // leans on — the stem is the name they deleted, so nothing shows it to them again.
   if (stem === 'Untitled' && n.file) {
     stem = ownStem(n.file, section);
+  } else if (stem === 'Untitled' && n.stack) {
+    stem = 'Stack';   // a new pile's folder: `Stack`, `Stack 2`, …
   }
   const pathFor = (s: string): string => section ? at + s + '/' + SECTION_NOTE : at + s + '.md';
   // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since

@@ -45,8 +45,10 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 // The ONE kind test for "can this be opened": a SECTION, and only a section — a card has no inside to stand
 // in (its note is read where it sits, or in Obsidian). Raw `type` rather than isSection, deliberately — a
 // COLLAPSED section is openable, and stays folded while you stand in it.
+// A STACK is the exception: its cards lie on one spot, so its interior has nothing to show as a canvas —
+// it FANS OUT instead (features/stacks.ts).
 export function canOpen(n: MindNode | null | undefined): boolean {
-  return n?.type === 'section';
+  return n?.type === 'section' && !n.stack;
 }
 // …and can be opened from where you stand: not the section you are already in. (canOpen itself stays
 // true for that one — the scope stack below checks the sections on the path, the open one included.)

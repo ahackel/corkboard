@@ -67,6 +67,10 @@ export interface MindNode {
   // clipped under a fade (main.ts paintNode), instead of a minimum the text grows past. Persisted as
   // `clip` in board.json; Fit (float bar ↔) clears it.
   clip?: boolean;
+
+  // A SECTION drawn as a PILE (isStack below): its cards lie on top of each other, the last one added on
+  // top, instead of sitting in a box. Still a folder on disk; persisted as `stack` in board.json.
+  stack?: boolean;
   title: string;
   color: string;                   // palette key, e.g. 'blue', or '' for none
   keepStatus: string;              // preserved `status:` frontmatter value
@@ -101,6 +105,12 @@ export interface MindNode {
 // an editor", the two states where a card shows something other than its picture.
 export function isImageCard(n: MindNode | null | undefined): boolean {
   return !!n && n.type === 'card' && !n.title.trim() && !!soleImage(n.body);
+}
+
+// A STACK is a section shown as a pile of its cards rather than as a box (docs/architecture.md, "A STACK
+// is a section drawn as a PILE"). Not a third kind: `type` stays 'section', and this flag is how it looks.
+export function isStack(n: MindNode | null | undefined): boolean {
+  return !!n && n.type === 'section' && !!n.stack;
 }
 
 export interface View { x: number; y: number; k: number; }

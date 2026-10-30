@@ -7,7 +7,7 @@
 // auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
-import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
+import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds } from '../utils/model.js';
 import { detachParentId, scope } from '../nav/scope.js';
 import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection, moveSubtreeTo } from '../view/layout.js';
@@ -31,6 +31,7 @@ import { afterReading } from '../data/lazy.js';
 import { arrangeSections } from '../data/load.js';
 import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
+import { beginPileGesture, pileTarget, pileInto, fanSlot, fanSlotCard, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
@@ -69,8 +70,9 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   const grid = { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
   // Smart guides (features/guides.ts) win over the grid on an axis where something lines up with the
   // RAW pointer position — read before the grid rounds it, or a 20px step would jump right past a
-  // 6px pull. Off while ⌥ is held: the card is going INTO another card's note then.
-  if (drag.alt || drag.cardMerge) { hideGuides(); return grid; }
+  // 6px pull. Off while ⌥ is held, or over a pile: the card is going INTO another card's note, or onto
+  // the pile, then.
+  if (drag.alt || drag.cardMerge || drag.pile) { hideGuides(); return grid; }
   const roots: Array<{ n: MindNode; s: Pt }> = [];
   for (const [id, st] of drag.targets) {
     const m = state.nodes.get(id);
@@ -300,6 +302,15 @@ export function bindNodeDrag(n: MindNode): void {
     if (ui.titleEdit && ui.titleEdit.id !== n.id) {
       endTitleEdit();
     }
+
+    // A plain press on a STACK's pile fans it out or lifts its top card off (features/stacks.ts). Its pin and
+    // its name tab are the stack's own handles, and take the ordinary path below: select, move it whole.
+    if (isStack(n) && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
+        && !tgt.closest('.stack-pin, .title-row')) {
+      e.stopPropagation();
+      beginPileGesture(n, e);
+      return;
+    }
     // while this node is being edited, let clicks place the caret — don't start a drag
     if (inPlaceEditOn(n.id)) { e.stopPropagation(); return; }
     // A drag inside an UNSELECTED (expanded) section rubber-band-selects the cards INSIDE it rather
@@ -461,7 +472,7 @@ function dragPointerUp(): void {
       } else {
         // ⌥ over a card merges into it; otherwise every dragged root belongs to the section its
         // centre is in, else the top level (sectionAt — the same test the preview ran).
-        const { cloned, targets, clones, selRoots, cardMerge, chute } = drag;
+        const { cloned, targets, clones, selRoots, cardMerge, chute, pile, fanSlot: slot } = drag;
         clearDropTarget();
         // Null drag NOW so every paint in the commit phase sees no active drag and draws all edges.
         ui.drag = null;
@@ -486,6 +497,22 @@ function dragPointerUp(): void {
           fileAway(selRoots, chute);
           return;
         }
+
+        // Within the open fan: the card takes another place in its pile (features/stacks.ts).
+        if (slot != null && reorderPile(selRoots[0], slot)) {
+          relayout();
+          scheduleSave(); commitStep();
+          return;
+        }
+
+        // Onto a stack, or held over a card until it lifted: the cards go on that pile.
+        const onto = pile ? pileInto(pile.id, pile.make, selRoots) : null;
+        if (onto) {
+          remeasure();
+          selectNode(onto.id);
+          scheduleSave(); commitStep();
+          return;
+        }
         // THE drop rule. Per root, from its own centre, so a group straddling a section's edge splits
         // the way it looks. Positions stay exactly where they were dropped — snappedDelta already put
         // them on the grid (or on a guide) on every move, so a release changes nothing about WHERE.
@@ -501,6 +528,7 @@ function dragPointerUp(): void {
             reparentOnly(rootId, np);
           }
         }
+        settleStacks();   // a card dragged off a pile of two leaves the other lying where the pile was
         // Paint first so freshly-created clone cards have real DOM heights, then let each section that
         // now holds a dropped card grow to show all of it (it clips, so part of it would be lost).
         // A dropped SECTION also collects whatever it now covers (settleSections).
@@ -703,11 +731,18 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
       }
     }
   }
-  const chute = fuse ? null : chuteAt(e.clientX, e.clientY, sub);
-  const f = fuse || chute ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
-  const target = fuse ? dragged.parent : chute ? chute.parent : (f?.id ?? detachParentId());
+
+  // A card of the open fan, dragged within it, takes another place in the pile; anything over a stack — or
+  // held over a card long enough — goes onto a pile (features/stacks.ts).
+  const slot = fuse ? null : fanSlot(drag, e.clientX, e.clientY);
+  const pile = fuse || slot != null ? null : pileTarget(drag, e.clientX, e.clientY, sub);
+  const chute = fuse || slot != null || pile ? null : chuteAt(e.clientX, e.clientY, sub);
+  const f = fuse || slot != null || pile || chute ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
+  const pileHolder = pile ? (pile.make ? state.nodes.get(pile.id)!.parent : pile.id) : null;
+  const target = fuse || slot != null ? dragged.parent : pile ? pileHolder : chute ? chute.parent : (f?.id ?? detachParentId());
   const changed = drag.dropTarget !== target;
-  drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute;
+  drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute; drag.pile = pile; drag.fanSlot = slot;
+  armPileHover(drag);
   if (changed) {
     for (const id of sub) {
       const m = state.nodes.get(id);
@@ -718,6 +753,10 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   }
   if (fuse) {
     state.nodes.get(fuse)!.el?.classList.add('drop-merge');
+  } else if (slot != null) {
+    fanSlotCard(slot)?.el?.classList.add('drop-slot');
+  } else if (pile) {
+    state.nodes.get(pile.id)!.el?.classList.add('drop-pile');
   } else if (chute) {
     chute.el.classList.add('drop-target');
   } else if (f && f.id !== dragged.parent) {
@@ -725,8 +764,25 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   }
 }
 function clearDropTarget(): void {
-  document.querySelectorAll('.drop-target, .drop-merge')
-    .forEach(el => el.classList.remove('drop-target', 'drop-merge'));
+  document.querySelectorAll('.drop-target, .drop-merge, .drop-pile, .drop-slot')
+    .forEach(el => el.classList.remove('drop-target', 'drop-merge', 'drop-pile', 'drop-slot'));
+}
+
+// The pointer resting on a card ARMS a stack after PILE_HOVER_MS, whether or not the mouse moves again in
+// the meantime: re-ask then, so the target lifts while the card is simply held there.
+let pileTimer = 0;
+
+function armPileHover(drag: Drag): void {
+  window.clearTimeout(pileTimer);
+  if (!drag.pileHover || drag.pile) {
+    return;
+  }
+  const wait = PILE_HOVER_MS - (performance.now() - drag.pileHover.since);
+  pileTimer = window.setTimeout(() => {
+    if (ui.drag === drag && drag.moved) {
+      updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
+    }
+  }, Math.max(0, wait) + 10);
 }
 // What the POINTER is over that files a drop somewhere off the canvas: a crumb of the open-section path
 // (out to that level, beside the section you came out of) or a folded section's pill (into it). The

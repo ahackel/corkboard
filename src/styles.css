@@ -672,6 +672,70 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    since it's the filter talking, not the section */
 .node.section-folded > .title-row > .title > .section-hits { display:inline-block; margin-left:6px; padding:0 7px;
   border-radius:var(--r-full); font-size:11px; line-height:18px; font-weight:700; background:var(--accent); color:#fff; }
+/* ---------- a STACK: a section drawn as a PILE of its cards (features/stacks.ts) ---------- */
+/* The element is the pile's footprint — its top card's width, the face's height — and nothing of its own:
+   no fill, no padding. What you see is .stack-face: the top cards as drawings, the pin, the count. Its
+   cards aren't nodes on the board while piled (utils/model.ts isHidden), so these are plain divs. */
+.node.stack { padding:0; background:transparent; min-height:0; }
+.node.stack > .body, .node.stack > .fold-more, .node.stack > .task-bar { display:none; }
+.stack-face { position:relative; }
+.stack-face > .pile { position:relative; }
+/* Each card as a card looks — its fill and ink from its own .c-* class, a card's padding and corner. The ones
+   underneath lie askew (paintPile sets `rotate`/`translate`), behind the top one, at its height; the top one
+   is in flow, so it is what the pile measures. A shade darker underneath reads as depth without a shadow
+   (board nodes never cast one). */
+.pile-card { position:absolute; left:0; top:0; height:100%; box-sizing:border-box; overflow:hidden;
+  background:var(--card, var(--node)); color:var(--ink, #fff); border-radius:var(--r-card);
+  padding:var(--pad-y) var(--pad-x); pointer-events:none; }
+.pile-card:last-child { position:relative; height:auto; }
+.pile-card.under { filter:brightness(.93); }
+.pile-card.image-card { padding:0; }
+.pile-card.image-card > .body, .pile-card.image-card > .body > p, .pile-card.image-card > .body > p > .img-wrap {
+  width:100%; height:100%; margin:0; }
+.pile-card.image-card .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; border-radius:inherit; }
+.pile-card.image-card > .body { overflow:hidden; border-radius:inherit; }
+.pile-card .img-zoom { display:none !important; }
+/* THE PIN: a red pushpin at the top centre, pressed through the pile. It is the stack's handle — grab it to
+   move the whole stack (features/drag.ts: a press on the pile's body lifts the top card instead). It keeps
+   its screen size zoomed out, like a section's name (--ls, view/camera.ts). */
+.stack-pin { position:absolute; left:50%; top:-12px; width:26px; height:26px; margin-left:-13px; z-index:3;
+  cursor:grab; transform:scale(var(--ls, 1)); transform-origin:50% 50%;
+  filter:drop-shadow(0 2px 1.5px rgba(0,0,0,.35)); }
+.stack-pin svg { width:100%; height:100%; display:block; }
+.stack-pin:hover { filter:drop-shadow(0 3px 2px rgba(0,0,0,.4)); }
+body.grabbing .stack-pin { cursor:grabbing; }
+/* how many cards it holds — a small round count on the top-right corner, in the stack's own colour */
+.stack-count { position:absolute; right:-9px; top:-9px; z-index:3; min-width:20px; height:20px; padding:0 6px;
+  box-sizing:border-box; border-radius:var(--r-full); text-align:center; font-size:11px; line-height:20px; font-weight:700;
+  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text));
+  box-shadow:0 0 0 1.5px #fff; pointer-events:none; transform:scale(var(--ls, 1)); transform-origin:0 100%; }
+/* a NAMED stack wears its name on a small tab above the pile, the way a section does; unnamed, none */
+.node.stack > .title-row { position:absolute; left:0; bottom:calc(100% + 10px * var(--ls, 1)); z-index:4;
+  transform:scale(var(--ls, 1)); transform-origin:0 100%; max-width:calc(100% / var(--ls, 1));
+  padding:2px 9px; border-radius:8px; align-items:center;
+  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
+.node.stack > .title-row > .title { margin:0; font-size:12px; font-weight:600; line-height:18px;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node.stack > .title-row > .title > * { display:inline; margin:0; font-size:inherit; }
+.node.stack > .title-row > .title > :not(:first-child) { display:none; }
+.node.stack > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+.node.stack.no-title > .title-row { display:none; }
+.node.stack > .lock-badge { left:auto; right:14px; top:-8px; z-index:4; }
+/* a drop would put the dragged cards ON this pile — a stack, or a card held over long enough to become one:
+   it lifts to meet them (features/drag.ts updateDropTarget) */
+.node.drop-pile { scale:1.05; outline:2px solid var(--node-sel); outline-offset:4px; border-radius:var(--r-card); }
+/* FANNED OUT: the pile steps back to an outline of where it lies, under a dimmed board, and its cards are
+   held up above both — over every line and card, and the cards in hand above them. */
+.node.stack.fan-open > .stack-face > .pile { visibility:hidden; }
+.node.stack.fan-open > .stack-face { min-height:60px; border-radius:var(--r-card);
+  outline:2px dashed color-mix(in srgb, var(--text) 30%, transparent); outline-offset:2px; }
+#fanScrim { position:absolute; left:-100000px; top:-100000px; width:200000px; height:200000px; z-index:60;
+  background:rgba(40,40,46,.16); }
+#fanScrim.grid { background:rgba(40,40,46,.28); }
+.node.fanned { z-index:61; rotate:var(--tilt, 0deg); }
+body.fan-open #dragLayer { z-index:62; }
+/* dragging a fanned card within the fan: the card whose place it would take */
+.node.drop-slot { outline:2px dashed var(--node-sel); outline-offset:4px; }
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (section / image card) gets all 8: 4 edge bands inset from the corners, plus 4

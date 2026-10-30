@@ -14,7 +14,7 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
 import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, descendantCount } from './utils/model.js';
-import { state, world, dragLayer } from './core/state.js';
+import { state, world, dragLayer, isStack } from './core/state.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, LOCK_BADGE_SVG } from './view/icons.js';
 import { screenToWorld, labelScale } from './view/camera.js';
@@ -28,7 +28,9 @@ import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-gh
 import './features/commands.js';   // the keyboard shortcuts and the ⌘P palette's list of every action
 import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
 import { addCardInside } from './features/crud.js';
-import { bindNodeDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
+import { bindNodeDrag } from './features/drag.js';
+import { paintPile, syncFan } from './features/stacks.js';
+import { fanTilt } from './view/pile.js';   // also registers the Alt/Shift drag-modifier listeners
 import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
 import { syncFloatBar } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -216,6 +218,15 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // the read-only bail on purpose, the same exemption openSection itself takes: looking inside something
   // isn't changing it. A card has no inside, so on one it's a plain double-click.
   if ((open || n.collapsed) && canOpen(n)) { openSection(n); return; }
+
+  // A STACK has nothing to type into but its name, on the tab it wears once it has one. A click already
+  // fans it out (features/stacks.ts), so the rest of a double-click there means nothing more.
+  if (isStack(n)) {
+    if (hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el) {
+      startInlineEdit(n);
+    }
+    return;
+  }
   // Read-only (a map the user has locked down): there is nothing to edit, so the
   // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
   // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
@@ -334,6 +345,8 @@ export function paintNode(n: MindNode): void {
     + (arrivedIds.has(n.id) ? ' arrived' : '')   // just came in from outside (flashArrived)   // its tags step aside while it's resized (styles.css)
     + (isSection(n) ? ' section' : '')
     + (isSectionFold(n) ? ' section-folded' : '')   // folded to its bare label pill (styles.css)
+    + (isStack(n) ? ' stack' + (ui.fan === n.id ? ' fan-open' : '') : '')   // a pile of its cards (features/stacks.ts)
+    + (ui.fan && n.parent === ui.fan ? ' fanned' : '')   // a card of the stack fanned out over the board
     + (imageLook(n) ? ' image-card' : '')   // expanded: the bare picture · folded: its 40px icon
     + (state.sel.has(n.id) ? ' sel' : '')
     + (state.sel.size === 1 && state.sel.has(n.id) ? ' solo' : '')   // lone selection → show +
@@ -387,7 +400,7 @@ export function paintNode(n: MindNode): void {
     const p = parentOf(n);
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
     // (The OPEN section is the canvas even while folded: its children are top-level, never nested in its pill.)
-    if (p && !isSection(p) && !isScopeRoot(p) && !isSection(n)) {
+    if (p && !isSection(p) && !isScopeRoot(p) && !isStack(p) && !isSection(n)) {
       const pEl = nodeEl(p);
       const pp = paintPos(p);
       el.style.left = (np.x - pp.x) + 'px';
@@ -410,14 +423,19 @@ export function paintNode(n: MindNode): void {
   // While its editor is open a card also holds the height it had (BodyEdit.holdH): the raw markdown
   // is a different height from the rendered note, and the card must not jump as editing starts.
   // FOLDED it's a 40px chip whatever height it was dragged to: n.h waits for the unfold.
-  if (!heightIsDeclared(n) && !collapsed) {
+  if (!heightIsDeclared(n) && !collapsed && !isStack(n)) {
     const hold = ui.bodyEdit?.id === n.id ? ui.bodyEdit.holdH ?? 0 : 0;
     const min = Math.max(n.h != null ? n.h : 0, hold);
     el.style.minHeight = min ? min + 'px' : '';
   } else if (el.style.minHeight) {
     el.style.minHeight = '';
   }
-  if (isBoxNode(n)) {
+  if (isStack(n)) {
+    // a pile: its top card's width, its height whatever the face measures, and nothing to resize
+    el.style.width = nodeW(n) + 'px';
+    el.style.height = ''; el.style.maxWidth = '';
+    clearResizeHandles(el);
+  } else if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     el.style.height = nodeH(n) + 'px';
     ensureResizeHandles(n, SECTION_DIRS);
@@ -472,13 +490,13 @@ export function paintNode(n: MindNode): void {
     // one. It keeps a `.title` element rather than a body because it hangs OUTSIDE the box (a pill
     // above it, FigJam-style), and its own `.body` is display:none because the box holds cards, not a
     // note.
-    if (isSection(n) || isSectionFold(n)) {
+    if (isSection(n) || isSectionFold(n) || isStack(n)) {
       // …and under the name, on a second muted line, its DESCRIPTION (sectionDescription — the note
       // after the heading). The
       // label grows UPWARD from the box's top edge, so a description never moves the box. FOLDED, the
       // pill is one line: the name, then how many notes it holds (`.section-count`).
       const desc = isSection(n) ? sectionDescription(n) : '';
-      const md = desc || isSectionFold(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(n) : cardMarkdown(n);
+      const md = desc || isSectionFold(n) || isStack(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(n) : cardMarkdown(n);
       // A folded section whose notes weren't read knows only HOW MANY there are (data/lazy.ts).
       const count = isSectionFold(n) ? n.lazy ?? descendantCount(n.id) : 0;
       // …and, while a search is on, how many of them match it (features/search.ts).
@@ -561,6 +579,17 @@ export function paintNode(n: MindNode): void {
   // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
   // what's left under the padding and the rest is simply cut. Not while folded, opened as a page, or
   // edited — the editor shows the whole note, then it clips again.
+  // A stack's FACE — its top cards drawn as a pile, the pin, the count — or the leftovers of one gone.
+  paintPile(n, el);
+
+  // A card of the open fan lies at a tilt (view/pile.ts fanTilt): the CSS `rotate`, which the drag's
+  // `transform` leaves alone.
+  const tilt = fanTilt(n.id);
+  if (tilt != null) {
+    el.style.setProperty('--tilt', tilt.toFixed(2) + 'deg');
+  } else {
+    el.style.removeProperty('--tilt');
+  }
   const clipH = clipHeight(n, !!editingBody);
   if (clipH != null) {
     const cap = Math.max(0, clipH - bodyEl.offsetTop - parseFloat(getComputedStyle(el).paddingBottom));
@@ -732,6 +761,7 @@ export function paintAll(): void {
     paintNode(n);
   }
   refreshTray();      // the tag tray's stickers, when it's out
+  syncFan();          // the scrim under a fanned-out stack (features/stacks.ts)
   paintFreeEdges();
   updateEmptyHints();
   syncScopeChrome();   // crumbs + reading class + the recovery when the section you were inside has gone

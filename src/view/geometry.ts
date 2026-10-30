@@ -1,11 +1,12 @@
 // ---------- card geometry: how big each kind of node is, and the grid it snaps to ----------
-import { state, type MindNode, isImageCard } from '../core/state.js';
+import { state, type MindNode, isImageCard, isStack } from '../core/state.js';
 import { type Pt, ui } from '../core/ui-state.js';
 import { snapTo } from '../utils/num.js';
 import { hiddenLineCount } from '../utils/frontmatter.js';
 import { isLockedEffective } from '../utils/model.js';
 import { isScopeRoot } from '../nav/scope.js';
 import { isSection } from './layout.js';
+import { pileW } from './pile.js';
 
 export const NODE_W = 200;
 // world-px grid dragged positions AND section/image-card sizes snap to — tracks the visible grid's
@@ -26,7 +27,7 @@ export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world p
 // A FOLDED section renders as nothing but its label — a pill at the box's top-left
 // corner (n.x, n.y), its cards hidden (utils/model.ts isHidden). Its element shrink-wraps the label,
 // so its width is measured (nodeW) and its height is the SECTION_TAB_H constant.
-export function isSectionFold(n: MindNode): boolean { return n.type === 'section' && !!n.collapsed; }
+export function isSectionFold(n: MindNode): boolean { return n.type === 'section' && !!n.collapsed && !n.stack; }
 // Height of a folded section's pill (styles.css .section-folded: 20px line + 9px padding + 1px border, top
 // and bottom). A constant, so the pill is one ellipsised line and never measured.
 const SECTION_TAB_H = 40;
@@ -34,7 +35,7 @@ const SECTION_TAB_H = 40;
 // away (to a one-line chip), or an image card (to a 40px icon of itself). The one rule the arrow, X,
 // ←/→, the menus and ⌘P's Collapse all ask.
 export function canFold(n: MindNode): boolean {
-  return n.type === 'section' || isImageCard(n) || hiddenLineCount(n) > 0;
+  return (n.type === 'section' && !n.stack) || isImageCard(n) || hiddenLineCount(n) > 0;
 }
 // …and may be folded or unfolded by the user right now: not locked, and not the open section (it's the canvas).
 export const canToggleFold = (n: MindNode): boolean => canFold(n) && !isLockedEffective(n) && !isScopeRoot(n);
@@ -68,6 +69,9 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : SEC
 // authors only this axis (its height comes from its content). A folded section's tab shrink-wraps its
 // title instead.
 export function nodeW(n: MindNode): number {
+  if (isStack(n)) {
+    return pileW(n);   // its top card's, the face of the pile
+  }
   if (isBoxNode(n)) {
     return n.w ?? boxDefaultW(n);
   }

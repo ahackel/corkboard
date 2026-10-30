@@ -23,6 +23,7 @@ import { afterReading } from '../data/lazy.js';
 import { nodeH, nodeW, snapPt, NODE_W, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { selectNode, setSelectionSet, applySelection, selectedIds } from './selection.js';
 import { scheduleSave } from '../data/save.js';
+import { settleStacks, hasStackSelected, unstackSelection } from './stacks.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -503,7 +504,7 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
 // ---------- delete ----------
 // Forget a set of node ids: drop them from state, remove their DOM cards, and queue
 // their files for deletion on the next save. Callers pass the full subtree(s) to remove.
-function deleteNodes(ids: Iterable<string>): void {
+export function deleteNodes(ids: Iterable<string>): void {
   const gone = new Set(ids);
   touch(...gone);   // single choke point: every removal's before-image lands in the step
   for (const id of gone){
@@ -528,6 +529,7 @@ function deleteNodes(ids: Iterable<string>): void {
     state.edges = state.edges.filter(e => !gone.has(e.from) && !gone.has(e.to));
     scheduleSaveBoard();
   }
+  settleStacks();   // a pile left with one card is no pile (features/stacks.ts)
 }
 export function deleteNode(id: string): void {
   if (state.readOnly) {
@@ -606,6 +608,13 @@ function canPromoteDelete(id: string): boolean {
 // position, so nothing needs doing here. Shared by ⌘⌫/⌥⌫, the float bar's and the right-click menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
   if (state.readOnly) {
+    return;
+  }
+
+  // A STACK's cards all lie on one spot, so keeping them where they sit would leave them in a heap:
+  // Ungroup on a stack is Unstack, which spreads them out.
+  if (hasStackSelected()) {
+    unstackSelection();
     return;
   }
   const ids = selectedIds().filter(canPromoteDelete);

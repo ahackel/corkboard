@@ -103,7 +103,7 @@ export function makeEdge(from: string, to: string): BoardEdge {
 // Entries that don't resolve are ignored and children missing from the list are appended by position
 // (view/layout.ts orderedKids already does exactly this), so the list cannot lie about the tree — at
 // worst it is incomplete, and incomplete degrades to filename order.
-export interface StoredGeom { x?: number; y?: number; w?: number; h?: number; clip?: boolean; collapsed?: boolean; order?: string[] }
+export interface StoredGeom { x?: number; y?: number; w?: number; h?: number; clip?: boolean; collapsed?: boolean; stack?: boolean; order?: string[] }
 let geom = new Map<string, StoredGeom>();
 export function boardGeom(path: string | null): StoredGeom | undefined {
   return path ? geom.get(path) : undefined;
@@ -143,6 +143,9 @@ function collectGeom(): Record<string, StoredGeom> {
     if (n.collapsed) {
       g.collapsed = true;
     }
+    if (n.stack) {
+      g.stack = true;                  // a section drawn as a pile (features/stacks.ts)
+    }
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     if (order.length > 1) {
       g.order = order;       // a single child has no order worth writing
@@ -164,7 +167,7 @@ export function rememberGeom(nodes: Iterable<MindNode>): void {
     }
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     geom.set(n.file, { x: Math.round(n.rx), y: Math.round(n.ry), w: n.w, h: n.h, clip: !!n.clip,
-                       collapsed: n.collapsed, order: order.length > 1 ? order : geom.get(n.file)?.order });
+                       collapsed: n.collapsed, stack: !!n.stack, order: order.length > 1 ? order : geom.get(n.file)?.order });
   }
 }
 // Re-seed each parent's in-memory child order from the stored paths. Called by loadFromDir once the
@@ -226,6 +229,7 @@ function applyGeom(v: unknown): void {
       x: num(raw.x), y: num(raw.y), w: num(raw.w), h: num(raw.h),
       clip: raw.clip === true,
       collapsed: raw.collapsed === true,
+      stack: raw.stack === true,
       order: Array.isArray(raw.order) ? raw.order.filter(p => typeof p === 'string') : undefined,
     });
   }
