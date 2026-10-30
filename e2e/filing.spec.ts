@@ -33,7 +33,7 @@ test('a card dropped on a folded pill is filed into that section', async ({ page
   const pill = page.locator('#world .node.section-folded', { hasText: 'Box' });
   await dragOnto(page, card(page, 'A loose card'), pill);
   await expect(card(page, 'A loose card')).toBeHidden();
-  await expect(pill.locator('.section-count')).toHaveText('3');
+  await expect(pill).toHaveAttribute('title', /\b3 Cards\b/);
   expect(Object.keys(await diskFiles(page))).toContain('Box/A loose card.md');
   expect(errors).toEqual([]);
 });

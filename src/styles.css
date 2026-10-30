@@ -648,28 +648,32 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* A section with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
    that case. The float bar's title button (T) brings one back. */
 .node.section.no-title > .title-row { display:none; }
-/* ---------- a FOLDED section: just its pill ---------- */
-/* Folding hides the box: the element IS the pill (no .section class, so none of the box rules above apply),
-   at the box's top-left corner. It shrink-wraps its one-line label — the ▸, the name, how many notes are
-   inside — so main.ts nodeW measures it, and nodeH reports the SECTION_TAB_H constant: nothing sets a height
-   here, so 20px of line + 9px padding + 1px border, top and bottom, MUST total 40. */
-.node.section-folded {
-  border:1px solid color-mix(in srgb, var(--card, #fff), #000 14%); min-height:0; padding:9px 12px 9px 8px;
-  border-radius:10px; width:max-content; max-width:240px;
+/* ---------- a FOLDED section: a folder, and its label ---------- */
+/* Folding hides the box: the element is a FOLDER ICON with the section's label beside it — the same pill, the
+   same name and description, as an open section wears above its box (no .section class, so none of the box
+   rules above apply), at the box's top-left corner. It shrink-wraps, so main.ts nodeW and nodeH MEASURE it.
+   What it holds is in its tooltip (main.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
+   just the folder. */
+.node .fold-icon { display:none; }
+.node.section-folded { display:flex; align-items:center; gap:6px; width:max-content; max-width:360px; min-height:0;
+  padding:0; border:none; border-radius:8px; background:transparent; color:var(--ink, var(--text)); }
+.node.section-folded > .fold-icon { display:block; order:-1; flex:none; width:26px; height:26px;
+  color:color-mix(in srgb, var(--card, #fff), #000 55%); }
+.node.section-folded > .fold-icon svg { width:100%; height:100%; display:block; }
+.node.section-folded > .fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff), #000 9%); }
+.node.section-folded > .title-row { min-width:0; margin:0; align-items:center; padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
-.node.section-folded > .title-row { align-items:center; min-height:0; margin:0; }
-.node.section-folded > .title-row > .title { margin:0; padding:0; font-size:14px; font-weight:600; line-height:20px;
+.node.section-folded > .title-row > .title { margin:0; padding:0; font-size:16px; font-weight:600; line-height:24px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node.section-folded > .title-row > .title > * { display:inline; margin:0; font-size:inherit; }
 .node.section-folded > .title-row > .title > :not(:first-child) { display:none; }
+.node.section-folded > .title-row > .title h1 { font-size:16px; }
+.node.section-folded > .title-row > .title > .section-desc { display:block; font-size:11px; line-height:16px;
+  font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node.section-folded.no-title > .title-row { display:none; }
 .node.section-folded > .body { display:none; }
-/* how many notes the pill holds — a small round count after the name */
-.node.section-folded > .title-row > .title > .section-count { display:inline-block; margin-left:8px; padding:0 6px;
-  min-width:18px; box-sizing:border-box; border-radius:var(--r-full); text-align:center;
-  font-size:11px; line-height:18px; font-weight:700; background:color-mix(in srgb, currentColor 14%, transparent); }
-.node.section-folded > .title-row > .title > .section-count:first-child { margin-left:0; }
-/* …and while the tag filter is on, how many of them match (features/tag-filter.ts) — in the accent,
-   since it's the filter talking, not the section */
+/* while the search is on, how many of what it holds match (features/search.ts) — in the accent, since it's
+   the search talking, not the section */
 .node.section-folded > .title-row > .title > .section-hits { display:inline-block; margin-left:6px; padding:0 7px;
   border-radius:var(--r-full); font-size:11px; line-height:18px; font-weight:700; background:var(--accent); color:#fff; }
 /* ---------- a STACK: a section drawn as a PILE of its cards (features/stacks.ts) ---------- */
@@ -1199,7 +1203,7 @@ body.zoom-far .node > .top-edge { display:none; }
 /* A FOLDED card is a CHIP: one line in a row with its count, shrink-wrapped to its text (up to the width
    it has open — paintNode's inline max-width) with tighter padding, so a board of folded cards packs. */
 .node.collapsed:not(.image-card) { --pad-y:0px; display:flex; align-items:center; gap:8px; width:max-content;
-  height:40px; }   /* the height of a folded section's pill (SECTION_TAB_H): one row, whichever kind folded */
+  height:40px; }
 .node.collapsed:not(.image-card) > .title-row { flex:none; }
 .node.collapsed:not(.image-card) > .body { flex:0 1 auto; min-width:0; }
 .node.collapsed:not(.image-card) > .body > :first-child { margin-top:0; }

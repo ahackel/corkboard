@@ -49,17 +49,17 @@ test('a section folds to its label pill: its cards hide, its lines meet the pill
   const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, BOARD);
-  // saved folded → a 40px pill, no box
+  // saved folded → a folder and its 30px label, no box
   const old = page.locator('#world .node.section-folded', { hasText: 'Old' });
   await expect(old).toBeVisible();
-  expect(Math.round((await old.boundingBox())!.height)).toBe(40);
+  expect(Math.round((await old.boundingBox())!.height)).toBe(30);
   // fold Todo from the float bar
   const todo = section(page, 'Todo');
   await todo.locator(':scope > .title-row').click();
   await page.locator('#fbFold').click();
   const pill = page.locator('#world .node.section-folded', { hasText: 'Todo' });
   await expect(pill).toBeVisible();
-  await expect(pill.locator('.section-count')).toHaveText('1');
+  await expect(pill).toHaveAttribute('title', /\b1 Card\b/);
   await expect(card(page, 'Buy milk')).toBeHidden();
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);   // Loose → Milk now ends on the pill
   // drag the pill; its hidden card comes along

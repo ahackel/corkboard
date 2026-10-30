@@ -45,7 +45,7 @@ test('a folded section is not read until it unfolds, and lets go of its notes wh
   await openBoard(page);
   await seedBoard(page, FOLDERS);
   const pill = page.locator('#world .node.section-folded', { hasText: 'Box' });
-  await expect(pill.locator('.section-count')).toHaveText('2');          // counted, not read
+  await expect(pill).toHaveAttribute('title', /\b2 Cards\b/);          // counted, not read
   await expect(page.locator('#world .node', { hasText: 'First inside' })).toHaveCount(0);
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);     // its line still meets the pill
   await pill.click();
@@ -57,7 +57,7 @@ test('a folded section is not read until it unfolds, and lets go of its notes wh
   await page.locator('#fbFold').click();
   await page.waitForTimeout(1500);
   await expect(page.locator('#world .node', { hasText: 'First inside' })).toHaveCount(0);
-  await expect(page.locator('#world .node.section-folded .section-count')).toHaveText('2');
+  await expect(page.locator('#world .node.section-folded')).toHaveAttribute('title', /\b2 Cards\b/);
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);
   // ⌘Z unfolds it again — and its notes, already let go of, are read back in
   await page.keyboard.press('ControlOrMeta+z');
@@ -72,7 +72,7 @@ test('a folder made outside the app arrives as a folded section named after it',
   await openBoard(page);
   await seedBoard(page, { 'Loose.md': note('A loose card'), 'Inbox/From phone.md': note('Call Sam') });
   const pill = page.locator('#world .node.section-folded', { hasText: 'Inbox' });
-  await expect(pill.locator('.section-count')).toHaveText('1');
+  await expect(pill).toHaveAttribute('title', /\b1 Card\b/);
   await palette(page, 'Expand all');
   await expect(card(page, 'Call Sam')).toBeVisible();
   const files = await diskFiles(page);
@@ -159,4 +159,23 @@ test('a section clips its cards all the way through an unfold', async ({ page })
   expect(clip[1]).toBeGreaterThanOrEqual(box[1] - 1);
   expect(clip[2]).toBeLessThanOrEqual(box[2] + 1);
   expect(clip[3]).toBeLessThanOrEqual(box[3] + 1);
+});
+
+test('a folded section is a folder and its label; what it holds is in its tooltip, sections apart', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, {
+    'Box/_index.md': note('# Box\n\nThe things in it', { 'mm_type': 'frame' }),
+    'Box/One.md': note('First inside'),
+    'Box/Two.md': note('Second inside'),
+    'Box/Inner/_index.md': note('# Inner', { 'mm_type': 'frame' }),
+    'Box/Inner/Deep.md': note('Deep inside'),
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: { 'Box/_index.md': { x: 0, y: 0, w: 300, h: 300, collapsed: true } } }),
+  });
+  const pill = page.locator('#world .node.section-folded', { hasText: 'Box' });
+  await expect(pill.locator('.fold-icon svg')).toBeVisible();
+  await expect(pill.locator('.section-desc')).toHaveText('The things in it');   // the same label an open one wears
+  await expect(pill).toHaveAttribute('title', 'Box\nThe things in it\n3 Cards, 1 Section');   // unread: counted
+  await page.screenshot({ path: 'test-results/folded.png', clip: { x: 300, y: 250, width: 600, height: 300 } });
+  expect(errors).toEqual([]);
 });

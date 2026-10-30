@@ -50,6 +50,7 @@ export interface MindNode {
   // A FOLDED section whose notes are still on disk, unread (data/lazy.ts): how many there are, for its
   // pill. Undefined once they're in memory. Ephemeral — what's read is a property of this session.
   lazy?: number;
+  lazySections?: number;           // …and how many of those are SECTIONS, for the pill's tooltip
   _parentPath?: string;            // transient: the parent's path (its folder), resolved to `parent` post-load
   collapsed: boolean;
   locked: boolean;                 // this card can be selected but not moved, (un)collapsed, or

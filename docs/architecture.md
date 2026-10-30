@@ -225,11 +225,9 @@ untitled box, like an untitled FigJam section. Three ways back to writing on it:
   text editor, named or not. The band includes the resize zones lying over that border, which is why this
   is the one gesture allowed past the `NODE_CONTROLS` bail — a double-click means nothing on a handle.
 - **F2 / Rename** in the menu.
-FOLDED, an untitled section is a bare stub — and the CHIP is what keeps it usable. The row goes invisible
-rather than `display:none`: `.hidden-count` lives inside it, and hiding it would leave a nameless section with
-no way to open again. Expanded, that invisible row collapses onto the BOX's top edge, so the chip hangs off
-the corner the way a card's does. The stub asserts its 40px (`min-height`, `--section-tab-h`). While its editor
-is open the row is revealed regardless (`ui.titleEdit`), or the editor would open on an invisible element.
+FOLDED, an untitled section is just its folder icon (`.fold-icon`) — still something to click, drag and open.
+While its editor is open the row is revealed regardless (`ui.titleEdit`), or the editor would open on an
+invisible element.
 
 **`isSection` means an EXPANDED section** (`view/layout.ts` tests `!collapsed`), and so does every question built
 on it; a rule that must also reach the folded pill keys on the raw `n.type === 'section'`.
@@ -687,10 +685,11 @@ it hid from the selection (`dropHiddenFromSelection`). It ANIMATES (`animateLayo
 Web Animations on width/height with the content clipped, a section's content wrapper with it). Fit
 (`autoSizeSelection`) goes through the same path (`animateLayout`).
 
-- **A folded SECTION** is its label pill at the box's top-left corner: its name, a round count of the
-  notes inside (`.section-count`, `descendantCount`). `nodeH` = `SECTION_TAB_H` (40px: 20px line + 9px padding
-  + 1px border, top and bottom — pinned in CSS, since `nodeH` asserts it rather than measuring); `nodeW`
-  measures the pill. Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
+- **A folded SECTION is a FOLDER ICON and its label** at the box's top-left corner: the folder (`.fold-icon`,
+  tinted by the section's colour), then the very pill an open section wears above its box — name and
+  description. No count on it: what it holds is its TOOLTIP, "10 Cards, 4 Sections" (`heldSummary`, from the
+  notes in memory and, for a folder never read, the listing's `lazy`/`lazySections`). `nodeW` and `nodeH` both
+  MEASURE it (`SECTION_TAB_H`, 30px, only before it has painted). Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
   when the pill is dragged (`moveSubtreeTo`'s `insideSection`). It takes no drops (`isSection` is false while
   folded) and has no resize handles. Anything ADDED inside one — a paste, a new card, a dropped file or
   text — unfolds it first; `focusNode` (links) unfolds the sections above its target, up to the open section.
@@ -706,7 +705,7 @@ Web Animations on width/height with the content clipped, a section's content wra
 - **A folded card is a CHIP**: one row — its first line (`collapsedMarkdown`, greyed when the card is
   untitled so it reads as the start of a note, not a name), then `.fold-more`, a small round badge: "+N"
   (`hiddenLineCount`, non-blank lines after the first; the tooltip says "N
-  more lines"). It shrink-wraps (`width:max-content`, 40px tall like a folded section's pill, `SECTION_TAB_H`) up to the width it has open (an inline
+  more lines"). It shrink-wraps (`width:max-content`, 40px tall) up to the width it has open (an inline
   `max-width`), so `nodeW` measures a folded card. Its authored `n.h` is NOT applied while folded (no `min-height`), so a card
   dragged taller still folds to the 40px chip and unfolds back to that height.
 - **While a card is resized its tags step aside** (`.resizing`, set from `resizingId` in paintNode's class

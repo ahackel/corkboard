@@ -102,6 +102,29 @@ export function firstVisible(n: MindNode): MindNode {
   // (features/search.ts), so the fallback is only a backstop, not a case anyone relies on.
   return n;
 }
+// What a section holds, all the way down, for a FOLDED one's tooltip: "10 Cards, 4 Sections". Counted from
+// the notes in memory and, for a folder never read, from what its listing counted (MindNode.lazy).
+export function heldSummary(n: MindNode): string {
+  let cards = 0, sections = 0;
+  const walk = (m: MindNode): void => {
+    if (m.lazy != null) {
+      sections += m.lazySections ?? 0;
+      cards += m.lazy - (m.lazySections ?? 0);
+    }
+    for (const k of childrenOf(m.id)) {
+      if (k.type === 'section') {
+        sections++;
+      } else {
+        cards++;
+      }
+      walk(k);
+    }
+  };
+  walk(n);
+  const part = (k: number, one: string): string => k ? `${k} ${one}${k === 1 ? '' : 's'}` : '';
+  return [part(cards, 'Card'), part(sections, 'Section')].filter(Boolean).join(', ') || 'Empty';
+}
+
 export function descendantCount(id: string): number {
   let c = 0;
   for (const ch of childrenOf(id)) {

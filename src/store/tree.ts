@@ -8,7 +8,7 @@
 // folder is asked about, since nothing below it is read.
 import { SECTION_NOTE } from '../utils/filenames.js';
 
-export interface LazyFolder { count: number; hasIndex: boolean; }
+export interface LazyFolder { count: number; hasIndex: boolean; sections: number; }   // sections: of `count`
 export interface TreePlan {
   read: string[];                      // the .md paths to read, in listing order
   lazy: Map<string, LazyFolder>;       // folder ('A/B/') -> its unread notes
@@ -53,7 +53,8 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
     }
     const hasIndex = index.has(d);
     if (fold(d, hasIndex)) {
-      lazy.set(d, { count: n - (hasIndex ? 1 : 0), hasIndex });
+      const sections = [...index.keys()].filter(k => k !== d && k.startsWith(d)).length;
+      lazy.set(d, { count: n - (hasIndex ? 1 : 0), hasIndex, sections });
     }
   }
   const lazyDirs = [...lazy.keys()];

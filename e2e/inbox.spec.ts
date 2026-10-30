@@ -69,11 +69,11 @@ test('a note that lands in a FOLDED Inbox pulses its pill, which counts it', asy
   });
   await openFolder(page);
   const pill = page.locator('#world .node.section-folded', { hasText: 'Inbox' });
-  await expect(pill.locator('.section-count')).toHaveText('1');
+  await expect(pill).toHaveAttribute('title', /\b1 Card\b/);
   await seedFolder(page, { 'Inbox/Two.md': 'Two\n' });
   await page.waitForTimeout(700);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(pill.locator('.section-count')).toHaveText('2');
+  await expect(pill).toHaveAttribute('title', /\b2 Cards\b/);
   await expect(pill).toHaveClass(/arrived/);
   // the palette's Inbox reads it and opens it up
   await palette(page, 'Inbox');

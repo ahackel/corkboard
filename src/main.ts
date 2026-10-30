@@ -13,10 +13,10 @@ import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStor
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
-import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, descendantCount } from './utils/model.js';
+import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary } from './utils/model.js';
 import { state, world, dragLayer, isStack } from './core/state.js';
 import { setupGrid } from './view/grid.js';
-import { mountIcons, LOCK_BADGE_SVG } from './view/icons.js';
+import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
 import { screenToWorld, labelScale } from './view/camera.js';
 import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionDescription } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
@@ -78,7 +78,7 @@ function nodeEl(n: MindNode): HTMLElement {
   el.innerHTML = `<div class="title-row"><div class="title"></div></div><div class="body"></div>
     <div class="fold-more"></div>
     <div class="top-edge"><div class="tag-row"></div></div><div class="task-bar"></div>
-    <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span>`;
+    <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span><span class="fold-icon">${FOLDER_SVG}</span>`;
   world.appendChild(el);
   n.el = el;
   bindNodeDrag(n);
@@ -497,12 +497,10 @@ export function paintNode(n: MindNode): void {
       // …and under the name, on a second muted line, its DESCRIPTION (sectionDescription — the note
       // after the heading). The
       // label grows UPWARD from the box's top edge, so a description never moves the box. FOLDED, the
-      // pill is one line: the name, then how many notes it holds (`.section-count`).
-      const desc = isSection(n) ? sectionDescription(n) : '';
+      // section is a folder icon and that same label beside it; what it holds is in the tooltip.
+      const desc = isSection(n) || isSectionFold(n) ? sectionDescription(n) : '';
       const md = desc || isSectionFold(n) || isStack(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(n) : cardMarkdown(n);
-      // A folded section whose notes weren't read knows only HOW MANY there are (data/lazy.ts).
-      const count = isSectionFold(n) ? n.lazy ?? descendantCount(n.id) : 0;
-      // …and, while a search is on, how many of them match it (features/search.ts).
+      // …and, while a search is on, how many of what a folded one holds match it (features/search.ts).
       const hits = isSectionFold(n) ? searchHitsIn(n.id) : 0;
       const full = nodeLabel(n) + (desc ? '\n' + desc : '');
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
@@ -511,15 +509,22 @@ export function paintNode(n: MindNode): void {
       // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
       // on its own, e.g. when the file is renamed) and `md` alone would never notice.
       // A section with no text of its own renders NOTHING here.
-      const key = md + '\u0000' + desc + '\u0000' + (isSectionFold(n) ? count + '/' + hits : '');
+      const key = md + '\u0000' + desc + '\u0000' + (isSectionFold(n) ? hits : '');
       if (titleEl.dataset.md !== key){
         titleEl.dataset.md = key;
         titleEl.innerHTML = (md.trim() ? renderBodyHTML(md) : '')
           + (desc ? `<div class="section-desc">${renderBodyHTML(desc)}</div>` : '')
-          + (isSectionFold(n) ? `<span class="section-count">${count}</span>` : '')
           + (hits ? `<span class="section-hits" title="${hits} matching the search">${hits} match${hits === 1 ? '' : 'es'}</span>` : '');
       }
-      titleEl.title = full;   // ellipsised lines, so the full text lives in the tooltip
+      // Ellipsised lines, so the full text lives in the tooltip — on the whole element when folded, the icon
+      // too, with what the folder holds ("10 Cards, 4 Sections").
+      if (isSectionFold(n)) {
+        titleEl.removeAttribute('title');
+        el.title = (sectionLabelled(n) ? full + '\n' : '') + heldSummary(n);
+      } else {
+        titleEl.title = full;
+        el.removeAttribute('title');
+      }
       // A section with nothing written on it shows NO TITLE: expanded, that means no label at all;
       // FOLDED, a bare stub of a pill. Either way its fold
       // CHIP stays visible (styles.css re-shows it inside the invisible row) — hiding that would leave a

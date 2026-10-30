@@ -167,6 +167,7 @@ export function releaseFolded(): void {
     }
     forgetImages(pics);
     f.lazy = kids.reduce((c, n) => c + 1 + (n.lazy ?? 0), 0);   // a folded section inside counts its own
+    f.lazySections = kids.reduce((c, n) => c + (n.type === 'section' ? 1 : 0) + (n.lazySections ?? 0), 0);
     f.kidOrder = undefined;
   }
 }

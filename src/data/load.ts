@@ -150,6 +150,7 @@ function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
       add(n = folderSection(path, seeds));
     }
     n.lazy = f.count;
+    n.lazySections = f.sections;
     n.collapsed = true;   // a folder nobody has unfolded yet arrives as its pill
   }
   // Sections for the folders that have notes but no section note — outermost last, since each one asks
@@ -288,7 +289,7 @@ async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
   if (f.lazy == null || !state.nodes.has(f.id)) {
     return;   // read twice at once, or gone meanwhile
   }
-  f.lazy = undefined;
+  f.lazy = undefined; f.lazySections = undefined;
   const seeds = newSeeds();
   const added = addListed(listing, seeds);
   const byPath = settle(added, seeds);

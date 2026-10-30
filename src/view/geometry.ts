@@ -24,13 +24,11 @@ export const SECTION_BORDER = 2;   // must match .node.section's CSS `border` wi
 // Default section container size (world px).
 export const SECTION_W = 360, SECTION_H = 260;
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
-// A FOLDED section renders as nothing but its label — a pill at the box's top-left
-// corner (n.x, n.y), its cards hidden (utils/model.ts isHidden). Its element shrink-wraps the label,
-// so its width is measured (nodeW) and its height is the SECTION_TAB_H constant.
+// A FOLDED section renders as a folder icon and its label at the box's top-left corner (n.x, n.y), its cards
+// hidden (utils/model.ts isHidden). Its element shrink-wraps both, so it is MEASURED, width and height.
 export function isSectionFold(n: MindNode): boolean { return n.type === 'section' && !!n.collapsed && !n.stack; }
-// Height of a folded section's pill (styles.css .section-folded: 20px line + 9px padding + 1px border, top
-// and bottom). A constant, so the pill is one ellipsised line and never measured.
-const SECTION_TAB_H = 40;
+// …a folded section's height before it has painted: the label's one line (24px) and its padding (3px).
+const SECTION_TAB_H = 30;
 // What CAN fold: every SECTION (to its label pill), a card with something below its first line to tuck
 // away (to a one-line chip), or an image card (to a 40px icon of itself). The one rule the arrow, X,
 // ←/→, the menus and ⌘P's Collapse all ask.
@@ -57,7 +55,8 @@ export function isImageFold(n: MindNode): boolean { return imageLook(n) && n.col
 // below.
 export function isBoxNode(n: MindNode): boolean { return isSection(n) || isImageBox(n); }
 
-// Every kind whose height is set rather than measured: a box, and anything folded to a fixed size.
+// Every kind whose height is NOT the authored n.h (a card's min-height): a box, an image folded to its icon,
+// and a folded section, which is its folder and label — whatever height those measure (nodeH).
 export function heightIsDeclared(n: MindNode): boolean {
   return isBoxNode(n) || isImageFold(n) || isSectionFold(n);
 }
@@ -95,7 +94,7 @@ export function nodeH(n: MindNode): number {
     return IMAGE_FOLD;
   }
   if (isSectionFold(n)) {
-    return SECTION_TAB_H;   // just the pill — one fixed line, never measured
+    return (n.el && n.el.offsetHeight) || SECTION_TAB_H;   // the folder and its label, measured
   }
   return (n.el && n.el.offsetHeight) || 64;
 }

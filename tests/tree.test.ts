@@ -19,17 +19,17 @@ describe('planTree', () => {
     expect(p.read).toContain('Ideas/_index.md');
     expect(p.read).not.toContain('Ideas/A.md');
     expect(p.read).not.toContain('Ideas/Deep/B.md');
-    expect(p.lazy.get('Ideas/')).toEqual({ count: 3, hasIndex: true });
+    expect(p.lazy.get('Ideas/')).toEqual({ count: 3, hasIndex: true, sections: 1 });   // Deep/ is one of them
     expect(p.lazy.has('Ideas/Deep/')).toBe(false);   // never asked: nothing under a folded folder is
   });
   it('folds a folder with no section note too', () => {
     const p = planTree(PATHS, '', (_d, hasIndex) => !hasIndex);
-    expect(p.lazy.get('Bare/')).toEqual({ count: 1, hasIndex: false });
+    expect(p.lazy.get('Bare/')).toEqual({ count: 1, hasIndex: false, sections: 0 });
     expect(p.read).not.toContain('Bare/Note.md');
   });
   it('plans one folder at a time', () => {
     const p = planTree(PATHS.filter(x => x.startsWith('Ideas/')), 'Ideas/', d => d === 'Ideas/Deep/');
     expect(p.read).toEqual(['Ideas/_index.md', 'Ideas/A.md', 'Ideas/Deep/_index.md']);
-    expect(p.lazy.get('Ideas/Deep/')).toEqual({ count: 1, hasIndex: true });
+    expect(p.lazy.get('Ideas/Deep/')).toEqual({ count: 1, hasIndex: true, sections: 0 });
   });
 });

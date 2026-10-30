@@ -49,8 +49,8 @@ after its text, like every other card.
 ## 4. At the desk
 
 Switch to the Corkboard window. New notes appear in the Inbox section, in a column beside whatever is
-already there, and **pulse** blue for a moment. If the Inbox is folded, its pill pulses and its count goes
-up. Drag each card to where it belongs — that moves its file out of the `Inbox/` folder too, so the inbox
+already there, and **pulse** blue for a moment. If the Inbox is folded, its folder pulses and the count in its
+tooltip goes up. Drag each card to where it belongs — that moves its file out of the `Inbox/` folder too, so the inbox
 empties as you sort.
 
 ## When a note doesn't show up
