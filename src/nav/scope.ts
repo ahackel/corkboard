@@ -17,7 +17,7 @@
 // also what makes the `utils/model.ts` → this edge legal: this module imports `core/state.js`, never
 // the reverse.
 // ============================================================
-import { state, type MindNode, type View } from '../core/state.js';
+import { state, isStack, type MindNode, type View } from '../core/state.js';
 
 export interface ScopeBack { view: View; sel: string[]; selId: string | null; }
 export interface ScopeLevel {
@@ -48,7 +48,7 @@ export function scopeRootFile(): string | null { return scopeRootNode()?.file ??
 // A STACK is the exception: its cards lie on one spot, so its interior has nothing to show as a canvas —
 // it FANS OUT instead (features/stacks.ts).
 export function canOpen(n: MindNode | null | undefined): boolean {
-  return n?.type === 'section' && !n.stack;
+  return n?.type === 'section' && !isStack(n);
 }
 // …and can be opened from where you stand: not the section you are already in. (canOpen itself stays
 // true for that one — the scope stack below checks the sections on the path, the open one included.)

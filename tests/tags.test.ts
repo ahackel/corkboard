@@ -1,7 +1,7 @@
 // Tags are Obsidian's (utils/tags.ts): what counts as one, in a note's text and as typed, and how they
 // match. Plus emoji by name for the `#` field (utils/emoji-names.ts) and how a `#tag` renders.
 import { describe, expect, it } from 'vitest';
-import { cleanTag, textTags, hasTag, isEmojiTag, noteTags, tagTilt } from '../src/utils/tags.js';
+import { cleanTag, textTags, hasTag, isEmojiTag, noteTags } from '../src/utils/tags.js';
 import { emojiByName } from '../src/utils/emoji-names.js';
 import { renderBodyHTML } from '../src/utils/markdown.js';
 import { parseMd } from '../src/utils/frontmatter.js';
@@ -49,9 +49,6 @@ describe('matching', () => {
     expect(isEmojiTag('🇩🇪')).toBe(true);
     expect(isEmojiTag('idea')).toBe(false);
     expect(isEmojiTag('v2🔥')).toBe(false);
-  });
-  it('tilts a tag the same way every time', () => {
-    expect(tagTilt('idea')).toBe(tagTilt('idea'));
   });
 });
 

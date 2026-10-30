@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openBoard, section, card, palette, watchErrors } from './helpers';
+import { openBoard, section, card, palette, watchErrors, tooltip } from './helpers';
 
 // A "folder on disk" for the File System Access store: the picker is stubbed to hand back a folder in
 // the browser's private storage — the same directory-handle API a real folder has — so the board runs
@@ -69,11 +69,11 @@ test('a note that lands in a FOLDED Inbox pulses its pill, which counts it', asy
   });
   await openFolder(page);
   const pill = page.locator('#world .node.section-folded', { hasText: 'Inbox' });
-  await expect(pill).toHaveAttribute('title', /\b1 Card\b/);
+  await expect.poll(() => tooltip(page, pill)).toMatch(/\b1 Card\b/);
   await seedFolder(page, { 'Inbox/Two.md': 'Two\n' });
   await page.waitForTimeout(700);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(pill).toHaveAttribute('title', /\b2 Cards\b/);
+  await expect.poll(() => tooltip(page, pill)).toMatch(/\b2 Cards\b/);
   await expect(pill).toHaveClass(/arrived/);
   // the palette's Inbox reads it and opens it up
   await palette(page, 'Inbox');

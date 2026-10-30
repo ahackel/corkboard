@@ -32,7 +32,7 @@ describe('listEnter', () => {
     expect(enter('- [x] done|')).toBe('- [x] done\n- [ ] |');
   });
   it('splits an item at the caret', () => {
-    expect(enter('- milk| and eggs')).toBe('- milk\n-  and eggs'.replace('-  and', '- | and'));
+    expect(enter('- milk| and eggs')).toBe('- milk\n- | and eggs');
   });
   it('ends the list on an empty item', () => {
     expect(enter('- a\n- |')).toBe('- a\n|');

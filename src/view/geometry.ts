@@ -26,14 +26,14 @@ export const SECTION_W = 360, SECTION_H = 260;
 export const IMAGE_W = 240, IMAGE_H = 180;   // default image-card size (world px)
 // A FOLDED section renders as a folder icon and its label at the box's top-left corner (n.x, n.y), its cards
 // hidden (utils/model.ts isHidden). Its element shrink-wraps both, so it is MEASURED, width and height.
-export function isSectionFold(n: MindNode): boolean { return n.type === 'section' && !!n.collapsed && !n.stack; }
+export function isSectionFold(n: MindNode): boolean { return n.type === 'section' && !!n.collapsed && !isStack(n); }
 // …a folded section's height before it has painted: the label's one line (24px) and its padding (3px).
 const SECTION_TAB_H = 30;
 // What CAN fold: every SECTION (to its label pill), a card with something below its first line to tuck
 // away (to a one-line chip), or an image card (to a 40px icon of itself). The one rule the arrow, X,
 // ←/→, the menus and ⌘P's Collapse all ask.
 export function canFold(n: MindNode): boolean {
-  return (n.type === 'section' && !n.stack) || isImageCard(n) || hiddenLineCount(n) > 0;
+  return (n.type === 'section' && !isStack(n)) || isImageCard(n) || hiddenLineCount(n) > 0;
 }
 // …and may be folded or unfolded by the user right now: not locked, and not the open section (it's the canvas).
 export const canToggleFold = (n: MindNode): boolean => canFold(n) && !isLockedEffective(n) && !isScopeRoot(n);

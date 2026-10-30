@@ -28,9 +28,8 @@ import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-gh
 import './features/commands.js';   // the keyboard shortcuts and the ⌘P palette's list of every action
 import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
 import { addCardInside } from './features/crud.js';
-import { bindNodeDrag } from './features/drag.js';
+import { bindNodeDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
-import { fanTilt } from './view/pile.js';   // also registers the Alt/Shift drag-modifier listeners
 import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
 import { syncFloatBar } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
@@ -81,6 +80,14 @@ function nodeEl(n: MindNode): HTMLElement {
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span><span class="fold-icon">${FOLDER_SVG}</span>`;
   world.appendChild(el);
   n.el = el;
+  // A FOLDED section's tooltip: its name and what it holds — "10 Cards, 4 Sections" (utils/model.ts
+  // heldSummary). Worked out when the pointer arrives rather than on every paint, since it walks the folder.
+  el.addEventListener('pointerenter', () => {
+    if (isSectionFold(n)) {
+      const desc = sectionDescription(n);
+      el.title = (sectionLabelled(n) ? nodeLabel(n) + (desc ? '\n' + desc : '') + '\n' : '') + heldSummary(n);
+    }
+  });
   bindNodeDrag(n);
   bindCardFileDrag(n);   // ⌥-drag out of the window = save as .md file(s)
   // The badge on a folded card shows the whole note (features/peek.ts) — the tap for touch,
@@ -256,7 +263,7 @@ export function effectiveColor(n: MindNode): string {
   // vanish into it. Uncoloured, it's the neutral surface below — a box you can see inside any other.
   // A STACK's colour is its pin's, and an uncoloured pin is red.
   if (n.type === 'section') {
-    return n.color || (n.stack ? STACK_DEFAULT_COLOR : 'white');
+    return n.color || (isStack(n) ? STACK_DEFAULT_COLOR : 'white');
   }
   const drag = ui.drag;
   let previewId: string | null = null;
@@ -509,18 +516,17 @@ export function paintNode(n: MindNode): void {
       // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
       // on its own, e.g. when the file is renamed) and `md` alone would never notice.
       // A section with no text of its own renders NOTHING here.
-      const key = md + '\u0000' + desc + '\u0000' + (isSectionFold(n) ? hits : '');
+      const key = md + '\u0000' + desc + '\u0000' + hits;
       if (titleEl.dataset.md !== key){
         titleEl.dataset.md = key;
         titleEl.innerHTML = (md.trim() ? renderBodyHTML(md) : '')
           + (desc ? `<div class="section-desc">${renderBodyHTML(desc)}</div>` : '')
           + (hits ? `<span class="section-hits" title="${hits} matching the search">${hits} match${hits === 1 ? '' : 'es'}</span>` : '');
       }
-      // Ellipsised lines, so the full text lives in the tooltip — on the whole element when folded, the icon
-      // too, with what the folder holds ("10 Cards, 4 Sections").
+      // Ellipsised lines, so the full text lives in the tooltip — when folded, on the whole element (the icon
+      // too) and written as the pointer comes in (nodeEl), since saying what the folder holds walks it.
       if (isSectionFold(n)) {
         titleEl.removeAttribute('title');
-        el.title = (sectionLabelled(n) ? full + '\n' : '') + heldSummary(n);
       } else {
         titleEl.title = full;
         el.removeAttribute('title');
@@ -584,20 +590,12 @@ export function paintNode(n: MindNode): void {
     bar.title = barTitle;
     bar.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
   }
+  // A stack's FACE — its top cards drawn as a pile and its pin — or the leftovers of one gone.
+  paintPile(n, el);
+
   // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
   // what's left under the padding and the rest is simply cut. Not while folded, opened as a page, or
   // edited — the editor shows the whole note, then it clips again.
-  // A stack's FACE — its top cards drawn as a pile, the pin, the count — or the leftovers of one gone.
-  paintPile(n, el);
-
-  // A card of the open fan lies at a tilt (view/pile.ts fanTilt): the CSS `rotate`, which the drag's
-  // `transform` leaves alone.
-  const tilt = fanTilt(n.id);
-  if (tilt != null) {
-    el.style.setProperty('--tilt', tilt.toFixed(2) + 'deg');
-  } else {
-    el.style.removeProperty('--tilt');
-  }
   const clipH = clipHeight(n, !!editingBody);
   if (clipH != null) {
     const cap = Math.max(0, clipH - bodyEl.offsetTop - parseFloat(getComputedStyle(el).paddingBottom));

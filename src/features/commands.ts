@@ -3,7 +3,7 @@ import { createNode, centredAt, newSectionAt, duplicateSelection, createSibling,
 import { worldAtOrCentre, zoomAt } from '../view/camera.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
 import { exitScope, openSection } from '../nav/sections.js';
-import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
+import { state, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { setCollapsedSelection, toggleCollapseSelection, foldScope, expandAll } from './fold.js';
 import { selectedIds, selectAll, selectNode, taggableSelection } from './selection.js';
 import { focusOrFit } from '../nav/focus.js';
@@ -313,7 +313,7 @@ function paletteCommands(): Command[] {
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
     { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: hasStackSelected, run: unstackSelection },
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
-    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && nodesOf(selectedIds()).some(n => n.type === 'section' && !n.stack), run: deleteSelectionKeepChildren },
+    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && nodesOf(selectedIds()).some(n => n.type === 'section' && !isStack(n)), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },

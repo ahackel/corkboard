@@ -26,13 +26,39 @@ export function topOfPile(s: MindNode): MindNode | null {
   return kids[kids.length - 1] ?? null;
 }
 
-// The pile's footprint is its TOP card's: that's the face you see and grab.
+// The pile's footprint is its TOP card's: that's the face you see and grab. Asked on every paint and drag
+// frame (nodeW), so it reads the top off the stored order — the last id still a card of this stack — and only
+// falls back to the full child scan when that order has nothing to say.
 export function pileW(s: MindNode): number {
+  const order = s.kidOrder ?? [];
+  for (let i = order.length - 1; i >= 0; i--) {
+    const k = state.nodes.get(order[i]);
+    if (k?.parent === s.id) {
+      return nodeW(k);
+    }
+  }
   const top = topOfPile(s);
   return top ? nodeW(top) : NODE_W;
 }
 
-// The tilt of each card in the open fan, in degrees — read by paintNode for the card's CSS `rotate`.
+// Cards in a GRID: ⌈√n⌉ columns as wide as the widest card, each row as tall as its tallest, `gap` apart.
+// Each card's top-left as an offset from the grid's own, and the grid's size. Shared by the fan's grid and by
+// Unstack / Turn into section (features/stacks.ts). Heights are measured, so the cards must be painted.
+export function gridOf(cards: MindNode[], gap: number): { at: Pt[]; w: number; h: number } {
+  const cols = Math.ceil(Math.sqrt(cards.length));
+  const colW = Math.max(...cards.map(nodeW)) + gap;
+  const at: Pt[] = [];
+  let y = 0, w = 0;
+  for (let i = 0; i < cards.length; i += cols) {
+    const row = cards.slice(i, i + cols);
+    row.forEach((_, j) => at.push({ x: j * colW, y }));
+    w = Math.max(w, row.length * colW - gap);
+    y += Math.max(...row.map(nodeH)) + gap;
+  }
+  return { at, w, h: Math.max(0, y - gap) };
+}
+
+// The tilt of each card in the open fan, in degrees — set as its `--tilt` by features/stacks.ts syncFan.
 const fanTilts = new Map<string, number>();
 
 export function fanTilt(id: string): number | undefined {
@@ -86,20 +112,9 @@ function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
     });
     return out;
   }
-  const cols = Math.ceil(Math.sqrt(shown.length));
-  const colW = Math.max(...shown.map(nodeW)) + FAN_GAP;
-  const rows: MindNode[][] = [];
-  for (let i = 0; i < shown.length; i += cols) {
-    rows.push(shown.slice(i, i + cols));
-  }
-  const rowH = rows.map(r => Math.max(...r.map(nodeH)) + FAN_GAP);
-  const total = rowH.reduce((a, b) => a + b, 0) - FAN_GAP;
-  let y = s.y + nodeH(s) / 2 - total / 2;
-  rows.forEach((r, ri) => {
-    const x0 = cx - (cols * colW - FAN_GAP) / 2;
-    r.forEach((k, i) => out.set(k.id, { x: x0 + i * colW, y, tilt: 0 }));
-    y += rowH[ri];
-  });
+  const g = gridOf(shown, FAN_GAP);
+  const x0 = cx - g.w / 2, y0 = s.y + nodeH(s) / 2 - g.h / 2;
+  shown.forEach((k, i) => out.set(k.id, { x: x0 + g.at[i].x, y: y0 + g.at[i].y, tilt: 0 }));
   return out;
 }
 

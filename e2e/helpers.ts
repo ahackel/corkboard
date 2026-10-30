@@ -9,7 +9,7 @@ export const AWAY = { x: 1180, y: 60 };
 export async function openBoard(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('#stage')).toBeVisible();
-  await page.waitForTimeout(600);   // boot onto the (fresh) map
+  await expect(page.locator('#folderName .sc-name')).toBeVisible();   // booted onto the (fresh) map
 }
 
 export function card(page: Page, text: string): Locator {
@@ -17,6 +17,14 @@ export function card(page: Page, text: string): Locator {
 }
 export function section(page: Page, text: string): Locator {
   return page.locator('#world .node.section', { hasText: text }).first();
+}
+
+// What a node's tooltip says. A folded section writes its own as the pointer comes in (main.ts nodeEl), so
+// come in from somewhere else first.
+export async function tooltip(page: Page, l: Locator): Promise<string | null> {
+  await page.mouse.move(AWAY.x, AWAY.y);
+  await l.hover();
+  return l.getAttribute('title');
 }
 
 export async function clickAway(page: Page): Promise<void> {
@@ -39,6 +47,31 @@ export async function makeCard(page: Page, x: number, y: number, text: string): 
   // value, which a text match can't see
   const id = await card(page, first).getAttribute('data-id');
   return page.locator(`#world .node[data-id="${id}"]`);
+}
+
+// An element's centre on screen.
+export async function centre(l: Locator): Promise<{ x: number; y: number }> {
+  const b = (await l.boundingBox())!;
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+}
+
+// Press at `from`, carry it to `to` (screen points) and let go; `hold` rests there first — what a person does
+// to say "this one, onto that".
+export async function dragTo(page: Page, from: { x: number; y: number }, to: { x: number; y: number },
+                             { hold = 0 }: { hold?: number } = {}): Promise<void> {
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 12 });
+  if (hold) {
+    await page.waitForTimeout(hold);
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+}
+
+// …from one element's centre onto another's.
+export async function dragOnto(page: Page, what: Locator, onto: Locator): Promise<void> {
+  await dragTo(page, await centre(what), await centre(onto));
 }
 
 export async function select(page: Page, c: Locator): Promise<void> {
@@ -97,7 +130,20 @@ export async function reload(page: Page): Promise<void> {
 // the map's folder exists, then everything in it is replaced.
 export async function seedBoard(page: Page, files: Record<string, string>): Promise<void> {
   await makeCard(page, 300, 300, 'seed');
-  await page.waitForTimeout(1000);
+  // …and its save has landed: the board file is written last (data/save.ts), after the note
+  await page.evaluate(async () => {
+    async function has(d: FileSystemDirectoryHandle): Promise<boolean> {
+      for await (const [n, h] of (d as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
+        if (n === 'board.json' || (h.kind === 'directory' && await has(h as FileSystemDirectoryHandle))) {
+          return true;
+        }
+      }
+      return false;
+    }
+    for (let i = 0; i < 100 && !await has(await navigator.storage.getDirectory()); i++) {
+      await new Promise(r => setTimeout(r, 50));
+    }
+  });
   await page.evaluate(async (files) => {
     async function find(d: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle | undefined> {
       for await (const [n, h] of (d as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
@@ -130,8 +176,8 @@ export async function seedBoard(page: Page, files: Record<string, string>): Prom
     }
   }, files);
   await page.reload();
-  await expect(page.locator('#stage')).toBeVisible();
-  await page.waitForTimeout(800);
+  await expect(page.locator('#folderName .sc-name')).toBeVisible();     // booted back onto the map…
+  await expect(page.locator('#world .node').first()).toBeAttached();   // …and the seeded map is on the canvas
   await page.keyboard.press('f');   // fit the seeded map
   await page.waitForTimeout(500);
 }

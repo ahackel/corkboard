@@ -58,25 +58,23 @@ export function paintMapCrumb(): void {
     return;
   }
   mapCrumb.innerHTML = `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(store.name)}</span>`;
-  mapCrumb.classList.add('sc-section');
-  mapCrumb.className = mapCrumb.className.replace(/\bc-\S+/g, '').trim();
-  const col = state.canvasColor || THEME_BG;
-  mapCrumb.classList.add(colorClass(col));
-  applyColorVars(mapCrumb, col);
+  tint(mapCrumb, state.canvasColor || THEME_BG);
 }
 
-// Each section crumb wears its section's colour, through the one colour path every surface takes.
+// A segment wears a colour through the one colour path every surface takes: its .c-* class (replacing the
+// last one) and, for a custom colour, its variables.
+function tint(el: HTMLElement, col: string): void {
+  el.className = el.className.replace(/\bc-\S+/g, '').trim() + ' ' + colorClass(col);
+  applyColorVars(el, col);
+}
+
+// Each section segment wears its section's colour.
 function paintCrumbColors(): void {
-  bar.querySelectorAll<HTMLElement>('.sc-section').forEach(el => {
-    const n = state.nodes.get(scope.stack[Number(el.dataset.depth) - 1]?.rootId ?? '');
-    const col = n ? effectiveColor(n) : 'white';
-    el.classList.add(colorClass(col));
-    applyColorVars(el, col);
-  });
+  bar.querySelectorAll<HTMLElement>('.sc-section').forEach(el => tint(el, levelColor(Number(el.dataset.depth) - 1)));
 }
 const levelColor = (i: number): string => {
-  const p = state.nodes.get(scope.stack[i]!.rootId);
-  return p ? effectiveColor(p) : '';
+  const p = state.nodes.get(scope.stack[i]?.rootId ?? '');
+  return p ? effectiveColor(p) : 'white';
 };
 const levelTitle = (i: number): string => {
   const p = state.nodes.get(scope.stack[i]!.rootId);

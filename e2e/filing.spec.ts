@@ -1,8 +1,8 @@
 // A drop FILES cards off the canvas: onto a folded section's pill (into it), or onto a crumb of the
 // open-section path (up to that level) — features/drag.ts chuteAt/fileAway. And the search's "1/2" and
 // chevrons, which find a match even inside a folded section never read.
-import { test, expect, type Page, type Locator } from '@playwright/test';
-import { openBoard, seedBoard, note, section, card, watchErrors, diskFiles } from './helpers';
+import { test, expect } from '@playwright/test';
+import { openBoard, seedBoard, note, section, card, watchErrors, diskFiles, tooltip, dragOnto } from './helpers';
 
 const BOARD = {
   'Loose.md': note('A loose card'),
@@ -17,15 +17,6 @@ const BOARD = {
     'Shelf/_index.md': { x: 400, y: 0, w: 300, h: 300 }, 'Shelf/Inner.md': { x: 440, y: 60 } } }),
 };
 
-async function dragOnto(page: Page, what: Locator, onto: Locator): Promise<void> {
-  const a = (await what.boundingBox())!, b = (await onto.boundingBox())!;
-  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
-  await page.mouse.up();
-  await page.waitForTimeout(400);
-}
-
 test('a card dropped on a folded pill is filed into that section', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
@@ -33,7 +24,7 @@ test('a card dropped on a folded pill is filed into that section', async ({ page
   const pill = page.locator('#world .node.section-folded', { hasText: 'Box' });
   await dragOnto(page, card(page, 'A loose card'), pill);
   await expect(card(page, 'A loose card')).toBeHidden();
-  await expect(pill).toHaveAttribute('title', /\b3 Cards\b/);
+  await expect.poll(() => tooltip(page, pill)).toMatch(/\b3 Cards\b/);
   expect(Object.keys(await diskFiles(page))).toContain('Box/A loose card.md');
   expect(errors).toEqual([]);
 });

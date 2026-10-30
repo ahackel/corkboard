@@ -1,7 +1,7 @@
 // ---------- hierarchy helpers ----------
 // The tree is DERIVED from each node's `parent` (no stored edge list). These queries
 // walk that live structure in state.nodes.
-import { state, type MindNode } from '../core/state.js';
+import { state, isStack, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
 import { scope } from '../nav/scope.js';
 import { ui } from '../core/ui-state.js';
@@ -78,7 +78,7 @@ export function isHidden(n: MindNode): boolean {
     if (p.id === scopeId) {
       return false;
     }
-    if (p.collapsed || (p.stack && ui.fan !== p.id)) {
+    if (p.collapsed || (isStack(p) && ui.fan !== p.id)) {
       return true;
     }
   }
@@ -106,21 +106,16 @@ export function firstVisible(n: MindNode): MindNode {
 // the notes in memory and, for a folder never read, from what its listing counted (MindNode.lazy).
 export function heldSummary(n: MindNode): string {
   let cards = 0, sections = 0;
-  const walk = (m: MindNode): void => {
+  subtreeIds(n.id).forEach((id, i) => {
+    const m = state.nodes.get(id)!;
+    if (i) {
+      m.type === 'section' ? sections++ : cards++;   // (i = 0 is n itself)
+    }
     if (m.lazy != null) {
       sections += m.lazySections ?? 0;
       cards += m.lazy - (m.lazySections ?? 0);
     }
-    for (const k of childrenOf(m.id)) {
-      if (k.type === 'section') {
-        sections++;
-      } else {
-        cards++;
-      }
-      walk(k);
-    }
-  };
-  walk(n);
+  });
   const part = (k: number, one: string): string => k ? `${k} ${one}${k === 1 ? '' : 's'}` : '';
   return [part(cards, 'Card'), part(sections, 'Section')].filter(Boolean).join(', ') || 'Empty';
 }

@@ -31,6 +31,7 @@ import { afterReading } from '../data/lazy.js';
 import { arrangeSections } from '../data/load.js';
 import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
+import type { FanInsert } from '../view/pile.js';
 import { beginPileGesture, pileTarget, pileInto, fanSlot, showFanInsert, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
 
 
@@ -732,17 +733,26 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     }
   }
 
-  // A card of the open fan, dragged within it, takes another place in the pile; anything over a stack — or
-  // held over a card long enough — goes onto a pile (features/stacks.ts).
-  const insert = fuse ? null : fanSlot(drag, e.clientX, e.clientY);
-  const slot = insert ? insert.slot : null;
-  const pile = fuse || slot != null ? null : pileTarget(drag, e.clientX, e.clientY, sub);
-  const chute = fuse || slot != null || pile ? null : chuteAt(e.clientX, e.clientY, sub);
-  const f = fuse || slot != null || pile || chute ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
-  const pileHolder = pile ? (pile.make ? state.nodes.get(pile.id)!.parent : pile.id) : null;
-  const target = fuse || slot != null ? dragged.parent : pile ? pileHolder : chute ? chute.parent : (f?.id ?? detachParentId());
+  // What else a release right now would do — the FIRST of these that applies: a card of the open fan dragged
+  // within it takes another place in the pile; over a stack, or held over a card long enough, the cards go
+  // onto a pile (features/stacks.ts); over a crumb or a folded pill they're filed (chuteAt); else they land in
+  // the section their centre is in.
+  let insert: FanInsert | null = null, pile: Drag['pile'] = null, chute: ReturnType<typeof chuteAt> = null;
+  let f: MindNode | null = null, target: string | null;
+  if (fuse) {
+    target = dragged.parent;
+  } else if ((insert = fanSlot(drag, e.clientX, e.clientY))) {
+    target = dragged.parent;
+  } else if ((pile = pileTarget(drag, e.clientX, e.clientY, sub))) {
+    target = pile.make ? state.nodes.get(pile.id)!.parent : pile.id;
+  } else if ((chute = chuteAt(e.clientX, e.clientY, sub))) {
+    target = chute.parent;
+  } else {
+    f = sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
+    target = f?.id ?? detachParentId();
+  }
   const changed = drag.dropTarget !== target;
-  drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute; drag.pile = pile; drag.fanSlot = slot;
+  drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute; drag.pile = pile; drag.fanSlot = insert?.slot ?? null;
   armPileHover(drag);
   if (changed) {
     for (const id of sub) {

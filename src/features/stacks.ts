@@ -2,21 +2,21 @@
 // Hold a dragged card over another for a moment and the two become a stack, like the Dock's; drop more cards
 // on the pile and they go on top. It's a SECTION all the same — a folder of its cards on disk — that shows
 // its cards lying on top of each other instead of sitting in a box (core/state.ts isStack).
-//   · the pile shows its top card, two more peeking out behind it, a pushpin and how many it holds
+//   · the pile shows its top card, two more peeking out behind it, and a pushpin in the stack's colour
 //   · a CLICK fans it out over the board; dragging the pile's BODY lifts its top card off; dragging the PIN
 //     moves the whole stack
 //   · down to one card, it's no stack any more: the last card is left lying where the pile was
 // Where its cards lie, piled or fanned, is view/pile.ts.
-import { state, stage, setStatus, isStack, isImageCard, type MindNode } from '../core/state.js';
+import { state, setStatus, isStack, isImageCard, type MindNode } from '../core/state.js';
 import { ui, type Drag, type Pt } from '../core/ui-state.js';
-import { childrenOf, isHidden, isLockedEffective, nodeLabel, nodesOf } from '../utils/model.js';
+import { childrenOf, isHidden, isLockedEffective, nodeLabel, nodesOf, nodeAtTarget } from '../utils/model.js';
 import { cardMarkdown } from '../utils/frontmatter.js';
 import { renderBodyHTML } from '../utils/markdown.js';
 import { trackPointer } from '../utils/dom.js';
-import { pileKids, topOfPile, fanSlotAt, fanTilt, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
-import { nodeW, nodeH, imageLook, gridSnap } from '../view/geometry.js';
+import { pileKids, topOfPile, fanSlotAt, fanTilt, gridOf, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
+import { nodeW, nodeH, imageLook } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
-import { screenToWorld, frameBox } from '../view/camera.js';
+import { screenToWorld, frameBox, stageSize } from '../view/camera.js';
 import { applyColorVars, colorClass, colorFill } from '../view/color.js';
 import { SPACING } from '../utils/guides.js';
 import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout } from '../main.js';
@@ -25,8 +25,7 @@ import { mkNode, deleteNodes } from './crud.js';
 import { touch, record } from './history.js';
 import { hydrateImages } from './images.js';
 import { selectedIds, setSelectionSet } from './selection.js';
-import { MIN_SECTION_W, MIN_SECTION_H } from './resize.js';
-import { growSectionsToHold } from './float-bar.js';
+import { growSectionsToHold, fitSectionToContent, SECTION_FIT_PAD } from './float-bar.js';
 import { scheduleSave } from '../data/save.js';
 
 // How long a dragged card rests on another before letting go makes the two a stack. A quick pass over a
@@ -41,15 +40,19 @@ const PILE_SHOWN = 3;
 
 // ---------- the pile ----------
 // A stack's face, inside its own element: its top cards as plain drawings (they're not nodes on the board
-// while piled — isHidden says so), the pin, and the selection ring round all of them. Built once and refreshed on every paint, each
-// card's text keyed on its markdown the way paintNode keys a card's own. Anything that stops being a stack
-// (Turn into section, an undo) drops its face here too.
+// while piled — isHidden says so), the pin, and the selection ring round all of them. Built once and refreshed
+// on every paint — each card KEYED on what it shows, the way paintNode keys a card's text, so a paint that
+// changed nothing writes nothing and measures nothing. Anything that stops being a stack (Turn into section,
+// an undo) drops its face here too; `data-cards` marks an element that has one.
 export function paintPile(n: MindNode, el: HTMLElement): void {
-  let face = el.querySelector<HTMLElement>(':scope > .stack-face');
   if (!isStack(n)) {
-    face?.remove();
+    if (el.dataset.cards != null) {
+      el.querySelector(':scope > .stack-face')?.remove();
+      delete el.dataset.cards;
+    }
     return;
   }
+  let face = el.querySelector<HTMLElement>(':scope > .stack-face');
   if (!face) {
     face = document.createElement('div');
     face.className = 'stack-face';
@@ -66,28 +69,30 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   while (pile.children.length < shown.length) {
     pile.insertAdjacentHTML('beforeend', '<div class="pile-card"><div class="body"></div></div>');
   }
-  shown.forEach((k, i) => {
+  const mess = shown.map((_, i) => messAt(kids.length - shown.length + i));
+  const keys = shown.map((k, i) => {
     const card = pile.children[i] as HTMLElement;
     const under = shown.length - 1 - i;   // 0 = the top card
-    const col = effectiveColor(k);
-    card.className = 'pile-card ' + colorClass(col) + (imageLook(k) ? ' image-card' : '') + (under ? ' under' : '');
-    applyColorVars(card, col);
-    card.style.width = nodeW(k) + 'px';
-    card.style.height = isImageCard(k) ? nodeH(k) + 'px' : '';
-    card.style.minHeight = !under && !isImageCard(k) && k.h != null ? k.h + 'px' : '';
+    const col = effectiveColor(k), image = isImageCard(k), md = cardMarkdown(k);
+    const minH = !under && !image && k.h != null ? k.h : null;
+    const key = [col, imageLook(k), under, nodeW(k), image ? nodeH(k) : '', minH, i, md].join('\u0000');
+    if (card.dataset.key !== key) {
+      card.dataset.key = key;
+      card.className = 'pile-card ' + colorClass(col) + (imageLook(k) ? ' image-card' : '') + (under ? ' under' : '');
+      applyColorVars(card, col);
+      card.style.width = nodeW(k) + 'px';
+      card.style.height = image ? nodeH(k) + 'px' : '';
+      card.style.minHeight = minH != null ? minH + 'px' : '';
 
-    // The mess: each card lies askew by its PLACE in the pile, counted from the bottom (messAt), so a card
-    // keeps its angle as others are piled on top of it.
-    const mess = messAt(kids.length - shown.length + i);
-    card.style.rotate = mess.tilt + 'deg';
-    card.style.translate = `${mess.dx}px ${mess.dy}px`;
-    const body = card.firstElementChild as HTMLElement;
-    const md = cardMarkdown(k);
-    if (body.dataset.md !== md) {
-      body.dataset.md = md;
+      // The mess: each card lies askew by its PLACE in the pile, counted from the bottom (messAt), so a card
+      // keeps its angle as others are piled on top of it.
+      card.style.rotate = mess[i].tilt + 'deg';
+      card.style.translate = `${mess[i].dx}px ${mess[i].dy}px`;
+      const body = card.firstElementChild as HTMLElement;
       body.innerHTML = renderBodyHTML(md);
       hydrateImages(body);
     }
+    return key;
   });
   el.dataset.cards = String(kids.length);
   // The stack's colour is its PIN's — red until one is picked (STACK_DEFAULT_COLOR, via effectiveColor, so the
@@ -97,7 +102,12 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   if (pin.style.background !== fill) {
     pin.style.background = fill;
   }
-  ringPile(face, pile, shown, shown.map((_, i) => messAt(kids.length - shown.length + i)));
+  // The ring MEASURES the pile, so only when what the pile shows has changed.
+  const ringKey = keys.join('\u0001');
+  if (face.dataset.ring !== ringKey) {
+    face.dataset.ring = ringKey;
+    ringPile(face, pile, shown, mess);
+  }
 }
 
 // How a card lies, by its place in the pile from the bottom: an angle (degrees) and a nudge (px). The BOTTOM
@@ -216,7 +226,7 @@ export function openFan(id: string): void {
   // …and if it opened past the edge of the screen, the view goes to it.
   // (From where the cards are GOING: on screen they're still gliding out of the pile.)
   const shown = [state.nodes.get(id)!, ...childrenOf(id)];
-  const r = stage.getBoundingClientRect(), v = state.view;
+  const r = stageSize(), v = state.view;
   const out = shown.some(n => n.x * v.k + v.x < 0 || n.y * v.k + v.y < 0
     || (n.x + nodeW(n)) * v.k + v.x > r.width || (n.y + nodeH(n)) * v.k + v.y > r.height);
   if (out) {
@@ -239,9 +249,10 @@ export function closeFan(): void {
 }
 
 // The scrim and the body class follow ui.fan, whatever cleared it — a close, or the stack dissolving under
-// an open fan (view/pile.ts layStacks). Run by every paintAll. The tilt each fanned card wears is set here
-// too, for the paint that happened before the layout that decided it (openFan's animateLayout) — a
-// custom property, which leaves the glide's own left/top transition running.
+// an open fan (view/pile.ts layStacks). Run by every paintAll. The tilt each fanned card wears (`--tilt`) is
+// set here and only here — after the layout that decided it, which for openFan's animateLayout comes AFTER
+// its paint; a custom property, so the glide's own left/top transition keeps running. A card that leaves the
+// fan keeps a stale `--tilt`, which nothing reads once it isn't `.fanned`.
 export function syncFan(): void {
   const on = !!ui.fan;
   document.body.classList.toggle('fan-open', on);
@@ -250,8 +261,9 @@ export function syncFan(): void {
   } else if (!on && scrim.isConnected) {
     scrim.remove();
   }
-  scrim.classList.toggle('grid', on && childrenOf(ui.fan!).length > FAN_ARC_MAX);
-  for (const k of on ? childrenOf(ui.fan!) : []) {
+  const kids = on ? childrenOf(ui.fan!) : [];
+  scrim.classList.toggle('grid', kids.length > FAN_ARC_MAX);
+  for (const k of kids) {
     k.el?.style.setProperty('--tilt', (fanTilt(k.id) ?? 0).toFixed(2) + 'deg');
   }
 }
@@ -265,9 +277,9 @@ function canPile(n: MindNode | undefined): boolean {
 // The board node under the POINTER — the top one, as drawn, skipping the cards in hand.
 function nodeUnder(cx: number, cy: number, skip: Set<string>): MindNode | null {
   for (const hit of document.elementsFromPoint(cx, cy)) {
-    const id = hit.closest<HTMLElement>('#world .node')?.dataset.id;
-    if (id && !skip.has(id)) {
-      return state.nodes.get(id) ?? null;
+    const n = nodeAtTarget(hit);
+    if (n && !skip.has(n.id)) {
+      return n;
     }
   }
   return null;
@@ -278,7 +290,7 @@ function nodeUnder(cx: number, cy: number, skip: Set<string>): MindNode | null {
 // as a new stack made around it (`make`). Not while a fan is open: the board is under the scrim.
 export function pileTarget(drag: Drag, cx: number, cy: number, skip: Set<string>): Drag['pile'] {
   const n = ui.fan || !drag.selRoots.every(id => canPile(state.nodes.get(id))) ? null : nodeUnder(cx, cy, skip);
-  if (!n || isHidden(n) || isLockedEffective(n) || !(n.type === 'card' || isStack(n))) {
+  if (!n || isHidden(n) || !canPile(n)) {
     drag.pileHover = null;
     return null;
   }
@@ -363,7 +375,6 @@ export function pileInto(targetId: string, make: boolean, roots: string[]): Mind
       c.parent = s.id; c.dirty = true; c.dirtyLayout = true;
       order = order.filter(x => x !== c.id).concat(c.id);
     }
-    s.kidOrder = order;
     if (isStack(r)) {
       deleteNodes([r.id]);
     }
@@ -390,30 +401,19 @@ export function settleStacks(): void {
       touch(k.id);
       k.parent = s.parent; k.x = s.x; k.y = s.y; k.dirty = true; k.dirtyLayout = true;
     }
-    if (ui.fan === s.id) {
-      ui.fan = null;
-    }
-    deleteNodes([s.id]);
+    deleteNodes([s.id]);   // (an open fan on it closes with it: view/pile.ts layStacks)
   }
 }
 
 // ---------- spreading a pile out: Unstack, Turn into section ----------
-// Lay cards out in a tidy grid, its top-left at `at` — the top card first, then down the pile, row by row,
-// at the house spacing. Heights are MEASURED, so the cards must be painted (visible) first. Returns its size.
-function layGrid(cards: MindNode[], at: Pt): { w: number; h: number } {
-  const cols = Math.ceil(Math.sqrt(cards.length));
-  const colW = Math.max(...cards.map(nodeW)) + SPACING;
-  let y = at.y, w = 0;
-  for (let i = 0; i < cards.length; i += cols) {
-    const row = cards.slice(i, i + cols);
-    row.forEach((c, j) => {
-      touch(c.id);
-      moveSubtreeTo(c, at.x + j * colW, y);
-    });
-    w = Math.max(w, row.length * colW - SPACING);
-    y += Math.max(...row.map(nodeH)) + SPACING;
-  }
-  return { w, h: y - SPACING - at.y };
+// Lay cards out in a tidy grid (view/pile.ts gridOf), its top-left at `at` — the top card first, then down the
+// pile, row by row, at the house spacing. The cards must be painted (visible) first: their heights are measured.
+function layGrid(cards: MindNode[], at: Pt): void {
+  const g = gridOf(cards, SPACING);
+  cards.forEach((c, i) => {
+    touch(c.id);
+    moveSubtreeTo(c, at.x + g.at[i].x, at.y + g.at[i].y);
+  });
 }
 
 // The selected stacks, unlocked — what Unstack and Turn into section act on.
@@ -438,9 +438,6 @@ export function unstackSelection(): void {
         c.parent = s.parent; c.dirty = true;
         loose.push(c.id);
       }
-      if (ui.fan === s.id) {
-        ui.fan = null;
-      }
       deleteNodes([s.id]);
       paintAll();   // the cards are on the board now, and measurable
       layGrid(cards, s);
@@ -453,10 +450,8 @@ export function unstackSelection(): void {
   setStatus(`Unstacked ${loose.length} card${loose.length === 1 ? '' : 's'}`);
 }
 
-// TURN INTO SECTION: the same grid, kept in the stack's folder, which becomes an ordinary section box sized
-// round it.
-const SECTION_PAD = 16;
-
+// TURN INTO SECTION: the same grid, kept in the stack's folder, which becomes an ordinary section box fitted
+// round it (float-bar.ts fitSectionToContent, Fit's own sizing).
 export function stackToSection(): void {
   const stacks = selectedStacks();
   if (!stacks.length) {
@@ -466,15 +461,10 @@ export function stackToSection(): void {
     for (const s of stacks) {
       touch(s.id);
       const cards = pileKids(s).reverse();
-      if (ui.fan === s.id) {
-        ui.fan = null;
-      }
       s.stack = false; s.dirtyLayout = true;
       paintAll();
-      const size = layGrid(cards, { x: s.x + SECTION_PAD, y: s.y + SECTION_PAD });
-      const up = (v: number): number => Math.ceil(v / gridSnap()) * gridSnap();
-      s.w = Math.max(MIN_SECTION_W, up(size.w + SECTION_PAD * 2));
-      s.h = Math.max(MIN_SECTION_H, up(size.h + SECTION_PAD * 2));
+      layGrid(cards, { x: s.x + SECTION_FIT_PAD, y: s.y + SECTION_FIT_PAD });
+      fitSectionToContent(s);
     }
     growSectionsToHold(stacks.map(s => s.id));
     remeasure();

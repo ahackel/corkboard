@@ -1,7 +1,7 @@
 // Tags are Obsidian's: frontmatter `tags:` plus `#tags` in the text. `#` adds and removes them, a click on
 // one filters the board by it (features/tags.ts, tag-picker.ts, tag-filter.ts).
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors } from './helpers';
+import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors, dragOnto } from './helpers';
 
 const BOARD = {
   'Login.md': note('# Fix login\nSessions drop. Try #idea', { tags: '[🔥, backend]' }),
@@ -24,9 +24,6 @@ test('a card wears its tags on its top edge: emoji as stamps, words as labels, t
   const c = (await login.boundingBox())!, t = (await login.locator('.tag.stamp').boundingBox())!;
   expect(t.y).toBeLessThan(c.y);
   await expect(card(page, 'Logo ideas').locator('.tag')).toHaveCount(0);
-  // no add button on a selected card any more
-  await select(page, login);
-  await expect(page.locator('.tag-add-btn')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -118,7 +115,7 @@ test('the tag tray: T shows it, a sticker dragged onto a card tags it', async ({
   await tray.locator('.tray-new').press('Enter');
   const sticker = tray.locator('.tag', { hasText: '#urgent' });
   await expect(sticker).toBeVisible();
-  await drag(page, sticker, card(page, 'Logo ideas'));
+  await dragOnto(page, sticker, card(page, 'Logo ideas'));
   await expect(card(page, 'Logo ideas').locator('.tag')).toHaveText(['#urgent']);
   expect(Object.values(await diskFiles(page)).find(t => t.includes('Logo ideas'))).toContain('tags: [urgent]');
   // the dock button puts it away
@@ -132,7 +129,7 @@ test('a tag dragged to another card moves there; dragged off onto the canvas it 
   await openBoard(page);
   await seedBoard(page, BOARD);
   await clickAway(page);
-  await drag(page, card(page, 'Fix login').locator('.tag', { hasText: '#backend' }), card(page, 'Logo ideas'));
+  await dragOnto(page, card(page, 'Fix login').locator('.tag', { hasText: '#backend' }), card(page, 'Logo ideas'));
   await expect(card(page, 'Logo ideas').locator('.tag')).toHaveText(['#backend']);
   await expect(card(page, 'Fix login').locator('.tag:not(.in-text)')).toHaveText(['🔥']);
   // ⌘Z puts it back in one step
@@ -156,7 +153,7 @@ test('⇧-dragging a tag to another card copies it, as ⇧-drag clones a card', 
   await seedBoard(page, BOARD);
   await clickAway(page);
   await page.keyboard.down('Shift');
-  await drag(page, card(page, 'Fix login').locator('.tag', { hasText: '#backend' }), card(page, 'Logo ideas'));
+  await dragOnto(page, card(page, 'Fix login').locator('.tag', { hasText: '#backend' }), card(page, 'Logo ideas'));
   await page.keyboard.up('Shift');
   await expect(card(page, 'Logo ideas').locator('.tag')).toHaveText(['#backend']);
   await expect(card(page, 'Fix login').locator('.tag', { hasText: '#backend' })).toBeVisible();
@@ -220,12 +217,3 @@ async function dragOff(page: import('@playwright/test').Page, from: import('@pla
   await page.waitForTimeout(200);
 }
 
-// Press on `from`, carry it over `to`, let go — the way a person drags a sticker.
-async function drag(page: import('@playwright/test').Page, from: import('@playwright/test').Locator, to: import('@playwright/test').Locator): Promise<void> {
-  const a = (await from.boundingBox())!, b = (await to.boundingBox())!;
-  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 });
-  await page.mouse.up();
-  await page.waitForTimeout(150);
-}

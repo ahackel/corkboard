@@ -56,8 +56,8 @@ const props = createProperties({ colors: edColors }, () => selectedIds());
 // action and the load migration that turns a card's old children into a section's
 // (data/persistence.ts).
 // The section's label hangs outside the box (above it), so the margin is the same on all four sides.
-const SECTION_FIT_PAD = 16;
-function fitSectionToContent(n: MindNode, orDefault = false): void {
+export const SECTION_FIT_PAD = 16;
+export function fitSectionToContent(n: MindNode, orDefault = false): void {
   const snapStep = gridSnap();
   const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
   const { x0, y0, x1, y1 } = subtreesBox(childrenOf(n.id));

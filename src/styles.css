@@ -268,7 +268,6 @@ body.scoped #scopeBar { display:flex; }
 .sc-crumb.sc-section:not(.sc-cur) { opacity:.75; }
 .sc-crumb.sc-section:not(.sc-cur):hover { opacity:1; }
 .sc-crumb.sc-section > .fold-icon { flex:none; width:18px; height:18px; }
-.sc-crumb.sc-section > .fold-icon svg { width:100%; height:100%; display:block; }
 .sc-crumb.sc-section > .sc-name { padding:1px 7px; border-radius:6px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
@@ -614,10 +613,13 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   position:absolute; left:-2px; bottom:calc(100% + 7px * var(--ls, 1));
   z-index:4;                    /* over the box and over cards; see the ladder */
   transform:scale(var(--ls, 1)); transform-origin:0 100%;
-  max-width:calc((100% + 4px) / var(--ls, 1)); align-items:center;
+  max-width:calc((100% + 4px) / var(--ls, 1)); }
+/* The label itself — the pill and the text on it — is the SAME folded (.node.section-folded, below), where it
+   sits beside the folder instead of above a box: every rule from here to the editing one says so. */
+.node.section > .title-row, .node.section-folded > .title-row { align-items:center;
   padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
-.node.section > .title-row > .title {
+.node.section > .title-row > .title, .node.section-folded > .title-row > .title {
   /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a section whose
      text is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1
      rule below, exactly as a card does. */
@@ -626,20 +628,21 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* The markdown a label renders has to become ONE line: every block markdown produces goes inline with its
    margins dropped, and anything after the first block is left off (a label shows a name, not a note — the
    text is still all there in the file and in the editor). */
-.node.section > .title-row > .title > * { display:inline; margin:0; }
-.node.section > .title-row > .title > :not(:first-child) { display:none; }
-.node.section > .title-row > .title h1 { font-size:var(--h1-size); font-weight:600; }
-/* the expanded label's NAME is bigger and bolder than a card's, as FigJam's section names are */
-.node.section > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
-.node.section > .title-row > .title h1 { font-size:16px; }
+.node.section > .title-row > .title > *, .node.section-folded > .title-row > .title > * { display:inline; margin:0; }
+.node.section > .title-row > .title > :not(:first-child),
+.node.section-folded > .title-row > .title > :not(:first-child) { display:none; }
+/* the label's NAME is bigger and bolder than a card's, as FigJam's section names are */
+.node.section > .title-row > .title, .node.section-folded > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
+.node.section > .title-row > .title h1, .node.section-folded > .title-row > .title h1 { font-size:16px; font-weight:600; }
 /* …and under the name, the section's DESCRIPTION (main.ts paintNode, view/layout.ts sectionDescription): one
    muted, ellipsised line, its markdown flattened inline with a dot between blocks. */
-.node.section > .title-row > .title > .section-desc { display:block; font-size:11px; line-height:16px;
+.node.section > .title-row > .title > .section-desc,
+.node.section-folded > .title-row > .title > .section-desc { display:block; font-size:11px; line-height:16px;
   font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .section-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
 .section-desc > * + *::before, .section-desc li + li::before { content:' · '; }
 /* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
-.node.section > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
+.node.section > .title-row > .title.editing, .node.section-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 /* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
 .node.section > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
 /* real CSS containment for a section's contents: a plain overflow:hidden box (main.ts sectionContentEl)
@@ -672,21 +675,13 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* A section's FOLDER — folded on the canvas, or its segment of the path — is coloured like its BOX
    (.node.section): the outline is the box's rim, the section's own colour; the inside is its pale wash. */
 .fold-icon { color:color-mix(in srgb, var(--card, #fff), #000 10%); }
+.fold-icon svg { width:100%; height:100%; display:block; }
 .fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff) 32%, #fff); }
 .node .fold-icon { display:none; }
 .node.section-folded { display:flex; align-items:center; gap:6px; width:max-content; max-width:360px; min-height:0;
   padding:0; border:none; border-radius:8px; background:transparent; color:var(--ink, var(--text)); }
 .node.section-folded > .fold-icon { display:block; order:-1; flex:none; width:26px; height:26px; }
-.node.section-folded > .fold-icon svg { width:100%; height:100%; display:block; }
-.node.section-folded > .title-row { min-width:0; margin:0; align-items:center; padding:3px 10px; border-radius:8px;
-  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
-.node.section-folded > .title-row > .title { margin:0; padding:0; font-size:16px; font-weight:600; line-height:24px;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.node.section-folded > .title-row > .title > * { display:inline; margin:0; font-size:inherit; }
-.node.section-folded > .title-row > .title > :not(:first-child) { display:none; }
-.node.section-folded > .title-row > .title h1 { font-size:16px; }
-.node.section-folded > .title-row > .title > .section-desc { display:block; font-size:11px; line-height:16px;
-  font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.node.section-folded > .title-row { min-width:0; margin:0; }   /* its look: the section label rules above */
 .node.section-folded.no-title > .title-row { display:none; }
 .node.section-folded > .body { display:none; }
 /* while the search is on, how many of what it holds match (features/search.ts) — in the accent, since it's
@@ -710,18 +705,14 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   padding:var(--pad-y) var(--pad-x); pointer-events:none; }
 .pile-card:last-child { position:relative; height:auto; }
 .pile-card.under { filter:brightness(.93); }
-.pile-card.image-card { padding:0; }
-.pile-card.image-card > .body, .pile-card.image-card > .body > p, .pile-card.image-card > .body > p > .img-wrap {
-  width:100%; height:100%; margin:0; }
-.pile-card.image-card .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; border-radius:inherit; }
-.pile-card.image-card > .body { overflow:hidden; border-radius:inherit; }
+.pile-card.image-card { padding:0; }   /* the picture itself: the image-card .body rules further down */
 .pile-card .img-zoom { display:none !important; }
 /* THE PIN: a plain disc in the STACK's colour — bold red until one is picked (paintPile sets it inline) — the size
    of a tag label (.tag.label, 18px), just reaching over the pile's top edge at its centre. It is the stack's handle — grab it to move the whole stack (features/drag.ts: a press on
    the pile's body lifts the top card instead). It keeps its screen size zoomed out, like a section's name
    (--ls, view/camera.ts). */
 .stack-pin { position:absolute; left:50%; top:-5px; width:18px; height:18px; margin-left:-9px; z-index:3;
-  border-radius:50%; background:var(--pal-bold-red); box-shadow:0 1px 3px rgba(0,0,0,.16);
+  border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.16);   /* its fill: the stack's colour, set inline */
   cursor:grab; transform:scale(var(--ls, 1)); transform-origin:50% 5px; }
 .stack-pin:hover { filter:brightness(.92); }
 body.grabbing .stack-pin { cursor:grabbing; }
@@ -857,12 +848,13 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    corner every other card does, with the image clipped to it rather than squaring it off. Putting
    the inherit on .md-img instead cannot work — its parents are <p>/.img-wrap, which carry no radius
    of their own, so it inherits a 0 and the picture keeps its corners. */
-.node.image-card > .body { position:absolute; inset:0; width:100%; height:100%; margin:0;
+.node.image-card > .body, .pile-card.image-card > .body { position:absolute; inset:0; width:100%; height:100%; margin:0;
   overflow:hidden; border-radius:inherit; }
 /* renderBodyHTML wraps a standalone image in a <p>, and imgTag wraps the <img> in .img-wrap —
    both, not .body, are the img's real containing blocks, so the explicit height passes down. */
-.node.image-card > .body > p, .node.image-card > .body > p > .img-wrap { width:100%; height:100%; margin:0; }
-.node.image-card > .body .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; }
+.node.image-card > .body > p, .node.image-card > .body > p > .img-wrap,
+.pile-card.image-card > .body > p, .pile-card.image-card > .body > p > .img-wrap { width:100%; height:100%; margin:0; }
+.node.image-card > .body .md-img, .pile-card.image-card > .body .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; }
 /* image wrapper: anchors the magnifier button over each image; block so it stacks like the img did */
 .img-wrap { position:relative; display:block; }
 /* magnifier button — hidden until the card is selected, then floats top-right over each image */

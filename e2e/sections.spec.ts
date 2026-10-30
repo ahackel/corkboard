@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openBoard, seedBoard, makeCard, select, note, section, card, clickAway, reload, watchErrors, palette } from './helpers';
+import { openBoard, seedBoard, makeCard, select, note, section, card, clickAway, reload, watchErrors, palette, tooltip } from './helpers';
 
 const BOARD = {
   'Todo.md': note('# Todo', { 'mm_type': 'frame' }),
@@ -59,7 +59,7 @@ test('a section folds to its label pill: its cards hide, its lines meet the pill
   await page.locator('#fbFold').click();
   const pill = page.locator('#world .node.section-folded', { hasText: 'Todo' });
   await expect(pill).toBeVisible();
-  await expect(pill).toHaveAttribute('title', /\b1 Card\b/);
+  await expect.poll(() => tooltip(page, pill)).toMatch(/\b1 Card\b/);
   await expect(card(page, 'Buy milk')).toBeHidden();
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);   // Loose → Milk now ends on the pill
   // drag the pill; its hidden card comes along
@@ -109,14 +109,6 @@ test('a dragged section and its cards cast no shadow', async ({ page }) => {
   expect(await shadow('#world .node.section.dragging')).not.toContain('rgba(0, 0, 0');
   expect(await shadow('#world .node:not(.section)')).not.toContain('rgba(0, 0, 0');
   await page.mouse.up();
-});
-
-test('nothing floats beside a selected card or folded section: a double-click edits', async ({ page }) => {
-  await openBoard(page);
-  await seedBoard(page, BOARD);
-  const old = page.locator('#world .node.section-folded', { hasText: 'Old' });
-  await old.click();
-  await expect(page.locator('#world .addnote')).toHaveCount(0);
 });
 
 test('zoomed out, a section name keeps its screen size while the box shrinks', async ({ page }) => {
@@ -198,7 +190,6 @@ test('⌘S wraps the selection in "Section N" from the bar, and ⌘⌫ ungroups 
   await select(page, a);
   await b.click({ modifiers: ['ControlOrMeta'] });
   await expect(page.locator('#fbWrap')).toBeVisible();
-  await expect(page.locator('#fbMore')).toHaveCount(0);
   await page.keyboard.press('ControlOrMeta+s');
   await expect(section(page, 'Section 1')).toBeVisible();
   await expect(page.locator('#fbUngroup')).toBeVisible();

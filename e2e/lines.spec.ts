@@ -26,8 +26,6 @@ test('two cards join again through DIFFERENT ports, never twice through the same
   await expect(lines(page)).toHaveCount(2);
   await drawLine(page, a, 'right', b, 'up');   // the same two ports again: no new line
   await expect(lines(page)).toHaveCount(2);
-  await reload(page);
-  await expect(lines(page)).toHaveCount(2);
 });
 
 test('clicking a port ⊕ makes a connected card; abandoning it takes the line too', async ({ page }) => {

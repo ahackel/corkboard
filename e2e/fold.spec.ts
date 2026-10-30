@@ -6,7 +6,6 @@ test('the arrow folds a card to a one-line chip that says how much it hides', as
   await openBoard(page);
   const g = await makeCard(page, 300, 250, '# Groceries\nmilk\neggs\nbread');
   const one = await makeCard(page, 650, 250, 'One line only');
-  await expect(page.locator('#world .hidden-count')).toHaveCount(0);   // no fold button on cards any more
   await select(page, one);
   await expect(page.locator('#fbFold')).toBeHidden();           // nothing to fold away
   await select(page, g);
