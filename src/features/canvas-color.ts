@@ -23,9 +23,10 @@ import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js
 import { paintFreeEdges } from '../view/free-edges.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { placePopover, closeOnOutside } from '../utils/dom.js';
-import { colorFill, THEME_BG } from '../view/color.js';
+import { colorFill, colorTexture, surfaceFill, swatchBg, THEME_BG } from '../view/color.js';
+import { paintCanvasTexture } from '../view/grid.js';
 import { scopeRootNode } from '../nav/scope.js';
-import { paleFill, inkFor } from '../utils/ink.js';
+import { inkFor } from '../utils/ink.js';
 import { scheduleSave } from '../data/save.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
@@ -111,7 +112,7 @@ export function markCanvasColorBtn(): void {
   }
   // nothing authored: the colour actually behind you — the board's own grey at the top level
   else {
-    chip.style.setProperty('--sw', fill ?? canvasSurface());
+    chip.style.setProperty('--sw', fill ? swatchBg(v) : canvasSurface());
   }
   const owner = canvasOwner();
   btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the section you’re in` : 'Canvas colour of this map';
@@ -126,6 +127,7 @@ function build(): void {
     return;
   }
   colors.innerHTML = swatchRowHTML(canvasOwner() ? 'inherit' : 'default');
+  colors.classList.add('surfaces');   // the canvas is always a surface, so cork is always on offer
   renderRecentChips(colors);
   markSwatchRow(colors, currentColor());
   if (built) {
@@ -231,20 +233,26 @@ function hasAuthoredColor(n: MindNode): boolean {
 // and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
 // writes can't become two different things.
 export const canvasOwner = (): MindNode | null => scopeRootNode();
-// The fill actually behind the cards right now — the one input both the background and the grid ink
-// are derived from. null = none, and the theme's own background shows through as before.
+
+// The colour VALUE behind the cards right now, and whether a section owns it (and so wears it as its box does).
 //
 // An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
 // rather than to nothing: what's behind an uncoloured section is whatever is behind IT. Standing inside a section nobody coloured
 // used to discard the canvas colour the map itself was painted in — so
 // going in turned a teal board grey, and coming out turned it teal again.
-function canvasFill(): string | null {
+function canvasColor(): { color: string; section: boolean } {
   const owner = canvasOwner();
   if (!owner || !hasAuthoredColor(owner)) {
-    return colorFill(state.canvasColor);
+    return { color: state.canvasColor, section: false };
   }
-  const fill = colorFill(effectiveColor(owner));
-  return fill && paleFill(fill);
+  return { color: effectiveColor(owner), section: true };
+}
+
+// The fill actually behind the cards right now — the one input both the background and the grid ink
+// are derived from. null = none, and the theme's own background shows through as before.
+function canvasFill(): string | null {
+  const { color, section } = canvasColor();
+  return section ? surfaceFill(color) : colorFill(color);
 }
 // The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
 // free edge's label plate is painted in — a label is a small
@@ -258,6 +266,14 @@ export function canvasSurface(): string { return canvasFill() ?? THEME_BG; }
 // #grid is its child and declares --grid-ink from it, so one write covers both grid levels.
 export function syncCanvasBackground(): void {
   const fill = canvasFill();
+
+  // A TEXTURED colour (cork) lays its texture over the fill, on #canvasTex (styles.css).
+  const tex = colorTexture(canvasColor().color);
+  stage.classList.toggle('textured', !!tex);
+  if (tex) {
+    stage.style.setProperty('--canvas-tex', tex);
+    paintCanvasTexture();
+  }
   if (fill) {
     stage.style.setProperty('--canvas-bg', fill);
     stage.style.setProperty('--grid-pat', `color-mix(in srgb, ${fill} 55%, ${inkFor(fill)} 45%)`);

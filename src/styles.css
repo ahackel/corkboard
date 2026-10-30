@@ -67,6 +67,11 @@
   --pal-bold-blue: #3d9eff;
   --pal-bold-violet: #874fff;
   --pal-bold-pink: #f849c1;
+  /* CORK, a SURFACE colour (view/color.ts isSurfaceOnly): only the board and sections wear it, and they wear
+     it as a TEXTURE — --tex-cork over this base. The hex is what JS reasons with (ink, grid, the browser's
+     theme colour). Two noise layers: dark pores and pale granules, tiled at TEX_TILE (240px). */
+  --pal-cork: #c99d6b;
+  --tex-cork: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .22 0 0 0 0 .1 0 0 0 -3.4 1.9'/%3E%3C/filter%3E%3Cfilter id='l'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.28' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .8 0 0 0 0 .6 0 0 0 -3 1.55'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23l)'/%3E%3Crect width='240' height='240' filter='url(%23d)'/%3E%3C/svg%3E");
 
   /* shared roundness scale — keep every surface on one of these steps */
   --r-card: 3px;   /* board cards (FigJam's near-square stickies), the ghost card, image cards */
@@ -428,6 +433,13 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
+/* The canvas's TEXTURE, when its colour is one (features/canvas-color.ts syncCanvasBackground sets --canvas-tex).
+   Over-sized by one tile and pan-translated like #grid (canvas-color.ts paintCanvasTexture), so the cork
+   moves with the board instead of sliding under it — compositor-only. Under #grid by DOM order. */
+#canvasTex { position:absolute; inset:-240px; pointer-events:none; will-change:transform;
+  background:var(--canvas-tex, none) 0 0 / 240px 240px; opacity:0; transition:opacity 500ms ease; }
+#stage.textured > #canvasTex { opacity:1; }
+body.scope-instant #canvasTex { transition:none; }
 /* ---------- THE LAYER LADDER inside #world — the one place it is spelled ----------
    Read it top to bottom before adding a z-index anywhere in this file; every rule below that carries
    one points back here rather than restating the ordering.
@@ -599,6 +611,8 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.section { z-index:auto; min-height:0; padding:0; border-radius:var(--r-section);
   background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
   border:2px solid color-mix(in srgb, var(--card, #fff), #000 10%); }
+/* …except a TEXTURED colour, which is a material, not a tint: the box wears it as it is. */
+.node.section.c-cork { background:var(--tex-cork) 0 0 / 240px 240px, var(--card); }
 /* ---------- a section's label: a pill above the box ---------- */
 /* FigJam's section name: a borderless pill a step darker than the section's own colour (a white section's
    is light grey), its text the ink that colour demands (--ink) like any card's. It grows UPWARD from 7px
@@ -1415,6 +1429,8 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
    instead of wherever the container's width happens to run out. Needs the container to have a
    DEFINITE width to resolve against — see #fbColorPop's .swatches below. */
 .swatch-break { flex:0 0 100%; height:0; margin:0; }
+/* the SURFACE chips (cork) on their own row, only where a surface is being coloured (properties.ts) */
+.swatches:not(.surfaces) > .surface { display:none; }
 /* colour chips: a fixed size */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
   border:0; background:var(--sw); }

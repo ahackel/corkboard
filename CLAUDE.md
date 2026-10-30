@@ -97,4 +97,4 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
   fallback, FSA) · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
 - Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "The dock" · "A card's text colour is DERIVED from its
-  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".
+  fill" · "CORK is a SURFACE colour" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".

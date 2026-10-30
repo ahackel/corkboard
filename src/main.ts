@@ -48,7 +48,7 @@ import { installPeek, peekCard } from './features/peek.js';
 import { installEdgeTools } from './features/edge-tools.js';
 import { ui, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { byId } from './utils/dom.js';
-import { applyColorVars, colorClass } from './view/color.js';
+import { applyColorVars, colorClass, isSurfaceOnly } from './view/color.js';
 import { canFold, isSectionFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
 import { ensureResizeHandles, SECTION_DIRS, clearResizeHandles } from './features/resize.js';
 import { toggleCollapse } from './features/fold.js';
@@ -277,9 +277,9 @@ export function effectiveColor(n: MindNode): string {
   // runs on every paint of every card — a cycle must degrade to a fallback colour, not hang the tab.
   let guard = 0;
   // A STACK's colour is its PIN's (features/stacks.ts paintPile), not something its cards wear: the walk
-  // passes it by.
+  // passes it by, and so past a SURFACE colour (cork) — a card pinned to cork is still a sticky note.
   for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c)) {
-    if (c.color && !isStack(c)) {
+    if (c.color && !isStack(c) && !isSurfaceOnly(c.color)) {
       return c.color;
     }
   }

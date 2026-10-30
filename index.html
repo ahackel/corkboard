@@ -77,6 +77,8 @@
          level has stepped up by a factor of 4 with the sub-grid already invisible, so it never
          pops. See view/grid.ts for the level-of-detail math. Panning only writes #grid's
          transform (compositor-only); the gradients are rebuilt only when the level changes. -->
+    <!-- the canvas's texture (a cork board): below the grid, see styles.css #canvasTex -->
+    <div id="canvasTex"></div>
     <div id="grid"><div id="gridFine"></div></div>
     <div id="world">
       <!-- free edges: the relations the user DREW (board.json). The lines are drawn ABOVE the cards (see the layer ladder in

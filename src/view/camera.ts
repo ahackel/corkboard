@@ -5,7 +5,7 @@ import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { NARROW_MQ } from '../core/ui-state.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
-import { paintGrid } from './grid.js';
+import { paintGrid, paintCanvasTexture } from './grid.js';
 import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
 import { nodeW, nodeH } from './geometry.js';
@@ -82,6 +82,7 @@ export function applyView(): void {
   applyLabelScale();
   refreshRaster();
   paintGrid();
+  paintCanvasTexture();
   scheduleUrlSync();
 }
 // Smoothly glide the view to (tx,ty) instead of snapping. Any direct pan/zoom cancels it

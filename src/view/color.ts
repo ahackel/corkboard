@@ -1,5 +1,5 @@
 // ---------- colour: the palette, and what a colour VALUE paints as ----------
-import { inkFor, scrimFor, isHexColor } from '../utils/ink.js';
+import { inkFor, scrimFor, isHexColor, paleFill } from '../utils/ink.js';
 
 // colour palette (keys match the .c-* CSS classes); 'grey' is the old neutral "none" look.
 // The hexes themselves live in ONE place — the --pal-* custom properties in styles.css's
@@ -8,7 +8,7 @@ import { inkFor, scrimFor, isHexColor } from '../utils/ink.js';
 // Every key a note may carry. `slate` predates FigJam's palette: it still paints, but the picker no
 // longer offers it.
 const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black',
-  'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink'];
+  'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink','cork'];
 // …and what the picker OFFERS, FigJam's two rows of eleven: the strong hues framed by black and white,
 // then the pastels — the sticky colours — framed by two greys (the custom chip ends that row).
 export const PICKER_ROWS: string[][] = [
@@ -62,6 +62,29 @@ deriveInk();
 // every paint.
 export function colorFill(c: string): string | null { return SWATCH_BG[c] ?? (isHexColor(c) ? c : null); }
 export function colorClass(c: string): string { return isHexColor(c) ? 'c-custom' : 'c-' + c; }
+
+// ---------- SURFACE colours: a material for the board and sections, never a card ----------
+// A cork board is something cards are pinned TO, so `cork` is offered only where the colour is a
+// surface (the canvas picker, and the float bar while only sections are selected), a card never
+// inherits it (main.ts effectiveColor walks past it), and it paints as a TEXTURE over its --pal-* base
+// rather than as a wash. Its hex still answers colorFill, so ink, grid and theme colour need nothing new.
+const TEXTURES: Record<string, string> = { cork: 'var(--tex-cork)' };
+export function isSurfaceOnly(c: string): boolean { return c in TEXTURES; }
+export function colorTexture(c: string): string | null { return TEXTURES[c] ?? null; }
+
+// What a swatch chip shows for a colour: the texture, if it has one, over its fill.
+export function swatchBg(c: string): string {
+  const fill = colorFill(c) ?? '';
+  const tex = colorTexture(c);
+  return tex ? `${tex} center / 120px 120px, ${fill}` : fill;
+}
+
+// The fill a SECTION's interior wears — its colour's pale wash (styles.css `.node.section`), or a
+// textured colour's own base, which is never washed.
+export function surfaceFill(c: string): string | null {
+  const fill = colorFill(c);
+  return fill && (isSurfaceOnly(c) ? fill : paleFill(fill));
+}
 // SET for a custom colour, REMOVED otherwise. Removing matters —
 // recolouring a custom card back to a palette key has to drop the inline triple, or it would keep
 // overriding the .c-* class that now owns the colour (an inline custom property beats any selector).

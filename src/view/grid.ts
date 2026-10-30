@@ -147,6 +147,19 @@ export function paintGrid(): void {
   gridEl.style.transform = `translate(${off(state.view.x)}px,${off(state.view.y)}px)`;
 }
 
+// The canvas TEXTURE layer (#canvasTex, a cork board) pans with the board the way the grid does: one
+// tile of overhang, translated by view mod tile. Screen-scaled, like the grid's dots — the grain stays the
+// same size at every zoom. Its tile is TEX_TILE, which styles.css spells as 240px.
+const TEX_TILE = 240;
+const texEl = document.getElementById('canvasTex');
+export function paintCanvasTexture(): void {
+  if (!texEl) {
+    return;
+  }
+  const off = (v: number): number => Math.round((v % TEX_TILE + TEX_TILE) % TEX_TILE);
+  texEl.style.transform = `translate(${off(state.view.x)}px,${off(state.view.y)}px)`;
+}
+
 // Reflects state.gridStyle/gridSize onto the ONE grid button (its face is the live style) and
 // repaints the layer. Called after a fresh map load (settings.json may have just changed it) and
 // after each pick.

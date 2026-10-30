@@ -8,7 +8,7 @@ import { record } from './history.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
-import { SWATCH_BG, PICKER_ROWS } from '../view/color.js';
+import { SWATCH_BG, PICKER_ROWS, swatchBg } from '../view/color.js';
 import { scheduleSave } from '../data/save.js';
 
 export interface PropEls {
@@ -49,13 +49,20 @@ export function swatchRowHTML(first: FirstChip): string {
   // and covers the chip (styles.css), so the chip keeps the round-bubble look its neighbours have.
   html += `<label class="swatch custom" title="custom colour — any colour you like">`
     + `<input type="color" value="${CUSTOM_FALLBACK}" aria-label="Custom colour"></label>`;
+
   // No "inherit" or "none" chips, as in FigJam: a card nobody coloured still follows its section (or is
   // the default yellow), and the picker rings the colour it SHOWS (markSwatch). The custom colours used
-  // recently wrap onto a third row (renderRecentChips). The MAP's canvas alone gets a reset chip in
-  // the board's own grey, ahead of them, since there is no other way back to "no canvas colour".
+  // recently wrap onto a third row (renderRecentChips), after the chips below.
+  //
+  // The third row: the MAP's canvas alone gets a reset chip in the board's own grey, since there is no
+  // other way back to "no canvas colour"; then the SURFACE colours (cork), shown only where a surface is
+  // being coloured — the canvas picker always, the float bar while only sections are selected (`.surfaces`
+  // on the row, styles.css). Its break goes with them, so a card's row is the two FigJam rows as before.
+  html += `<span class="swatch-break surface"></span>`;
   if (first === 'default') {
-    html += `<span class="swatch-break"></span><div class="swatch" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
+    html += `<div class="swatch" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
   }
+  html += `<div class="swatch surface" data-color="cork" title="cork board" style="--sw:${swatchBg('cork')}"></div>`;
   return html;
 }
 // The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered at
@@ -183,6 +190,8 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
   }
 
   function sync(): void {
+    const ids = getIds();
+    els.colors.classList.toggle('surfaces', !!ids.length && ids.every(id => state.nodes.get(id)?.type === 'section'));
     renderRecents();   // the offered set depends on the open MAP, so re-derive it whenever we're shown
     markSwatch();
   }

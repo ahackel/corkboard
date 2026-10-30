@@ -1059,6 +1059,16 @@ the commit rewinds to the pre-drag colours before calling `record` — `record` 
 by then is too late. The float bar exempts this chip from its close-on-swatch-click, or the row would vanish
 mid-pick.
 
+**CORK is a SURFACE colour: the board and sections wear it, a card never does.** `cork` is a palette key
+(`--pal-cork`, so ink, grid, theme colour and `colorFill` need nothing new) that `isSurfaceOnly` (view/color.ts)
+marks as a MATERIAL: it paints as `--tex-cork` (an inline SVG noise texture, so the single file stays
+self-contained) over its base, and is never washed — a cork section's box and the canvas inside it are the
+same cork (`surfaceFill`). The picker offers it on its own third-row chip, shown only where a surface is
+being coloured (`.surfaces`: always on the canvas picker, on the float bar while only sections are selected),
+and `effectiveColor` walks past it, so a card pinned to cork stays a sticky. On the canvas the texture is
+its own layer, `#canvasTex`, over-sized by a tile and pan-translated like `#grid` (`paintCanvasTexture`).
+A new texture is one `TEXTURES` entry plus its `--tex-*` and `--pal-*` (and a `.node.section.c-*` rule).
+
 **Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, like the `#` field's recent
 and board tags: the MRU in `localStorage` (`corkboard.colorMru`, cap 8) *plus* every distinct custom colour in the open
 map, derived fresh from `state.nodes`. The second saves the first from being useless on a device that has never
