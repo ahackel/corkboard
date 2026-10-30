@@ -51,6 +51,11 @@ test('holding a card over another makes a stack; a quick pass does not', async (
   await drag(page, await centre(a), await centre(b), 700);
   await expect(stack(page)).toHaveCount(1);
   await expect(stack(page)).toHaveAttribute('data-cards', '2');
+  // the new stack is selected, and its ring goes round the whole pile, not along one edge of it
+  const ring = (await stack(page).locator('.stack-ring').boundingBox())!;
+  const pile = (await stack(page).locator('.pile').boundingBox())!;
+  expect(ring.height).toBeGreaterThanOrEqual(pile.height);
+  expect(ring.width).toBeGreaterThanOrEqual(pile.width);
   await expect(stack(page).locator('.pile-card').last()).toContainText('Alpha');   // the last one added is on top
   const files = Object.keys(await diskFiles(page));
   expect(files).toEqual(expect.arrayContaining(['Stack/_index.md', 'Stack/Alpha.md', 'Stack/Beta.md']));

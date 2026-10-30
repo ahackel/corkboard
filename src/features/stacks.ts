@@ -87,13 +87,14 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     }
   });
   el.dataset.cards = String(kids.length);
-  ringPile(face, pile, shown);
+  ringPile(face, pile, shown, shown.map((_, i) => messAt(kids.length - shown.length + i)));
 }
 
 // How a card lies, by its place in the pile from the bottom: an angle (degrees) and a nudge (px). The BOTTOM
 // card lies square — the pile's footing; every card above it takes the next of a fixed list, cycled, so the
 // same pile always looks the same.
-function messAt(place: number): { tilt: number; dx: number; dy: number } {
+interface Mess { tilt: number; dx: number; dy: number }
+function messAt(place: number): Mess {
   return place ? PILE_MESS[(place - 1) % PILE_MESS.length] : { tilt: 0, dx: 0, dy: 0 };
 }
 
@@ -105,15 +106,13 @@ const PILE_MESS = [
 // The selection ring goes round the WHOLE pile — every card as it lies, askew — not just the element's box,
 // which is the top card's footprint unrotated. Each card turns about its own centre, so its bounds are those of
 // the rotated rectangle; the ones underneath are as tall as the pile (styles.css .pile-card).
-function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[]): void {
+function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess: Mess[]): void {
   const ring = face.querySelector<HTMLElement>(':scope > .stack-ring')!;
   const h = pile.offsetHeight;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  [...pile.children].forEach((c, i) => {
-    const card = c as HTMLElement;
-    const w = nodeW(shown[i]);
-    const [dx, dy] = card.style.translate.split(' ').map(v => parseFloat(v) || 0);
-    const a = parseFloat(card.style.rotate) * Math.PI / 180;
+  shown.forEach((k, i) => {
+    const w = nodeW(k), { dx, dy } = mess[i];
+    const a = mess[i].tilt * Math.PI / 180;
     const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
     const cx = w / 2 + dx, cy = h / 2 + dy, hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
     x0 = Math.min(x0, cx - hw); y0 = Math.min(y0, cy - hh); x1 = Math.max(x1, cx + hw); y1 = Math.max(y1, cy + hh);
