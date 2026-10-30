@@ -113,19 +113,28 @@ function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
   return out;
 }
 
-// Which place in the pile (an index into pileKids, bottom first) a card dragged within the fan would take:
-// the fan spot nearest the pointer. Null when the pointer is nowhere near the fan.
-export function fanSlotAt(s: MindNode, p: Pt, dragged: string): number | null {
-  const kids = pileKids(s);
+// Where a card dragged within the fan would go: the GAP beside the fanned card nearest the pointer — before
+// it or after it, by which half of it the pointer is over. `slot` is that place as an index into the pile
+// without the dragged card (bottom first, what reorderPile splices at); `x`/`y`/`h` are the insertion line,
+// down the middle of the gap. Null when the pointer is nowhere near the fan.
+export interface FanInsert { slot: number; x: number; y: number; h: number }
+export function fanSlotAt(s: MindNode, p: Pt, dragged: string): FanInsert | null {
+  const order = pileKids(s).filter(k => k.id !== dragged);
+  const shown = order.slice().reverse();   // as laid out: the top card first
   let best = -1, bestD = Infinity;
-  kids.forEach((k, i) => {
-    if (k.id === dragged) {
-      return;
-    }
-    const cxk = k.x + nodeW(k) / 2, cyk = k.y + nodeH(k) / 2;
-    const d = Math.hypot(p.x - cxk, p.y - cyk);
+  shown.forEach((k, j) => {
     const inside = p.x >= k.x - FAN_GAP && p.x <= k.x + nodeW(k) + FAN_GAP && p.y >= k.y - FAN_GAP && p.y <= k.y + nodeH(k) + FAN_GAP;
-    if (inside && d < bestD) { bestD = d; best = i; }
+    const d = Math.hypot(p.x - (k.x + nodeW(k) / 2), p.y - (k.y + nodeH(k) / 2));
+    if (inside && d < bestD) { bestD = d; best = j; }
   });
-  return best < 0 ? null : best;
+  if (best < 0) {
+    return null;
+  }
+  const c = shown[best];
+  const after = p.x > c.x + nodeW(c) / 2;
+  return {
+    slot: order.length - (best + (after ? 1 : 0)),
+    x: after ? c.x + nodeW(c) + FAN_GAP / 2 : c.x - FAN_GAP / 2,
+    y: c.y, h: nodeH(c),
+  };
 }

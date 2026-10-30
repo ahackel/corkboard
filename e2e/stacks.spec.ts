@@ -146,3 +146,28 @@ test('Unstack spreads the cards out; Turn into section keeps them in a box', asy
   expect(Object.keys(await diskFiles(page))).toContain('Top card.md');
   expect(errors).toEqual([]);
 });
+
+test('dragging a card within the fan shows a line where it will go, and drops it there', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await stack(page).click();
+  await page.waitForTimeout(700);
+  const top = page.locator('#world .node.fanned:visible', { hasText: 'Top card' });
+  const last = (await page.locator('#world .node.fanned:visible', { hasText: 'Bottom card' }).boundingBox())!;
+  await page.mouse.move((await centre(top)).x, (await centre(top)).y);
+  await page.mouse.down();
+  await page.mouse.move(last.x + last.width * 0.8, last.y + last.height / 2, { steps: 12 });
+  await expect(page.locator('#fanInsert')).toBeVisible();
+  await expect(page.locator('#world .node.drop-slot')).toHaveCount(0);
+  await page.screenshot({ path: 'test-results/fan-insert.png' });
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  await expect(page.locator('#fanInsert')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  // it went to the BOTTOM of the pile (the far end of the fan), so the middle card is on top now
+  await expect(stack(page).locator('.pile-card').last()).toContainText('Middle card');
+  await page.screenshot({ path: 'test-results/pin.png' });
+  expect(errors).toEqual([]);
+});

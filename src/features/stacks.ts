@@ -13,7 +13,7 @@ import { childrenOf, isHidden, isLockedEffective, nodeLabel, nodesOf } from '../
 import { cardMarkdown } from '../utils/frontmatter.js';
 import { renderBodyHTML } from '../utils/markdown.js';
 import { trackPointer } from '../utils/dom.js';
-import { pileKids, topOfPile, jitter, fanSlotAt, fanTilt, FAN_ARC_MAX } from '../view/pile.js';
+import { pileKids, topOfPile, jitter, fanSlotAt, fanTilt, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
 import { nodeW, nodeH, imageLook, gridSnap } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld, frameBox } from '../view/camera.js';
@@ -36,10 +36,10 @@ export const PILE_HOVER_MS = 400;
 // The cards drawn in the pile: the top one, and two peeking out from under it.
 const PILE_SHOWN = 3;
 
-// A red pushpin, seen from above: the stack's handle (styles.css .stack-pin).
-const PIN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="#e5383b"/>`
-  + `<circle cx="12" cy="12" r="8" fill="none" stroke="#a4161a" stroke-width="1.2"/>`
-  + `<circle cx="9.2" cy="9" r="2.6" fill="#fff" opacity=".55"/></svg>`;
+// A red pushpin, seen from above and drawn flat: a disc and its smaller cap, no gloss — the stack's handle
+// (styles.css .stack-pin).
+const PIN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e5383b"/>`
+  + `<circle cx="12" cy="12" r="5" fill="#f26b6d"/></svg>`;
 
 // ---------- the pile ----------
 // A stack's face, inside its own element: its top cards as plain drawings (they're not nodes on the board
@@ -253,8 +253,8 @@ export function pileTarget(drag: Drag, cx: number, cy: number, skip: Set<string>
   return performance.now() - drag.pileHover.since >= PILE_HOVER_MS ? { id: n.id, make: true } : null;
 }
 
-// Dragging ONE card of the open fan within the fan: the place in its pile it would take.
-export function fanSlot(drag: Drag, cx: number, cy: number): number | null {
+// Dragging ONE card of the open fan within the fan: where in its pile it would go.
+export function fanSlot(drag: Drag, cx: number, cy: number): FanInsert | null {
   const s = ui.fan ? state.nodes.get(ui.fan) : null;
   const r = drag.selRoots.length === 1 && !drag.cloned ? state.nodes.get(drag.selRoots[0]) : null;
   if (!s || !r || r.parent !== s.id) {
@@ -263,10 +263,20 @@ export function fanSlot(drag: Drag, cx: number, cy: number): number | null {
   return fanSlotAt(s, screenToWorld(cx, cy), r.id);
 }
 
-// …and the card of the fan whose place that is, for the drop preview.
-export function fanSlotCard(slot: number): MindNode | null {
-  const s = ui.fan ? state.nodes.get(ui.fan) : null;
-  return s ? pileKids(s)[slot] ?? null : null;
+// …shown as a LINE in the gap the card would drop into (styles.css #fanInsert); null hides it.
+const insertLine = document.createElement('div');
+insertLine.id = 'fanInsert';
+export function showFanInsert(at: FanInsert | null): void {
+  if (!at) {
+    insertLine.remove();
+    return;
+  }
+  insertLine.style.left = at.x + 'px';
+  insertLine.style.top = at.y + 'px';
+  insertLine.style.height = at.h + 'px';
+  if (!insertLine.isConnected) {
+    document.getElementById('world')!.appendChild(insertLine);
+  }
 }
 
 // Move a card of a stack to another place in its pile. Inside the caller's undo step.

@@ -31,7 +31,7 @@ import { afterReading } from '../data/lazy.js';
 import { arrangeSections } from '../data/load.js';
 import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
-import { beginPileGesture, pileTarget, pileInto, fanSlot, fanSlotCard, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
+import { beginPileGesture, pileTarget, pileInto, fanSlot, showFanInsert, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
@@ -70,9 +70,9 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   const grid = { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
   // Smart guides (features/guides.ts) win over the grid on an axis where something lines up with the
   // RAW pointer position — read before the grid rounds it, or a 20px step would jump right past a
-  // 6px pull. Off while ⌥ is held, or over a pile: the card is going INTO another card's note, or onto
-  // the pile, then.
-  if (drag.alt || drag.cardMerge || drag.pile) { hideGuides(); return grid; }
+  // 6px pull. Off while ⌥ is held, over a pile or within an open fan: the card is going INTO another
+  // card's note, onto the pile, or to a place in the pile, then.
+  if (drag.alt || drag.cardMerge || drag.pile || drag.fanSlot != null) { hideGuides(); return grid; }
   const roots: Array<{ n: MindNode; s: Pt }> = [];
   for (const [id, st] of drag.targets) {
     const m = state.nodes.get(id);
@@ -734,7 +734,8 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
 
   // A card of the open fan, dragged within it, takes another place in the pile; anything over a stack — or
   // held over a card long enough — goes onto a pile (features/stacks.ts).
-  const slot = fuse ? null : fanSlot(drag, e.clientX, e.clientY);
+  const insert = fuse ? null : fanSlot(drag, e.clientX, e.clientY);
+  const slot = insert ? insert.slot : null;
   const pile = fuse || slot != null ? null : pileTarget(drag, e.clientX, e.clientY, sub);
   const chute = fuse || slot != null || pile ? null : chuteAt(e.clientX, e.clientY, sub);
   const f = fuse || slot != null || pile || chute ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
@@ -753,8 +754,8 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   }
   if (fuse) {
     state.nodes.get(fuse)!.el?.classList.add('drop-merge');
-  } else if (slot != null) {
-    fanSlotCard(slot)?.el?.classList.add('drop-slot');
+  } else if (insert) {
+    showFanInsert(insert);
   } else if (pile) {
     state.nodes.get(pile.id)!.el?.classList.add('drop-pile');
   } else if (chute) {
@@ -764,8 +765,9 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   }
 }
 function clearDropTarget(): void {
-  document.querySelectorAll('.drop-target, .drop-merge, .drop-pile, .drop-slot')
-    .forEach(el => el.classList.remove('drop-target', 'drop-merge', 'drop-pile', 'drop-slot'));
+  document.querySelectorAll('.drop-target, .drop-merge, .drop-pile')
+    .forEach(el => el.classList.remove('drop-target', 'drop-merge', 'drop-pile'));
+  showFanInsert(null);
 }
 
 // The pointer resting on a card ARMS a stack after PILE_HOVER_MS, whether or not the mouse moves again in

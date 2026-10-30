@@ -261,7 +261,7 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   aren't selectable, searchable on the canvas or drawn as nodes. What you see is the stack's own element
   painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
   `paintNode`), askew by a `jitter` seeded from each card's PATH so the mess survives a reload, the pin, the
-  count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
+  count. The pin is a flat red disc just inside the top edge. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
 - **Where its cards lie is DERIVED, every layout** (`layStacks`, run by `applyLayouts`): all of them at the
   stack's corner, or at their spots in the fan. Never authored, so a position written there is nothing anyone
   chose; Unstack and Turn into section lay the cards out afresh in a grid (`layGrid`).
@@ -283,7 +283,7 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   arc above the pile, more open as a grid centred on it (`fanSpots`); the cards are real nodes then, hosted
   straight in `#world` (`hostSection` returns null for a stack's card) above a scrim (`#fanScrim`, z 60/61,
   the drag layer lifted to 62). Drag one out and it leaves the pile; drag it within the fan and it takes that
-  place (`fanSlot`/`reorderPile`). A click on the scrim, Esc or the pile closes it; search fans the stack a hit
+  place (`fanSlot`/`reorderPile`), the gap it would drop into marked by a line (`showFanInsert`, `#fanInsert`). A click on the scrim, Esc or the pile closes it; search fans the stack a hit
   lies in.
 - **Ungroup on a stack is UNSTACK** (`deleteSelectionKeepChildren` hands it over): the cards would otherwise be
   left in a heap on one spot. **Turn into section** keeps the folder and gives it a box sized round the grid.
