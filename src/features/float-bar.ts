@@ -5,10 +5,10 @@
 // FigJam: the card's full action list is the right-click menu (features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
+import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { record, touch } from './history.js';
-import { subtreesBox, moveSubtreeTo } from '../view/layout.js';
+import { subtreesBox, moveSubtreeTo, isSection } from '../view/layout.js';
 import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
 import { settleSections } from './drag.js';
@@ -29,6 +29,7 @@ import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
 import { selectedIds, selectNode } from './selection.js';
 import { setLockedSelection, anyLocked } from './lock.js';
 import { scheduleSave } from '../data/save.js';
+import { hasStackSelected, stackToSection } from './stacks.js';
 
 
 const bar = byId('floatBar');
@@ -42,6 +43,7 @@ const fbFold = byId<HTMLButtonElement>('fbFold');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbWrap = byId<HTMLButtonElement>('fbWrap');
 const fbUngroup = byId<HTMLButtonElement>('fbUngroup');
+const fbToSection = byId<HTMLButtonElement>('fbToSection');
 const colorPop = byId('fbColorPop');
 const edColors = byId('edColors');
 
@@ -76,7 +78,7 @@ export function growSectionsToHold(ids: Iterable<string>, { pin = false }: { pin
   const sections = new Set<MindNode>();
   for (const id of ids) {
     const n = state.nodes.get(id); const p = n ? parentOf(n) : null;
-    if (p && p.type === 'section' && !p.collapsed && !isScopeRoot(p) && !isLockedEffective(p)) {
+    if (p && isSection(p) && !isScopeRoot(p) && !isLockedEffective(p)) {
       sections.add(p);
     }
   }
@@ -116,7 +118,7 @@ function canFit(n: MindNode): boolean {
   if (isLockedEffective(n)) {
     return false;
   }
-  return n.type === 'section' || (n.h != null && !isImageCard(n));
+  return isSection(n) || (n.h != null && !isImageCard(n) && !isStack(n));
 }
 export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
@@ -203,9 +205,16 @@ function markOpen(): void {
   fbTitle.style.display = oneSection ? '' : 'none';
   fbWrap.style.display = !state.readOnly && state.sel.size > 1 ? '' : 'none';
   fbUngroup.style.display = !state.readOnly && nodesOf(selectedIds()).some(k => k.type === 'section') ? '' : 'none';
+
+  // On a stack, Ungroup is UNSTACK (crud.ts deleteSelectionKeepChildren), and a stack can become a section.
+  const stacks = hasStackSelected();
+  fbUngroup.title = stacks ? 'Unstack (⌘⌫)' : 'Ungroup (⌘⌫)';
+  fbUngroup.setAttribute('aria-label', stacks ? 'Unstack' : 'Ungroup');
+  fbToSection.style.display = stacks ? '' : 'none';
 }
 fbWrap.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); groupSelectionIntoSection(); });
 fbUngroup.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); deleteSelectionKeepChildren(); });
+fbToSection.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); stackToSection(); });
 // T — a section's TITLE. An untitled section shows no label at all (its text was deleted, FigJam-style),
 // so this is how one comes back: it seeds a name and selects it, ready to type over. A named section just
 // opens its label with the name selected — the same editor F2 and a double-click on the label open.

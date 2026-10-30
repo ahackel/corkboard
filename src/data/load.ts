@@ -104,6 +104,7 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
     // than that and lives in board.json alone.
     h: g?.h ?? (isBoxType(type) || imageOnly ? mm.h : undefined) ?? undefined,
     clip: !!g?.clip,
+    stack: type === 'section' && !!g?.stack,
     ...rest, dirty: unmigrated || !!mm.parent, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
   };
   if (mm.wasStack) {

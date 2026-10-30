@@ -246,6 +246,49 @@ of `paintNode`'s `isHidden` early return rather than repeated inside it. It is c
 code; a folded container's children ride along detached and are re-placed by `place()` when it opens. Skip
 the drop and a fold strands an empty `overflow:hidden` div at the box's old size.
 
+## Stacks
+
+**A STACK is a section drawn as a PILE** (`features/stacks.ts`, `view/pile.ts`), after the macOS Dock's stacks.
+Not a third kind: `type` stays `section`, so it is a folder on disk like any section (`Stack/_index.md` plus its
+cards), and `isStack` is a flag beside the kind — `stack: true` in board.json (`StoredGeom`), the same place a
+fold lives, since how a folder is DRAWN is arrangement, not content. A new, unnamed one's folder is `Stack`,
+`Stack 2`… (`desiredFileFor`). Its child ORDER (`kidOrder`, board.json `order`) is the pile, bottom first.
+- **It isn't a box.** `isSection` is false for it (as for a folded section), so nothing that asks "is this a
+  box?" — the drop rule `sectionAt`, `settleSections`, grow-to-hold, Fit, the content wrapper, the resize
+  handles — sees one. `canOpen` and `canFold` say no too: a pile has no interior to open and nothing to tuck
+  away. A rule that must reach a stack keys on `isStack`.
+- **Its cards are HIDDEN while it's piled** — `isHidden`'s third term, `p.stack && ui.fan !== p.id` — so they
+  aren't selectable, searchable on the canvas or drawn as nodes. What you see is the stack's own element
+  painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
+  `paintNode`), askew by a `jitter` seeded from each card's PATH so the mess survives a reload, the pin, the
+  count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
+- **Where its cards lie is DERIVED, every layout** (`layStacks`, run by `applyLayouts`): all of them at the
+  stack's corner, or at their spots in the fan. Never authored, so a position written there is nothing anyone
+  chose; Unstack and Turn into section lay the cards out afresh in a grid (`layGrid`).
+- **Three gestures on the pile, by where you press** (`bindNodeDrag` hands a plain press on the body to
+  `beginPileGesture`): a CLICK fans it out; a DRAG lifts the top card off — reparented to whatever the pile
+  lies in and handed to the ordinary drag (`startNodeDrag`), so it lands by the ordinary drop rule, back on
+  this pile included; the PIN and the name tab take the ordinary path — select, and move the stack whole.
+  A double-click does nothing more (the click already fanned it) except rename on the tab.
+- **Dropping makes and grows piles** (`pileTarget`, consulted by `updateDropTarget` before the chute and the
+  section test): over a STACK, the drop goes on top of it at once; over a plain CARD, only once the pointer has
+  rested on it `PILE_HOVER_MS` (an `armPileHover` timer re-asks while the mouse is still), so a quick pass still
+  just overlaps. A dragged stack gives its cards to the target and goes (`pileInto`). Sections never pile.
+  Guides stand down over a pile, as they do for ⌥-merge.
+- **A stack of one is no stack** (`settleStacks`): after every drop and every delete (`deleteNodes`), a stack
+  down to its last card leaves it where the pile was and goes, folder and all. This is the one place the app
+  removes something you didn't — docs/PRODUCT.md's "nothing moves on its own" bends for it, because a pile of
+  one is a card with a pin in it.
+- **The FAN is a way of looking, not an edit** (`ui.fan`, ephemeral). Up to `FAN_ARC_MAX` cards fan up in an
+  arc above the pile, more open as a grid centred on it (`fanSpots`); the cards are real nodes then, hosted
+  straight in `#world` (`hostSection` returns null for a stack's card) above a scrim (`#fanScrim`, z 60/61,
+  the drag layer lifted to 62). Drag one out and it leaves the pile; drag it within the fan and it takes that
+  place (`fanSlot`/`reorderPile`). A click on the scrim, Esc or the pile closes it; search fans the stack a hit
+  lies in.
+- **Ungroup on a stack is UNSTACK** (`deleteSelectionKeepChildren` hands it over): the cards would otherwise be
+  left in a heap on one spot. **Turn into section** keeps the folder and gives it a box sized round the grid.
+  Lines don't attach to a stack (`connectable`).
+
 ## Open sections (scope)
 
 **A section can be OPENED, and then the canvas IS its interior** (`nav/scope.ts` for the model,

@@ -22,7 +22,8 @@ import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { openImageAt } from '../main.js';
 import { inboxSection, goToInbox } from './inbox.js';
-import { canEnter, scopeActive } from '../nav/scope.js';
+import { canEnter, canOpen, scopeActive } from '../nav/scope.js';
+import { hasStackSelected, unstackSelection, stackToSection } from './stacks.js';
 import { openGridMenu } from '../view/grid.js';
 import { byId } from '../utils/dom.js';
 import { showStart } from '../boot.js';
@@ -227,7 +228,7 @@ window.addEventListener('keydown', (e) => {
   // Tab puts a new card INSIDE the selected section — the one thing that has an inside.
   if (key === 'Tab' && state.selId){
     e.preventDefault();
-    if (state.nodes.get(state.selId)?.type === 'section') {
+    if (canOpen(state.nodes.get(state.selId))) {
       addCardInside(state.selId);
     }
     return;
@@ -292,7 +293,7 @@ function paletteCommands(): Command[] {
         startBodyEdit(n);
       }
     } },
-    { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => editable() && oneSel()?.type === 'section', run: () => addCardInside(state.selId!) },
+    { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => editable() && canOpen(oneSel()), run: () => addCardInside(state.selId!) },
     { label: 'New section', keywords: 'group box section', when: editable, run: newSectionAtPointer },
     { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || editable(), run: goToInbox },
     { label: 'Leave the section', shortcut: MOD + '↑', keywords: 'exit back up out parent', when: scopeActive, run: exitScope },
@@ -310,7 +311,9 @@ function paletteCommands(): Command[] {
     { label: 'Collapse all', keywords: 'fold every card section', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
-    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && nodesOf(selectedIds()).some(n => n.type === 'section'), run: deleteSelectionKeepChildren },
+    { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: hasStackSelected, run: unstackSelection },
+    { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
+    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && nodesOf(selectedIds()).some(n => n.type === 'section' && !n.stack), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },

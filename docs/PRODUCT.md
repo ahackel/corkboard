@@ -64,6 +64,10 @@ one searchable list.
   the name back. Cards sit in it wherever you put them, and sections nest. On disk a section IS a
   folder of its cards, so Finder and Obsidian see the same grouping; a folded section isn't even read
   until you open it, which keeps a big board quick.
+- A **stack** is a section drawn as a pile, like a Dock stack: hold a dragged card over another for a moment
+  and they stack; drop more on the pile to add them on top. A click fans it out to read; drag the pile to lift
+  its top card off, or its red pin to move it whole. Unstack spreads the cards out again, or Turn into section
+  gives them a box. Down to one card, it lets go of it.
 - **The rule:** a card is in the section its centre is over — whether you drop the card there, or move,
   resize or draw the section over it. A section grows to hold what you drop into it, so nothing is hidden
   past its edge. Drop cards on a FOLDED section's pill to file them in it, or on a crumb of the path to move

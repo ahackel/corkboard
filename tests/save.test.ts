@@ -39,4 +39,23 @@ describe('saveAll', () => {
     await flushSave();
     expect(store.files.get('notes.md')).toContain('# Notes');
   });
+
+  // A stack is a section drawn as a pile: the folder is the same, and the pile is board.json's to say.
+  it('writes a stack as a section folder, flagged `stack` in board.json, its pile order with it', async () => {
+    const store = caseInsensitiveStore();
+    useStore(store);
+    const s = nodeFrom('', null);
+    s.type = 'section'; s.stack = true;
+    const a = nodeFrom('# Alpha', null), b = nodeFrom('# Beta', null);
+    a.parent = s.id; b.parent = s.id;
+    s.kidOrder = [b.id, a.id];
+    for (const n of [s, a, b]) {
+      n.dirty = true;
+    }
+    await flushSave();
+    expect([...store.files.keys()]).toEqual(expect.arrayContaining(['stack/_index.md', 'stack/alpha.md', 'stack/beta.md']));
+    const board = JSON.parse(store.files.get('board.json')!);
+    expect(board.nodes['Stack/_index.md']).toMatchObject({ stack: true, order: ['Stack/Beta.md', 'Stack/Alpha.md'] });
+    expect(board.nodes['Stack/Alpha.md'].stack).toBeUndefined();
+  });
 });

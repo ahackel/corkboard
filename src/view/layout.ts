@@ -10,6 +10,7 @@ import { state, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
 import { layoutH, nodeH, nodeW, SECTION_BORDER } from './geometry.js';
+import { layStacks } from './pile.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the drag engine
@@ -69,8 +70,9 @@ export function subtreesBox(nodes: Iterable<MindNode>): { x0: number; y0: number
 }
 // An EXPANDED section: a box that holds the cards dropped inside it. A COLLAPSED section folds to its bare
 // title tab (children hidden), so it isn't a box while folded — its footprint is the tab.
+// A STACK isn't one either: it's a section drawn as a PILE (features/stacks.ts), with no box to hold anything.
 export function isSection(node: MindNode): boolean {
-  return node.type === 'section' && !node.collapsed;
+  return node.type === 'section' && !node.collapsed && !node.stack;
 }
 // The box a section actually holds its children in: its own bounds. The single spelling, shared by
 // sectionInterior, the in-section test and the open section's canvas.
@@ -99,6 +101,10 @@ function insideSection(node: MindNode): boolean {
 // (isSection): a collapsed section has no box/wrapper, so it can't host anything. Shared with the edge
 // painter so an edge between two cards inside the same section clips to it too.
 export function hostSection(node: MindNode): MindNode | null {
+  // A STACK's card is only on screen FANNED OUT, held up over the board — never clipped by a box below.
+  if (parentOf(node)?.stack) {
+    return null;
+  }
   const h = containerHost(node);
   // The OPEN section hosts NOTHING: its children are the top level now, so they go straight under
   // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode.
@@ -252,5 +258,6 @@ export function applyLayouts(): void {
   // The open section may have just been deleted / undone away / vanished on disk. (An open section keeps
   // its fold: its interior is the canvas either way.)
   pruneScope();
+  layStacks();   // a stack's cards lie in its pile, or in the fan (view/pile.ts)
 }
 

@@ -33,6 +33,16 @@ export interface Drag {
   // there (drag.ts fileAway) instead of placing them where they were let go. `beside` is the section the
   // cards come out of, for a crumb — they land next to it.
   chute?: Chute | null;
+
+  // Over a STACK, or held over a plain card long enough (features/stacks.ts PILE_HOVER_MS): the drop PILES
+  // the dragged cards there. `make` = the target is a card, and a new stack is made around it.
+  pile?: { id: string; make: boolean } | null;
+
+  // The card the pointer is resting on, and since when — the hover that arms a new stack.
+  pileHover?: { id: string; since: number } | null;
+
+  // Dragging a card of the FANNED stack within the fan: the place in the pile it would take.
+  fanSlot?: number | null;
 }
 export interface Chute { parent: string | null; beside?: string }
 // A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
@@ -91,6 +101,9 @@ export const ui = {
   // At most one of the two is ever set — each opener closes the other.
   bodyEdit: null as BodyEdit | null,
   titleEdit: null as TitleEdit | null,
+
+  // ---- the stack FANNED OUT over the board (features/stacks.ts), its cards shown; null = none ----
+  fan: null as string | null,
   // ---- animated relayout (main) ----
   animToken: 0,
   // ---- last known mouse position (window pointermove, main) ----

@@ -13,9 +13,9 @@
 // without ending the search. The field stays while a query is in it — a filter you can work under — and
 // goes with Esc or its ×. A FOLDED section never read can't say what it holds, so a search reads them all
 // (data/lazy.ts readAll) and keeps them while it is up (searchHolds).
-import { state, type MindNode } from '../core/state.js';
+import { state, isStack, type MindNode } from '../core/state.js';
 import { esc } from '../utils/markdown.js';
-import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible, ancestors } from '../utils/model.js';
+import { nodeLabel, disambiguatedLabel, duplicateLabels, firstVisible, ancestors, parentOf } from '../utils/model.js';
 import { allTags, hasTag, tagKey, cleanTag, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { outOfScope, isScopeRoot } from '../nav/scope.js';
@@ -27,6 +27,8 @@ import { tagText, tagChipHTML } from './tags.js';
 import { boardTags } from './tag-picker.js';
 import { focusNode } from '../nav/focus.js';
 import { afterReading } from '../data/lazy.js';
+import { ui } from '../core/ui-state.js';
+import { openFan } from './stacks.js';
 
 const searchBox = byId<HTMLInputElement>('searchBox');
 const searchWrap = byId('searchWrap');
@@ -235,6 +237,12 @@ function goTo(n: MindNode, confirm: boolean): void {
   }
   if (folded) {
     openSection(folded);
+  }
+
+  // …and a hit lying in a STACK fans that stack out, so the card is there to see.
+  const pile = parentOf(n);
+  if (isStack(pile) && ui.fan !== pile!.id) {
+    openFan(pile!.id);
   }
   focusNode(n, confirm && n.type !== 'section');
 }

@@ -83,6 +83,12 @@ describe('a section is a folder', () => {
   it('keeps a nameless section\'s folder name as it moves', () => {
     expect(desiredFileFor(section('', 'Box 3/_index.md'), new Map(), 'Ideas/')).toBe('Ideas/Box 3/_index.md');
   });
+  it('names a new, unnamed stack\'s folder Stack, and the next one Stack 2', () => {
+    const stack = { ...section(''), stack: true };
+    expect(desiredFileFor(stack, new Map(), '')).toBe('Stack/_index.md');
+    expect(desiredFileFor(stack, new Map([['stack/_index.md', 'other']]), '')).toBe('Stack 2/_index.md');
+    expect(desiredFileFor({ ...stack, file: 'Stack 2/_index.md' }, new Map(), 'Ideas/')).toBe('Ideas/Stack 2/_index.md');
+  });
   it('never names a card _index', () => {
     expect(desiredFileFor(node('_index'), new Map(), 'A/')).toBe('A/_index 2.md');
   });
