@@ -196,7 +196,7 @@ test('⌘S wraps the selection in "Section N" from the bar, and ⌘⌫ ungroups 
   const a = await makeCard(page, 300, 300, 'One');
   const b = await makeCard(page, 600, 300, 'Two');
   await select(page, a);
-  await b.click({ modifiers: ['Shift'] });
+  await b.click({ modifiers: ['ControlOrMeta'] });
   await expect(page.locator('#fbWrap')).toBeVisible();
   await expect(page.locator('#fbMore')).toHaveCount(0);
   await page.keyboard.press('ControlOrMeta+s');
