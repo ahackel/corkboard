@@ -295,3 +295,23 @@ function syncThemeColor(fill: string | null | undefined): void {
     themeMeta.setAttribute('content', rgb);
   }
 }
+
+// The canvas colour must LAND, not fade in, whenever it comes from somewhere other than something the user
+// just did: a map LOAD (a reload, a map switch — there is nothing to transition FROM, so the fade reads as
+// the app flashing the board's grey before settling on its colour) and a scope from the URL (on a
+// back/forward step the camera and selection jump too, so a sliding background would be the only thing
+// still catching up). A HOLD keeps `body.scope-instant` on until its release, plus two frames — long enough
+// for the paint that sets --canvas-bg to land; after that every real open/leave fades again. Counted, so a
+// load and a URL step overlapping can't end each other's hold.
+let fadeHolds = 0;
+export function holdCanvasFade(): () => void {
+  fadeHolds++;
+  document.body.classList.add('scope-instant');
+  return () => requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (--fadeHolds === 0) {
+      document.body.classList.remove('scope-instant');
+    }
+  }));
+}
+
+export function withoutCanvasFade(): void { holdCanvasFade()(); }

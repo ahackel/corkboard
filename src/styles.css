@@ -413,8 +413,8 @@ input::placeholder { color:var(--muted); opacity:1; }
      taking the section's colour rather than a hard cut; 500ms is animateReflow's card glide, so the two
      land together. Unset → transparent, and the theme's background shows through as before. */
   background-color: var(--canvas-bg, transparent); transition: background-color 500ms ease; }
-/* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
-   simply BE there (withoutScopeFade in main.ts). See its comment for why. */
+/* …except during a map load or a scope from the URL — a reload, a map switch, a back/forward step — where the
+   colour must simply BE there (features/canvas-color.ts holdCanvasFade). See its comment for why. */
 body.scope-instant #stage { transition: none; }
 #stage.panning { cursor:grabbing; }
 /* the hand only appears while actually dragging a card; default everywhere else */

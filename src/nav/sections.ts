@@ -10,7 +10,7 @@ import { record } from '../features/history.js';
 import { syncUrl } from './url-state.js';
 import { afterReading } from '../data/lazy.js';
 import { renderCrumbs } from '../features/breadcrumbs.js';
-import { syncCanvasBackground } from '../features/canvas-color.js';
+import { syncCanvasBackground, withoutCanvasFade } from '../features/canvas-color.js';
 import { focusScope } from './focus.js';
 import { setSelectionSet, selectNode } from '../features/selection.js';
 import { scheduleSave } from '../data/save.js';
@@ -199,22 +199,12 @@ export function goToScopeDepth(depth: number): void {
 export function restoreScopeFromFile(file: string | null): void {
   const t = file ? nodeByFile(file) : undefined;
   const want = t && canOpen(t) ? t : null;
-  if (!want) { if (scopeActive()) { withoutScopeFade(); applyScope(null, { exiting: true, camera: false }); } return; }
+  if (!want) { if (scopeActive()) { withoutCanvasFade(); applyScope(null, { exiting: true, camera: false }); } return; }
   if (isScopeRoot(want)) {
     return;
   }
-  withoutScopeFade();
+  withoutCanvasFade();
   applyScope(want, { camera: false });
-}
-// The canvas colour must LAND, not fade in, whenever the scope comes from the URL rather than from
-// something the user just did. On a reload there is nothing to transition FROM — the map has only just
-// appeared — so the fade reads as the app flashing the wrong background before settling on the right
-// one; on a back/forward step the camera and selection jump too, so a sliding background would be the
-// only thing still catching up. Suppressed for two sections (long enough for the paint that sets
-// --canvas-bg to land), after which every real open/leave fades again.
-function withoutScopeFade(): void {
-  document.body.classList.add('scope-instant');
-  requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('scope-instant')));
 }
 // Bring `t` into reach from ANYWHERE: leave as many levels as it takes for it to be inside the scope
 // we land in. The deliberately UNSCOPED jumps (a [[wikilink]], an undo that

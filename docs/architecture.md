@@ -348,9 +348,9 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 - **The CANVAS wears the open section's fill** (`syncCanvasBackground` → `--canvas-bg` on `#stage`, under
   `#grid`; `<body>`'s `--bg` is untouched so the theme is). Same resolver the box used — `effectiveColor` →
   `colorFill` — so the canvas can't disagree with the colour the box was showing, transitioned over
-  `animateReflow`'s 320ms so going in reads as the canvas taking the colour rather than a cut — **except when
-  the scope came from the URL** (`withoutScopeFade` → `body.scope-instant`, killing the transition for two
-  sections): on a reload there's nothing to transition FROM, so the fade reads as flashing the wrong background,
+  `animateReflow`'s 320ms so going in reads as the canvas taking the colour rather than a cut — **except during a
+  map LOAD or when the scope came from the URL** (`holdCanvasFade`/`withoutCanvasFade` in canvas-color.ts →
+  `body.scope-instant`, killing the transition until two frames after): on a reload there's nothing to transition FROM, so the fade reads as flashing the wrong background,
   and on a back/forward step the camera and selection jump too. Only when the colour is **authored** somewhere
   up the chain (`hasAuthoredColor`): `effectiveColor` falls back to the theme's neutral card fill for a section
   nobody coloured, and painting the whole canvas *that* is a lie, and a near-white that swallows the chrome

@@ -73,3 +73,25 @@ test('A section coloured from the sticky palette, on disk, opens as its surface 
   expect((await diskFiles(page))['Box/_index.md']).toContain('color: light-blue');
   expect(errors).toEqual([]);
 });
+
+test('A reload lands on the board colour instead of fading in from grey', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, {
+    'Loose.md': note('A loose card'),
+    'board.json': JSON.stringify({ version: 1, settings: { canvasColor: 'light-blue' }, nodes: { 'Loose.md': { x: 0, y: 0 } }, edges: [] }),
+  });
+  await page.reload();
+  // the first moment the colour is set at all, the stage already SHOWS it — not a step of a fade from grey
+  const first = await page.evaluate(() => new Promise<string>(resolve => {
+    const stage = document.getElementById('stage')!;
+    const check = (): void => {
+      if (stage.style.getPropertyValue('--canvas-bg')) {
+        resolve(getComputedStyle(stage).backgroundColor);
+      } else {
+        requestAnimationFrame(check);
+      }
+    };
+    check();
+  }));
+  expect(first).toBe('rgb(214, 238, 255)');
+});

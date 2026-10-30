@@ -12,6 +12,7 @@ import { unreadSectionHolding } from './lazy.js';
 import { type FoldTest } from '../store/tree.js';
 import { scope, resolveScopeAfterLoad } from '../nav/scope.js';
 import { clearHistory } from '../features/history.js';
+import { holdCanvasFade } from '../features/canvas-color.js';
 import { resetSaveState, scheduleSave } from './save.js';
 import { resetImageCache } from '../features/images.js';
 import { refreshGrid } from '../view/grid.js';
@@ -220,7 +221,18 @@ function foldTest(keep: string[]): FoldTest {
 export const foreignDirs = new Set<string>();
 const scopeFiles = (): string[] => scope.stack.map(l => l.file).filter((f): f is string => !!f);
 
-export async function loadFromDir({ keepView = false }: { keepView?: boolean } = {}): Promise<void> {
+// A load's canvas colour LANDS rather than fading in from the board's grey (features/canvas-color.ts
+// holdCanvasFade), however long the reads take.
+export async function loadFromDir(opts: { keepView?: boolean } = {}): Promise<void> {
+  const release = holdCanvasFade();
+  try {
+    await load(opts);
+  } finally {
+    release();
+  }
+}
+
+async function load({ keepView = false }: { keepView?: boolean }): Promise<void> {
   clearHistory();   // ids are minted fresh per load, so no snapshot survives a (re)load / map switch
   // …including the container wrappers, which carry no data-id: a section's clipping wrapper
   // hangs off the NODE object (sectionContentEl), so once state.nodes is
