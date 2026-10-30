@@ -3,6 +3,7 @@ import { state, type MindNode } from '../core/state.js';
 import { childrenOf, ancestors, parentOf } from '../utils/model.js';
 import { makeEdge } from './board.js';
 import { arrangeSections } from './load.js';
+import { surfaceColorOf } from '../view/color.js';
 
 // ---------- cards that hold cards become sections (runs on every load; a no-op once done) ----------
 // A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
@@ -26,7 +27,9 @@ export function foldCardsIntoSections(): number {
   const was = new Set(cards.map(n => n.id));
   const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
     && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
-  for (const n of cards) { n.type = 'section'; n.dirty = true; n.dirtyLayout = true; }
+  for (const n of cards) {
+    n.type = 'section'; n.color = surfaceColorOf(n.color); n.dirty = true; n.dirtyLayout = true;
+  }
   arrangeSections(arrange);
   return cards.length;
 }

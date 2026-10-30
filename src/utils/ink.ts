@@ -48,10 +48,10 @@ function parseHex(c: string): [number, number, number] | null {
   }
   return null;
 }
-// A section's PALE fill: its colour washed most of the way to white — what styles.css paints the box in
-// (`.node.section`'s color-mix, same 32%), spelled here for the one place JS needs it: the canvas while
-// that section is open (features/canvas-color.ts canvasFill). A fill it can't read comes back unchanged.
-export const SECTION_WASH = 0.32;
+// A colour's PALE wash: washed most of the way to white. What a section's box showed before sections had
+// their own palette, so a custom-coloured section migrates to exactly the look it had (view/color.ts
+// surfaceColorOf). A fill it can't read comes back unchanged.
+const SECTION_WASH = 0.32;
 export function paleFill(c: string): string {
   const rgb = parseHex(c);
   if (!rgb) {

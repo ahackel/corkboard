@@ -196,9 +196,8 @@ way the cards leave the canvas you're looking at, so a toast says where they wen
 ## Sections
 
 **A section looks like a FigJam SECTION: a pale box, its name on a pill ABOVE it.** The box is the section's
-colour washed 68% toward white (`color-mix`, `SECTION_WASH`/`paleFill` in `utils/ink.ts` for the one JS reader,
-the open section's canvas) with a 1px rim a step darker than the colour (`SECTION_BORDER` = 1). The label is a
-pill filled with the section's full colour, so its text takes that colour's own `--ink` like any card.
+colour EXACTLY — a SURFACE colour, already a pale tint (see "SURFACES have their own palette") — with a rim a
+step darker. The label is a pill a step darker again, its text that colour's own `--ink` like any card.
 
 **A section's BOUNDS are its box; the label hangs OUTSIDE them.** `n.x/n.y/w/h` are the box, and the pill sits
 7px above its top-left corner (`.node.section > .title-row`, `bottom:calc(100% + 7px)`), growing upward. So
@@ -356,7 +355,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   up the chain (`hasAuthoredColor`): `effectiveColor` falls back to the theme's neutral card fill for a section
   nobody coloured, and painting the whole canvas *that* is a lie, and a near-white that swallows the chrome
   floating on it. Authorship, not the hex — a section explicitly coloured white still tints. A SECTION's canvas is
-  its PALE fill (`paleFill`), the same wash its box wears, so the full-colour cards it holds read on it.
+  its colour exactly, as its box is.
 - **At the TOP level that same variable carries the MAP's own colour** — `state.canvasColor`, per-map in
   `settings.json` beside the grid, so it travels with the vault rather than the browser. One resolver answers
   both, `canvasFill`, off `canvasOwner`: the open section, or `null` for "the map". The
@@ -948,8 +947,8 @@ everywhere, and a colour has exactly one ink. An uncoloured CARD falls back to `
 yellow — derived, never written, so the note on disk stays uncoloured — and an uncoloured SECTION to `white`.
 The keys (`amber`, `slate`, …) are the file format; only the hexes in `styles.css` may change.
 
-**The colour picker is FigJam's: two rows of eleven** (`PICKER_ROWS`, view/color.ts) — the STRONG hues framed by
-black and white (`stone`, `bold-red` … `bold-pink`), then the pastels, the sticky colours, framed by two
+**The colour picker is FigJam's: two rows of eleven** (`PICKER_ROWS`, view/color.ts; a CARD's — a surface has its own, see "SURFACES have their own palette") — the
+STRONG hues framed by black and white (`stone`, `bold-red` … `bold-pink`), then the pastels, the sticky colours, framed by two
 greys and ending in the custom chip; recently used custom colours wrap onto a third row. `PALETTE` is every
 key a note may carry (a superset: `slate` still paints but is no longer offered), and its `.c-<key>`
 classes are GENERATED beside their ink (`deriveInk`), so a new key is its `--pal-*` hex plus one array
@@ -1059,15 +1058,23 @@ the commit rewinds to the pre-drag colours before calling `record` — `record` 
 by then is too late. The float bar exempts this chip from its close-on-swatch-click, or the row would vanish
 mid-pick.
 
-**CORK is a SURFACE colour: the board and sections wear it, a card never does.** `cork` is a palette key
-(`--pal-cork`, so ink, grid, theme colour and `colorFill` need nothing new) that `isSurfaceOnly` (view/color.ts)
-marks as a MATERIAL: it paints as `--tex-cork` (an inline SVG noise texture, so the single file stays
-self-contained) over its base, and is never washed — a cork section's box and the canvas inside it are the
-same cork (`surfaceFill`). The picker offers it on its own third-row chip, shown only where a surface is
-being coloured (`.surfaces`: always on the canvas picker, on the float bar while only sections are selected),
-and `effectiveColor` walks past it, so a card pinned to cork stays a sticky. On the canvas the texture is
-its own layer, `#canvasTex`, over-sized by a tile and pan-translated like `#grid` (`paintCanvasTexture`).
-A new texture is one `TEXTURES` entry plus its `--tex-*` and `--pal-*` (and a `.node.section.c-*` rule).
+**SURFACES have their own palette, FigJam's section colours.** The board and sections (not stacks: a stack's
+colour is its pin's) are coloured from `SURFACE_ROW` (view/color.ts) — white, light grey and eight light tints —
+and paint that colour EXACTLY, so a board and a section picked the same ARE the same, and opening a section
+doesn't change its colour. Cards keep the sticky palette; both live in ONE picker row, `.surfaces` choosing
+which shows (`swatchRowHTML`). Each tint is the pale twin of a sticky (`SURFACE_TONE`, its hex the old 68% wash
+of that sticky), and a card nobody coloured in a tinted section wears the twin (`cardTone`, in
+`effectiveColor`): light blue box, blue cards. Anything that hands a section a STICKY colour — a section on
+disk from before this (migrated on load, `nodeFromNote`, and saved), a card turned section, a stack turned
+section, a mixed selection coloured from the card palette — goes through `surfaceColorOf`: a sticky becomes
+its light twin (strong ones too; greys and black light grey), a custom hex its old wash. A board colour needs
+no migration: it was always painted exactly.
+
+**CORK is a surface MATERIAL.** `cork` is a surface key (`--pal-cork`, so ink, grid and theme colour need
+nothing new) painted as `--tex-cork` (an inline SVG noise texture, so the single file stays self-contained)
+over its base. It has no sticky twin, so a card pinned to cork stays yellow. On the canvas the texture is its
+own layer, `#canvasTex`, over-sized by a tile and pan-translated like `#grid` (`paintCanvasTexture`). A new
+texture is one `TEXTURES` entry plus its `--tex-*` and `--pal-*` and a `.node.section.c-*` rule.
 
 **Recently-used custom colours** (`features/color-recents.ts`) have TWO sources, like the `#` field's recent
 and board tags: the MRU in `localStorage` (`corkboard.colorMru`, cap 8) *plus* every distinct custom colour in the open

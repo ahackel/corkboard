@@ -2,13 +2,13 @@
 // The swatch row the floating bar's colour popover shows (#floatBar). Given the row element plus a
 // "which cards am I editing" provider, it wires the swatches and the custom-colour chip to the undo /
 // paint / save contract. Also exports the swatch-row helpers the canvas-colour picker shares.
-import { state } from '../core/state.js';
+import { state, isStack, type MindNode } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { record } from './history.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
-import { SWATCH_BG, PICKER_ROWS, swatchBg } from '../view/color.js';
+import { SWATCH_BG, PICKER_ROWS, SURFACE_ROW, swatchBg, surfaceColorOf } from '../view/color.js';
 import { scheduleSave } from '../data/save.js';
 
 export interface PropEls {
@@ -40,8 +40,14 @@ export function paletteChipsHTML(): string {
   return PICKER_ROWS.map(row => row.map(chip).join('')).join(`<span class="swatch-break"></span>`);
 }
 export function swatchRowHTML(first: FirstChip): string {
-  // …the second row ending in the custom chip.
-  let html = paletteChipsHTML();
+  // Both palettes are in the row, and `.surfaces` on it (styles.css) says which one shows: the STICKY rows
+  // for cards, the SURFACE row — FigJam's section colours, view/color.ts SURFACE_ROW — for the board and
+  // sections. One row element either way, so the delegated click, the ring and the custom chip are shared.
+  const chip = (c: string, cls: string): string =>
+    `<div class="swatch ${cls}" data-color="${c}" title="${c}" style="--sw:${swatchBg(c)}"></div>`;
+  let html = PICKER_ROWS.map(row => row.map(c => chip(c, 'sticky')).join('')).join(`<span class="swatch-break sticky"></span>`);
+  html += SURFACE_ROW.map(c => chip(c, 'surface')).join('');
+
   // Any colour at all — the card's ink follows automatically (utils/ink.ts), which is what makes an
   // off-palette colour safe to offer. A <label> WRAPPING the input, rather than a div that forwards
   // a click: that's the one form every platform opens natively from a single tap, including iOS,
@@ -52,17 +58,15 @@ export function swatchRowHTML(first: FirstChip): string {
 
   // No "inherit" or "none" chips, as in FigJam: a card nobody coloured still follows its section (or is
   // the default yellow), and the picker rings the colour it SHOWS (markSwatch). The custom colours used
-  // recently wrap onto a third row (renderRecentChips), after the chips below.
+  // recently wrap onto the next row (renderRecentChips), after the chips below.
   //
-  // The third row: the MAP's canvas alone gets a reset chip in the board's own grey, since there is no
-  // other way back to "no canvas colour"; then the SURFACE colours (cork), shown only where a surface is
-  // being coloured — the canvas picker always, the float bar while only sections are selected (`.surfaces`
-  // on the row, styles.css). Its break goes with them, so a card's row is the two FigJam rows as before.
+  // A surface's second row: the MAP's canvas alone gets a reset chip in the board's own grey, since there
+  // is no other way back to "no canvas colour"; then the cork board.
   html += `<span class="swatch-break surface"></span>`;
   if (first === 'default') {
-    html += `<div class="swatch" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
+    html += `<div class="swatch surface" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
   }
-  html += `<div class="swatch surface" data-color="cork" title="cork board" style="--sw:${swatchBg('cork')}"></div>`;
+  html += chip('cork', 'surface').replace('title="cork"', 'title="cork board"');
   return html;
 }
 // The recents chips, replaced wholesale each time (there are at most SHOWN_MAX of them). Rendered at
@@ -105,6 +109,9 @@ export function markSwatchRow(colors: HTMLElement, active: string): void {
     sw.classList.toggle('active', sw.dataset.color === active));
 }
 
+// A SURFACE is coloured from the surface palette: a section, but not a stack — its colour is its pin's.
+const isSurface = (n: MindNode | undefined): boolean => !!n && n.type === 'section' && !isStack(n);
+
 // getIds returns the card ids the controls act on: the whole selection in the sidebar, the single
 // active card in the branch sheet. Empty → the controls no-op (nothing selected).
 export function createProperties(els: PropEls, getIds: () => string[]): PropertyControls {
@@ -146,8 +153,14 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
     paintAll(); scheduleSave();
   }
   function editableIds(): string[] { return getIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); }
+  // A section in a MIXED selection is coloured from the sticky palette, so it takes that colour's surface
+  // twin — the cards turn blue, the box light blue.
   function applyColor(id: string, color: string): void {
-    const n = state.nodes.get(id); if (n){ n.color = color; n.dirty = true; }
+    const n = state.nodes.get(id);
+    if (n) {
+      n.color = isSurface(n) ? surfaceColorOf(color) : color;
+      n.dirty = true;
+    }
   }
   // ---- the custom picker ----
   // A native colour input streams `input` events for the whole time the user is dragging around the
@@ -191,7 +204,7 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
 
   function sync(): void {
     const ids = getIds();
-    els.colors.classList.toggle('surfaces', !!ids.length && ids.every(id => state.nodes.get(id)?.type === 'section'));
+    els.colors.classList.toggle('surfaces', !!ids.length && ids.every(id => isSurface(state.nodes.get(id))));
     renderRecents();   // the offered set depends on the open MAP, so re-derive it whenever we're shown
     markSwatch();
   }

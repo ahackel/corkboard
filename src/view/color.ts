@@ -8,7 +8,8 @@ import { inkFor, scrimFor, isHexColor, paleFill } from '../utils/ink.js';
 // Every key a note may carry. `slate` predates FigJam's palette: it still paints, but the picker no
 // longer offers it.
 const PALETTE = ['slate','red','amber','green','teal','blue','violet','pink','grey','white','black',
-  'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink','cork'];
+  'orange','silver','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink',
+  'light-grey','light-red','light-orange','light-yellow','light-green','light-teal','light-blue','light-violet','light-pink','cork'];
 // …and what the picker OFFERS, FigJam's two rows of eleven: the strong hues framed by black and white,
 // then the pastels — the sticky colours — framed by two greys (the custom chip ends that row).
 export const PICKER_ROWS: string[][] = [
@@ -63,14 +64,45 @@ deriveInk();
 export function colorFill(c: string): string | null { return SWATCH_BG[c] ?? (isHexColor(c) ? c : null); }
 export function colorClass(c: string): string { return isHexColor(c) ? 'c-custom' : 'c-' + c; }
 
-// ---------- SURFACE colours: a material for the board and sections, never a card ----------
-// A cork board is something cards are pinned TO, so `cork` is offered only where the colour is a
-// surface (the canvas picker, and the float bar while only sections are selected), a card never
-// inherits it (main.ts effectiveColor walks past it), and it paints as a TEXTURE over its --pal-* base
-// rather than as a wash. Its hex still answers colorFill, so ink, grid and theme colour need nothing new.
+// ---------- SURFACE colours: the board's and the sections' own palette ----------
+// FigJam's way: a SURFACE (the board, a section) has its own palette of light tints, painted EXACTLY as
+// picked — so the same chip on the board and on a section is the same colour — while cards keep the
+// sticky palette above. Each tint is the pale twin of a sticky colour (SURFACE_TONE), and a card nobody
+// coloured, sitting in a tinted section, wears that sticky (main.ts effectiveColor) — the tint says
+// what the cards in it are. `cork` is a surface too, a MATERIAL: it paints as a TEXTURE over its --pal-*
+// base and has no sticky twin, so a card pinned to cork stays the default yellow.
+export const SURFACE_ROW = ['white','light-grey','light-red','light-orange','light-yellow','light-green',
+  'light-teal','light-blue','light-violet','light-pink'];
+const SURFACE_TONE: Record<string, string> = {
+  'light-grey': 'grey', 'light-red': 'red', 'light-orange': 'orange', 'light-yellow': 'amber',
+  'light-green': 'green', 'light-teal': 'teal', 'light-blue': 'blue', 'light-violet': 'violet', 'light-pink': 'pink',
+};
 const TEXTURES: Record<string, string> = { cork: 'var(--tex-cork)' };
-export function isSurfaceOnly(c: string): boolean { return c in TEXTURES; }
 export function colorTexture(c: string): string | null { return TEXTURES[c] ?? null; }
+
+// What a card inheriting a surface colour wears: its sticky twin; none (null) for a material; any other
+// colour — a sticky key, white, a custom hex — passes through as itself.
+export function cardTone(c: string): string | null {
+  return c in TEXTURES ? null : SURFACE_TONE[c] ?? c;
+}
+
+// …and the other way: the surface colour standing for a STICKY one, for a section that is handed one — a
+// map from before the surface palette, a stack turned into a section (its pin's colour), a mixed selection
+// coloured from the card palette. A sticky key becomes its light twin (a strong one too; the greys and
+// black go light grey), a custom hex its pale wash (paleFill — what its box used to show), and a surface
+// colour stays itself.
+const STICKY_SURFACE: Record<string, string> = {
+  ...Object.fromEntries(Object.entries(SURFACE_TONE).map(([light, tone]) => [tone, light])),
+  'bold-red': 'light-red', 'bold-orange': 'light-orange', 'bold-yellow': 'light-yellow', 'bold-green': 'light-green',
+  'bold-teal': 'light-teal', 'bold-blue': 'light-blue', 'bold-violet': 'light-violet', 'bold-pink': 'light-pink',
+  slate: 'light-blue', silver: 'light-grey', stone: 'light-grey', black: 'light-grey',
+};
+export function surfaceColorOf(c: string): string {
+  if (isHexColor(c)) {
+    return paleFill(c);
+  }
+  return STICKY_SURFACE[c] ?? c;
+}
 
 // What a swatch chip shows for a colour: the texture, if it has one, over its fill.
 export function swatchBg(c: string): string {
@@ -79,12 +111,6 @@ export function swatchBg(c: string): string {
   return tex ? `${tex} center / 120px 120px, ${fill}` : fill;
 }
 
-// The fill a SECTION's interior wears — its colour's pale wash (styles.css `.node.section`), or a
-// textured colour's own base, which is never washed.
-export function surfaceFill(c: string): string | null {
-  const fill = colorFill(c);
-  return fill && (isSurfaceOnly(c) ? fill : paleFill(fill));
-}
 // SET for a custom colour, REMOVED otherwise. Removing matters —
 // recolouring a custom card back to a palette key has to drop the inline triple, or it would keep
 // overriding the .c-* class that now owns the colour (an inline custom property beats any selector).

@@ -1,5 +1,6 @@
 // ---------- reading notes into nodes ----------
 import { type MindNode, isBoxType, state, world, setStatus } from '../core/state.js';
+import { surfaceColorOf } from '../view/color.js';
 import { NODE_W, nodeW, SECTION_BORDER, nodeH, snapPt } from '../view/geometry.js';
 import { parseMd, fileStem } from '../utils/frontmatter.js';
 import { soleImage } from '../utils/markdown.js';
@@ -109,6 +110,13 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
   };
   if (mm.wasStack) {
     seeds.wasStack.add(node.id);
+  }
+
+  // A section coloured from the STICKY palette, from before sections had their own (view/color.ts): it
+  // takes that colour's surface twin, once, and is saved so.
+  if (type === 'section' && !node.stack && node.color && surfaceColorOf(node.color) !== node.color) {
+    node.color = surfaceColorOf(node.color);
+    node.dirty = true;
   }
   if (hasRel) {
     seeds.rel.add(node.id);

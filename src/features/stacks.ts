@@ -17,7 +17,7 @@ import { pileKids, topOfPile, fanSlotAt, fanTilt, gridOf, FAN_ARC_MAX, type FanI
 import { nodeW, nodeH, imageLook } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld, frameBox, stageSize } from '../view/camera.js';
-import { applyColorVars, colorClass, colorFill } from '../view/color.js';
+import { applyColorVars, colorClass, colorFill, surfaceColorOf } from '../view/color.js';
 import { SPACING } from '../utils/guides.js';
 import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout } from '../main.js';
 import { startNodeDrag, feedDragMove, commitDrag } from './drag.js';
@@ -470,6 +470,7 @@ export function stackToSection(): void {
       touch(s.id);
       const cards = pileKids(s).reverse();
       s.stack = false; s.dirtyLayout = true;
+      s.color = surfaceColorOf(s.color); s.dirty = true;   // its pin's colour, as a box's (view/color.ts)
       paintAll();
       layGrid(cards, { x: s.x + SECTION_FIT_PAD, y: s.y + SECTION_FIT_PAD });
       fitSectionToContent(s);

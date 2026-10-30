@@ -23,7 +23,7 @@ import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js
 import { paintFreeEdges } from '../view/free-edges.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { placePopover, closeOnOutside } from '../utils/dom.js';
-import { colorFill, colorTexture, surfaceFill, swatchBg, THEME_BG } from '../view/color.js';
+import { colorFill, colorTexture, swatchBg, THEME_BG } from '../view/color.js';
 import { paintCanvasTexture } from '../view/grid.js';
 import { scopeRootNode } from '../nav/scope.js';
 import { inkFor } from '../utils/ink.js';
@@ -127,7 +127,7 @@ function build(): void {
     return;
   }
   colors.innerHTML = swatchRowHTML(canvasOwner() ? 'inherit' : 'default');
-  colors.classList.add('surfaces');   // the canvas is always a surface, so cork is always on offer
+  colors.classList.add('surfaces');   // the canvas is always a surface: it offers the surface palette
   renderRecentChips(colors);
   markSwatchRow(colors, currentColor());
   if (built) {
@@ -217,8 +217,8 @@ export function setupCanvasColor(): void {
 // canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
 // #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
 // the grid still draws over it.
-// A SECTION's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
-// the cards in it, which take its full colour, read on it the same as they did inside the box.
+// Both are SURFACE colours (view/color.ts SURFACE_ROW), painted exactly, so a board and a section picked
+// the same are the same.
 // …and, for a section, only when that colour is AUTHORED somewhere up the chain. effectiveColor
 // deliberately falls back to the theme's neutral card fill for a section nobody has coloured, and
 // painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
@@ -234,26 +234,20 @@ function hasAuthoredColor(n: MindNode): boolean {
 // writes can't become two different things.
 export const canvasOwner = (): MindNode | null => scopeRootNode();
 
-// The colour VALUE behind the cards right now, and whether a section owns it (and so wears it as its box does).
+// The colour VALUE behind the cards right now — the one input the background, its texture and the grid
+// ink are all derived from.
 //
 // An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
 // rather than to nothing: what's behind an uncoloured section is whatever is behind IT. Standing inside a section nobody coloured
 // used to discard the canvas colour the map itself was painted in — so
 // going in turned a teal board grey, and coming out turned it teal again.
-function canvasColor(): { color: string; section: boolean } {
+function canvasColor(): string {
   const owner = canvasOwner();
-  if (!owner || !hasAuthoredColor(owner)) {
-    return { color: state.canvasColor, section: false };
-  }
-  return { color: effectiveColor(owner), section: true };
+  return owner && hasAuthoredColor(owner) ? effectiveColor(owner) : state.canvasColor;
 }
 
-// The fill actually behind the cards right now — the one input both the background and the grid ink
-// are derived from. null = none, and the theme's own background shows through as before.
-function canvasFill(): string | null {
-  const { color, section } = canvasColor();
-  return section ? surfaceFill(color) : colorFill(color);
-}
+// …and the fill it paints as. null = none, and the theme's own background shows through as before.
+function canvasFill(): string | null { return colorFill(canvasColor()); }
 // The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
 // free edge's label plate is painted in — a label is a small
 // patch of the canvas laid over the line, so its ink is measured against exactly this.
@@ -268,7 +262,7 @@ export function syncCanvasBackground(): void {
   const fill = canvasFill();
 
   // A TEXTURED colour (cork) lays its texture over the fill, on #canvasTex (styles.css).
-  const tex = colorTexture(canvasColor().color);
+  const tex = colorTexture(canvasColor());
   stage.classList.toggle('textured', !!tex);
   if (tex) {
     stage.style.setProperty('--canvas-tex', tex);

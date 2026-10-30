@@ -54,7 +54,7 @@ test('the browser theme colour follows the canvas colour', async ({ page }) => {
   const theme = () => page.locator('meta[name="theme-color"]').getAttribute('content');
   expect(await theme()).toBe('rgb(245, 245, 245)');   // the board's own grey
   await page.locator('#canvasColorBtn').click();
-  const chip = page.locator('#canvasColors .swatch[data-color]:not([data-color=""])').first();
+  const chip = page.locator('#canvasColors .swatch[data-color]:not([data-color=""]):visible').first();
   const want = await chip.evaluate(el => getComputedStyle(el).getPropertyValue('--sw').trim());
   await chip.click();
   await expect.poll(theme).not.toBe('rgb(245, 245, 245)');

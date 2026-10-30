@@ -67,8 +67,19 @@
   --pal-bold-blue: #3d9eff;
   --pal-bold-violet: #874fff;
   --pal-bold-pink: #f849c1;
-  /* CORK, a SURFACE colour (view/color.ts isSurfaceOnly): only the board and sections wear it, and they wear
-     it as a TEXTURE — --tex-cork over this base. The hex is what JS reasons with (ink, grid, the browser's
+  /* The SURFACE palette (view/color.ts SURFACE_ROW): FigJam's section colours, for the board and sections and
+     painted exactly. Each is the pale twin of the sticky it's named for — the wash a section's box used to put
+     on that sticky (utils/ink.ts paleFill), so a migrated section looks as it did. */
+  --pal-light-grey: #ebebeb;
+  --pal-light-red: #ffe5e2;
+  --pal-light-orange: #fff1e3;
+  --pal-light-yellow: #fff3ce;
+  --pal-light-green: #d8f5e2;
+  --pal-light-teal: #d6f6f3;
+  --pal-light-blue: #d6eeff;
+  --pal-light-violet: #f3e8ff;
+  --pal-light-pink: #ffeafb;
+  /* CORK, a surface MATERIAL (view/color.ts TEXTURES): the board and sections wear it as a TEXTURE — --tex-cork over this base. The hex is what JS reasons with (ink, grid, the browser's
      theme colour). Two noise layers: dark pores and pale granules, tiled at TEX_TILE (240px). */
   --pal-cork: #c99d6b;
   --tex-cork: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='d'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .22 0 0 0 0 .1 0 0 0 -3.4 1.9'/%3E%3C/filter%3E%3Cfilter id='l'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.28' numOctaves='3' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .93 0 0 0 0 .8 0 0 0 0 .6 0 0 0 -3 1.55'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23l)'/%3E%3Crect width='240' height='240' filter='url(%23d)'/%3E%3C/svg%3E");
@@ -605,13 +616,13 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    this box — they live in the sibling .section-content wrapper — so lowering the box doesn't hide them.
    `auto` rather than 0 deliberately: it keeps the section from becoming a STACKING CONTEXT, which is what
    lets its own label (below) lift above the edges/cards that would otherwise cover it.
-   The FILL is the section's colour (--card, from its .c-* class) washed most of the way to white, and the
-   2px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
-   colour, read clearly on it. Width 2px = SECTION_BORDER (main.ts). */
+   The FILL is the section's colour (--card, from its .c-* class) EXACTLY — a surface colour is already a pale
+   tint (the surface palette, view/color.ts), so the board and a section picked the same are the same — and the
+   2px rim a step darker. Width 2px = SECTION_BORDER (main.ts). */
 .node.section { z-index:auto; min-height:0; padding:0; border-radius:var(--r-section);
-  background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
-  border:2px solid color-mix(in srgb, var(--card, #fff), #000 10%); }
-/* …except a TEXTURED colour, which is a material, not a tint: the box wears it as it is. */
+  background:var(--card, #fff);
+  border:2px solid color-mix(in srgb, var(--card, #fff), #000 12%); }
+/* …and a TEXTURED colour (cork) wears its texture over that fill. */
 .node.section.c-cork { background:var(--tex-cork) 0 0 / 240px 240px, var(--card); }
 /* ---------- a section's label: a pill above the box ---------- */
 /* FigJam's section name: a borderless pill a step darker than the section's own colour (a white section's
@@ -687,10 +698,10 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    What it holds is in its tooltip (main.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
    just the folder. */
 /* A section's FOLDER — folded on the canvas, or its segment of the path — is coloured like its BOX
-   (.node.section): the outline is the box's rim, the section's own colour; the inside is its pale wash. */
-.fold-icon { color:color-mix(in srgb, var(--card, #fff), #000 10%); }
+   (.node.section): the outline is the box's rim, the inside its fill. */
+.fold-icon { color:color-mix(in srgb, var(--card, #fff), #000 25%); }
 .fold-icon svg { width:100%; height:100%; display:block; }
-.fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff) 32%, #fff); }
+.fold-icon svg path { fill:var(--card, #fff); }
 .node .fold-icon { display:none; }
 .node.section-folded { display:flex; align-items:center; gap:6px; width:max-content; max-width:360px; min-height:0;
   padding:0; border:none; border-radius:8px; background:transparent; color:var(--ink, var(--text)); }
@@ -1429,8 +1440,9 @@ svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; tex
    instead of wherever the container's width happens to run out. Needs the container to have a
    DEFINITE width to resolve against — see #fbColorPop's .swatches below. */
 .swatch-break { flex:0 0 100%; height:0; margin:0; }
-/* the SURFACE chips (cork) on their own row, only where a surface is being coloured (properties.ts) */
-.swatches:not(.surfaces) > .surface { display:none; }
+/* ONE row holds both palettes (properties.ts swatchRowHTML): the sticky rows for cards, the surface rows
+   where a surface — the board, a section — is being coloured (.surfaces) */
+.swatches:not(.surfaces) > .surface, .swatches.surfaces > .sticky { display:none; }
 /* colour chips: a fixed size */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
   border:0; background:var(--sw); }
