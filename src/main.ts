@@ -268,8 +268,10 @@ export function effectiveColor(n: MindNode): string {
   // `guard`: a chain is only as trustworthy as the data behind it, and this
   // runs on every paint of every card — a cycle must degrade to a fallback colour, not hang the tab.
   let guard = 0;
+  // A STACK's colour is its PIN's (features/stacks.ts paintPile), not something its cards wear: the walk
+  // passes it by.
   for (let c: MindNode | null | undefined = n; c && guard++ < 4096; c = (c.id === previewId) ? previewParent : parentOf(c)) {
-    if (c.color) {
+    if (c.color && !isStack(c)) {
       return c.color;
     }
   }

@@ -179,3 +179,15 @@ test('dragging a card within the fan shows a line where it will go, and drops it
   await page.screenshot({ path: 'test-results/pin.png' });
   expect(errors).toEqual([]);
 });
+
+test('a stack\'s colour is its pin\'s, red by default; its cards keep their own', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const pin = stack(page).locator('.stack-pin');
+  await expect(pin).toHaveCSS('background-color', 'rgb(229, 56, 59)');
+  await seedBoard(page, { ...BOARD, 'Pile/_index.md': note('', { 'mm_type': 'frame', 'mm_blank': 'true', 'color': 'blue' }) });
+  await expect(pin).not.toHaveCSS('background-color', 'rgb(229, 56, 59)');
+  await expect(stack(page).locator('.pile-card').last()).toHaveClass(/c-amber/);   // a sticky's own yellow
+  expect(errors).toEqual([]);
+});

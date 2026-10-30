@@ -261,8 +261,9 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   aren't selectable, searchable on the canvas or drawn as nodes. What you see is the stack's own element
   painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
   `paintNode`), each askew by its PLACE in the pile counted from the bottom (`messAt`: the bottom card square, the
-  rest from a fixed list), so a card keeps its angle as more are piled on; and the pin, a plain red disc a tag label's size just reaching
-  over the top edge. No count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
+  rest from a fixed list), so a card keeps its angle as more are piled on; and the pin, a plain disc a tag label's size just reaching
+  over the top edge. **A stack's colour is its PIN's** (red until one is picked); its cards don't inherit it —
+  `effectiveColor` walks past a stack. No count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
   Selected, it's ringed round the whole askew pile (`ringPile`), not its element's box; with cards held over
   it, it lifts — scaled, with a soft drop shadow, the one time a board node casts one — and shows no ring.
 - **Where its cards lie is DERIVED, every layout** (`layStacks`, run by `applyLayouts`): all of them at the

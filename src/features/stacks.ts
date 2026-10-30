@@ -17,7 +17,7 @@ import { pileKids, topOfPile, fanSlotAt, fanTilt, FAN_ARC_MAX, type FanInsert } 
 import { nodeW, nodeH, imageLook, gridSnap } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld, frameBox } from '../view/camera.js';
-import { applyColorVars, colorClass } from '../view/color.js';
+import { applyColorVars, colorClass, colorFill } from '../view/color.js';
 import { SPACING } from '../utils/guides.js';
 import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout } from '../main.js';
 import { startNodeDrag, feedDragMove, commitDrag } from './drag.js';
@@ -87,6 +87,12 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     }
   });
   el.dataset.cards = String(kids.length);
+  // The stack's colour is its PIN's — red until one is picked (styles.css .stack-pin).
+  const pin = face.querySelector<HTMLElement>(':scope > .stack-pin')!;
+  const fill = colorFill(n.color) ?? '';
+  if (pin.style.background !== fill) {
+    pin.style.background = fill;
+  }
   ringPile(face, pile, shown, shown.map((_, i) => messAt(kids.length - shown.length + i)));
 }
 
