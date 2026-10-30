@@ -261,7 +261,7 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   aren't selectable, searchable on the canvas or drawn as nodes. What you see is the stack's own element
   painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
   `paintNode`), askew by a `jitter` seeded from each card's PATH so the mess survives a reload, the pin, the
-  count. The pin is a flat red disc just inside the top edge. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
+  count. The pin is a plain red disc, a tag label's size, just reaching over the top edge. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
 - **Where its cards lie is DERIVED, every layout** (`layStacks`, run by `applyLayouts`): all of them at the
   stack's corner, or at their spots in the fan. Never authored, so a position written there is nothing anyone
   chose; Unstack and Turn into section lay the cards out afresh in a grid (`layGrid`).

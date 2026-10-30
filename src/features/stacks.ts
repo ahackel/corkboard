@@ -36,11 +36,6 @@ export const PILE_HOVER_MS = 400;
 // The cards drawn in the pile: the top one, and two peeking out from under it.
 const PILE_SHOWN = 3;
 
-// A red pushpin, seen from above and drawn flat: a disc and its smaller cap, no gloss — the stack's handle
-// (styles.css .stack-pin).
-const PIN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e5383b"/>`
-  + `<circle cx="12" cy="12" r="5" fill="#f26b6d"/></svg>`;
-
 // ---------- the pile ----------
 // A stack's face, inside its own element: its top cards as plain drawings (they're not nodes on the board
 // while piled — isHidden says so), the pin and the count. Built once and refreshed on every paint, each
@@ -56,7 +51,7 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     face = document.createElement('div');
     face.className = 'stack-face';
     face.innerHTML = `<div class="pile"></div><span class="stack-count"></span>`
-      + `<span class="stack-pin" title="Drag to move the stack">${PIN_SVG}</span>`;
+      + `<span class="stack-pin" title="Drag to move the stack"></span>`;
     el.appendChild(face);
   }
   const kids = pileKids(n);
