@@ -234,6 +234,7 @@ button:disabled { opacity:.45; cursor:default; }
 /* .floating-btn styles the box and the bar owns positioning — but inside the pill the button drops its
    own background, so it reads as one item in a bar rather than a capsule inside a capsule. */
 #homeBar #homeBtn { position:static; flex:none; background:transparent; box-shadow:none; width:28px; }
+#homeBar #homeBtn svg { width:20px; height:20px; }   /* the Corkboard icon itself, in its own colours */
 #homeBar #homeBtn:hover { background:color-mix(in srgb, var(--text) 8%, transparent); }
 #folderName:empty { display:none; }   /* icon-only until a map is loaded */
 /* The icon and the map's name read as one item: the button is only a little wider than its icon, and the name's

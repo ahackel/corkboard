@@ -24,7 +24,7 @@ import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';
 import { byId } from '../utils/dom.js';
 import { FOLDER_SVG } from '../view/icons.js';
-import { applyColorVars, colorClass } from '../view/color.js';
+import { applyColorVars, colorClass, THEME_BG } from '../view/color.js';
 import { effectiveColor } from '../main.js';
 import { goToScopeDepth } from '../nav/sections.js';
 
@@ -49,6 +49,22 @@ function crumb(depth: number, label: string, current: boolean): string {
     + `${current ? ' aria-current="page"' : ''} title="${esc(label)}">`
     + `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(label)}</span></button>`;
 }
+// The MAP's segment is a folder like the rest, in the map's own canvas colour (the theme's board grey when it
+// has none) — the root folder of the path. Empty while no map is open, so the bar is the home button alone.
+// Also run by data/persistence.ts the moment a map opens, ahead of any paint.
+export function paintMapCrumb(): void {
+  if (!store.name) {
+    mapCrumb.textContent = '';
+    return;
+  }
+  mapCrumb.innerHTML = `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(store.name)}</span>`;
+  mapCrumb.classList.add('sc-section');
+  mapCrumb.className = mapCrumb.className.replace(/\bc-\S+/g, '').trim();
+  const col = state.canvasColor || THEME_BG;
+  mapCrumb.classList.add(colorClass(col));
+  applyColorVars(mapCrumb, col);
+}
+
 // Each section crumb wears its section's colour, through the one colour path every surface takes.
 function paintCrumbColors(): void {
   bar.querySelectorAll<HTMLElement>('.sc-section').forEach(el => {
@@ -75,12 +91,13 @@ const foldedLevels = (): number[] =>
 // the signature guard: paintAll runs once per animation FRAME for the length of a resize drag, and
 // rebuilding this innerHTML per section would be pure waste (cf. queryKey in main.ts).
 export function renderCrumbs(): void {
-  const sig = !scopeActive() ? store.name
-    : store.name + '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i) + ':' + levelColor(i)).join('/');
+  const sig = store.name + '|' + state.canvasColor + (!scopeActive() ? ''
+    : '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i) + ':' + levelColor(i)).join('/'));
   if (bar.dataset.sig === sig) {
     return;
   }
   bar.dataset.sig = sig;
+  paintMapCrumb();
   document.body.classList.toggle('scoped', scopeActive());
   // The map is the first segment either way — it's just the CURRENT one (and so inert) when there's
   // nothing open above it.

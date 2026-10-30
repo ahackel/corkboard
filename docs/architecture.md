@@ -340,7 +340,9 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   than swapping loose text for chrome. A SECTION's segment is drawn the way that section is drawn FOLDED —
   a folder in its colour and its name on a pill in that colour (`.sc-section`, `paintCrumbColors`) — so the path
   reads as the folders you went into; the CURRENT one is inert and full strength, the rest a little faded. The
-  home button and the map name sit close (a 28px button, a 4px lead-in), reading as one item. A deep path folds its middle into one `…` menu — the only thing that
+  MAP's segment is the root folder, drawn the same way in the map's own canvas colour (`paintMapCrumb`, also run
+  by `updateMapTitle` as a map opens). The home button wears the Corkboard icon (`corkboard.svg`, the app icon)
+  and sits close to it (a 28px button, a 4px lead-in). A deep path folds its middle into one `…` menu — the only thing that
   keeps it clear of the CENTRED `#toolbar`, since capping the pill's width can't (the separators are
   `flex:none` and simply overflow it).
 - **The CANVAS wears the open section's fill** (`syncCanvasBackground` → `--canvas-bg` on `#stage`, under

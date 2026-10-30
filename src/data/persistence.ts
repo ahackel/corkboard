@@ -8,7 +8,7 @@ import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, type S
 import { flashArrived } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { isTypingInField, inPlaceEditActive } from '../core/ui-state.js';
-import { byId } from '../utils/dom.js';
+import { paintMapCrumb } from '../features/breadcrumbs.js';
 import { selectNode } from '../features/selection.js';
 import { settleSave, hasUnsavedChanges } from './save.js';
 import { loadFromDir } from './load.js';
@@ -69,9 +69,9 @@ export async function loadFolder(id: string): Promise<void> {
 }
 
 
-// Show the open map's name in the home button (:empty hides it until loaded) + the tab title.
+// Show the open map's name as the path's first folder (:empty hides it until loaded) + the tab title.
 export function updateMapTitle(): void {
-  byId('folderName').textContent = store.name;
+  paintMapCrumb();
   updateDocumentTitle();
 }
 // ---------- reload on focus ----------
