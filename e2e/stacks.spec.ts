@@ -177,3 +177,25 @@ test('a stack\'s colour is its pin\'s, red by default; its cards keep their own'
   await expect(page.locator('#edColors .swatch.active')).toHaveAttribute('data-color', 'bold-red');
   expect(errors).toEqual([]);
 });
+
+test('Ungroup on a stack and a section together lets both go, in one step', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, { ...BOARD,
+    'Box/_index.md': note('# Box', { 'mm_type': 'frame' }), 'Box/In.md': note('In the box'),
+    'board.json': board({ ...NODES, 'Box/_index.md': { x: 0, y: 400, w: 300, h: 200 }, 'Box/In.md': { x: 40, y: 60 } }) });
+  await select(page, stack(page).locator('.stack-pin'));
+  await page.locator('#world .node.section', { hasText: 'Box' }).locator(':scope > .title-row').click({ modifiers: ['ControlOrMeta'] });
+  await page.keyboard.press('ControlOrMeta+Backspace');
+  await expect(stack(page)).toHaveCount(0);
+  await expect(page.locator('#world .node.section')).toHaveCount(0);
+  for (const t of ['Top card', 'Middle card', 'Bottom card', 'In the box']) {
+    await expect(card(page, t)).toBeVisible();
+  }
+  const boxes = await Promise.all(['Top card', 'Middle card', 'Bottom card'].map(t => card(page, t).boundingBox()));
+  expect(new Set(boxes.map(b => `${Math.round(b!.x)},${Math.round(b!.y)}`)).size).toBe(3);   // spread out, not a heap
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(stack(page)).toHaveCount(1);
+  await expect(page.locator('#world .node.section')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});

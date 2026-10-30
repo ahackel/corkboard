@@ -417,32 +417,40 @@ function layGrid(cards: MindNode[], at: Pt): void {
 }
 
 // The selected stacks, unlocked — what Unstack and Turn into section act on.
-function selectedStacks(): MindNode[] {
+export function selectedStacks(): MindNode[] {
   return nodesOf(selectedIds()).filter(n => isStack(n) && !isLockedEffective(n));
 }
 export const hasStackSelected = (): boolean => !state.readOnly && selectedStacks().length > 0;
 
-// UNSTACK: the cards go back on the board as loose cards, in a grid where the pile was, and the stack goes.
-// (Ungroup on a stack does this — crud.ts deleteSelectionKeepChildren hands it over.)
+// Let stacks go: each one's cards back on the board as loose cards, in a grid where the pile was, and the stack
+// gone. Inside the caller's undo step; returns the cards it let go of. Unstack's, and Ungroup's for the stacks
+// in its selection (crud.ts deleteSelectionKeepChildren).
+export function spreadPiles(stacks: MindNode[]): string[] {
+  const loose: string[] = [];
+  for (const s of stacks) {
+    const cards = pileKids(s).reverse();
+    for (const c of cards) {
+      touch(c.id);
+      c.parent = s.parent; c.dirty = true;
+      loose.push(c.id);
+    }
+    deleteNodes([s.id]);
+    paintAll();   // the cards are on the board now, and measurable
+    layGrid(cards, s);
+  }
+  growSectionsToHold(loose);
+  return loose;
+}
+
+// UNSTACK: every selected stack spreads its cards out and goes.
 export function unstackSelection(): void {
   const stacks = selectedStacks();
   if (!stacks.length) {
     return;
   }
-  const loose: string[] = [];
+  let loose: string[] = [];
   record([], () => {
-    for (const s of stacks) {
-      const cards = pileKids(s).reverse();
-      for (const c of cards) {
-        touch(c.id);
-        c.parent = s.parent; c.dirty = true;
-        loose.push(c.id);
-      }
-      deleteNodes([s.id]);
-      paintAll();   // the cards are on the board now, and measurable
-      layGrid(cards, s);
-    }
-    growSectionsToHold(loose);
+    loose = spreadPiles(stacks);
     relayout();
   });
   setSelectionSet(loose);

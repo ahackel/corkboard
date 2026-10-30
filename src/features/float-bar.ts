@@ -208,8 +208,9 @@ function markOpen(): void {
 
   // On a stack, Ungroup is UNSTACK (crud.ts deleteSelectionKeepChildren), and a stack can become a section.
   const stacks = hasStackSelected();
-  fbUngroup.title = stacks ? 'Unstack (⌘⌫)' : 'Ungroup (⌘⌫)';
-  fbUngroup.setAttribute('aria-label', stacks ? 'Unstack' : 'Ungroup');
+  const onlyStacks = stacks && !nodesOf(selectedIds()).some(k => k.type === 'section' && !isStack(k));
+  fbUngroup.title = onlyStacks ? 'Unstack (⌘⌫)' : 'Ungroup (⌘⌫)';
+  fbUngroup.setAttribute('aria-label', onlyStacks ? 'Unstack' : 'Ungroup');
   fbToSection.style.display = stacks ? '' : 'none';
 }
 fbWrap.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); groupSelectionIntoSection(); });

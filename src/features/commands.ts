@@ -276,6 +276,9 @@ const MOD = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl ';
 const editable = (): boolean => !state.readOnly && store.isOpen;
 const hasSel = (): boolean => state.sel.size > 0 && editable();
 const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : undefined;
+// A section in the selection that is a box, not a stack — what decides Ungroup against Unstack.
+const plainSectionSelected = (): boolean => nodesOf(selectedIds()).some(n => n.type === 'section' && !isStack(n));
+
 function paletteCommands(): Command[] {
   return [
     { label: 'New card', shortcut: 'N', keywords: 'add create note', when: editable, run: newCardAtPointer },
@@ -311,9 +314,10 @@ function paletteCommands(): Command[] {
     { label: 'Collapse all', keywords: 'fold every card section', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
-    { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: hasStackSelected, run: unstackSelection },
+    // ⌘⌫ is listed once: Unstack when only stacks are selected, else Ungroup, which unstacks the stacks among them too
+    { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: () => hasStackSelected() && !plainSectionSelected(), run: unstackSelection },
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
-    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && nodesOf(selectedIds()).some(n => n.type === 'section' && !isStack(n)), run: deleteSelectionKeepChildren },
+    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && plainSectionSelected(), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
     { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },

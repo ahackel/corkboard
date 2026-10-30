@@ -2,7 +2,7 @@
 // Every node is one .md file; ids are ephemeral (minted in mkNode). All create/duplicate paths go
 // through mkNode so the node schema stays in one place. Each mutation schedules a save. Re-parenting
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
-import { state, setStatus, type MindNode, type NodeType } from '../core/state.js';
+import { state, setStatus, isStack, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
 import { stripImageRef, appendMd } from '../utils/markdown.js';
@@ -23,7 +23,7 @@ import { afterReading } from '../data/lazy.js';
 import { nodeH, nodeW, snapPt, NODE_W, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { selectNode, setSelectionSet, applySelection, selectedIds } from './selection.js';
 import { scheduleSave } from '../data/save.js';
-import { settleStacks, hasStackSelected, unstackSelection } from './stacks.js';
+import { settleStacks, selectedStacks, spreadPiles } from './stacks.js';
 
 // Mint a fresh node with the standard shape; callers override only the fields they care about.
 // Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
@@ -611,14 +611,11 @@ export function deleteSelectionKeepChildren(): void {
     return;
   }
 
-  // A STACK's cards all lie on one spot, so keeping them where they sit would leave them in a heap:
-  // Ungroup on a stack is Unstack, which spreads them out.
-  if (hasStackSelected()) {
-    unstackSelection();
-    return;
-  }
-  const ids = selectedIds().filter(canPromoteDelete);
-  if (!ids.length) {
+  // A STACK's cards all lie on one spot, so keeping them where they sit would leave them in a heap: the stacks
+  // in the selection are UNSTACKED instead (features/stacks.ts spreadPiles), in the same step as the sections.
+  const stacks = selectedStacks().filter(s => canPromoteDelete(s.id));
+  const ids = selectedIds().filter(id => !isStack(state.nodes.get(id)) && canPromoteDelete(id));
+  if (!ids.length && !stacks.length) {
     setStatus('Locked — can’t delete');
     return;
   }
@@ -626,6 +623,7 @@ export function deleteSelectionKeepChildren(): void {
     return;   // the children it keeps must exist
   }
   const promoted = new Set<string>();
+  let loose: string[] = [];
   record([], () => {
     for (const id of ids) {
       const n = state.nodes.get(id);
@@ -648,14 +646,17 @@ export function deleteSelectionKeepChildren(): void {
         state.toDelete.push(n.file);
       }
     }
+    // …after the sections, so a stack that was inside one spreads out where it now lies
+    loose = spreadPiles(stacks.filter(s => state.nodes.has(s.id)));
   });
-  for (const id of ids) {
+  for (const id of [...ids, ...stacks.map(s => s.id)]) {
     promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
   }
   relayout();
-  setSelectionSet(promoted);
+  setSelectionSet([...promoted, ...loose]);
   scheduleSave();
-  setStatus(`Ungrouped ${ids.length} section${ids.length===1?'':'s'}`);
+  const part = (k: number, one: string): string => k ? `${k} ${one}${k === 1 ? '' : 's'}` : '';
+  setStatus(`Ungrouped ${[part(ids.length, 'section'), part(stacks.length, 'stack')].filter(Boolean).join(' and ')}`);
 }
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
 // source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it

@@ -289,8 +289,9 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   the drag layer lifted to 62). Drag one out and it leaves the pile; drag it within the fan and it takes that
   place (`fanSlot`/`reorderPile`), the gap it would drop into marked by a line (`showFanInsert`, `#fanInsert`). A click on the scrim, Esc or the pile closes it; search fans the stack a hit
   lies in.
-- **Ungroup on a stack is UNSTACK** (`deleteSelectionKeepChildren` hands it over): the cards would otherwise be
-  left in a heap on one spot. **Turn into section** keeps the folder and gives it a box sized round the grid.
+- **Ungroup on a stack is UNSTACK**: the cards would otherwise be left in a heap on one spot. A selection of
+  both lets both go in ONE undo step — `deleteSelectionKeepChildren` promotes the sections' cards, then spreads the
+  stacks' (`spreadPiles`, Unstack's own body). ⌘P lists ⌘⌫ once: Unstack for stacks alone, else Ungroup. **Turn into section** keeps the folder and gives it a box sized round the grid.
   Lines don't attach to a stack (`connectable`).
 
 ## Open sections (scope)
