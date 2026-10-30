@@ -260,8 +260,8 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
 - **Its cards are HIDDEN while it's piled** — `isHidden`'s third term, `p.stack && ui.fan !== p.id` — so they
   aren't selectable, searchable on the canvas or drawn as nodes. What you see is the stack's own element
   painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
-  `paintNode`), each askew by its PLACE in the pile counted from the bottom (`PILE_MESS`, a fixed list), so a
-  card keeps its angle as more are piled on; and the pin, a plain red disc a tag label's size just reaching
+  `paintNode`), each askew by its PLACE in the pile counted from the bottom (`messAt`: the bottom card square, the
+  rest from a fixed list), so a card keeps its angle as more are piled on; and the pin, a plain red disc a tag label's size just reaching
   over the top edge. No count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
   Selected, it's ringed round the whole askew pile (`ringPile`), not its element's box; with cards held over
   it, it lifts — scaled, with a soft drop shadow, the one time a board node casts one — and shows no ring.

@@ -62,6 +62,9 @@ test('a plain drop on a stack puts the card on top of it', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, BOARD);
   await expect(stack(page)).toHaveAttribute('data-cards', '3');
+  // the bottom card lies square; the ones on it are askew
+  await expect(stack(page).locator('.pile-card').first()).toHaveCSS('rotate', '0deg');
+  await expect(stack(page).locator('.pile-card').nth(1)).not.toHaveCSS('rotate', '0deg');
   await drag(page, await centre(card(page, 'A loose card')), await centre(stack(page)));
   await expect(stack(page)).toHaveAttribute('data-cards', '4');
   await expect(stack(page).locator('.pile-card').last()).toContainText('A loose card');

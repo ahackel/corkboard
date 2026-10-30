@@ -73,9 +73,9 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     card.style.height = isImageCard(k) ? nodeH(k) + 'px' : '';
     card.style.minHeight = !under && !isImageCard(k) && k.h != null ? k.h + 'px' : '';
 
-    // The mess: each card lies askew by its PLACE in the pile, counted from the bottom (PILE_MESS), so a card
+    // The mess: each card lies askew by its PLACE in the pile, counted from the bottom (messAt), so a card
     // keeps its angle as others are piled on top of it.
-    const mess = PILE_MESS[(kids.length - shown.length + i) % PILE_MESS.length];
+    const mess = messAt(kids.length - shown.length + i);
     card.style.rotate = mess.tilt + 'deg';
     card.style.translate = `${mess.dx}px ${mess.dy}px`;
     const body = card.firstElementChild as HTMLElement;
@@ -90,8 +90,13 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   ringPile(face, pile, shown);
 }
 
-// How the cards lie, by their place in the pile from the bottom: an angle (degrees) and a nudge (px). A fixed
-// list, cycled — the same pile always looks the same.
+// How a card lies, by its place in the pile from the bottom: an angle (degrees) and a nudge (px). The BOTTOM
+// card lies square — the pile's footing; every card above it takes the next of a fixed list, cycled, so the
+// same pile always looks the same.
+function messAt(place: number): { tilt: number; dx: number; dy: number } {
+  return place ? PILE_MESS[(place - 1) % PILE_MESS.length] : { tilt: 0, dx: 0, dy: 0 };
+}
+
 const PILE_MESS = [
   { tilt: -2.5, dx: -3, dy: 2 }, { tilt: 2, dx: 3, dy: -2 }, { tilt: -1, dx: -1, dy: 3 },
   { tilt: 3, dx: 2, dy: 1 }, { tilt: -3, dx: -2, dy: -1 }, { tilt: 1.5, dx: 1, dy: 2 },
