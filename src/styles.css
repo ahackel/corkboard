@@ -267,9 +267,8 @@ body.scoped #scopeBar { display:flex; }
 .sc-crumb.sc-section { gap:4px; padding:2px 4px; color:var(--ink, var(--text)); }
 .sc-crumb.sc-section:not(.sc-cur) { opacity:.75; }
 .sc-crumb.sc-section:not(.sc-cur):hover { opacity:1; }
-.sc-crumb.sc-section > .fold-icon { flex:none; width:18px; height:18px; color:color-mix(in srgb, var(--card, #fff), #000 55%); }
+.sc-crumb.sc-section > .fold-icon { flex:none; width:18px; height:18px; }
 .sc-crumb.sc-section > .fold-icon svg { width:100%; height:100%; display:block; }
-.sc-crumb.sc-section > .fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff), #000 9%); }
 .sc-crumb.sc-section > .sc-name { padding:1px 7px; border-radius:6px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
@@ -669,13 +668,15 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    rules above apply), at the box's top-left corner. It shrink-wraps, so main.ts nodeW and nodeH MEASURE it.
    What it holds is in its tooltip (main.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
    just the folder. */
+/* A section's FOLDER — folded on the canvas, or its segment of the path — is coloured like its BOX
+   (.node.section): the outline is the box's rim, the section's own colour; the inside is its pale wash. */
+.fold-icon { color:color-mix(in srgb, var(--card, #fff), #000 10%); }
+.fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff) 32%, #fff); }
 .node .fold-icon { display:none; }
 .node.section-folded { display:flex; align-items:center; gap:6px; width:max-content; max-width:360px; min-height:0;
   padding:0; border:none; border-radius:8px; background:transparent; color:var(--ink, var(--text)); }
-.node.section-folded > .fold-icon { display:block; order:-1; flex:none; width:26px; height:26px;
-  color:color-mix(in srgb, var(--card, #fff), #000 55%); }
+.node.section-folded > .fold-icon { display:block; order:-1; flex:none; width:26px; height:26px; }
 .node.section-folded > .fold-icon svg { width:100%; height:100%; display:block; }
-.node.section-folded > .fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff), #000 9%); }
 .node.section-folded > .title-row { min-width:0; margin:0; align-items:center; padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .node.section-folded > .title-row > .title { margin:0; padding:0; font-size:16px; font-weight:600; line-height:24px;

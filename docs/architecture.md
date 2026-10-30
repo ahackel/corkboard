@@ -690,7 +690,7 @@ Web Animations on width/height with the content clipped, a section's content wra
 (`autoSizeSelection`) goes through the same path (`animateLayout`).
 
 - **A folded SECTION is a FOLDER ICON and its label** at the box's top-left corner: the folder (`.fold-icon`,
-  tinted by the section's colour), then the very pill an open section wears above its box — name and
+  coloured like the section's box: its rim for the outline, its pale wash inside), then the very pill an open section wears above its box — name and
   description. No count on it: what it holds is its TOOLTIP, "10 Cards, 4 Sections" (`heldSummary`, from the
   notes in memory and, for a folder never read, the listing's `lazy`/`lazySections`). `nodeW` and `nodeH` both
   MEASURE it (`SECTION_TAB_H`, 30px, only before it has painted). Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
