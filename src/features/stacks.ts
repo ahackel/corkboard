@@ -13,7 +13,7 @@ import { childrenOf, isHidden, isLockedEffective, nodeLabel, nodesOf } from '../
 import { cardMarkdown } from '../utils/frontmatter.js';
 import { renderBodyHTML } from '../utils/markdown.js';
 import { trackPointer } from '../utils/dom.js';
-import { pileKids, topOfPile, jitter, fanSlotAt, fanTilt, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
+import { pileKids, topOfPile, fanSlotAt, fanTilt, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
 import { nodeW, nodeH, imageLook, gridSnap } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld, frameBox } from '../view/camera.js';
@@ -38,7 +38,7 @@ const PILE_SHOWN = 3;
 
 // ---------- the pile ----------
 // A stack's face, inside its own element: its top cards as plain drawings (they're not nodes on the board
-// while piled — isHidden says so), the pin and the count. Built once and refreshed on every paint, each
+// while piled — isHidden says so), the pin, and the selection ring round all of them. Built once and refreshed on every paint, each
 // card's text keyed on its markdown the way paintNode keys a card's own. Anything that stops being a stack
 // (Turn into section, an undo) drops its face here too.
 export function paintPile(n: MindNode, el: HTMLElement): void {
@@ -50,7 +50,7 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   if (!face) {
     face = document.createElement('div');
     face.className = 'stack-face';
-    face.innerHTML = `<div class="pile"></div><span class="stack-count"></span>`
+    face.innerHTML = `<div class="pile"></div><span class="stack-ring"></span>`
       + `<span class="stack-pin" title="Drag to move the stack"></span>`;
     el.appendChild(face);
   }
@@ -73,10 +73,11 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     card.style.height = isImageCard(k) ? nodeH(k) + 'px' : '';
     card.style.minHeight = !under && !isImageCard(k) && k.h != null ? k.h + 'px' : '';
 
-    // The mess: the cards underneath lie askew and a little off, the top one nearly square.
-    const tilt = jitter(k, 1) * (under ? 5 : 1.2);
-    card.style.rotate = tilt.toFixed(2) + 'deg';
-    card.style.translate = under ? `${(jitter(k, 2) * 6).toFixed(1)}px ${(jitter(k, 3) * 5).toFixed(1)}px` : '';
+    // The mess: each card lies askew by its PLACE in the pile, counted from the bottom (PILE_MESS), so a card
+    // keeps its angle as others are piled on top of it.
+    const mess = PILE_MESS[(kids.length - shown.length + i) % PILE_MESS.length];
+    card.style.rotate = mess.tilt + 'deg';
+    card.style.translate = `${mess.dx}px ${mess.dy}px`;
     const body = card.firstElementChild as HTMLElement;
     const md = cardMarkdown(k);
     if (body.dataset.md !== md) {
@@ -85,11 +86,40 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
       hydrateImages(body);
     }
   });
-  const count = face.querySelector<HTMLElement>(':scope > .stack-count')!;
-  if (count.textContent !== String(kids.length)) {
-    count.textContent = String(kids.length);
-    count.title = `${kids.length} card${kids.length === 1 ? '' : 's'}`;
+  el.dataset.cards = String(kids.length);
+  ringPile(face, pile, shown);
+}
+
+// How the cards lie, by their place in the pile from the bottom: an angle (degrees) and a nudge (px). A fixed
+// list, cycled — the same pile always looks the same.
+const PILE_MESS = [
+  { tilt: -2.5, dx: -3, dy: 2 }, { tilt: 2, dx: 3, dy: -2 }, { tilt: -1, dx: -1, dy: 3 },
+  { tilt: 3, dx: 2, dy: 1 }, { tilt: -3, dx: -2, dy: -1 }, { tilt: 1.5, dx: 1, dy: 2 },
+];
+
+// The selection ring goes round the WHOLE pile — every card as it lies, askew — not just the element's box,
+// which is the top card's footprint unrotated. Each card turns about its own centre, so its bounds are those of
+// the rotated rectangle; the ones underneath are as tall as the pile (styles.css .pile-card).
+function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[]): void {
+  const ring = face.querySelector<HTMLElement>(':scope > .stack-ring')!;
+  const h = pile.offsetHeight;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  [...pile.children].forEach((c, i) => {
+    const card = c as HTMLElement;
+    const w = nodeW(shown[i]);
+    const [dx, dy] = card.style.translate.split(' ').map(v => parseFloat(v) || 0);
+    const a = parseFloat(card.style.rotate) * Math.PI / 180;
+    const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+    const cx = w / 2 + dx, cy = h / 2 + dy, hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
+    x0 = Math.min(x0, cx - hw); y0 = Math.min(y0, cy - hh); x1 = Math.max(x1, cx + hw); y1 = Math.max(y1, cy + hh);
+  });
+  if (!isFinite(x0)) {
+    x0 = 0; y0 = 0; x1 = 0; y1 = 0;
   }
+  ring.style.left = x0.toFixed(1) + 'px';
+  ring.style.top = y0.toFixed(1) + 'px';
+  ring.style.width = (x1 - x0).toFixed(1) + 'px';
+  ring.style.height = (y1 - y0).toFixed(1) + 'px';
 }
 
 // ---------- pressing the pile ----------

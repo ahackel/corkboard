@@ -674,7 +674,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   border-radius:var(--r-full); font-size:11px; line-height:18px; font-weight:700; background:var(--accent); color:#fff; }
 /* ---------- a STACK: a section drawn as a PILE of its cards (features/stacks.ts) ---------- */
 /* The element is the pile's footprint — its top card's width, the face's height — and nothing of its own:
-   no fill, no padding. What you see is .stack-face: the top cards as drawings, the pin, the count. Its
+   no fill, no padding. What you see is .stack-face: the top cards as drawings, the pin, the selection ring. Its
    cards aren't nodes on the board while piled (utils/model.ts isHidden), so these are plain divs. */
 .node.stack { padding:0; background:transparent; min-height:0; }
 .node.stack > .body, .node.stack > .fold-more, .node.stack > .task-bar { display:none; }
@@ -704,11 +704,13 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   cursor:grab; transform:scale(var(--ls, 1)); transform-origin:50% 5px; }
 .stack-pin:hover { background:#d62f32; }
 body.grabbing .stack-pin { cursor:grabbing; }
-/* how many cards it holds — a small round count on the top-right corner, in the stack's own colour */
-.stack-count { position:absolute; right:-9px; top:-9px; z-index:3; min-width:20px; height:20px; padding:0 6px;
-  box-sizing:border-box; border-radius:var(--r-full); text-align:center; font-size:11px; line-height:20px; font-weight:700;
-  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text));
-  box-shadow:0 0 0 1.5px #fff; pointer-events:none; transform:scale(var(--ls, 1)); transform-origin:0 100%; }
+/* SELECTED, a stack is ringed round the whole pile as it lies (features/stacks.ts ringPile), rather than round
+   its element — the top card's footprint, unrotated */
+.node.stack.sel { box-shadow:none; }
+.stack-ring { position:absolute; display:none; pointer-events:none; border-radius:var(--r-card);
+  box-shadow:0 0 0 2px var(--node-sel); }
+.node.stack.sel > .stack-face > .stack-ring { display:block; }
+.node.stack.fan-open > .stack-face > .stack-ring { display:none; }
 /* a NAMED stack wears its name on a small tab above the pile, the way a section does; unnamed, none */
 .node.stack > .title-row { position:absolute; left:0; bottom:calc(100% + 10px * var(--ls, 1)); z-index:4;
   transform:scale(var(--ls, 1)); transform-origin:0 100%; max-width:calc(100% / var(--ls, 1));
@@ -722,8 +724,10 @@ body.grabbing .stack-pin { cursor:grabbing; }
 .node.stack.no-title > .title-row { display:none; }
 .node.stack > .lock-badge { left:auto; right:14px; top:-8px; z-index:4; }
 /* a drop would put the dragged cards ON this pile — a stack, or a card held over long enough to become one:
-   it lifts to meet them (features/drag.ts updateDropTarget) */
-.node.drop-pile { scale:1.05; outline:2px solid var(--node-sel); outline-offset:4px; border-radius:var(--r-card); }
+   it LIFTS to meet them (features/drag.ts updateDropTarget), and a lifted thing casts a soft shadow — the one
+   time a board node does. `drop-shadow`, so it follows the pile's askew cards rather than its box. */
+.node.drop-pile { scale:1.06; filter:drop-shadow(0 8px 12px rgba(0,0,0,.16)); }
+.node.drop-pile.sel, .node.drop-pile > .stack-face > .stack-ring { box-shadow:none; }
 /* FANNED OUT: the pile steps back to an outline of where it lies, under a dimmed board, and its cards are
    held up above both — over every line and card, and the cards in hand above them. */
 .node.stack.fan-open > .stack-face > .pile { visibility:hidden; }

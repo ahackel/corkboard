@@ -32,16 +32,6 @@ export function pileW(s: MindNode): number {
   return top ? nodeW(top) : NODE_W;
 }
 
-// A steady number in [-1, 1) for a card, from its PATH rather than its id (ids are minted afresh on every
-// load): the pile's mess is part of how it looks, so it must not reshuffle each time the map opens.
-export function jitter(n: MindNode, salt: number): number {
-  let h = 2166136261 ^ salt;
-  for (const ch of n.file ?? n.id) {
-    h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  }
-  return ((h >>> 0) % 2000) / 1000 - 1;
-}
-
 // The tilt of each card in the open fan, in degrees — read by paintNode for the card's CSS `rotate`.
 const fanTilts = new Map<string, number>();
 

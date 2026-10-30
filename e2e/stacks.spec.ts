@@ -50,7 +50,7 @@ test('holding a card over another makes a stack; a quick pass does not', async (
   await expect(stack(page)).toHaveCount(0);
   await drag(page, await centre(a), await centre(b), 700);
   await expect(stack(page)).toHaveCount(1);
-  await expect(stack(page).locator('.stack-count')).toHaveText('2');
+  await expect(stack(page)).toHaveAttribute('data-cards', '2');
   await expect(stack(page).locator('.pile-card').last()).toContainText('Alpha');   // the last one added is on top
   const files = Object.keys(await diskFiles(page));
   expect(files).toEqual(expect.arrayContaining(['Stack/_index.md', 'Stack/Alpha.md', 'Stack/Beta.md']));
@@ -61,9 +61,9 @@ test('a plain drop on a stack puts the card on top of it', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, BOARD);
-  await expect(stack(page).locator('.stack-count')).toHaveText('3');
+  await expect(stack(page)).toHaveAttribute('data-cards', '3');
   await drag(page, await centre(card(page, 'A loose card')), await centre(stack(page)));
-  await expect(stack(page).locator('.stack-count')).toHaveText('4');
+  await expect(stack(page)).toHaveAttribute('data-cards', '4');
   await expect(stack(page).locator('.pile-card').last()).toContainText('A loose card');
   expect(Object.keys(await diskFiles(page))).toContain('Pile/A loose card.md');
   expect(errors).toEqual([]);
@@ -75,14 +75,14 @@ test('dragging the pile lifts its top card off; dragging the pin moves the whole
   await seedBoard(page, BOARD);
   const at = await centre(stack(page));
   await drag(page, at, { x: at.x + 250, y: at.y + 200 });
-  await expect(stack(page).locator('.stack-count')).toHaveText('2');
+  await expect(stack(page)).toHaveAttribute('data-cards', '2');
   await expect(page.locator('#world .node:not(.stack)', { hasText: 'Top card' })).toBeVisible();
   const before = (await stack(page).boundingBox())!;
   const pin = await centre(stack(page).locator('.stack-pin'));
   await drag(page, pin, { x: pin.x - 150, y: pin.y + 120 });
   const after = (await stack(page).boundingBox())!;
   expect(after.x).toBeLessThan(before.x - 100);
-  await expect(stack(page).locator('.stack-count')).toHaveText('2');
+  await expect(stack(page)).toHaveAttribute('data-cards', '2');
   expect(errors).toEqual([]);
 });
 
@@ -119,7 +119,7 @@ test('a click fans the stack out, and Esc puts it back', async ({ page }) => {
   await page.waitForTimeout(300);
   await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
   await expect(page.locator('#fanScrim')).toHaveCount(0);
-  await expect(stack(page).locator('.stack-count')).toHaveText('2');
+  await expect(stack(page)).toHaveAttribute('data-cards', '2');
   expect(errors).toEqual([]);
 });
 
