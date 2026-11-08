@@ -22,9 +22,6 @@ export function toggleLockSelection(): void {
 }
 
 export function setLockedSelection(ids: Iterable<string>, locked: boolean): void {
-  if (state.readOnly) {
-    return;
-  }
   const cards = nodesOf(ids).filter(n => n.locked !== locked);
   if (!cards.length) {
     return;

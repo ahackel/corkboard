@@ -22,7 +22,7 @@ import { esc } from '../utils/markdown.js';
 import { colorFill } from './color.js';
 import { nodeW, nodeH } from './geometry.js';
 import { canvasSurface } from '../features/canvas-color.js';
-import { centre, rimPoint, polyline, segment, routeFor, facePoint, type Rect, type Geometry } from '../utils/edge-route.js';
+import { centre, rimPoint, polyline, routeFor, facePoint, type Rect, type Geometry } from '../utils/edge-route.js';
 
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.
@@ -165,7 +165,7 @@ function linkEdges(n: MindNode): string {
     const y = clamp((p1.y + p2.y) / 2, n.y, n.y + nodeH(n));
     const toRight = centre(rimRect(target)).x >= (p1.x + p2.x) / 2;
     const from = { x: toRight ? n.x + nodeW(n) : n.x, y };
-    const s = segment(from, rimPoint(rimRect(target), from), 0, ARROW_INSET);
+    const s = polyline([from, rimPoint(rimRect(target), from)], 0, ARROW_INSET);
     out += `<path class="fe" style="stroke:${LINK_INK}" stroke-dasharray="1 7" d="${s.d}"/>`
          + endCap('arrow', s.b, s.tipTan, LINK_INK) + capDot(s.a, LINK_INK);
   }
@@ -192,7 +192,7 @@ export function paintFreeEdges(): void {
     const ink = colorFill(e.color) ?? 'var(--edge)';
     const sel = state.selEdges.has(e.id);
     const dash = e.dashed ? ' stroke-dasharray="7 6"' : '';
-    hits += `<path class="fe-hit" data-edge="${e.id}" d="${g.d}" stroke-width="${HIT_W}"/>`;
+    hits += `<path class="fe-hit" data-edge="${esc(e.id)}" d="${g.d}" stroke-width="${HIT_W}"/>`;
     // The selection ring, in the same language a card's is: the same line drawn thicker and SOLID
     // underneath, so a selected edge reads as outlined rather than merely recoloured.
     // With ONE edge selected its two end handles say so (FigJam); a multi-selection has no handles, so
@@ -230,8 +230,8 @@ export function paintFreeEdges(): void {
       const ta = trim(e.fromCap), tb = trim(e.toCap);
       const ha = { x: g.a.x + g.tailTan.x * ta, y: g.a.y + g.tailTan.y * ta };
       const hb = { x: g.b.x + g.tipTan.x * tb, y: g.b.y + g.tipTan.y * tb };
-      tools += `<circle class="fe-handle" data-handle="from" data-edge="${e.id}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
-      tools += `<circle class="fe-handle" data-handle="to" data-edge="${e.id}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
+      tools += `<circle class="fe-handle" data-handle="from" data-edge="${esc(e.id)}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
+      tools += `<circle class="fe-handle" data-handle="to" data-edge="${esc(e.id)}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
     }
   }
   // The four rings on the selected card. On SELECTION, never on hover: a ring that only appears once

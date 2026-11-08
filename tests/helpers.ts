@@ -1,6 +1,22 @@
 // Build a MindNode from a parsed note the way data/load.ts loadFromDir does, minus geometry.
 import { parseMd } from '../src/utils/frontmatter.js';
 import { state, type MindNode } from '../src/core/state.js';
+import type { Store } from '../src/store/types.js';
+
+// A store that holds nothing and does nothing; a test overrides the calls it cares about.
+export function fakeStore(over: Partial<Store> = {}): Store {
+  return {
+    isOpen: true, name: 'test',
+    async pick() { return 'ok'; },
+    async listTree() { return { files: [], lazy: new Map(), foreign: new Set() }; },
+    async removeDir() {},
+    async write() {},
+    async remove() {},
+    async readBlob() { return null; },
+    watch() {},
+    ...over,
+  };
+}
 
 export function nodeFrom(text: string, file: string | null = 'Note.md', id = 'n' + state.nodes.size): MindNode {
   const p = parseMd(text);

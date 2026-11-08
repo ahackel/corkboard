@@ -95,19 +95,19 @@ export const fsaStore = {
   },
 
   async listTree(under: string, fold: FoldTest){
-    // Stamped BEFORE the read: a change that lands during it then shows as a change at the next focus.
+    // A full load restamps the folder from the files it reads, so a later change shows at the next focus.
     if (!under) {
-      this._stamp = await folderStamp(this._dir!);
+      const stamp = new Map<string, string>();
+      const tree = await listTree(this._dir!, '', fold, stamp);
+      this._stamp = stamp;
+      return tree;
     }
     return listTree(this._dir!, under, fold);
   },
   removeDir(dir: string){ return removeEmptyDir(this._dir!, dir); },
   async write(path: string, data: string | Blob){
-    await writeFile(this._dir!, path, data);
-    const f = await readFileBlob(this._dir!, path);
-    if (f instanceof File) {
-      this._stamp?.set(path, stampOf(f));
-    }
+    const f = await writeFile(this._dir!, path, data);
+    this._stamp?.set(path, stampOf(f));
   },
   async remove(path: string){ await removeFile(this._dir!, path); this._stamp?.delete(path); },
   // Has anything outside this app changed the folder since the last load? Unknown counts as yes.

@@ -9,7 +9,7 @@
 // It anchors to the MIDPOINT of the curve, tracked across pan/zoom/drag by the same kind of rAF
 // follow loop the card bar uses.
 // ============================================================
-import { state, type EdgeCap } from '../core/state.js';
+import { state, type EdgeCap, type BoardEdge } from '../core/state.js';
 import { selectedEdges, leadEdge } from './edge-tools.js';
 import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
@@ -109,8 +109,8 @@ function wire(): void {
       return;
     }
     const want = chip.dataset.dash === '1';
-    mutate([], () => { for (const e of es) { e.dashed = want; } }, { edges: true, reflow: 'none' });
-    closeDashPop(); commit();
+    editEdges(e => { e.dashed = want; });
+    closeDashPop();
   };
   arrowsBtn.onclick = (ev) => { ev.stopPropagation(); arrowPop.classList.contains('open') ? closeArrowPop() : openArrowPop(); };
   arrowChips.onclick = (ev) => {
@@ -121,18 +121,16 @@ function wire(): void {
       return;
     }
     const cap = chip.dataset.cap as EdgeCap;
-    mutate([], () => {
-      for (const e of es) {
-        if (col.dataset.end === 'from') {
-          e.fromCap = cap;
-        } else {
-          e.toCap = cap;
-        }
+    editEdges(e => {
+      if (col.dataset.end === 'from') {
+        e.fromCap = cap;
+      } else {
+        e.toCap = cap;
       }
-    }, { edges: true, reflow: 'none' });
+    });
     // The picker stays OPEN: the two ends are two choices, and closing after the first would make
     // setting both a matter of reopening the same menu.
-    commit(); openArrowPop();
+    openArrowPop();
   };
 
   colorBtn.onclick = (ev) => { ev.stopPropagation(); colorPop.classList.contains('open') ? closeColorPop() : openColorPop(); };
@@ -142,15 +140,17 @@ function wire(): void {
     if (!sw || !es.length) {
       return;
     }
-    mutate([], () => { for (const e of es) { e.color = sw.dataset.color!; } }, { edges: true, reflow: 'none' });
-    closeColorPop(); commit();
+    editEdges(e => { e.color = sw.dataset.color!; });
+    closeColorPop();
   };
   closeOnOutside(colorPop, colorBtn, closeColorPop);
   closeOnOutside(arrowPop, arrowsBtn, closeArrowPop);
   closeOnOutside(dashPop, dashBtn, closeDashPop);
 }
-function commit(): void {
-  scheduleSaveBoard();
+
+// Set one value across every selected line, as one undo step (mutate saves the board).
+function editEdges(set: (e: BoardEdge) => void): void {
+  mutate([], () => { selectedEdges().forEach(set); }, { edges: true, reflow: 'none' });
   paintFreeEdges();
   syncControls();
 }

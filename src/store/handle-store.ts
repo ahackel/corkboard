@@ -34,19 +34,26 @@ async function listPaths(root: FileSystemDirectoryHandle, under: string): Promis
 // The notes under `under`, minus the contents of every folder `fold` leaves unread (store/tree.ts).
 // Read READS_AT_ONCE at a time rather than one by one: a map is hundreds of small files, and on a synced
 // folder each read is a round trip. Bounded, so a huge map doesn't open every file at once.
+// `stamp`, when given, is filled with every listed file's stamp (folderStamp) from this same walk.
 const READS_AT_ONCE = 16;
-export async function listTree(root: FileSystemDirectoryHandle, under: string, fold: FoldTest): Promise<TreeListing> {
+export async function listTree(root: FileSystemDirectoryHandle, under: string, fold: FoldTest,
+                               stamp?: Map<string, string>): Promise<TreeListing> {
   const handles = await listPaths(root, under);
   const plan = planTree([...handles.keys()], under, fold);
   const files: NoteFile[] = new Array(plan.read.length);
   let next = 0;
   const worker = async (): Promise<void> => {
     for (let i = next++; i < plan.read.length; i = next++) {
-      const path = plan.read[i];
-      files[i] = { path, text: await (await handles.get(path)!.getFile()).text() };
+      const path = plan.read[i], f = await handles.get(path)!.getFile();
+      stamp?.set(path, stampOf(f));
+      files[i] = { path, text: await f.text() };
     }
   };
   await Promise.all(Array.from({ length: Math.min(READS_AT_ONCE, plan.read.length) }, worker));
+  if (stamp) {
+    const unread = [...handles].filter(([path]) => !stamp.has(path));
+    await Promise.all(unread.map(async ([path, h]) => { stamp.set(path, stampOf(await h.getFile())); }));
+  }
   return { files, lazy: plan.lazy, foreign: plan.foreign };
 }
 // What the folder looks like on disk without reading a byte of it: every file's size and modification
@@ -78,10 +85,12 @@ async function resolvePath(root: FileSystemDirectoryHandle, path: string, create
   return [d, parts[parts.length-1]];
 }
 // Create/overwrite a note at a relative path (intermediate dirs created).
-export async function writeFile(root: FileSystemDirectoryHandle, path: string, data: string | Blob): Promise<void> {
+// Returns the file as written.
+export async function writeFile(root: FileSystemDirectoryHandle, path: string, data: string | Blob): Promise<File> {
   const [d, name] = await resolvePath(root, path, true);
   const h = await d.getFileHandle(name, { create:true });
   const w = await h.createWritable(); await w.write(data); await w.close();
+  return h.getFile();
 }
 // Delete a note (a missing file is fine).
 export async function removeFile(root: FileSystemDirectoryHandle, path: string): Promise<void> {

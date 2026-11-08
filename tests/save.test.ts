@@ -5,20 +5,17 @@ import './page-shell.js';
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
 const { flushSave } = await import('../src/data/save.js');
-const { nodeFrom } = await import('./helpers.js');
+const { nodeFrom, fakeStore } = await import('./helpers.js');
 
 // A folder the way macOS and Windows see one: `Notes.md` and `notes.md` are the same file.
 function caseInsensitiveStore(): Store & { files: Map<string, string> } {
   const files = new Map<string, string>();
   return {
-    files, isOpen: true, name: 'test',
-    async pick() { return 'ok'; },
-    async listTree() { return { files: [], lazy: new Map(), foreign: new Set() }; },
-    async removeDir() {},
-    async write(path, data) { files.set(path.toLowerCase(), String(data)); },
-    async remove(path) { files.delete(path.toLowerCase()); },
-    async readBlob() { return null; },
-    watch() {},
+    files,
+    ...fakeStore({
+      async write(path, data) { files.set(path.toLowerCase(), String(data)); },
+      async remove(path) { files.delete(path.toLowerCase()); },
+    }),
   };
 }
 

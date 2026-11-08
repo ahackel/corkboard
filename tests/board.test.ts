@@ -5,18 +5,10 @@ import './page-shell.js';
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
 const { loadBoard } = await import('../src/data/board.js');
+const { fakeStore } = await import('./helpers.js');
 
 function storeWithBoard(board: unknown): Store {
-  return {
-    isOpen: true, name: 'test',
-    async pick() { return 'ok'; },
-    async listTree() { return { files: [], lazy: new Map(), foreign: new Set() }; },
-    async removeDir() {},
-    async write() {},
-    async remove() {},
-    async readBlob(path) { return path === 'board.json' ? new Blob([JSON.stringify(board)]) : null; },
-    watch() {},
-  };
+  return fakeStore({ async readBlob(path) { return path === 'board.json' ? new Blob([JSON.stringify(board)]) : null; } });
 }
 
 describe('loadBoard', () => {

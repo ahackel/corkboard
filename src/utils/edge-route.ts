@@ -4,8 +4,10 @@
 // which is what lets tests/edge-route.test.ts pin the router down without a browser.
 import type { EdgeSide } from '../core/state.js';
 import type { Pt } from '../core/ui-state.js';
+import type { Box } from './guides.js';
+
 // The rectangle a line meets (view/free-edges.ts rimRect builds it from a node).
-export interface Rect { x: number; y: number; w: number; h: number }
+export type Rect = Box;
 
 export function centre(r: Rect): Pt {
   return { x: r.x + r.w/2, y: r.y + r.h/2 };
@@ -24,7 +26,7 @@ export function rimPoint(r: Rect, p: Pt): Pt {
   return { x: c.x + dx * t, y: c.y + dy * t };
 }
 
-export function unit(p: Pt, q: Pt): Pt {
+function unit(p: Pt, q: Pt): Pt {
   const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
   return { x: dx / L, y: dy / L };
 }
@@ -79,8 +81,6 @@ export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   }
   return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU, box };
 }
-
-export function segment(a: Pt, b: Pt, trimA: number, trimB: number): Geometry { return polyline([a, b], trimA, trimB); }
 
 // The elbow between two boxes (`to` may be a bare point — the pointer, while a line is being drawn).
 // The AXIS is the one the boxes are further apart along: side by side → it leaves a left/right side,

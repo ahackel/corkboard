@@ -39,9 +39,6 @@ export function tagChipHTML(t: ShownTag): string {
 // every other per-card mutation. Case is ignored: `Idea` is `idea`. Returns whether anything changed. ----
 export interface TagChange { id: string; tag: string; on: boolean; }
 export function retag(changes: TagChange[]): boolean {
-  if (state.readOnly) {
-    return false;
-  }
   const todo = changes.filter(c => {
     const n = state.nodes.get(c.id);
     return !!n && wearsTags(n) && !isLockedEffective(n) && n.tags.some(t => tagKey(t) === tagKey(c.tag)) !== c.on;
