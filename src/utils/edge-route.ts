@@ -90,6 +90,7 @@ export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
 // shortest, each bend costing BEND_COST. Small enough to run per paint; nothing is stored but the faces.
 const DIR: Record<EdgeSide, Pt> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
 const SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
+export const OPPOSITE: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
 const STUB = 44, BEND_COST = 40;   // a detour clears the card by STUB — room for a round corner and the cap
 
 // The point `at` of the way along a face (0 → 1 from its top/left; the middle, where the port sits, by default).

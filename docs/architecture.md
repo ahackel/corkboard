@@ -972,7 +972,7 @@ being EDITED the card itself is the field: the textarea is bare (no box, no scri
 (`.node.sel.card-editing`); a section's label being renamed rings its PILL the same way. The card never
 changes size as editing starts: the textarea is one row (`rows = 1`) and the card holds the height it
 had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — it only grows if you type
-past it. While a line end is dragged, the target card shows FigJam's ports — hollow rings ON its rim, no outline; the one within `PORT_SNAP` fills. An end SHIFTED along a face shows FigJam's cue instead: no ports, the card's rim traced 3px blue (`.fe-rim`) with a white notch at each port (`.fe-rim-gap`) — the spots it would snap to — and the end's dot on the face. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
+past it. While a line end is dragged, the target card shows FigJam's ports — hollow rings ON its rim, no outline; the one within `PORT_SNAP` fills. An end SHIFTED along a face shows FigJam's cue instead: no ports, the card's rim traced 3px blue (`.fe-rim`) with a white notch at each port (`.fe-rim-gap`) — the spots it would snap to — and the end's dot on the face. A shifted end is also pulled level with the line's fixed end (`STRAIGHT_SNAP`, half `PORT_SNAP`'s reach) so the line runs straight. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron. A lone selected line shows FigJam's end
 handles — white discs with a 3px blue rim, ON the card rims where it attaches (the drawn ends stepped back
 by their trim) — and no outline; a multi-selection, which has no handles, outlines each line instead. The

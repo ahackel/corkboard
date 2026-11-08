@@ -22,7 +22,7 @@ import { esc } from '../utils/markdown.js';
 import { colorFill } from './color.js';
 import { nodeW, nodeH } from './geometry.js';
 import { canvasSurface } from '../features/canvas-color.js';
-import { centre, rimPoint, polyline, routeFor, facePoint, type Rect, type Geometry } from '../utils/edge-route.js';
+import { centre, rimPoint, polyline, routeFor, facePoint, OPPOSITE, type Rect, type Geometry } from '../utils/edge-route.js';
 
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.
@@ -90,11 +90,15 @@ export function edgeGeometry(e: BoardEdge): Geometry | null {
 
 // Where on a card a line end dropped at a world point pins (features/edge-tools.ts), if anywhere: within
 // PORT_SNAP screen px of a floating port dot or the middle of a face, that face's MIDDLE — the port; else
-// within PORT_SNAP of a face anywhere along it, THAT point of it (FigJam's shifted connection), so the
-// middle is the one spot an end snaps to. Further inside, the card's body: no pin at all.
-const PORT_SNAP = 16;
+// within PORT_SNAP of a face anywhere along it, THAT point of it (FigJam's shifted connection). There a
+// shifted end is pulled, more weakly (STRAIGHT_SNAP), level with the line's fixed `anchor` end, so the line
+// runs STRAIGHT. Further inside, the card's body: no pin at all.
+const PORT_SNAP = 16, STRAIGHT_SNAP = 8;
 
-export function portAt(n: MindNode, p: Pt): { side: EdgeSide; at: number } | null {
+// A line's fixed end while the other is dragged: its card, and the face (and point along it) it's pinned to.
+export interface Anchor { n: MindNode; side?: EdgeSide; at?: number }
+
+export function portAt(n: MindNode, p: Pt, anchor?: Anchor): { side: EdgeSide; at: number } | null {
   const snap = PORT_SNAP / (state.view.k || 1), r = rimRect(n);
   let best: { side: EdgeSide; at: number } | null = null, bestD = snap;
   for (const { side, p: dot } of socketPoints(n)) {
@@ -111,6 +115,16 @@ export function portAt(n: MindNode, p: Pt): { side: EdgeSide; at: number } | nul
   ];
   for (const { side, off, along } of faces) {
     if (along >= 0 && along <= 1 && Math.abs(off) < bestD) { bestD = Math.abs(off); best = { side, at: along }; }
+  }
+  // straight across means leaving the anchor by the face opposite this one (an unpinned anchor can pick it)
+  const facing = best && OPPOSITE[best.side];
+  if (best && facing && anchor && (!anchor.side || anchor.side === facing)) {
+    const a = facePoint(rimRect(anchor.n), facing, anchor.side ? anchor.at : 0.5);
+    const across = best.side === 'left' || best.side === 'right';
+    const at = across ? (a.y - r.y) / r.h : (a.x - r.x) / r.w;
+    if (at > 0 && at < 1 && Math.abs(across ? a.y - p.y : a.x - p.x) < STRAIGHT_SNAP / (state.view.k || 1)) {
+      best.at = at;
+    }
   }
   return best;
 }

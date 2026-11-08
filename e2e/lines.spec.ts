@@ -172,3 +172,26 @@ test('a line end dropped anywhere on a face stays there, shifted; near the middl
   await expect.poll(centreY).toBeCloseTo(t.y + t.height / 2, 0);
   expect(errors).toEqual([]);
 });
+
+test('a shifted line end snaps level with the other end, so the line runs straight — more weakly than a port', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 300, 250, 'Source');
+  const b = await makeCard(page, 750, 300, 'Target');
+  await drawLine(page, a, 'right', b, 'left');
+  const handle = page.locator('circle.fe-handle[data-handle="to"]');
+  const centreY = async () => { const h = (await handle.boundingBox())!; return h.y + h.height / 2; };
+  const dragEndTo = async (x: number, y: number) => {
+    const h = (await handle.boundingBox())!;
+    await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, y, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+  };
+  const s = (await a.boundingBox())!, t = (await b.boundingBox())!;
+  const level = s.y + s.height / 2;                 // the source's right port, where the line leaves
+  await dragEndTo(t.x, level + 6);                  // within the straight snap: pulled level
+  await expect.poll(centreY).toBeCloseTo(level, 0);
+  await dragEndTo(t.x, level + 14);                 // past it, still shifted: stays where dropped
+  await expect.poll(centreY).toBeCloseTo(level + 14, 0);
+});

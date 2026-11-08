@@ -10,7 +10,8 @@
 import { state, stage, setStatus, type BoardEdge, type EdgeSide } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { makeEdge, scheduleSaveBoard } from '../data/board.js';
-import { paintFreeEdges, connectable, portAt } from '../view/free-edges.js';
+import { paintFreeEdges, connectable, portAt, type Anchor } from '../view/free-edges.js';
+import { OPPOSITE } from '../utils/edge-route.js';
 import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges } from './history.js';
 import { mutate } from './mutate.js';
@@ -114,16 +115,29 @@ export function connectSelection(): void {
   setStatus(made ? `Connected ${made + 1} cards` : 'Already connected');
 }
 
+// The end that STAYS while one is dragged: a moved end's other end as it's pinned, or the port a fresh draw left.
+function anchorOf(draw: NonNullable<typeof ui.edgeDraw>): Anchor | undefined {
+  const n = state.nodes.get(draw.sourceId);
+  const e = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
+  if (!n) {
+    return undefined;
+  }
+  if (!e) {
+    return { n, side: draw.side };
+  }
+  return draw.end === 'from' ? { n, side: e.toPort, at: e.toAt } : { n, side: e.fromPort, at: e.fromAt };
+}
+
 // What a line end dropped at `p` lands on: a point on a card's FACE (pinning the end there — its port or
 // shifted along it; the floating dots sit outside the card, so a face wins even off the card's body), else
 // the card under the point, topmost first — the drop target for both a fresh draw and a moved end.
-function dropAt(p: Pt, exclude: string): { id: string; pin?: Pin } | null {
+function dropAt(p: Pt, exclude: string, anchor?: Anchor): { id: string; pin?: Pin } | null {
   let hit: { id: string; pin?: Pin } | null = null;
   for (const n of state.nodes.values()) {
     if (n.id === exclude || isHidden(n) || !connectable(n.id)) {
       continue;
     }
-    const pin = portAt(n, p);
+    const pin = portAt(n, p, anchor);
     if (pin) { hit = { id: n.id, pin }; continue; }
     if (p.x < n.x || p.y < n.y || p.x > n.x + nodeW(n) || p.y > n.y + nodeH(n)) {
       continue;
@@ -209,7 +223,7 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
   const move = (e: PointerEvent): void => {
     const draw = ui.edgeDraw!;
     draw.to = screenToWorld(e.clientX, e.clientY);
-    const at = dropAt(draw.to, draw.sourceId);
+    const at = dropAt(draw.to, draw.sourceId, anchorOf(draw));
     draw.overId = at?.id; draw.overSide = at?.pin?.side; draw.overAt = at?.pin?.at;
     paintFreeEdges();
   };
@@ -290,9 +304,8 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   if (!n) {
     return;
   }
-  const opposite: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
   touchEdges();          // into the new card's step, which its rename session commits
-  addEdge(srcId, n.id, { side, at: 0.5 }, { side: opposite[side], at: 0.5 });
+  addEdge(srcId, n.id, { side, at: 0.5 }, { side: OPPOSITE[side], at: 0.5 });
   scheduleSaveBoard();
   paintFreeEdges();
 }
