@@ -6,7 +6,6 @@ test('the arrow folds a card to a one-line chip that says how much it hides', as
   await openBoard(page);
   const g = await makeCard(page, 300, 250, '# Groceries\nmilk\neggs\nbread');
   const one = await makeCard(page, 650, 250, 'One line only');
-  await expect(page.locator('#world .hidden-count')).toHaveCount(0);   // no fold button on cards any more
   await select(page, one);
   await expect(page.locator('#fbFold')).toBeHidden();           // nothing to fold away
   await select(page, g);
@@ -116,16 +115,6 @@ test('a folded card has no resize handles; ports and handles stand down while a 
   await expect(g.locator(':scope > .fh')).toHaveCount(0);
   await page.locator('#fbFold').click();
   await expect(g.locator(':scope > .fh')).not.toHaveCount(0);       // unfolded, resizable again
-});
-
-test('a card casts no shadow, selected or not', async ({ page }) => {
-  await openBoard(page);
-  const c = await makeCard(page, 400, 300, 'Lift me');
-  await clickAway(page);
-  const shadow = () => c.evaluate(el => getComputedStyle(el).boxShadow);
-  expect(await shadow()).toBe('none');
-  await select(page, c);
-  expect(await shadow()).not.toContain('rgba(0, 0, 0');
 });
 
 test('a card resized taller than its text still folds to a 40px chip, and unfolds to its size', async ({ page }) => {

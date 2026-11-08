@@ -1,12 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { Store } from '../src/store/types.js';
+import './page-shell.js';
 
-// Booting the app opens IndexedDB, which the test DOM lacks — and a save never needs it.
-vi.mock('../src/boot.js', () => ({ boot: async () => {}, showStart() {}, hideStart() {} }));
-// The save pulls in modules that wire up the page as they load, so they need its shell first.
-document.body.innerHTML = readFileSync('index.html', 'utf8').replace(/^[\s\S]*<body[^>]*>|<\/body>[\s\S]*$/g, '')
-  .replace(/<script[\s\S]*?<\/script>/g, '');
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
 const { flushSave } = await import('../src/data/save.js');

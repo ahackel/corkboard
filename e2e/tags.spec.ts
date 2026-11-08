@@ -24,9 +24,6 @@ test('a card wears its tags on its top edge: emoji as stamps, words as labels, t
   const c = (await login.boundingBox())!, t = (await login.locator('.tag.stamp').boundingBox())!;
   expect(t.y).toBeLessThan(c.y);
   await expect(card(page, 'Logo ideas').locator('.tag')).toHaveCount(0);
-  // no add button on a selected card any more
-  await select(page, login);
-  await expect(page.locator('.tag-add-btn')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

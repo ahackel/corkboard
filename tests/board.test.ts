@@ -1,11 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
 import type { Store } from '../src/store/types.js';
+import './page-shell.js';
 
-// Same page shell as tests/save.test.ts: loading the board pulls in modules that wire up the page.
-vi.mock('../src/boot.js', () => ({ boot: async () => {}, showStart() {}, hideStart() {} }));
-document.body.innerHTML = readFileSync('index.html', 'utf8').replace(/^[\s\S]*<body[^>]*>|<\/body>[\s\S]*$/g, '')
-  .replace(/<script[\s\S]*?<\/script>/g, '');
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
 const { loadBoard } = await import('../src/data/board.js');

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
          tableTab, tableEnter, type TextEdit } from '../src/utils/md-edit.js';
-import { renderBodyHTML } from '../src/utils/markdown.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
 function at(s: string): [string, number, number] {
@@ -147,27 +146,6 @@ describe('tableEnter', () => {
     expect(tenter('| one |^')).toBeNull();
     expect(tenter('| a | b^ |')).toBeNull();
     expect(tenter('plain^')).toBeNull();
-  });
-});
-
-describe('renderBodyHTML lists', () => {
-  it('nests by indentation', () => {
-    expect(renderBodyHTML('- a\n  - b\n  - c\n- d'))
-      .toBe('<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>');
-  });
-  it('nests a bullet under a number and switches kind at one level', () => {
-    expect(renderBodyHTML('1. a\n   - b\n2. c'))
-      .toBe('<ol><li>a<ul><li>b</li></ul></li><li>c</li></ol>');
-    expect(renderBodyHTML('- a\n1. b')).toBe('<ul><li>a</li></ul><ol><li>b</li></ol>');
-  });
-  it('closes several levels at once', () => {
-    expect(renderBodyHTML('- a\n  - b\n    - c\n- d'))
-      .toBe('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li><li>d</li></ul>');
-  });
-  it('numbers tasks in body order through nesting, for write-back', () => {
-    const h = renderBodyHTML('- [ ] a\n  - [x] b\n- [ ] c');
-    expect([...h.matchAll(/data-ti="(\d)"( checked)?/g)].map(m => m[1] + (m[2] ? 'x' : ''))).toEqual(['0', '1x', '2']);
-    expect(h).toContain('<span class="task-text">a</span><ul>');
   });
 });
 

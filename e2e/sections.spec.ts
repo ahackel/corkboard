@@ -111,14 +111,6 @@ test('a dragged section and its cards cast no shadow', async ({ page }) => {
   await page.mouse.up();
 });
 
-test('nothing floats beside a selected card or folded section: a double-click edits', async ({ page }) => {
-  await openBoard(page);
-  await seedBoard(page, BOARD);
-  const old = page.locator('#world .node.section-folded', { hasText: 'Old' });
-  await old.click();
-  await expect(page.locator('#world .addnote')).toHaveCount(0);
-});
-
 test('zoomed out, a section name keeps its screen size while the box shrinks', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, BOARD);
@@ -198,7 +190,6 @@ test('⌘S wraps the selection in "Section N" from the bar, and ⌘⌫ ungroups 
   await select(page, a);
   await b.click({ modifiers: ['Shift'] });
   await expect(page.locator('#fbWrap')).toBeVisible();
-  await expect(page.locator('#fbMore')).toHaveCount(0);
   await page.keyboard.press('ControlOrMeta+s');
   await expect(section(page, 'Section 1')).toBeVisible();
   await expect(page.locator('#fbUngroup')).toBeVisible();

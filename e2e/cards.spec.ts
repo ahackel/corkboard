@@ -64,9 +64,11 @@ test('⇧D duplicates a card as the next of its series: next day, next slot of t
   expect(errors).toEqual([]);
 });
 
-test('a selected card in hand keeps its ring and casts no shadow; nothing of it fades', async ({ page }) => {
+test('a card casts no shadow, at rest or in hand; in hand it keeps its ring and nothing of it fades', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 400, 300, 'Lift me');
+  await clickAway(page);
+  expect(await c.evaluate(el => getComputedStyle(el).boxShadow)).toBe('none');
   await select(page, c);
   const b = (await c.boundingBox())!;
   await page.mouse.move(b.x + 30, b.y + 20);
