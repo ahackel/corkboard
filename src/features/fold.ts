@@ -52,12 +52,13 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) {
     return;
   }
+  const what = cards.length > 1 ? `${cards.length} notes` : `“${nodeLabel(cards[0]!)}”`;
+  // Folding mutates nothing on disk that read-only protects, so it stays allowed there (CLAUDE.md).
   record(cards.map(n => n.id),
     () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
   syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();
-  const what = cards.length > 1 ? `${cards.length} notes` : `“${nodeLabel(cards[0]!)}”`;
   setStatus(`${collapsed ? 'Collapsed' : 'Expanded'} ${what}`);
 }
 export function toggleCollapseSelection(ids: Iterable<string>): void {

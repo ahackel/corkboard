@@ -29,7 +29,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch). Mutate in place, never reassign, so every module shares one interaction state.
 - `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list/table Enter, Tab, ⌘B/I/L, ⌥↑↓), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
-  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `ink.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
+  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
@@ -39,7 +39,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
   resize, text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
-  `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
+  `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`); its `main`↔feature cycles are runtime-only.
 
@@ -61,13 +61,13 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **Two kinds, card and section (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
-  through `holderOf`; a drop lands in the innermost section under the card's centre (`sectionAt`), else the top level.
+  through `holderOf`; a drop lands in the innermost section under the card's centre (a group: the POINTER's), else the top level.
 - **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed** (dragged shorter, `n.clip`: exact, clipped). An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
 - **Visibility has ONE gate, `isHidden`**: a FOLDED section ancestor (persisted), the open-section scope
   (ephemeral) and a STACK not fanned out. Add new terms IN it, never beside it. Nothing writes through it.
-- **Every mutation calls `scheduleSave()`** (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
+- **A one-shot edit goes through `mutate()`** ("An edit RUNS through mutate"); every mutation ends in `scheduleSave()` (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
   make writes no-ops. Folding a card and opening a section stay allowed in read-only — they mutate nothing.
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
@@ -87,7 +87,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - Sections — "A section COLLECTS what it covers" · "A section's BOUNDS are its box" · "A container's content wrapper is
   LIFECYCLE-managed" · "A section can be OPENED, and then the canvas IS its interior" · "A CARD is never opened"
   (scope, crumbs, canvas colour, `detachParentId`) · "A STACK is a section drawn as a PILE" (`isStack`, the fan).
-- The model — "Cards are flat; a SECTION is the only container" (drop rule, grow-to-hold, load migration) · "A section's
+- The model — "Cards are flat; a SECTION is the only container" (drop rule, never auto-resized, load migration) · "A section's
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse folds a card to a CHIP and a section to its PILL" (arrow, peek, fold all) · "A plain double-click

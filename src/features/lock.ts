@@ -1,10 +1,8 @@
 // ---------- locking cards in place ----------
 import { nodesOf, isLockedEffective } from '../utils/model.js';
-import { state, setStatus } from '../core/state.js';
-import { record } from './history.js';
-import { paintAll } from '../main.js';
+import { state } from '../core/state.js';
+import { mutate } from './mutate.js';
 import { syncFloatBar } from './float-bar.js';
-import { scheduleSave } from '../data/save.js';
 
 // Lock/unlock every selected card (the float bar's lock toggle / L). Locking freezes that card in place — no move,
 // (un)collapse, rename/body/color/type/layout edit, add-child, or delete — and cascades so its
@@ -24,16 +22,11 @@ export function toggleLockSelection(): void {
 }
 
 export function setLockedSelection(ids: Iterable<string>, locked: boolean): void {
-  if (state.readOnly) {
-    return;
-  }
   const cards = nodesOf(ids).filter(n => n.locked !== locked);
   if (!cards.length) {
     return;
   }
-  record(cards.map(n => n.id), () => { for (const n of cards){ n.locked = locked; n.dirty = true; } });
-  paintAll();
+  mutate(cards.map(n => n.id), () => { for (const n of cards){ n.locked = locked; n.dirty = true; } },
+    { reflow: 'paint', status: `${locked ? 'Locked' : 'Unlocked'} ${cards.length} card${cards.length===1?'':'s'}` });
   syncFloatBar();   // the bar collapses to just its lock toggle while the selection is locked
-  scheduleSave();
-  setStatus(`${locked ? 'Locked' : 'Unlocked'} ${cards.length} card${cards.length===1?'':'s'}`);
 }

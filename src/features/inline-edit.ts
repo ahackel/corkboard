@@ -13,7 +13,7 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { cardMarkdown, setNoteText, firstTextLine, headingOnLine } from '../utils/frontmatter.js';
+import { cardMarkdown, setNoteText, headingOf, caretIn } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
@@ -21,7 +21,7 @@ import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { extractToCard, discardNewCard, nextSectionTitle } from './crud.js';
-import { growSectionsToHold, syncFloatBar } from './float-bar.js';
+import { syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 import { selectNode } from './selection.js';
 import { scheduleSave } from '../data/save.js';
@@ -349,41 +349,6 @@ function clickedOffset(bodyEl: HTMLElement, text: string, at: { x: number; y: nu
   const h = headingOf(text);
   return sourceOffset(text, h ? h.at + h.title.length : 0, texts, hit, off);
 }
-// The heading of the FIRST non-blank line, which is the only one that can be a note's title — the
-// format rule itself lives in utils/frontmatter.ts, so seeding, the caret and the strip below all read
-// one regex instead of three that have to be kept in agreement. `at` is the offset of the title's first
-// character into the WHOLE text, since that's what a caret is measured in: the heading need not be on
-// line 0 (a note may open with blank lines), and a marker length alone would then be off by them.
-function headingOf(text: string): { at: number; title: string } | null {
-  const lines = text.split('\n');
-  const i = firstTextLine(lines);
-  if (i < 0) {
-    return null;
-  }
-  const h = headingOnLine(lines[i]);
-  if (!h) {
-    return null;
-  }
-  let start = 0;
-  for (let k = 0; k < i; k++) {
-    start += lines[k].length + 1;
-  }
-  return { at: start + h.markerLen, title: h.title };
-}
-// Where the caret goes. 'title' SELECTS the name so typing replaces it — which is what the old rename
-// editor's select-all did — but only the NAME, not the `# ` that marks it as one, or the first keystroke
-// would demote the card's title to a plain first line. An UNTITLED card has no name to select, so the
-// caret goes to the very start of the note — the one spot where typing `# Something` names it.
-function caretIn(text: string, caret: 'title' | 'end'): [number, number] {
-  if (caret === 'end') {
-    return [text.length, text.length];
-  }
-  const h = headingOf(text);
-  if (!h) {
-    return [0, 0];
-  }
-  return [h.at, h.at + h.title.length];
-}
 // "Edit the note" — the same one editor, caret past the name rather than on it. Kept as its own name
 // because that's what its callers mean (double-click the body, `E`, the pen). A double-click passes
 // its point, and the caret lands on the word it hit.
@@ -495,10 +460,6 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change
-  // A note that grew past its section's edge would be clipped out of sight — grow the section instead.
-  if (changed && growSectionsToHold([n.id])) {
-    relayout();
-  }
   // The text decides what the bar offers (a card with lines to tuck away can fold): the bar was synced for
   // the text the edit STARTED with, and the card often stays selected after it ends.
   if (changed) { scheduleSave(); syncFloatBar(); }

@@ -68,9 +68,10 @@ one searchable list.
   and they stack; drop more on the pile to add them on top. A click fans it out to read; drag the pile to lift
   its top card off, or its red pin to move it whole. Unstack spreads the cards out again, or Turn into section
   gives them a box. Down to one card, it lets go of it.
-- **The rule:** a card is in the section its centre is over — whether you drop the card there, or move,
-  resize or draw the section over it. A section grows to hold what you drop into it, so nothing is hidden
-  past its edge. Drop cards on a FOLDED section's pill to file them in it, or on a crumb of the path to move
+- **The rule:** a card is in the section its centre is over — whether you drop the card there (a dragged
+  group all goes into the section under the pointer), or move,
+  resize or draw the section over it. Only you resize a section (its handles, or Resize to fit); what
+  sticks out past its edge is clipped until you do. Drop cards on a FOLDED section's pill to file them in it, or on a crumb of the path to move
   them up out of the section you're in.
 
 **Tags are for finding.** A tag is an Obsidian tag — a word, or an emoji as its shortest form — worn on

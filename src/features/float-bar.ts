@@ -7,8 +7,9 @@
 // this module skips the floating position math there and lets CSS own it.
 import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
-import { record, touch } from './history.js';
-import { subtreesBox, moveSubtreeTo, isSection } from '../view/layout.js';
+import { touch } from './history.js';
+import { mutate } from './mutate.js';
+import { subtreesBox, isSection } from '../view/layout.js';
 import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
 import { settleSections } from './drag.js';
@@ -17,9 +18,9 @@ import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelec
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
-import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf, subtreeIds } from '../utils/model.js';
-import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
-import { labelEl, relayout, animateLayout } from '../main.js';
+import { childrenOf, isLockedEffective, subtreeHasLocked, nodesOf } from '../utils/model.js';
+import { canOpen, canEnter } from '../nav/scope.js';
+import { labelEl, animateLayout } from '../main.js';
 import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { MIN_SECTION_W, MIN_SECTION_H } from './resize.js';
@@ -28,7 +29,6 @@ import { openSection } from '../nav/sections.js';
 import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
 import { selectedIds, selectNode } from './selection.js';
 import { setLockedSelection, anyLocked } from './lock.js';
-import { scheduleSave } from '../data/save.js';
 import { hasStackSelected, stackToSection } from './stacks.js';
 
 
@@ -67,50 +67,6 @@ export function fitSectionToContent(n: MindNode, orDefault = false): void {
   n.w = Math.max(MIN_SECTION_W, snap(x1 + SECTION_FIT_PAD - n.x));
   n.h = Math.max(MIN_SECTION_H, snap(y1 + SECTION_FIT_PAD - n.y));
 }
-// GROW a section until it holds what's in it — only outward, never shrinking or moving a side that
-// already clears its contents. A section clips (overflow:hidden), so a card dropped, pasted, created or
-// typed past its edge would otherwise be in the section and out of sight. Not the open section: its box is
-// the window. Each grown section is touched, so it rides the caller's undo step.
-// `pin` keeps the box's top-left where it is: what sticks out past its left or top edge comes IN instead, as
-// one group. Leaving a section asks for it — the box is what you see as you step back, and must not move.
-export function growSectionsToHold(ids: Iterable<string>, { pin = false }: { pin?: boolean } = {}): boolean {
-  let grew = false;
-  const sections = new Set<MindNode>();
-  for (const id of ids) {
-    const n = state.nodes.get(id); const p = n ? parentOf(n) : null;
-    if (p && isSection(p) && !isScopeRoot(p) && !isLockedEffective(p)) {
-      sections.add(p);
-    }
-  }
-  const snapStep = gridSnap();
-  const up = (v: number): number => Math.ceil(v / snapStep) * snapStep;
-  const down = (v: number): number => Math.floor(v / snapStep) * snapStep;
-  for (const f of sections) {
-    const kids = childrenOf(f.id);
-    let { x0, y0, x1, y1 } = subtreesBox(kids);
-    if (!isFinite(x0)) {
-      continue;
-    }
-    if (pin && (x0 < f.x || y0 < f.y)) {
-      const dx = x0 < f.x ? up(f.x + SECTION_FIT_PAD - x0) : 0, dy = y0 < f.y ? up(f.y + SECTION_FIT_PAD - y0) : 0;
-      for (const k of kids) {
-        touch(...subtreeIds(k.id));
-        moveSubtreeTo(k, k.x + dx, k.y + dy);
-      }
-      x0 += dx; x1 += dx; y0 += dy; y1 += dy;
-    }
-    const L = pin ? f.x : Math.min(f.x, down(x0 - SECTION_FIT_PAD)), T = pin ? f.y : Math.min(f.y, down(y0 - SECTION_FIT_PAD));
-    const R = Math.max(f.x + (f.w ?? SECTION_W), up(x1 + SECTION_FIT_PAD)), B = Math.max(f.y + (f.h ?? SECTION_H), up(y1 + SECTION_FIT_PAD));
-    if (L === f.x && T === f.y && R === f.x + (f.w ?? SECTION_W) && B === f.y + (f.h ?? SECTION_H)) {
-      continue;
-    }
-    touch(f.id);
-    f.x = L; f.y = T; f.w = R - L; f.h = B - T;
-    f.dirtyLayout = true;
-    grew = true;
-  }
-  return grew;
-}
 // FIT — the float bar's ↔, ⌥⇧⌘R and the menu's "Resize to fit": every selected section hugs its cards
 // (fitSectionToContent), every selected card drops its authored height — a minimum it was dragged out to,
 // or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
@@ -126,7 +82,7 @@ export function autoSizeSelection(): void {
     return;
   }
   // animated, like a fold: the box glides to its new size (main.ts animateLayout)
-  record(ids, () => animateLayout(() => {
+  mutate(ids, () => animateLayout(() => {
     for (const id of ids){
       const n = state.nodes.get(id);
       if (!n) {
@@ -140,8 +96,7 @@ export function autoSizeSelection(): void {
       }
       n.dirty = true; n.dirtyLayout = true;
     }
-  }));
-  scheduleSave();
+  }), { reflow: 'none' });
 }
 // Wrap the selected cards in a fresh section: the section lands as a child of the nearest
 // NON-selected ancestor of the first selected card (walking up past any selected ancestor —
@@ -165,7 +120,7 @@ export function groupSelectionIntoSection(): void {
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t group here'); return; }
 
   let sectionId = '';
-  record([], () => {
+  mutate([], () => {
     const { x0, y0, x1, y1 } = subtreesBox(nodes);
     const snapStep = gridSnap();
     const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
@@ -183,9 +138,8 @@ export function groupSelectionIntoSection(): void {
     state.nodes.set(sectionId, section);
     for (const n of nodes) { touch(n.id); n.parent = sectionId; n.dirty = true; }
     settleSections([sectionId]);   // …and whatever else its box now covers
-  });
-  relayout(); selectNode(sectionId); scheduleSave();
-  setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a section`);
+  }, { reflow: 'relayout', status: `Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a section` });
+  selectNode(sectionId);
 }
 // Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
 function markOpen(): void {

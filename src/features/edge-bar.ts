@@ -9,11 +9,12 @@
 // It anchors to the MIDPOINT of the curve, tracked across pan/zoom/drag by the same kind of rAF
 // follow loop the card bar uses.
 // ============================================================
-import { state, type EdgeCap } from '../core/state.js';
+import { state, type EdgeCap, type BoardEdge } from '../core/state.js';
 import { selectedEdges, leadEdge } from './edge-tools.js';
 import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { touchEdges, commitStep } from './history.js';
+import { mutate } from './mutate.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { isInteracting } from './float-bar.js';
 import { paletteChipsHTML } from './properties.js';
@@ -108,11 +109,8 @@ function wire(): void {
       return;
     }
     const want = chip.dataset.dash === '1';
-    touchEdges();
-    for (const e of es) {
-      e.dashed = want;
-    }
-    closeDashPop(); commit(); commitStep();
+    editEdges(e => { e.dashed = want; });
+    closeDashPop();
   };
   arrowsBtn.onclick = (ev) => { ev.stopPropagation(); arrowPop.classList.contains('open') ? closeArrowPop() : openArrowPop(); };
   arrowChips.onclick = (ev) => {
@@ -123,18 +121,16 @@ function wire(): void {
       return;
     }
     const cap = chip.dataset.cap as EdgeCap;
-    touchEdges();
-    // The picker stays OPEN: the two ends are two choices, and closing after the first would make
-    // setting both a matter of reopening the same menu.
-    for (const e of es) {
+    editEdges(e => {
       if (col.dataset.end === 'from') {
         e.fromCap = cap;
       } else {
         e.toCap = cap;
       }
-    }
-    commit(); openArrowPop();
-    commitStep();
+    });
+    // The picker stays OPEN: the two ends are two choices, and closing after the first would make
+    // setting both a matter of reopening the same menu.
+    openArrowPop();
   };
 
   colorBtn.onclick = (ev) => { ev.stopPropagation(); colorPop.classList.contains('open') ? closeColorPop() : openColorPop(); };
@@ -144,18 +140,17 @@ function wire(): void {
     if (!sw || !es.length) {
       return;
     }
-    touchEdges();
-    for (const e of es) {
-      e.color = sw.dataset.color!;
-    }
-    closeColorPop(); commit(); commitStep();
+    editEdges(e => { e.color = sw.dataset.color!; });
+    closeColorPop();
   };
   closeOnOutside(colorPop, colorBtn, closeColorPop);
   closeOnOutside(arrowPop, arrowsBtn, closeArrowPop);
   closeOnOutside(dashPop, dashBtn, closeDashPop);
 }
-function commit(): void {
-  scheduleSaveBoard();
+
+// Set one value across every selected line, as one undo step (mutate saves the board).
+function editEdges(set: (e: BoardEdge) => void): void {
+  mutate([], () => { selectedEdges().forEach(set); }, { edges: true, reflow: 'none' });
   paintFreeEdges();
   syncControls();
 }

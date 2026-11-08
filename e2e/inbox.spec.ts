@@ -31,7 +31,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('a note saved into the Inbox folder from elsewhere shows up beside its cards, and pulses', async ({ page }) => {
+test('a note saved into the Inbox folder from elsewhere shows up inside it, which keeps its size, and pulses', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedFolder(page, {
@@ -42,6 +42,7 @@ test('a note saved into the Inbox folder from elsewhere shows up beside its card
   });
   await openFolder(page);
   await expect(card(page, 'Old note')).toBeVisible();
+  const before = (await section(page, 'Inbox').boundingBox())!;
 
   // the phone saves a note into the folder; coming back to the window re-reads it
   await seedFolder(page, { 'Inbox/2026-10-27 0915.md': 'Buy oat milk\n' });
@@ -50,11 +51,10 @@ test('a note saved into the Inbox folder from elsewhere shows up beside its card
   const arrived = card(page, 'Buy oat milk');
   await expect(arrived).toBeVisible();
   await expect(arrived).toHaveClass(/arrived/);
-  const old = (await card(page, 'Old note').boundingBox())!, a = (await arrived.boundingBox())!;
-  const box = (await section(page, 'Inbox').boundingBox())!;
-  expect(a.x).toBeGreaterThan(old.x + old.width);          // beside the card already there, not on it
-  expect(a.x + a.width).toBeLessThanOrEqual(box.x + box.width);   // and inside the section, which grew
-  expect(a.y + a.height).toBeLessThanOrEqual(box.y + box.height);
+  const a = (await arrived.boundingBox())!, box = (await section(page, 'Inbox').boundingBox())!;
+  expect(box).toEqual(before);                              // a section is never resized for what arrives
+  expect(a.x).toBeGreaterThanOrEqual(box.x); expect(a.y).toBeGreaterThanOrEqual(box.y);   // it stacks inside, from the top-left
+  expect(a.x + a.width).toBeLessThanOrEqual(box.x + box.width);
   await expect(arrived).not.toHaveClass(/arrived/, { timeout: 4000 });   // the pulse ends
   expect(errors).toEqual([]);
 });
@@ -99,4 +99,47 @@ test('the palette’s Inbox makes the Inbox section beside the board, then goes 
   // a second time just goes there
   await palette(page, 'Inbox');
   await expect(page.locator('#world .node.section', { hasText: 'Inbox' })).toHaveCount(1);
+});
+
+test('coming back to the window with nothing changed on disk keeps the undo history', async ({ page }) => {
+  await openBoard(page);
+  await seedFolder(page, {
+    'Keep.md': 'Keep\n',
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: { 'Keep.md': { x: 100, y: 100 } } }),
+  });
+  await openFolder(page);
+  const keep = card(page, 'Keep');
+  await expect(keep).toBeVisible();
+  const b = (await keep.boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await page.keyboard.press('Backspace');
+  await expect(keep).toHaveCount(0);
+  await page.waitForTimeout(1200);   // past the save and its own-write guard
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(500);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(card(page, 'Keep')).toBeVisible();
+});
+
+test('notes changing on disk leave the selection on the same card', async ({ page }) => {
+  await openBoard(page);
+  await seedFolder(page, {
+    'A.md': 'Ay\n', 'M.md': 'Em\n', 'Z.md': 'Zed\n',
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: {
+      'A.md': { x: 100, y: 100 }, 'M.md': { x: 400, y: 100 }, 'Z.md': { x: 700, y: 100 } } }),
+  });
+  await openFolder(page);
+  const em = card(page, 'Em');
+  const b = (await em.boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await expect(em).toHaveClass(/\bsel\b/);
+  await page.waitForTimeout(1200);
+  // Another app deletes BOTH its neighbours: whichever way the folder is read, the card's fresh id shifts.
+  await page.evaluate(async () => {
+    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('picked');
+    await root.removeEntry('A.md'); await root.removeEntry('Z.md');
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(card(page, 'Ay')).toHaveCount(0);
+  await expect(card(page, 'Em')).toHaveClass(/\bsel\b/);
 });

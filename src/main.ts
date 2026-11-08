@@ -37,7 +37,7 @@ import { bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTags, tagChipHTML } from './features/tags.js';
 import { refreshTray } from './features/tag-tray.js';
 import { noteTags, wearsTags } from './utils/tags.js';
-import { record } from './features/history.js';
+import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { readOpenUnread } from './data/lazy.js';
@@ -55,7 +55,6 @@ import { toggleCollapse } from './features/fold.js';
 import { openSection, syncScopeChrome } from './nav/sections.js';
 import { focusByTitle } from './nav/focus.js';
 import { applyReadOnly } from './features/read-only.js';
-import { scheduleSave } from './data/save.js';
 
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();
@@ -1006,15 +1005,15 @@ export function animateReflow(before: Map<string, Pt>): void {
 
 // Flip the idx-th task checkbox in a node's body and write the change back to disk.
 function toggleTask(n: MindNode, idx: number): void {
-  if (state.readOnly || isLockedEffective(n)) {
+  if (isLockedEffective(n)) {
     return;
   }
-  record([n.id], () => {
+  mutate([n.id], () => {
     n.body = toggleTaskAt(n.body, idx);
     n.dirty = true;
-  });
-  syncOpenEditor(n);
-  paintNode(n); scheduleSave();
+    syncOpenEditor(n);
+    paintNode(n);
+  }, { reflow: 'none' });
 }
 
 syncFloatBar();

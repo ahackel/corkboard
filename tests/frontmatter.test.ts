@@ -95,10 +95,12 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(parseMd(out).mm.blank).toBe(true);
   });
 
-  it('folds legacy kinds', () => {
+  it('opens every retired kind as a plain card or section', () => {
     expect(parseMd('---\nmm_type: image\n---\nx').mm.type).toBe('card');
     expect(parseMd('---\nmm_layout: stack\n---\nx').mm).toMatchObject({ type: 'card', wasStack: true });
     expect(parseMd('---\nmm_layout: frame-v\n---\nx').mm.type).toBe('section');
+    expect(parseMd('---\nmm_type: annotation\nmm_parent: Card.md\n---\n\nremark').mm).toMatchObject({ type: 'card', parent: 'Card.md' });
+    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm.type).toBe('section');
   });
 
   it('drops the cut arrangement and checklist keys on the next write', () => {
@@ -111,14 +113,6 @@ describe('parseMd / serializeMd round-trip', () => {
     const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_type: query\nmm_query: p:Ideas\nmm_w: 280\nmm_h: 320\n---\n\n# Find ideas\n\nnotes\n');
     expect(n.type).toBe('card');
     expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\n---\n\n# Find ideas\n\nnotes\n');
-  });
-
-  it('opens a retired annotation as a plain card', () => {
-    expect(parseMd('---\nmm_type: annotation\nmm_parent: Card.md\n---\n\nremark').mm).toMatchObject({ type: 'card', parent: 'Card.md' });
-  });
-
-  it('opens a retired tab group as a plain section', () => {
-    expect(parseMd('---\nmm_type: frame\nmm_layout: tabs\n---\n\n# Group').mm.type).toBe('section');
   });
 
   it('reads frontmatter from a file with Windows line endings', () => {

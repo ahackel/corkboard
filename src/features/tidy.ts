@@ -8,11 +8,9 @@ import { isLockedEffective, nodesOf, outermost, subtreeIds } from '../utils/mode
 import { moveSubtreeTo, sectionLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
-import { record } from './history.js';
-import { growSectionsToHold } from './float-bar.js';
-import { relayout, remeasure, animateLayout } from '../main.js';
+import { mutate } from './mutate.js';
+import { animateLayout } from '../main.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
-import { scheduleSave } from '../data/save.js';
 
 // What a tidy acts on: the selected nodes that aren't inside another selected one (a section carries its
 // own cards along) and aren't locked.
@@ -36,7 +34,7 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
   const boxes = nodes.map(boxOf);
   const pos = place(boxes);
   const ids = nodes.flatMap(n => subtreeIds(n.id));
-  record(ids, () => animateLayout(() => {
+  mutate(ids, () => animateLayout(() => {
     for (const n of nodes) {
       const p = pos.get(n.id);
       if (!p) {
@@ -45,11 +43,7 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
       const lh = n.type === 'section' ? sectionLabelH(n) : 0;
       moveSubtreeTo(n, p.x, p.y + lh);
     }
-    growSectionsToHold(nodes.map(n => n.id));   // a section holding them shows the new arrangement
-  }));
-  relayout();
-  scheduleSave();
-  setStatus(what);
+  }), { reflow: 'relayout', status: what });
 }
 
 function tidyUp(): void {
@@ -71,10 +65,8 @@ function sameWidth(): void {
   const cards = targets().filter(n => n.type !== 'section' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }
   const w = Math.max(...cards.map(nodeW));
-  record(cards.map(n => n.id), () => { for (const n of cards) { n.w = w; n.dirtyLayout = true; } });
-  remeasure();
-  scheduleSave();
-  setStatus('Same width');
+  mutate(cards.map(n => n.id), () => { for (const n of cards) { n.w = w; n.dirtyLayout = true; } },
+    { reflow: 'remeasure', status: 'Same width' });
 }
 
 // The float bar's tidy menu (and ⌘P's entries): FigJam's shortcuts, ⌥ for the aligns, ⌃⌥ for the rest.

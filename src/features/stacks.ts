@@ -25,7 +25,7 @@ import { mkNode, deleteNodes } from './crud.js';
 import { touch, record } from './history.js';
 import { hydrateImages } from './images.js';
 import { selectedIds, setSelectionSet } from './selection.js';
-import { growSectionsToHold, fitSectionToContent, SECTION_FIT_PAD } from './float-bar.js';
+import { fitSectionToContent, SECTION_FIT_PAD } from './float-bar.js';
 import { scheduleSave } from '../data/save.js';
 
 // How long a dragged card rests on another before letting go makes the two a stack. A quick pass over a
@@ -438,7 +438,6 @@ export function spreadPiles(stacks: MindNode[]): string[] {
     paintAll();   // the cards are on the board now, and measurable
     layGrid(cards, s);
   }
-  growSectionsToHold(loose);
   return loose;
 }
 
@@ -474,7 +473,6 @@ export function stackToSection(): void {
       layGrid(cards, { x: s.x + SECTION_FIT_PAD, y: s.y + SECTION_FIT_PAD });
       fitSectionToContent(s);
     }
-    growSectionsToHold(stacks.map(s => s.id));
     remeasure();
   });
   setSelectionSet(stacks.map(s => s.id));

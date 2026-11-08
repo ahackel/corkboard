@@ -22,6 +22,8 @@ export interface Store {
   remove(path: string): Promise<void>;
   readBlob(path: string): Promise<Blob | null>;
   watch(cb: () => void): void;
+  // Only stores that are re-read on focus need it: false when nothing outside the app touched the files.
+  changed?(): Promise<boolean>;
 }
 
 // On-device backends (OPFS / the IndexedDB fallback) additionally host MULTIPLE maps and

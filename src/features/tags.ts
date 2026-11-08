@@ -7,13 +7,11 @@
 // stray click never deletes one.
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { record } from './history.js';
-import { remeasure } from '../main.js';
+import { mutate } from './mutate.js';
 import { esc } from '../utils/markdown.js';
 import { isEmojiTag, tagKey, tagTilt, wearsTags, type ShownTag } from '../utils/tags.js';
 import { searchTags, toggleSearchTag } from './search.js';
 import { beginTagDrag } from './tag-drag.js';
-import { scheduleSave } from '../data/save.js';
 
 // How a tag is written for a person: an emoji as itself, a word with its `#`.
 export const tagText = (t: string): string => isEmojiTag(t) ? t : '#' + t;
@@ -41,9 +39,6 @@ export function tagChipHTML(t: ShownTag): string {
 // every other per-card mutation. Case is ignored: `Idea` is `idea`. Returns whether anything changed. ----
 export interface TagChange { id: string; tag: string; on: boolean; }
 export function retag(changes: TagChange[]): boolean {
-  if (state.readOnly) {
-    return false;
-  }
   const todo = changes.filter(c => {
     const n = state.nodes.get(c.id);
     return !!n && wearsTags(n) && !isLockedEffective(n) && n.tags.some(t => tagKey(t) === tagKey(c.tag)) !== c.on;
@@ -51,7 +46,7 @@ export function retag(changes: TagChange[]): boolean {
   if (!todo.length) {
     return false;
   }
-  record([...new Set(todo.map(c => c.id))], () => {
+  return mutate([...new Set(todo.map(c => c.id))], () => {
     for (const c of todo) {
       const n = state.nodes.get(c.id)!, k = tagKey(c.tag);
       if (n.tags.some(t => tagKey(t) === k) === c.on) {
@@ -60,10 +55,7 @@ export function retag(changes: TagChange[]): boolean {
       n.tags = c.on ? [...n.tags, c.tag] : n.tags.filter(t => tagKey(t) !== k);
       n.dirty = true;
     }
-  });
-  // paint first so each card's height is current, then reflow, then paint again.
-  remeasure(); scheduleSave();
-  return true;
+  }, { reflow: 'remeasure' });   // a tag row can change a card's height
 }
 export function setTagOnNodes(ids: string[], tag: string, on: boolean): void {
   retag(ids.map(id => ({ id, tag, on })));

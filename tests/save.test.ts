@@ -1,29 +1,21 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach } from 'vitest';
 import type { Store } from '../src/store/types.js';
+import './page-shell.js';
 
-// Booting the app opens IndexedDB, which the test DOM lacks — and a save never needs it.
-vi.mock('../src/boot.js', () => ({ boot: async () => {}, showStart() {}, hideStart() {} }));
-// The save pulls in modules that wire up the page as they load, so they need its shell first.
-document.body.innerHTML = readFileSync('index.html', 'utf8').replace(/^[\s\S]*<body[^>]*>|<\/body>[\s\S]*$/g, '')
-  .replace(/<script[\s\S]*?<\/script>/g, '');
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
 const { flushSave } = await import('../src/data/save.js');
-const { nodeFrom } = await import('./helpers.js');
+const { nodeFrom, fakeStore } = await import('./helpers.js');
 
 // A folder the way macOS and Windows see one: `Notes.md` and `notes.md` are the same file.
 function caseInsensitiveStore(): Store & { files: Map<string, string> } {
   const files = new Map<string, string>();
   return {
-    files, isOpen: true, name: 'test',
-    async pick() { return 'ok'; },
-    async listTree() { return { files: [], lazy: new Map(), foreign: new Set() }; },
-    async removeDir() {},
-    async write(path, data) { files.set(path.toLowerCase(), String(data)); },
-    async remove(path) { files.delete(path.toLowerCase()); },
-    async readBlob() { return null; },
-    watch() {},
+    files,
+    ...fakeStore({
+      async write(path, data) { files.set(path.toLowerCase(), String(data)); },
+      async remove(path) { files.delete(path.toLowerCase()); },
+    }),
   };
 }
 
@@ -57,5 +49,37 @@ describe('saveAll', () => {
     const board = JSON.parse(store.files.get('board.json')!);
     expect(board.nodes['Stack/_index.md']).toMatchObject({ stack: true, order: ['Stack/Beta.md', 'Stack/Alpha.md'] });
     expect(board.nodes['Stack/Alpha.md'].stack).toBeUndefined();
+  });
+
+  it('never deletes a note that took a renamed one’s name in another case', async () => {
+    const store = caseInsensitiveStore();
+    useStore(store);
+    store.files.set('plan.md', '# Plan');
+    store.files.set('b.md', '# b');
+    const a = nodeFrom('# Other', 'Plan.md', 'a');
+    const b = nodeFrom('# plan', 'b.md', 'b');
+    a.dirty = true; b.dirty = true;
+    await flushSave();
+    expect(store.files.get(a.file!.toLowerCase())).toContain('# Other');
+    expect(store.files.get(b.file!.toLowerCase())).toContain('# plan');
+    // the next save, with the old name free, gives it the plain name
+    b.dirty = true;
+    await flushSave();
+    expect(b.file).toBe('plan.md');
+    expect(store.files.get('plan.md')).toContain('# plan');
+  });
+
+  it('a rename moves the file and carries the links that point at it', async () => {
+    const store = caseInsensitiveStore();
+    useStore(store);
+    store.files.set('old.md', '# Old');
+    store.files.set('ref.md', '# Ref\nsee [[old]]');
+    const n = nodeFrom('# New', 'old.md', 'n');
+    nodeFrom('# Ref\nsee [[old]]', 'ref.md', 'r');
+    n.dirty = true;
+    await flushSave();
+    expect(store.files.has('old.md')).toBe(false);
+    expect(store.files.get('new.md')).toContain('# New');
+    expect(store.files.get('ref.md')).toContain('[[New]]');
   });
 });

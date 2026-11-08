@@ -13,10 +13,10 @@ import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { paintAll, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
-import { touch, touchEdges, commitStep, record } from './history.js';
+import { touch, touchEdges, commitStep } from './history.js';
+import { mutate } from './mutate.js';
 import { SPACING, slidePast } from '../utils/guides.js';
 import { boxOf } from './guides.js';
-import { growSectionsToHold } from './float-bar.js';
 import { settleSections } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
@@ -99,8 +99,8 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout();
-  // a card made past its section's edge is shown, not clipped; a new SECTION takes in what it covers
-  if (growSectionsToHold([id, ...(n.type === 'section' ? settleSections([id]) : [])])) {
+  // a new SECTION takes in what it covers
+  if (n.type === 'section' && settleSections([id]).length) {
     relayout();
   }
   selectNode(id);
@@ -126,7 +126,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
   const p = parentId ? state.nodes.get(parentId) : undefined;
   if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return []; }
   const made: MindNode[] = [];
-  record([parentId], () => {
+  mutate([parentId], () => {
     if (p?.collapsed) {
       p.collapsed = false;   // reveal the new cards
     }
@@ -139,12 +139,9 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
     remeasure();
     let y = at.y;
     for (const n of made) { n.y = y; y += nodeH(n) + LIST_GAP; }
-    growSectionsToHold(made.map(n => n.id));
-    relayout();
-    setSelectionSet(made.map(n => n.id));
-    made.forEach(popIn);
-    scheduleSave();
-  });
+  }, { reflow: 'relayout' });
+  setSelectionSet(made.map(n => n.id));
+  made.forEach(popIn);
   return made;
 }
 // Make a new unconnected node at (x,y) and render it, but DON'T select / rename / save yet — the
@@ -233,11 +230,7 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
     return;
   }
   const copies = srcs.map(next ? copyNext : copyNode);
-  // paint first so the new cards get real DOM heights, then settle and commit.
   remeasure();
-  if (next && growSectionsToHold(copies.map(c => c.id))) {
-    relayout();
-  }
   const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
     : `${next ? 'Made the next of' : 'Duplicated'} ${copies.length} cards`;
   if (copies.length === 1){
@@ -544,11 +537,10 @@ export function deleteNode(id: string): void {
   if (afterReading([id], () => deleteNode(id))) {
     return;
   }
-  record([], () => {                 // ids are touched inside deleteNodes
+  mutate([], () => {                 // ids are touched inside deleteNodes
     deleteNodes(subtreeIds(id));
-    selectNode(null); relayout();
-    scheduleSave();
-  });
+    selectNode(null);
+  }, { reflow: 'relayout' });
 }
 // Undo a creation that never became a card — Escape out of a fresh card's first edit, or clicking away
 // from one nothing was typed into. Not a delete from the user's side, and not one in the history
@@ -575,12 +567,11 @@ export function deleteSelection(): void {
   if (afterReading(ids, deleteSelection)) {
     return;   // a folded section's notes first (see deleteNode)
   }
-  record([], () => {                 // ids are touched inside deleteNodes
+  mutate([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
     deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
-    relayout(); applySelection(); scheduleSave();
-  });
-  setStatus(`Deleted ${ids.length} card${ids.length===1?'':'s'}`);
+  }, { reflow: 'relayout', status: `Deleted ${ids.length} card${ids.length===1?'':'s'}` });
+  applySelection();
 }
 // A node is safe to delete-and-promote when it's unlocked, its own parent isn't locked (the
 // promoted children need to land there), and none of its direct children are locked (a locked
@@ -624,7 +615,8 @@ export function deleteSelectionKeepChildren(): void {
   }
   const promoted = new Set<string>();
   let loose: string[] = [];
-  record([], () => {
+  const part = (k: number, one: string): string => k ? `${k} ${one}${k === 1 ? '' : 's'}` : '';
+  mutate([], () => {
     for (const id of ids) {
       const n = state.nodes.get(id);
       if (!n) {
@@ -648,15 +640,11 @@ export function deleteSelectionKeepChildren(): void {
     }
     // …after the sections, so a stack that was inside one spreads out where it now lies
     loose = spreadPiles(stacks.filter(s => state.nodes.has(s.id)));
-  });
+  }, { reflow: 'relayout', status: `Ungrouped ${[part(ids.length, 'section'), part(stacks.length, 'stack')].filter(Boolean).join(' and ')}` });
   for (const id of [...ids, ...stacks.map(s => s.id)]) {
     promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
   }
-  relayout();
   setSelectionSet([...promoted, ...loose]);
-  scheduleSave();
-  const part = (k: number, one: string): string => k ? `${k} ${one}${k === 1 ? '' : 's'}` : '';
-  setStatus(`Ungrouped ${[part(ids.length, 'section'), part(stacks.length, 'stack')].filter(Boolean).join(' and ')}`);
 }
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
 // source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it
@@ -691,8 +679,6 @@ export function extractImage(sourceId: string, path: string, alt: string,
       body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
-    relayout();
-    growSectionsToHold([n.id]);
     setStatus('Image extracted');
   }
   relayout();

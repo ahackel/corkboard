@@ -2,11 +2,9 @@ import { type MindNode, state, setStatus } from '../core/state.js';
 import { containerBox } from '../view/layout.js';
 import { stageSize, cancelViewAnim, jumpViewTo } from '../view/camera.js';
 import { scope, type ScopeBack, type ScopeLevel, openPathTo, isScopeRoot, outOfScope, canOpen, scopeActive, scopeRootNode } from './scope.js';
-import { growSectionsToHold } from '../features/float-bar.js';
-import { childrenOf, nodeLabel, nodeByFile } from '../utils/model.js';
+import { nodeLabel, nodeByFile } from '../utils/model.js';
 import { endInPlaceEdit } from '../features/inline-edit.js';
 import { remeasure } from '../main.js';
-import { record } from '../features/history.js';
 import { syncUrl } from './url-state.js';
 import { afterReading } from '../data/lazy.js';
 import { renderCrumbs } from '../features/breadcrumbs.js';
@@ -74,24 +72,6 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
   scope.rootId = target.id;
 }
 
-// A FREE section you were INSIDE had the whole viewport to arrange things in, so a card can easily end
-// up outside the box it goes back to being on the way out — where its wrapper's overflow:hidden would
-// clip it clean away. So grow the box to hold what's in it as you leave (growSectionsToHold), and only
-// when something really does stick out, so a visit that moved nothing still writes nothing. PINNED: the box
-// never moves — it grows right and down, and what sticks out left or up comes in to meet it.
-// A locked section is out: it refuses to be resized at all.
-// A FOLDED section is measured as the box it unfolds to, not its pill: unfolded for the measurement
-// only, and folded straight back, so leaving it moves nothing unless a card really sticks out.
-function growToFitContents(f: MindNode): void {
-  if (state.readOnly || f.type !== 'section') {
-    return;
-  }
-  const folded = f.collapsed;
-  f.collapsed = false;
-  try { growSectionsToHold(childrenOf(f.id).map(k => k.id), { pin: true }); }
-  finally { f.collapsed = folded; }
-}
-
 interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiting?: boolean; camera?: boolean; }
 function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   // A scope change re-parents elements (a child moves between #world and a wrapper), which would
@@ -99,7 +79,6 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   endInPlaceEdit();
   cancelViewAnim();
   const before = scope.rootId;
-  const left = before ? state.nodes.get(before) : undefined;
   // No layout glide: the cards of the level you step into are simply THERE, where they sit — played from
   // where they were, they fly in from their ancestor and the canvas visibly builds itself up.
   setScopeStack(target, opts.back ?? null);
@@ -110,13 +89,6 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
     n.hostSectionId = undefined;
   }
   refreshScopeRect();
-  // Now that the stack is settled, containerBox reports the section we just left at its real size
-  // again — so this is the moment to check nothing it holds got stranded outside it. Its own undo
-  // step: ⌘Z undoes the resize without teleporting you between scopes.
-  // `type === 'section'` and not a scope predicate: the scope stack has already moved above this line.
-  if (left && left.type === 'section' && !isScopeRoot(left)) {
-    record([left.id], () => growToFitContents(left));
-  }
   remeasure();
   if (opts.exiting) {
     // Leaving: select the section you came out of — that's what makes a crumb read as a back button —

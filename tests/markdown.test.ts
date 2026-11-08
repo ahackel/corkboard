@@ -29,6 +29,27 @@ describe('renderBodyHTML', () => {
   });
 });
 
+describe('renderBodyHTML lists', () => {
+  it('nests by indentation', () => {
+    expect(renderBodyHTML('- a\n  - b\n  - c\n- d'))
+      .toBe('<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>');
+  });
+  it('nests a bullet under a number and switches kind at one level', () => {
+    expect(renderBodyHTML('1. a\n   - b\n2. c'))
+      .toBe('<ol><li>a<ul><li>b</li></ul></li><li>c</li></ol>');
+    expect(renderBodyHTML('- a\n1. b')).toBe('<ul><li>a</li></ul><ol><li>b</li></ol>');
+  });
+  it('closes several levels at once', () => {
+    expect(renderBodyHTML('- a\n  - b\n    - c\n- d'))
+      .toBe('<ul><li>a<ul><li>b<ul><li>c</li></ul></li></ul></li><li>d</li></ul>');
+  });
+  it('numbers tasks in body order through nesting, for write-back', () => {
+    const h = renderBodyHTML('- [ ] a\n  - [x] b\n- [ ] c');
+    expect([...h.matchAll(/data-ti="(\d)"( checked)?/g)].map(m => m[1] + (m[2] ? 'x' : ''))).toEqual(['0', '1x', '2']);
+    expect(h).toContain('<span class="task-text">a</span><ul>');
+  });
+});
+
 describe('taskProgress', () => {
   it('counts the bullet tasks a card draws as checkboxes, and how many are ticked', () => {
     expect(taskProgress('- [x] a\n- [ ] b\n  * [X] c\n+ [ ] d')).toEqual({ done: 2, total: 4 });

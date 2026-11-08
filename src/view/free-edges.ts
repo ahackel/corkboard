@@ -12,7 +12,7 @@
 //   · #freeEdgeHits — the same lines as invisible 18px CLICK targets, BEHIND the cards, so the
 //     stretch of a line that crosses a card is still the card's to press (see HIT_W);
 //   · #toggles — the rings and endpoint handles, above every card so they are always grabbable.
-import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, isStack, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+import { state, freeEdgesSvg, freeEdgesHeldSvg, freeEdgeHitsSvg, togglesSvg, isStack, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, firstVisible, resolveWikilink } from '../utils/model.js';
 import { ui, type Pt } from '../core/ui-state.js';
@@ -22,11 +22,13 @@ import { esc } from '../utils/markdown.js';
 import { colorFill } from './color.js';
 import { nodeW, nodeH } from './geometry.js';
 import { canvasSurface } from '../features/canvas-color.js';
+import { centre, rimPoint, polyline, routeFor, facePoint, type Rect, type Geometry } from '../utils/edge-route.js';
 
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
 // target at 50% zoom is a pixel or two — and unlike a card, an edge has no interior to aim at.
 const HIT_W = 18;
 const HANDLE_R = 8;          // endpoint grab handles (FigJam's white disc, thick blue rim), one edge selected
+
 // The four PORTS on a selected card you drag a new line from — FigJam's: a small blue dot in a white
 // rim, floating SOCKET_OUT outside each side, that becomes a ⊕ under the pointer (styles.css).
 const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
@@ -36,25 +38,9 @@ const SOCKET_OUT = 18;
 // the rim the user reads as the card's edge). A section's label hangs outside its bounds, so a line meets
 // the box it points at, not the label above it.
 const RING_MID = 1;
-interface Rect { x: number; y: number; w: number; h: number }
+
 function rimRect(n: MindNode): Rect {
   return { x: n.x - RING_MID, y: n.y - RING_MID, w: nodeW(n) + 2*RING_MID, h: nodeH(n) + 2*RING_MID };
-}
-function centre(n: MindNode | Rect): Pt {
-  const r = 'id' in n ? rimRect(n) : n;
-  return { x: r.x + r.w/2, y: r.y + r.h/2 };
-}
-// Where the segment from the box's centre toward `p` leaves its rim. Ray/box: the axis it reaches
-// first decides.
-function rimPoint(n: MindNode | Rect, p: Pt): Pt {
-  const r = 'id' in n ? rimRect(n) : n, c = centre(r);
-  const dx = p.x - c.x, dy = p.y - c.y;
-  if (!dx && !dy) {
-    return c;
-  }
-  const tx = dx ? (r.w/2) / Math.abs(dx) : Infinity, ty = dy ? (r.h/2) / Math.abs(dy) : Infinity;
-  const t = Math.min(tx, ty, 1);
-  return { x: c.x + dx * t, y: c.y + dy * t };
 }
 
 // The four dots on a selected card — only where a NEW line starts from, floating a little OUTSIDE each
@@ -77,183 +63,7 @@ const STROKE_W = 3;                  // must match path.fe / path.fe-arrow in st
 const END_GAP = 6;
 const ARROW_INSET = STROKE_W / 2;
 const trim = (cap: EdgeCap): number => END_GAP + (cap === 'arrow' ? ARROW_INSET : 0);
-function unit(p: Pt, q: Pt): Pt {
-  const dx = q.x - p.x, dy = q.y - p.y, L = Math.hypot(dx, dy) || 1;
-  return { x: dx / L, y: dy / L };
-}
-// A path through `pts`, each end pulled in by its own trim along its own leg, as an SVG path plus what
-// the caps and the label need. Two points is a straight segment; more is an elbow, its corners rounded
-// (CORNER_R, shrunk to fit a short leg) the way FigJam's are.
-// `box` bounds the whole route, its UNTRIMMED ends included — what the edge bar keeps clear of.
-interface Geometry { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt; box: { x0: number; y0: number; x1: number; y1: number } }
-const CORNER_R = 24;
-// A corner never eats the END legs down to nothing: the cap needs a straight stretch to sit on, or an
-// arrowhead lands on the bend and reads as a hook.
-const END_STRAIGHT = 16;
-function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
-  const box = { x0: Math.min(...pts.map(p => p.x)), y0: Math.min(...pts.map(p => p.y)),
-                x1: Math.max(...pts.map(p => p.x)), y1: Math.max(...pts.map(p => p.y)) };
-  pts = pts.map(p => ({ ...p }));
-  const n = pts.length;
-  const lenOf = (i: number): number => Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
-  const tailU = unit(pts[1], pts[0]), tipU = unit(pts[n-2], pts[n-1]);
-  // A leg too short to give up its trim keeps it (two cards nearly touching): a line that turned
-  // inside out would be worse than one that touches.
-  const trimTail = n === 2 ? lenOf(0) > (trimA + trimB) * 1.5 : lenOf(0) > trimA * 1.5;
-  const trimTip = n === 2 ? trimTail : lenOf(n-2) > trimB * 1.5;
-  if (trimTail) {
-    pts[0] = { x: pts[0].x - tailU.x * trimA, y: pts[0].y - tailU.y * trimA };
-  }
-  if (trimTip) {
-    pts[n-1] = { x: pts[n-1].x - tipU.x * trimB, y: pts[n-1].y - tipU.y * trimB };
-  }
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 1; i < n - 1; i++) {
-    const p = pts[i], uin = unit(pts[i-1], p), uout = unit(p, pts[i+1]);
-    const fit = (j: number): number => (j === 0 || j === n - 2) ? lenOf(j) - END_STRAIGHT : lenOf(j) / 2;
-    const r = Math.max(0, Math.min(CORNER_R, fit(i-1), fit(i)));
-    d += ` L ${p.x - uin.x * r} ${p.y - uin.y * r} Q ${p.x} ${p.y} ${p.x + uout.x * r} ${p.y + uout.y * r}`;
-  }
-  d += ` L ${pts[n-1].x} ${pts[n-1].y}`;
-  // The label's spot: halfway along the line, which on an elbow is the middle of its middle leg.
-  let half = 0;
-  for (let i = 0; i < n - 1; i++) {
-    half += lenOf(i);
-  }
-  half /= 2;
-  let mid = pts[0];
-  for (let i = 0; i < n - 1; i++) {
-    const L = lenOf(i);
-    if (half <= L) { const u = unit(pts[i], pts[i+1]); mid = { x: pts[i].x + u.x * half, y: pts[i].y + u.y * half }; break; }
-    half -= L;
-  }
-  return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU, box };
-}
-function segment(a: Pt, b: Pt, trimA: number, trimB: number): Geometry { return polyline([a, b], trimA, trimB); }
 
-// The elbow between two boxes (`to` may be a bare point — the pointer, while a line is being drawn).
-// The AXIS is the one the boxes are further apart along: side by side → it leaves a left/right side,
-// one above the other → top/bottom. Facing each other across that axis (their spans overlap), it runs
-// straight across the middle of the overlap; otherwise it leaves from the middle of one side, turns
-// halfway across the gap, and enters the middle of the other — a Z. Two boxes that overlap outright
-// have no gap to route through, so they get the plain centre-to-centre line.
-function route(ra: Rect, rb: Rect): Pt[] {
-  const ca = centre(ra), cb = centre(rb);
-  const gapX = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w));
-  const gapY = Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h));
-  if (gapX < 0 && gapY < 0) {
-    return [rimPoint(ra, cb), rimPoint(rb, ca)];
-  }
-  if (gapX >= gapY) {
-    const right = cb.x > ca.x;
-    const ax = right ? ra.x + ra.w : ra.x, bx = right ? rb.x : rb.x + rb.w;
-    const lo = Math.max(ra.y, rb.y), hi = Math.min(ra.y + ra.h, rb.y + rb.h);
-    if (hi >= lo) { const y = (lo + hi) / 2; return [{ x: ax, y }, { x: bx, y }]; }
-    const mx = (ax + bx) / 2;
-    return [{ x: ax, y: ca.y }, { x: mx, y: ca.y }, { x: mx, y: cb.y }, { x: bx, y: cb.y }];
-  }
-  const down = cb.y > ca.y;
-  const ay = down ? ra.y + ra.h : ra.y, by = down ? rb.y : rb.y + rb.h;
-  const lo = Math.max(ra.x, rb.x), hi = Math.min(ra.x + ra.w, rb.x + rb.w);
-  if (hi >= lo) { const x = (lo + hi) / 2; return [{ x, y: ay }, { x, y: by }]; }
-  const my = (ay + by) / 2;
-  return [{ x: ca.x, y: ay }, { x: ca.x, y: my }, { x: cb.x, y: my }, { x: cb.x, y: by }];
-}
-// ---------- a line with a PINNED end (dropped on a port) ----------
-// Each pinned end leaves its face square, from the face's midpoint; an unpinned end may use whichever
-// face routes best. The router tries a handful of orthogonal shapes for every allowed pair of faces —
-// straight, one bend, a Z through the middle, and the detours that step out STUB from each face and go
-// round either box — keeps those that leave and enter square and cross neither card, and takes the
-// shortest, each bend costing BEND_COST. Small enough to run per paint; nothing is stored but the faces.
-const DIR: Record<EdgeSide, Pt> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
-const SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
-const STUB = 44, BEND_COST = 40;   // a detour clears the card by STUB — room for a round corner and the cap
-function facePoint(r: Rect, s: EdgeSide): Pt {
-  return s === 'up' ? { x: r.x + r.w/2, y: r.y } : s === 'down' ? { x: r.x + r.w/2, y: r.y + r.h }
-       : s === 'left' ? { x: r.x, y: r.y + r.h/2 } : { x: r.x + r.w, y: r.y + r.h/2 };
-}
-// Drop repeated points and the middle of three in a row; null if the path doubles back on itself.
-function simplify(pts: Pt[]): Pt[] | null {
-  const out: Pt[] = [];
-  for (const p of pts) {
-    if (!out.length || Math.hypot(p.x - out[out.length-1].x, p.y - out[out.length-1].y) > 0.5) {
-      out.push(p);
-    }
-  }
-  for (let i = 1; i < out.length - 1;) {
-    const a = out[i-1], b = out[i], c = out[i+1];
-    if ((Math.abs(a.x - b.x) < 0.5 && Math.abs(b.x - c.x) < 0.5) || (Math.abs(a.y - b.y) < 0.5 && Math.abs(b.y - c.y) < 0.5)) {
-      if ((b.x - a.x) * (c.x - b.x) + (b.y - a.y) * (c.y - b.y) < 0) {
-        return null;
-      }
-      out.splice(i, 1);
-    } else {
-      i++;
-    }
-  }
-  return out.length >= 2 ? out : null;
-}
-// Does the axis-aligned segment p→q pass through the INSIDE of r (touching its rim is fine)?
-function crosses(p: Pt, q: Pt, r: Rect): boolean {
-  if (r.w < 2 || r.h < 2) {
-    return false;
-  }
-  const x0 = Math.min(p.x, q.x), x1 = Math.max(p.x, q.x), y0 = Math.min(p.y, q.y), y1 = Math.max(p.y, q.y);
-  return x1 > r.x + 1 && x0 < r.x + r.w - 1 && y1 > r.y + 1 && y0 < r.y + r.h - 1;
-}
-function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
-  let best: Pt[] | null = null, bestScore = Infinity;
-  for (const a of sa ? [sa] : SIDES) {
-    for (const b of sb ? [sb] : SIDES) {
-      const pa = facePoint(ra, a), pb = facePoint(rb, b), da = DIR[a], db = DIR[b];
-      const qa = { x: pa.x + da.x * STUB, y: pa.y + da.y * STUB }, qb = { x: pb.x + db.x * STUB, y: pb.y + db.y * STUB };
-      const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
-      const xs = [qa.x, qb.x, Math.min(ra.x, rb.x) - STUB, Math.max(ra.x + ra.w, rb.x + rb.w) + STUB];
-      const ys = [qa.y, qb.y, Math.min(ra.y, rb.y) - STUB, Math.max(ra.y + ra.h, rb.y + rb.h) + STUB];
-      const shapes: Pt[][] = [[pa, pb], [pa, { x: pb.x, y: pa.y }, pb], [pa, { x: pa.x, y: pb.y }, pb],
-        [pa, { x: mx, y: pa.y }, { x: mx, y: pb.y }, pb], [pa, { x: pa.x, y: my }, { x: pb.x, y: my }, pb]];
-      for (const X of xs) {
-        shapes.push([pa, qa, { x: X, y: qa.y }, { x: X, y: qb.y }, qb, pb]);
-      }
-      for (const Y of ys) {
-        shapes.push([pa, qa, { x: qa.x, y: Y }, { x: qb.x, y: Y }, qb, pb]);
-      }
-      for (const raw of shapes) {
-        const pts = simplify(raw);
-        if (!pts) {
-          continue;
-        }
-        let ok = true, len = 0;
-        for (let i = 0; i < pts.length - 1 && ok; i++) {
-          const p = pts[i], q = pts[i+1];
-          if (Math.abs(p.x - q.x) > 0.5 && Math.abs(p.y - q.y) > 0.5) {
-            ok = false;   // not orthogonal
-          } else if (crosses(p, q, ra) || crosses(p, q, rb)) {
-            ok = false;
-          }
-          len += Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
-        }
-        if (!ok) {
-          continue;
-        }
-        // leaves A along its face's normal, and arrives at B moving INTO it
-        const u0 = unit(pts[0], pts[1]), u1 = unit(pts[pts.length-2], pts[pts.length-1]);
-        if (u0.x * da.x + u0.y * da.y < 0.99 || u1.x * db.x + u1.y * db.y > -0.99) {
-          continue;
-        }
-        const score = len + (pts.length - 2) * BEND_COST;
-        // A tie goes to the shape tried FIRST — the Z through the middle of the gap is listed before the
-        // detours, so equal-length routes turn halfway across rather than hugging one card.
-        if (score < bestScore - 0.5) { bestScore = score; best = pts; }
-      }
-    }
-  }
-  return best ?? [facePoint(ra, sa ?? 'right'), facePoint(rb, sb ?? 'left')];
-}
-// The route for two boxes and their pins: the plain elbow when neither end is pinned, else the router.
-function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
-  return sa || sb ? pinnedRoute(ra, sa, rb, sb) : route(ra, rb);
-}
 // The ONE place an edge's geometry is computed, so the painter, the label, the bar and the inline
 // editor can never disagree about where the line is.
 // A line to a card tucked inside a FOLDED section attaches to that section's pill instead (firstVisible), and
@@ -266,6 +76,7 @@ function edgeEnd(id: string): MindNode | null {
   const v = firstVisible(n);
   return isHidden(v) ? null : v;
 }
+
 export function edgeGeometry(e: BoardEdge): Geometry | null {
   const from = edgeEnd(e.from), to = edgeEnd(e.to);
   if (!from || !to) {
@@ -274,9 +85,11 @@ export function edgeGeometry(e: BoardEdge): Geometry | null {
   const pa = from.id === e.from ? e.fromPort : undefined, pb = to.id === e.to ? e.toPort : undefined;
   return polyline(routeFor(rimRect(from), pa, rimRect(to), pb), trim(e.fromCap), trim(e.toCap));
 }
+
 // The port under a world point, if any: within PORT_SNAP screen px of a card's floating port dot OR of
 // the middle of that face — what a line end dropped there pins to (features/edge-tools.ts).
 const PORT_SNAP = 16;
+
 export function portAt(n: MindNode, p: Pt): EdgeSide | null {
   const k = state.view.k || 1, r = rimRect(n);
   let best: EdgeSide | null = null, bestD = PORT_SNAP / k;
@@ -292,6 +105,7 @@ export function portAt(n: MindNode, p: Pt): EdgeSide | null {
 // own weight it looks like the same pen drew it. Wide and shallow rather than a long thin dart.
 const ARROW_LEN = 11;    // tip → base, along the line
 const ARROW_W = 22;      // corner → corner, across it
+
 function arrowHead(tip: Pt, dir: Pt, ink: string): string {
   const nx = -dir.y, ny = dir.x;
   const bx = tip.x - dir.x * ARROW_LEN, by = tip.y - dir.y * ARROW_LEN;
@@ -299,11 +113,14 @@ function arrowHead(tip: Pt, dir: Pt, ink: string): string {
   const x2 = bx - nx * ARROW_W * 0.5, y2 = by - ny * ARROW_W * 0.5;
   return `<path class="fe-arrow" style="stroke:${ink}" d="M ${x1} ${y1} L ${tip.x} ${tip.y} L ${x2} ${y2}"/>`;
 }
+
 // The other terminator: a filled disc ON the rim — "attaches here", with no direction claimed.
 const DOT_R = ARROW_W * 0.28;
+
 function capDot(at: Pt, ink: string): string {
   return `<circle class="fe-dot" style="fill:${ink}" cx="${at.x}" cy="${at.y}" r="${DOT_R}"/>`;
 }
+
 // `dir` points INTO that end, which is what an arrowhead there needs; a dot ignores it.
 function endCap(cap: EdgeCap, at: Pt, dir: Pt, ink: string): string {
   return cap === 'arrow' ? arrowHead(at, dir, ink) : cap === 'dot' ? capDot(at, ink) : '';
@@ -315,6 +132,7 @@ export function connectable(id: string): boolean {
   const n = state.nodes.get(id);
   return !!n && !isStack(n);
 }
+
 // An edge is drawn when both ENDS are on the canvas — a card itself, or the folded section standing in for
 // it (edgeEnd) — and they aren't the same pill: a line between two cards of one folded section goes with them.
 export function edgeVisible(e: BoardEdge): boolean {
@@ -329,6 +147,7 @@ export function edgeVisible(e: BoardEdge): boolean {
 // Each leaves the card's rim level with its own link text (read off the rendered anchor), so a card
 // with four links sends four lines you can tell apart.
 const LINK_INK = '#fff';
+
 function linkEdges(n: MindNode): string {
   const links = n.el?.querySelectorAll<HTMLElement>('a.wikilink');
   if (!links?.length) {
@@ -346,9 +165,9 @@ function linkEdges(n: MindNode): string {
     }
     const p1 = screenToWorld(r.left, r.top), p2 = screenToWorld(r.right, r.bottom);
     const y = clamp((p1.y + p2.y) / 2, n.y, n.y + nodeH(n));
-    const toRight = centre(target).x >= (p1.x + p2.x) / 2;
+    const toRight = centre(rimRect(target)).x >= (p1.x + p2.x) / 2;
     const from = { x: toRight ? n.x + nodeW(n) : n.x, y };
-    const s = segment(from, rimPoint(target, from), 0, ARROW_INSET);
+    const s = polyline([from, rimPoint(rimRect(target), from)], 0, ARROW_INSET);
     out += `<path class="fe" style="stroke:${LINK_INK}" stroke-dasharray="1 7" d="${s.d}"/>`
          + endCap('arrow', s.b, s.tipTan, LINK_INK) + capDot(s.a, LINK_INK);
   }
@@ -357,8 +176,11 @@ function linkEdges(n: MindNode): string {
 
 export function paintFreeEdges(): void {
   // Searching hides every line: dimmed cards are translucent, so lines behind them read as clutter.
-  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
-  let svg = '', hits = '', tools = '';
+  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgesHeldSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
+  let svg = '', held = '', hits = '', tools = '';
+  // A line with an end in hand rides in #dragLayer, above the cards in hand, so a dragged section's box can't
+  // cover the lines in it or leaving it — as resting lines are drawn above resting cards.
+  const inHand = ui.drag?.moved ? ui.drag.origins : null;
   // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
   // fill (inkFor).
   const plate = canvasSurface(), labelInk = inkFor(plate);
@@ -372,10 +194,11 @@ export function paintFreeEdges(): void {
     if (!g) {
       continue;
     }
+    const start = svg.length;
     const ink = colorFill(e.color) ?? 'var(--edge)';
     const sel = state.selEdges.has(e.id);
     const dash = e.dashed ? ' stroke-dasharray="7 6"' : '';
-    hits += `<path class="fe-hit" data-edge="${e.id}" d="${g.d}" stroke-width="${HIT_W}"/>`;
+    hits += `<path class="fe-hit" data-edge="${esc(e.id)}" d="${g.d}" stroke-width="${HIT_W}"/>`;
     // The selection ring, in the same language a card's is: the same line drawn thicker and SOLID
     // underneath, so a selected edge reads as outlined rather than merely recoloured.
     // With ONE edge selected its two end handles say so (FigJam); a multi-selection has no handles, so
@@ -413,8 +236,12 @@ export function paintFreeEdges(): void {
       const ta = trim(e.fromCap), tb = trim(e.toCap);
       const ha = { x: g.a.x + g.tailTan.x * ta, y: g.a.y + g.tailTan.y * ta };
       const hb = { x: g.b.x + g.tipTan.x * tb, y: g.b.y + g.tipTan.y * tb };
-      tools += `<circle class="fe-handle" data-handle="from" data-edge="${e.id}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
-      tools += `<circle class="fe-handle" data-handle="to" data-edge="${e.id}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
+      tools += `<circle class="fe-handle" data-handle="from" data-edge="${esc(e.id)}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
+      tools += `<circle class="fe-handle" data-handle="to" data-edge="${esc(e.id)}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
+    }
+    if (inHand && (inHand.has(edgeEnd(e.from)!.id) || inHand.has(edgeEnd(e.to)!.id))) {
+      held += svg.slice(start);
+      svg = svg.slice(0, start);
     }
   }
   // The four rings on the selected card. On SELECTION, never on hover: a ring that only appears once
@@ -460,6 +287,7 @@ export function paintFreeEdges(): void {
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);
   }
   freeEdgesSvg.innerHTML = svg;
+  freeEdgesHeldSvg.innerHTML = held;
   freeEdgeHitsSvg.innerHTML = hits;
   togglesSvg.innerHTML = tools;
 }

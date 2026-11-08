@@ -16,8 +16,7 @@
 // target, and its own undo bookkeeping for the half that isn't a node (history.ts's touchCanvas).
 import { state, setStatus, type MindNode, stage } from '../core/state.js';
 import { nodeLabel, isLockedEffective, ancestors } from '../utils/model.js';
-import { record, touchCanvas, commitStep } from './history.js';
-import { scheduleSaveBoard } from '../data/board.js';
+import { mutate } from './mutate.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges } from '../view/free-edges.js';
@@ -26,7 +25,6 @@ import { placePopover, closeOnOutside } from '../utils/dom.js';
 import { colorFill, THEME_BG } from '../view/color.js';
 import { scopeRootNode } from '../nav/scope.js';
 import { paleFill, inkFor } from '../utils/ink.js';
-import { scheduleSave } from '../data/save.js';
 
 const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
 const pop = document.getElementById('canvasColorPop');
@@ -76,17 +74,8 @@ function setColor(color: string): void {
   if (state.readOnly) { setStatus('Read-only — can’t recolour the canvas'); return; }
   const owner = canvasOwner();
   if (owner && isLockedEffective(owner)) { setStatus(`“${nodeLabel(owner)}” is locked`); return; }
-  if (owner) {
-    record([owner.id], () => applyColor(color));
-    repaint();
-    scheduleSave();
-  } else {
-    touchCanvas();
-    applyColor(color);
-    commitStep();
-    repaint();
-    scheduleSaveBoard();
-  }
+  // Inside an open section the colour is that section's node; at the top level it's the map's own.
+  mutate(owner ? [owner.id] : [], () => { applyColor(color); repaint(); }, { reflow: 'none', canvas: !owner });
   // The COMMIT path only (a chip click, or the native sheet's `change`) — applyColor also runs per
   // `input` event during a live drag, and remembering there would bury the real picks under a drag's
   // worth of intermediates. Same rule as properties.ts's own setColor.

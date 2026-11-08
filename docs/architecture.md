@@ -156,17 +156,18 @@ keep that property when touching `parseFM`/`fmSet`/`fmRemove`.
 `annotation`, `query`) to `card` and a legacy `mm_layout: frame*` to `section`. A card never has children —
 structure inside a thought is written into the note (`- [ ]` tasks tick in place) — and a section's children
 sit wherever they were put: there are no arrangements, no outliner, no checklist mode. Four rules hold it:
-- **One drop rule** (`view/layout.ts sectionAt`): on release, each dragged root belongs to the INNERMOST
-  expanded, unlocked section its centre is in, else the top level (the open section while one is open). The
+- **One drop rule** (`view/layout.ts sectionAt`, `dropSection` in features/drag.ts): on release, a lone dragged
+  card belongs to the INNERMOST expanded, unlocked section its centre is in, and a MULTI-selection all goes to
+  the one under the POINTER (where you aim the group, even for its cards whose centres land outside), else the
+  top level (the open section while one is open). The
   preview lights that section (`.drop-target`) and `drag.dropTarget` carries it so `effectiveColor` can preview
   the inherited colour. ⌥ over a plain card is the one exception: a MERGE into its note. Text dragged out of
   an editor and ⌘V land by the same test (paste goes where the POINTER is, not into the selection).
 - **Cards can't hold cards, however it's asked** — `holderOf(id)` turns any "create in X" request into X's
   section (X itself if it is one), and every create/paste path goes through it.
-- **A section GROWS to hold what's put in it** (`growSectionsToHold`, `features/float-bar.ts`): after a drop,
-  a create, a paste or an edit that leaves a card past its section's edge, the section widens outward (never
-  shrinks, never moves a side that already clears). A section clips (`overflow:hidden`), so the alternative is
-  a card that is in the section and out of sight.
+- **A section is NEVER resized automatically** — only by the user's resize handles or Fit / "Resize to fit"
+  (`autoSizeSelection`). A drop, create, paste, edit, tidy or arrival that leaves a card past its section's
+  edge leaves it there, clipped (`overflow:hidden`) until the user resizes: a section's size is the user's call.
 - **A card with children on disk is MIGRATED on load** (`data/migrate.ts foldCardsIntoSections`): it
   becomes a section holding them (only `mm_type` changes), and each converted section — plus any section that was
   drawn as a row inside one — lays its cards out ONCE in a column in their old order (`kidOrder`) and sizes
@@ -183,8 +184,7 @@ card whose centre is now in it is reparented to it (`sectionAt`, so the innermos
 card of its own whose centre is now outside goes to whatever it is over — a shrink lets go of a card rather
 than hiding it under the clip. A SECTION is only collected when its whole box is inside: by its centre alone a
 big section could be swallowed by a small one laid across it. Locked and hidden things stay put. A move or a
-create then grows sections around what they took in (`growSectionsToHold`); a resize doesn't — the user just
-chose that size — but a card it let go of grows the section it landed in.
+create never resizes the section that took a card in, nor the one a let-go card lands in.
 
 **A drop can FILE cards somewhere off the canvas** (`chuteAt`/`fileAway`, features/drag.ts): let go with the
 POINTER over a folded section's pill and the dragged cards go into it, in a column of their own right of its
@@ -205,7 +205,7 @@ pill filled with the section's full colour, so its text takes that colour's own 
 naming, renaming, describing or un-naming a section never moves the box or anything in it, and nothing in
 the geometry (interior, drops, lines) has to know about the label. What does: anything
 that FITS a box around sections — `subtreeBox` counts `sectionLabelH` (the pill's measured height + its gap)
-above an expanded labelled section, so Auto-size, grow-to-hold, Group and the load migration's column leave
+above an expanded labelled section, so Auto-size, Group and the load migration's column leave
 a nested section's name room instead of clipping it. **A section FOLDS to its label pill** (`isSectionFold`,
 `.section-folded`): see "Collapse folds a card to a CHIP and a section to its PILL" below.
 
@@ -252,7 +252,7 @@ cards), and `isStack` is a flag beside the kind — `stack: true` in board.json 
 fold lives, since how a folder is DRAWN is arrangement, not content. A new, unnamed one's folder is `Stack`,
 `Stack 2`… (`desiredFileFor`). Its child ORDER (`kidOrder`, board.json `order`) is the pile, bottom first.
 - **It isn't a box.** `isSection` is false for it (as for a folded section), so nothing that asks "is this a
-  box?" — the drop rule `sectionAt`, `settleSections`, grow-to-hold, Fit, the content wrapper, the resize
+  box?" — the drop rule `sectionAt`, `settleSections`, Fit, the content wrapper, the resize
   handles — sees one. `canOpen` and `canFold` say no too: a pile has no interior to open and nothing to tuck
   away. A rule that must reach a stack keys on `isStack`.
 - **Its cards are HIDDEN while it's piled** — `isHidden`'s third term, `p.stack && ui.fan !== p.id` — so they
@@ -383,9 +383,8 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   dropped by the existing ONE drop in `paintNode` (it's `isHidden`, so `hostsContent` goes false), and
   `edges.ts` shares the walk so connectors unclip in step. The `hostSectionId` cache must be cleared on every
   scope change, or elements keep being placed into a wrapper that's about to go.
-- **Leaving GROWS the section to hold what you put in it** (`growSectionsToHold`), and only when something really
-  sticks out: inside, the whole viewport was fair game, so a card can end up outside the box it goes back to
-  being, where `overflow:hidden` would clip it into invisibility.
+- **Leaving changes nothing**: inside, the whole viewport was fair game, so a card can end up outside the box
+  it goes back to being. It stays in the section, clipped, until the user resizes the box (no auto-resize).
 - **The stack IS the crumb path** (`openPathTo`), not just what you clicked through, so opening a deep section
   from the right-click menu still reads `Map › A › B › C`. Levels you really stepped through remember their camera and
   selection, so leaving one cuts back to it; levels rebuilt from a URL don't (their ids are gone) and re-fit
@@ -393,11 +392,7 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 - **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no node field.
   A FOLDED section stays folded: while you stand in it its interior is the canvas whatever its fold says
   (`isHidden` asks about the open section before the fold; `containerHost` and paintNode's nesting treat it as
-  the canvas too), and leaving lands you back at the same pill. The one thing that IS recorded is the
-  grow-to-fit on the way out — measured against the BOX a folded section unfolds to, never its pill, so a
-  visit that moved nothing moves nothing — and ⌘Z un-grows it without teleporting you between scopes. It is
-  PINNED (`growSectionsToHold` with `pin`): the box grows only right and down, and cards that stuck out past its
-  left or top edge are brought in as one group instead, so the section you step back out to is never moved. Allowed in
+  the canvas too), and leaving lands you back at the same pill, the box neither moved nor resized. Allowed in
   read-only and on a LOCKED section (`activateTab`'s exemption: looking inside the box isn't changing it) —
   though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
   `⌘↓`, the float bar's Open and the right-click menu as the ways in (and a folded pill's double-click).
@@ -535,12 +530,17 @@ re-reads from disk but guards against clobbering in-progress typing/renaming and
 own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`settleSave`) and refuses to
 reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
 it used to read over an edit made just before switching away (it cancelled the queued save instead).
+It reloads only when the folder CHANGED (`store.changed`, FSA only): the store keeps a stamp of every file's
+size and modification time (`folderStamp`), taken during each full load and updated by its own writes, so a
+refocus with nothing new keeps the board as it is — undo history included — instead of re-reading it all.
+The selection survives a reload by PATH, never by id: ids are minted fresh per load, so a note added or
+deleted elsewhere shifts them, and the old id would select a neighbour.
 
 **The phone INBOX is a folder** — `Inbox/` at the top of a FOLDER map, i.e. an ordinary section (the user
 guide is [inbox.md](inbox.md): iCloud Drive plus an iOS Shortcut that saves a dated `.md` there). Nothing
 about it is special-cased in the model; three small pieces make it work. (1) A note that arrives with no
-position in a section that already holds placed cards is stacked in a column of its own just RIGHT of them,
-top-aligned, and the section only grows (`arrangeSections` with `fresh`, `data/persistence.ts`) — the old rule
+position in a section that was already placed is stacked in a column inside its box from the top-left, over
+its cards if need be, and the section keeps its size (`arrangeSections` with `fresh`, `data/persistence.ts`) — the old rule
 arranged a section only when ALL its notes were new, so one new note fell to the top-level grid fallback and
 landed on whatever was there. Placed cards never move (principle 2). (2) `reloadFromDisk` diffs PATHS (ids
 are minted per load) and each folded section's unread count before and after, and `flashArrived` (`main.ts`)
@@ -818,7 +818,7 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
 (`utils/advance.ts advanceTitle`, tested — a `YYYY-MM-DD` date by one day with any weekday name beside it,
 else the last number up, keeping its padding; a card with no heading advances its first line), and it lands in
 the next slot of its ROW — to the right, at the gap the row already keeps from its left neighbour, past
-anything already there — with its section grown to hold it. Plain D stays an EXACT copy, just below: the two
+anything already there (its section is not resized for it). Plain D stays an EXACT copy, just below: the two
 are different jobs, so neither guesses which one you meant.
 
 **A TAG is an OBSIDIAN tag, and its job is FINDING cards** (`utils/tags.ts`, tested). Any word, nested with `/`;
@@ -1095,6 +1095,23 @@ with its 7px gap and its box-width cap divided back out. A folded section's pill
 world geometry that guides, drops and lines measure, and a visual scale would cover its neighbours.
 
 ## State and naming
+
+**An edit RUNS through `mutate()` (`features/mutate.ts`).** A one-shot edit — a command, a menu or bar
+button, a paste — is `mutate(ids, fn, { reflow, status?, edges?, canvas? })`, and the runner applies the rules
+each call site used to spell out: read-only refuses it (returning false, changing nothing), it is ONE undo
+step, the `reflow` (`remeasure` / `relayout` / `paint` / `none`) runs INSIDE that step so undo and redo
+restore what layout settled on, and it ends in `scheduleSave()`. Two kinds of edit stay outside it on
+purpose. GESTURES (drag, resize, inline edit, drawing a line, a text or image drag) last longer than one
+call, so they `touch()` as they go and `commitStep()` at their own boundary. FOLDING and the reveal a
+search or link does use `record()` directly, because they must work in read-only and `mutate` would
+refuse them. `record()` counts ANY open half of a step — nodes, canvas colour or the edge list — as an
+outer owner, so an edge-label session and a chip click inside it make one step, not two.
+
+**Pure logic lives in `utils/`, rendering and state in `view/` and `features/`.** A function that only
+computes — geometry, text, colour maths — takes plain values (a `Rect`, a string, `now`) and returns
+one, so vitest can pin it without a browser; the module that owns the DOM or `state` adapts nodes to
+those values and paints the result. `utils/edge-route.ts` is the model: the elbow router knows Rects and
+sides, `view/free-edges.ts` knows cards, the camera and the SVG.
 
 **The mutable `state` (`core/state.ts`) is the MAP:** `nodes` (id → node), `view` (`{x,y,k}`), selection (`selId`
 + `sel` Set), `readOnly`, `canvasColor`, the grid settings, … Every field is either the notes

@@ -329,3 +329,40 @@ export function hiddenLineCount(n: MindNode): number {
   const i = firstTextLine(lines);
   return i < 0 ? 0 : lines.slice(i + 1).filter(l => l.trim()).length;
 }
+
+// The heading of the FIRST non-blank line, which is the only one that can be a note's title — read
+// through headingOnLine above, so seeding, the caret and the strip below all read
+// one regex instead of three that have to be kept in agreement. `at` is the offset of the title's first
+// character into the WHOLE text, since that's what a caret is measured in: the heading need not be on
+// line 0 (a note may open with blank lines), and a marker length alone would then be off by them.
+export function headingOf(text: string): { at: number; title: string } | null {
+  const lines = text.split('\n');
+  const i = firstTextLine(lines);
+  if (i < 0) {
+    return null;
+  }
+  const h = headingOnLine(lines[i]);
+  if (!h) {
+    return null;
+  }
+  let start = 0;
+  for (let k = 0; k < i; k++) {
+    start += lines[k].length + 1;
+  }
+  return { at: start + h.markerLen, title: h.title };
+}
+
+// Where the caret goes. 'title' SELECTS the name so typing replaces it — which is what the old rename
+// editor's select-all did — but only the NAME, not the `# ` that marks it as one, or the first keystroke
+// would demote the card's title to a plain first line. An UNTITLED card has no name to select, so the
+// caret goes to the very start of the note — the one spot where typing `# Something` names it.
+export function caretIn(text: string, caret: 'title' | 'end'): [number, number] {
+  if (caret === 'end') {
+    return [text.length, text.length];
+  }
+  const h = headingOf(text);
+  if (!h) {
+    return [0, 0];
+  }
+  return [h.at, h.at + h.title.length];
+}

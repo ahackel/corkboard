@@ -197,6 +197,7 @@ export const world = byId('world');
 export const stage = byId('stage');
 // The free edges the user drew — see BoardEdge above and view/free-edges.ts.
 export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');
+export const freeEdgesHeldSvg = byId<SVGSVGElement>('freeEdgesHeld');
 // …and the layer BEHIND the cards that holds nothing but those edges' click targets — see index.html
 // and view/free-edges.ts for why the two halves of one edge live on opposite sides of the cards.
 export const freeEdgeHitsSvg = byId<SVGSVGElement>('freeEdgeHits');
