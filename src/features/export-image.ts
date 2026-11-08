@@ -1,8 +1,11 @@
-// Export the board, or the selection, as a picture: PNG, SVG or PDF.
+// Export the board, or the selection, as a picture: PNG or PDF.
 // The canvas DOM is cloned into an SVG <foreignObject> together with the page's own CSS, so the picture is
-// drawn by the very rules that draw the screen: no second renderer to drift. The SVG is that clone as is
-// (it shows in browsers; design tools that don't read <foreignObject> see nothing). PNG draws it into a
-// canvas; PDF wraps that canvas as a JPEG page (utils/pdf.ts), so its text is pixels, not type.
+// drawn by the very rules that draw the screen: no second renderer to drift. PNG draws that SVG into a
+// canvas; PDF wraps the canvas as a JPEG page (utils/pdf.ts), so its text is pixels, not type.
+// No SVG export: that SVG renders differently in every viewer (WebKit blows up emoji, design tools show
+// nothing), and a true vector one would need a second renderer.
+// The picture is cropped tight to what it shows, with no canvas behind it: transparent, except in the PDF,
+// where a JPEG can't be and the page is white paper.
 import { state, world, stage, setStatus, type MindNode } from '../core/state.js';
 import { ancestors, isHidden } from '../utils/model.js';
 import { store } from '../data/persistence.js';
@@ -10,16 +13,16 @@ import { downloadBlob } from '../utils/download.js';
 import { safeName } from '../utils/filenames.js';
 import { jpegPdf } from '../utils/pdf.js';
 import { edgeEnd } from '../view/free-edges.js';
-import { canvasSurface } from './canvas-color.js';
+import { xmlSafe } from '../utils/markdown.js';
 
-export type ImageFormat = 'png' | 'svg' | 'pdf';
+export type ImageFormat = 'png' | 'pdf';
 
 interface Picture { svg: string; w: number; h: number; }
 
-const PAD = 32;
 const SCALE = 2;                             // a retina-sharp PNG
 const MAX_SIDE = 16384, MAX_AREA = 1.6e8;    // past these, browsers hand back a blank canvas
 const XHTML = 'http://www.w3.org/1999/xhtml';
+const GRIPS = '.fh';                        // a card's invisible resize grips, which reach past its edge
 
 export async function exportImage(format: ImageFormat): Promise<void> {
   const pic = await picture();
@@ -28,15 +31,11 @@ export async function exportImage(format: ImageFormat): Promise<void> {
     return;
   }
   const name = safeName(store.name || 'corkboard') + '.' + format;
-  if (format === 'svg') {
-    downloadBlob(new Blob([pic.svg], { type: 'image/svg+xml' }), name);
-    return;
-  }
-  const canvas = await rasterize(pic);
   if (format === 'png') {
-    downloadBlob(await toBlob(canvas, 'image/png'), name);
+    downloadBlob(await toBlob(await rasterize(pic), 'image/png'), name);
     return;
   }
+  const canvas = await rasterize(pic, '#fff');
   const jpeg = new Uint8Array(await (await toBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
   const pdf = jpegPdf(jpeg, canvas.width, canvas.height, pic.w * 0.75, pic.h * 0.75);   // CSS px → pt
   downloadBlob(new Blob([pdf as BlobPart], { type: 'application/pdf' }), name);
@@ -51,22 +50,26 @@ async function picture(): Promise<Picture | null> {
     return null;
   }
   const ids = new Set(kept.map(n => n.id));
-  const box = worldBox(kept);
-  const w = Math.ceil(box.x1 - box.x0 + 2 * PAD), h = Math.ceil(box.y1 - box.y0 + 2 * PAD);
+  const edges = new Map(state.edges.map(e => [e.id, e]));
+  const keepLine = (g: SVGGElement): boolean => {
+    const e = edges.get(g.dataset.edge ?? '');
+    return sel.size === 0 || (!!e && ids.has(edgeEnd(e.from)?.id ?? '') && ids.has(edgeEnd(e.to)?.id ?? ''));
+  };
+  const lines = [...world.querySelectorAll<SVGGElement>('.fe-lines g[data-edge]')].filter(keepLine);
+  const box = worldBox([...kept.map(n => n.el!), ...lines]);
+  const w = Math.ceil(box.x1 - box.x0), h = Math.ceil(box.y1 - box.y0);
 
   const clone = world.cloneNode(true) as HTMLElement;
-  clone.style.transform = `translate(${PAD - box.x0}px,${PAD - box.y0}px)`;
+  clone.style.transform = `translate(${-box.x0}px,${-box.y0}px)`;
   clone.style.willChange = 'auto';
-  clone.querySelectorAll('#freeEdgeHits, #toggles, .fe-lines > :not(g[data-edge]), .fe-selring').forEach(e => e.remove());
+  clone.querySelectorAll(`#freeEdgeHits, #toggles, .fe-lines > :not(g[data-edge]), .fe-selring, ${GRIPS}`).forEach(e => e.remove());
   clone.querySelectorAll('.sel, .solo, .search-dim').forEach(e => e.classList.remove('sel', 'solo', 'search-dim'));
   if (sel.size) {
 
     // visibility, not removal: a selected card inside an unselected section must still show
     clone.querySelectorAll<HTMLElement>('[data-id]').forEach(e => { e.style.visibility = ids.has(e.dataset.id ?? '') ? 'visible' : 'hidden'; });
-    const edges = new Map(state.edges.map(e => [e.id, e]));
     clone.querySelectorAll<SVGGElement>('g[data-edge]').forEach(g => {
-      const e = edges.get(g.dataset.edge ?? '');
-      if (!e || !ids.has(edgeEnd(e.from)?.id ?? '') || !ids.has(edgeEnd(e.to)?.id ?? '')) {
+      if (!keepLine(g)) {
         g.remove();
       }
     });
@@ -77,23 +80,23 @@ async function picture(): Promise<Picture | null> {
   const body = getComputedStyle(document.body);
   root.style.cssText = stage.style.cssText;   // the canvas colour's custom properties live on #stage
   Object.assign(root.style, { position: 'relative', width: `${w}px`, height: `${h}px`, overflow: 'hidden',
-    background: canvasSurface(), fontFamily: body.fontFamily, color: body.color });
+    fontFamily: body.fontFamily, color: body.color });
   const style = document.createElementNS(XHTML, 'style');
   style.textContent = pageCss();
   root.append(style, clone);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">`
-    + `<foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(root)}</foreignObject></svg>`;
+    + `<foreignObject width="100%" height="100%">${xmlSafe(new XMLSerializer().serializeToString(root))}</foreignObject></svg>`;
   return { svg, w, h };
 }
 
 // In world units. Every descendant counts: tags and a section's label sit outside the node's own box.
-function worldBox(nodes: MindNode[]): { x0: number; y0: number; x1: number; y1: number } {
+function worldBox(els: Element[]): { x0: number; y0: number; x1: number; y1: number } {
   const o = world.getBoundingClientRect(), k = state.view.k;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const n of nodes) {
-    for (const el of [n.el!, ...n.el!.querySelectorAll('*')]) {
+  for (const top of els) {
+    for (const el of [top, ...top.querySelectorAll('*')]) {
       const r = el.getBoundingClientRect();
-      if (!r.width && !r.height) {
+      if ((!r.width && !r.height) || el.matches(GRIPS) || (el !== top && !paints(el))) {
         continue;
       }
       x0 = Math.min(x0, (r.left - o.left) / k); y0 = Math.min(y0, (r.top - o.top) / k);
@@ -101,6 +104,12 @@ function worldBox(nodes: MindNode[]): { x0: number; y0: number; x1: number; y1: 
     }
   }
   return { x0, y0, x1, y1 };
+}
+
+// Does this part of a card draw anything? An empty slot (a card's tag strip with no tags) still has a box,
+// and that box reaching past the card's edge would pad the crop.
+function paints(el: Element): boolean {
+  return el instanceof SVGElement || !!el.textContent?.trim() || !!el.querySelector('img, svg');
 }
 
 // An SVG drawn as an image may not fetch anything, so a picture must travel inside it.
@@ -137,7 +146,7 @@ function pageCss(): string {
   return css;
 }
 
-async function rasterize(pic: Picture): Promise<HTMLCanvasElement> {
+async function rasterize(pic: Picture, fill?: string): Promise<HTMLCanvasElement> {
   const img = new Image();
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pic.svg);
   await img.decode();
@@ -145,7 +154,12 @@ async function rasterize(pic: Picture): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(pic.w * s);
   canvas.height = Math.round(pic.h * s);
-  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const ctx = canvas.getContext('2d')!;
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   return canvas;
 }
 

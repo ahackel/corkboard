@@ -80,7 +80,7 @@ a card; drag a tag to another card to move it, off onto the board to remove it. 
 text and tags together, and a click on any tag puts it in the search.
 
 **To build, in order:** nothing queued. (Done: section names keep their screen size when
-zoomed out · the phone inbox · export the board or a selection as PNG, SVG or PDF from ⌘P.)
+zoomed out · the phone inbox · export the board or a selection as PNG or PDF from ⌘P.)
 
 **Cut — and why:**
 - *Sketch / pen layer* — drawing is not sorting.
@@ -88,6 +88,7 @@ zoomed out · the phone inbox · export the board or a selection as PNG, SVG or 
 - *Annotations* — a sticky on a sticky; a coloured card does the job.
 - *Routed lines with ports and junction points* — a line only has to say "these belong together".
   Lines that reroute themselves broke principle 2.
+- *SVG export* — it could only wrap HTML, which each viewer draws differently (or not at all); PNG does the job.
 - *The permanent toolbar* — replaced by ⌘P and the selection bar.
 - *The help map* — the palette lists every action with its shortcut; that is the reference.
 - *Outline view (and its phone editor)* — built for working on a phone; the phone is an inbox now,

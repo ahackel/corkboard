@@ -13,6 +13,14 @@ export function esc(s: unknown): string {
   return String(s).replace(/[&<>"']/g, c => ESC_MAP[c]);
 }
 
+// XMLSerializer copies characters XML forbids (a control character pasted into a note, a lone surrogate)
+// straight through, and one of them makes a whole SVG undecodable (features/export-image.ts).
+export function xmlSafe(s: string): string {
+
+  // eslint-disable-next-line no-control-regex -- matching control characters is the point
+  return s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
 // A PLAIN text run: its `#tags` (utils/tags.ts — Obsidian's, so a tag here is one there) set apart, and
 // emphasis on the text between them. Tags first, so a `#snake_case_tag` isn't read as emphasis.
 function mdEmphasis(s: string): string {

@@ -325,9 +325,14 @@ function paletteCommands(): Command[] {
     { label: 'Canvas colour…', keywords: 'background', when: () => !state.readOnly, run: () => byId('canvasColorBtn').click() },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
     { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
-    ...(['png', 'svg', 'pdf'] as ImageFormat[]).map(f => ({
+    ...(['png', 'pdf'] as ImageFormat[]).map(f => ({
       label: `Export ${state.sel.size ? 'the selection' : 'the board'} as ${f.toUpperCase()}`, keywords: 'picture image download save print share',
-      run: () => { exportImage(f).catch(() => setStatus('Export failed')); } })),
+      run: () => {
+        exportImage(f).catch((e: unknown) => {
+          console.error(e);
+          setStatus(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+        });
+      } })),
   ];
 }
 setPaletteSource(paletteCommands);

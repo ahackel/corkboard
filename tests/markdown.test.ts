@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderBodyHTML, taskProgress, toggleTaskAt, appendMd } from '../src/utils/markdown.js';
+import { renderBodyHTML, taskProgress, toggleTaskAt, appendMd, xmlSafe } from '../src/utils/markdown.js';
 
 describe('renderBodyHTML', () => {
   it('draws a rule for ---, ***, ___ — even straight under a line of text', () => {
@@ -83,5 +83,11 @@ describe('appendMd', () => {
   it('adds to the end of a note over one blank line, or is the whole of an empty one', () => {
     expect(appendMd('a\n\n', '![](x.png)')).toBe('a\n\n![](x.png)');
     expect(appendMd('  ', '![](x.png)')).toBe('![](x.png)');
+  });
+});
+
+describe('xmlSafe', () => {
+  it('drops the characters XML forbids and keeps tabs, newlines and emoji', () => {
+    expect(xmlSafe('a\u000Bb\u0001c\t\n😀\uD83D')).toBe('abc\t\n😀');
   });
 });
