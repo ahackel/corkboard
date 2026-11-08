@@ -7,7 +7,8 @@
 // this module skips the floating position math there and lets CSS own it.
 import { state, stage, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
-import { record, touch } from './history.js';
+import { touch } from './history.js';
+import { mutate } from './mutate.js';
 import { subtreesBox, moveSubtreeTo } from '../view/layout.js';
 import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
@@ -19,7 +20,7 @@ import { canTidy, tidyMenuEntries } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, parentOf, nodesOf, subtreeIds } from '../utils/model.js';
 import { canOpen, canEnter, isScopeRoot } from '../nav/scope.js';
-import { labelEl, relayout, animateLayout } from '../main.js';
+import { labelEl, animateLayout } from '../main.js';
 import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { MIN_SECTION_W, MIN_SECTION_H } from './resize.js';
@@ -28,7 +29,6 @@ import { openSection } from '../nav/sections.js';
 import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';
 import { selectedIds, selectNode } from './selection.js';
 import { setLockedSelection, anyLocked } from './lock.js';
-import { scheduleSave } from '../data/save.js';
 
 
 const bar = byId('floatBar');
@@ -124,7 +124,7 @@ export function autoSizeSelection(): void {
     return;
   }
   // animated, like a fold: the box glides to its new size (main.ts animateLayout)
-  record(ids, () => animateLayout(() => {
+  mutate(ids, () => animateLayout(() => {
     for (const id of ids){
       const n = state.nodes.get(id);
       if (!n) {
@@ -138,8 +138,7 @@ export function autoSizeSelection(): void {
       }
       n.dirty = true; n.dirtyLayout = true;
     }
-  }));
-  scheduleSave();
+  }), { reflow: 'none' });
 }
 // Wrap the selected cards in a fresh section: the section lands as a child of the nearest
 // NON-selected ancestor of the first selected card (walking up past any selected ancestor —
@@ -163,7 +162,7 @@ export function groupSelectionIntoSection(): void {
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t group here'); return; }
 
   let sectionId = '';
-  record([], () => {
+  mutate([], () => {
     const { x0, y0, x1, y1 } = subtreesBox(nodes);
     const snapStep = gridSnap();
     const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
@@ -181,9 +180,8 @@ export function groupSelectionIntoSection(): void {
     state.nodes.set(sectionId, section);
     for (const n of nodes) { touch(n.id); n.parent = sectionId; n.dirty = true; }
     settleSections([sectionId]);   // …and whatever else its box now covers
-  });
-  relayout(); selectNode(sectionId); scheduleSave();
-  setStatus(`Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a section`);
+  }, { reflow: 'relayout', status: `Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a section` });
+  selectNode(sectionId);
 }
 // Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
 function markOpen(): void {

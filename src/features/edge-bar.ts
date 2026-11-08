@@ -14,6 +14,7 @@ import { selectedEdges, leadEdge } from './edge-tools.js';
 import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { touchEdges, commitStep } from './history.js';
+import { mutate } from './mutate.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { isInteracting } from './float-bar.js';
 import { paletteChipsHTML } from './properties.js';
@@ -108,11 +109,8 @@ function wire(): void {
       return;
     }
     const want = chip.dataset.dash === '1';
-    touchEdges();
-    for (const e of es) {
-      e.dashed = want;
-    }
-    closeDashPop(); commit(); commitStep();
+    mutate([], () => { for (const e of es) { e.dashed = want; } }, { edges: true, reflow: 'none' });
+    closeDashPop(); commit();
   };
   arrowsBtn.onclick = (ev) => { ev.stopPropagation(); arrowPop.classList.contains('open') ? closeArrowPop() : openArrowPop(); };
   arrowChips.onclick = (ev) => {
@@ -123,18 +121,18 @@ function wire(): void {
       return;
     }
     const cap = chip.dataset.cap as EdgeCap;
-    touchEdges();
+    mutate([], () => {
+      for (const e of es) {
+        if (col.dataset.end === 'from') {
+          e.fromCap = cap;
+        } else {
+          e.toCap = cap;
+        }
+      }
+    }, { edges: true, reflow: 'none' });
     // The picker stays OPEN: the two ends are two choices, and closing after the first would make
     // setting both a matter of reopening the same menu.
-    for (const e of es) {
-      if (col.dataset.end === 'from') {
-        e.fromCap = cap;
-      } else {
-        e.toCap = cap;
-      }
-    }
     commit(); openArrowPop();
-    commitStep();
   };
 
   colorBtn.onclick = (ev) => { ev.stopPropagation(); colorPop.classList.contains('open') ? closeColorPop() : openColorPop(); };
@@ -144,11 +142,8 @@ function wire(): void {
     if (!sw || !es.length) {
       return;
     }
-    touchEdges();
-    for (const e of es) {
-      e.color = sw.dataset.color!;
-    }
-    closeColorPop(); commit(); commitStep();
+    mutate([], () => { for (const e of es) { e.color = sw.dataset.color!; } }, { edges: true, reflow: 'none' });
+    closeColorPop(); commit();
   };
   closeOnOutside(colorPop, colorBtn, closeColorPop);
   closeOnOutside(arrowPop, arrowsBtn, closeArrowPop);

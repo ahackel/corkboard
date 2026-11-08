@@ -9,12 +9,11 @@ import { ui } from '../core/ui-state.js';
 import { screenToWorld, fit } from '../view/camera.js';
 import { createNode, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
-import { record } from './history.js';
+import { mutate } from './mutate.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
 import { syncOpenEditor } from './inline-edit.js';
 import { esc, stripImageRef } from '../utils/markdown.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
-import { relayout } from '../main.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
 // — this creates a deliberate two-way import cycle with float-bar.ts (which imports openMenu /
 // copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
@@ -25,7 +24,6 @@ import { nodeLabel } from '../utils/model.js';
 import { byId, placeInViewport } from '../utils/dom.js';
 import { exitScope, goToScopeDepth } from '../nav/sections.js';
 import { selectAll } from './selection.js';
-import { scheduleSave } from '../data/save.js';
 
 const menu = document.createElement('div');
 menu.id = 'ctxMenu';
@@ -89,16 +87,14 @@ export function copyFilePath(n: MindNode): void {
 // Remove the image's markdown reference from the card body. The file itself stays: a note inside a
 // folded section (not in memory) may still show it, and an undo has to find it there.
 function removeImage(n: MindNode, path: string): void {
-  if (state.readOnly || !path) {
+  if (!path) {
     return;
   }
-  record([n.id], () => {
+  mutate([n.id], () => {
     n.body = stripImageRef(n.body, path);
     n.dirty = true;
-  });
-  syncOpenEditor(n);
-  relayout(); scheduleSave();
-  setStatus('Image removed');
+    syncOpenEditor(n);
+  }, { reflow: 'relayout', status: 'Image removed' });
 }
 // Copy the bitmap to the clipboard. Browsers only accept PNG ClipboardItems, so anything else is
 // re-encoded via a canvas first. Remote CORS-tainted images fail → status message.

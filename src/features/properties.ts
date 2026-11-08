@@ -4,12 +4,11 @@
 // paint / save contract. Also exports the swatch-row helpers the canvas-colour picker shares.
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { record } from './history.js';
+import { mutate } from './mutate.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
 import { SWATCH_BG, PICKER_ROWS } from '../view/color.js';
-import { scheduleSave } from '../data/save.js';
 
 export interface PropEls {
   colors: HTMLElement;
@@ -125,18 +124,17 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
     if (!ids.length) {
       return;
     }
-    record(ids, () => {
+    mutate(ids, () => {
       for (const id of ids) {
         applyColor(id, color);
       }
-    });
+    }, { reflow: 'paint' });
     // Deliberately here and not in applyColor: this is the COMMIT path (a chip click, or the native
     // sheet's `change`), while applyColor also runs per `input` event during a live drag — remembering
     // there would bury the real picks under a drag's worth of intermediate colours.
     rememberColor(color);
     renderRecents();   // a colour just picked from the sheet becomes a chip immediately
     markSwatch();
-    paintAll(); scheduleSave();
   }
   function editableIds(): string[] { return getIds().filter(id => !isLockedEffective(state.nodes.get(id)!)); }
   function applyColor(id: string, color: string): void {

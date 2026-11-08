@@ -13,7 +13,8 @@ import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
 import { paintAll, relayout, remeasure } from '../main.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
-import { touch, touchEdges, commitStep, record } from './history.js';
+import { touch, touchEdges, commitStep } from './history.js';
+import { mutate } from './mutate.js';
 import { SPACING, slidePast } from '../utils/guides.js';
 import { boxOf } from './guides.js';
 import { growSectionsToHold } from './float-bar.js';
@@ -125,7 +126,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
   const p = parentId ? state.nodes.get(parentId) : undefined;
   if (p && isLockedEffective(p)) { setStatus('Locked — can’t add a child'); return []; }
   const made: MindNode[] = [];
-  record([parentId], () => {
+  mutate([parentId], () => {
     if (p?.collapsed) {
       p.collapsed = false;   // reveal the new cards
     }
@@ -139,11 +140,9 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
     let y = at.y;
     for (const n of made) { n.y = y; y += nodeH(n) + LIST_GAP; }
     growSectionsToHold(made.map(n => n.id));
-    relayout();
-    setSelectionSet(made.map(n => n.id));
-    made.forEach(popIn);
-    scheduleSave();
-  });
+  }, { reflow: 'relayout' });
+  setSelectionSet(made.map(n => n.id));
+  made.forEach(popIn);
   return made;
 }
 // Make a new unconnected node at (x,y) and render it, but DON'T select / rename / save yet — the
@@ -542,11 +541,10 @@ export function deleteNode(id: string): void {
   if (afterReading([id], () => deleteNode(id))) {
     return;
   }
-  record([], () => {                 // ids are touched inside deleteNodes
+  mutate([], () => {                 // ids are touched inside deleteNodes
     deleteNodes(subtreeIds(id));
-    selectNode(null); relayout();
-    scheduleSave();
-  });
+    selectNode(null);
+  }, { reflow: 'relayout' });
 }
 // Undo a creation that never became a card — Escape out of a fresh card's first edit, or clicking away
 // from one nothing was typed into. Not a delete from the user's side, and not one in the history
@@ -573,12 +571,11 @@ export function deleteSelection(): void {
   if (afterReading(ids, deleteSelection)) {
     return;   // a folded section's notes first (see deleteNode)
   }
-  record([], () => {                 // ids are touched inside deleteNodes
+  mutate([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
     deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
-    relayout(); applySelection(); scheduleSave();
-  });
-  setStatus(`Deleted ${ids.length} card${ids.length===1?'':'s'}`);
+  }, { reflow: 'relayout', status: `Deleted ${ids.length} card${ids.length===1?'':'s'}` });
+  applySelection();
 }
 // A node is safe to delete-and-promote when it's unlocked, its own parent isn't locked (the
 // promoted children need to land there), and none of its direct children are locked (a locked
@@ -617,7 +614,7 @@ export function deleteSelectionKeepChildren(): void {
     return;   // the children it keeps must exist
   }
   const promoted = new Set<string>();
-  record([], () => {
+  mutate([], () => {
     for (const id of ids) {
       const n = state.nodes.get(id);
       if (!n) {
@@ -639,14 +636,11 @@ export function deleteSelectionKeepChildren(): void {
         state.toDelete.push(n.file);
       }
     }
-  });
+  }, { reflow: 'relayout', status: `Ungrouped ${ids.length} section${ids.length===1?'':'s'}` });
   for (const id of ids) {
     promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
   }
-  relayout();
   setSelectionSet(promoted);
-  scheduleSave();
-  setStatus(`Ungrouped ${ids.length} section${ids.length===1?'':'s'}`);
 }
 // Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
 // source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it

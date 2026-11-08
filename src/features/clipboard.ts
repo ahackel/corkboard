@@ -22,17 +22,16 @@ import { detachParentId } from '../nav/scope.js';
 import { holderOf } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
 import { mkNode, deleteSelection } from './crud.js';
-import { touch, record } from './history.js';
+import { touch } from './history.js';
+import { mutate } from './mutate.js';
 import { cancelDragRestore } from './drag.js';
 import { imageExtractInProgress } from './image-extract.js';
 import { cardTextDrag } from './text-drag.js';
 import { downloadBlob } from '../utils/download.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { readAll, afterReading } from '../data/lazy.js';
-import { remeasure } from '../main.js';
 import { snapPt } from '../view/geometry.js';
 import { setSelectionSet, selectedIds } from './selection.js';
-import { scheduleSave } from '../data/save.js';
 
 const MARK = '<!-- corkboard-card: ';
 // Read side accepts the app's former name too, so a payload copied from an older build (or
@@ -161,7 +160,7 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
     return true;
   }
   const rootIds: string[] = [];
-  record([], () => {
+  mutate([], () => {
     const holder = holderOf(at.parent);
     const parentNode = holder ? state.nodes.get(holder) : undefined;
     if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }   // reveal the drop
@@ -189,12 +188,8 @@ export function tryPasteCards(text: string, at: { sx: number | null; sy: number 
       // doesn't inherit createNode's own default.
       n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : newIds.get(c.p.mm.parent)!;
     }
-    // paint first so the new cards have real DOM heights, then lay out, then commit
-    remeasure();
-    setSelectionSet(rootIds);
-    scheduleSave();
-  });
-  setStatus(`Pasted ${cards.length} card${cards.length === 1 ? '' : 's'}`);
+  }, { reflow: 'remeasure', status: `Pasted ${cards.length} card${cards.length === 1 ? '' : 's'}` });
+  setSelectionSet(rootIds);
   return true;
 }
 

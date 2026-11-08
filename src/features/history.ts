@@ -172,7 +172,8 @@ export function commitStep(): void {
 // Sugar for one-shot synchronous ops. Re-entrant: called while another step is already
 // pending (e.g. deleteNode inside a live drag), it only touches — the outer owner commits.
 export function record(ids: Iterable<string | null | undefined>, fn: () => void): void {
-  const owner = !pending;
+  // Any open half — nodes, canvas or edges (an edge-bar editing session) — means an outer owner.
+  const owner = !pending && pendingCanvas === null && !pendingEdges;
   touch(...ids);
   fn();
   if (owner) {

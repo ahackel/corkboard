@@ -8,14 +8,15 @@ import { ui, isTypingInField } from '../core/ui-state.js';
 import { store } from '../data/persistence.js';
 import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
 import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
-import { relayout, remeasure } from '../main.js';
+import { relayout } from '../main.js';
 import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { appendMd } from '../utils/markdown.js';
 import { nodeLabel } from '../utils/model.js';
 import { autosizeBody, syncOpenEditor } from './inline-edit.js';
-import { touch, record } from './history.js';
+import { touch } from './history.js';
+import { mutate } from './mutate.js';
 import { tryPasteCards, cardsToPayload } from './clipboard.js';
 import { isSection, sectionAt } from '../view/layout.js';
 import { classMarker } from '../utils/dom.js';
@@ -114,13 +115,11 @@ async function appendImagesToNode(id: string, files: FileList | File[]): Promise
   }
   setStatus('Adding image…');
   const md = await markdownForImages(imgs);
-  record([id], () => {
+  mutate([id], () => {
     n.body = appendMd(n.body, md);
     n.dirty = true;
-  });
-  syncOpenEditor(n);
-  remeasure(); scheduleSave();
-  setStatus(addedMsg(imgs.length));
+    syncOpenEditor(n);
+  }, { reflow: 'remeasure', status: addedMsg(imgs.length) });
 }
 // Insert images at the caret in the in-card body editor (used by paste / drop onto it).
 async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
@@ -254,9 +253,8 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
       if (!ok || !cur || cur.body !== text) {
         return;   // gone or edited meanwhile → leave it alone
       }
-      record([cur.id], () => { cur.body = `![](${text})`; cur.dirty = true; });
-      relayout(); scheduleSave();
-      setStatus('Pasted image link');
+      mutate([cur.id], () => { cur.body = `![](${text})`; cur.dirty = true; },
+        { reflow: 'relayout', status: 'Pasted image link' });
     });
     }
     return;

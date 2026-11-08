@@ -13,6 +13,7 @@ import { makeEdge, scheduleSaveBoard } from '../data/board.js';
 import { paintFreeEdges, connectable, portAt } from '../view/free-edges.js';
 import { syncEdgeBar, startLabelEdit } from './edge-bar.js';
 import { touchEdges, commitStep } from './history.js';
+import { mutate } from './mutate.js';
 import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
 import { paintAll } from '../main.js';
@@ -93,14 +94,13 @@ export function connectSelection(): void {
   const ids = [...state.sel];
   if (ids.length < 2) { setStatus('Select two cards to connect — or drag from a ring on the selected card.'); return; }
   let made = 0;
-  touchEdges();
-  for (let i = 0; i < ids.length - 1; i++) {
-    if (addEdge(ids[i], ids[i+1])) {
-      made++;
+  mutate([], () => {
+    for (let i = 0; i < ids.length - 1; i++) {
+      if (addEdge(ids[i], ids[i+1])) {
+        made++;
+      }
     }
-  }
-  paintAll();
-  commitStep();
+  }, { edges: true, reflow: 'paint' });
   setStatus(made ? `Connected ${made + 1} cards` : 'Already connected');
 }
 
@@ -290,13 +290,10 @@ export function deleteSelectedEdge(): boolean {
   if (!ids.length) {
     return false;
   }
-  touchEdges();
-  state.edges = state.edges.filter(e => !state.selEdges.has(e.id));
-  state.selEdges.clear();
-  scheduleSaveBoard();
-  paintAll();
+  const done = mutate([], () => {
+    state.edges = state.edges.filter(e => !state.selEdges.has(e.id));
+    state.selEdges.clear();
+  }, { edges: true, reflow: 'paint', status: ids.length > 1 ? `${ids.length} edges deleted` : 'Edge deleted' });
   syncEdgeBar();
-  commitStep();
-  setStatus(ids.length > 1 ? `${ids.length} edges deleted` : 'Edge deleted');
-  return true;
+  return done;
 }
