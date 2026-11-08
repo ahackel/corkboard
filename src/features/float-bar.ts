@@ -184,6 +184,15 @@ fbTitle.addEventListener('click', (e) => {
   }
 });
 
+// The pastel row, left to right without silver: what the number keys 1–9 colour the selection with.
+export const KEY_COLORS = ['grey', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'violet', 'pink'];
+
+// Colour the selection from the keyboard, through the picker's own commit path so the bar's swatch follows.
+export function colorSelection(color: string): void {
+  props.setColor(color);
+  markColorTrigger();
+}
+
 // ---------- colour trigger ----------
 // The trigger button reuses the SAME .swatch/.inherit/.nofill CSS look as the popover's chips
 // (see index.html: fbColorDot starts with class "fb-swatch swatch inherit") — just mirror whichever

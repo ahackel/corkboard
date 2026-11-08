@@ -11,15 +11,19 @@
 //
 // `mm_parent` is rewritten to the PAYLOAD-LOCAL name ("Title.md") when the parent is part of
 // the payload, and stripped for payload roots — so ids/disk paths never leak and a paste into
-// another tab/map reconstructs the subtree by name. Plain text stays readable markdown, so
-// pasting into a text editor / Obsidian yields real notes. Anything on the clipboard that
-// doesn't start with the marker falls through to the existing paste-as-new-card behaviour
-// (features/attachments.ts).
+// another tab/map reconstructs the subtree by name. Anything on the clipboard that doesn't start
+// with the marker falls through to the existing paste-as-new-card behaviour (features/attachments.ts).
+//
+// Copy does NOT put that payload on the clipboard: other apps get clean text (one card: its note;
+// more: a bullet outline, utils/outline.ts), and the payload is remembered beside it (this tab, and
+// localStorage for the others), so pasting that same text back onto a board restores the cards.
 import { state, setStatus, type MindNode } from '../core/state.js';
-import { serializeMd, parseMd, fileStem, type ParsedNote } from '../utils/frontmatter.js';
-import { nodesOf, outermost, isLockedEffective, subtreeIds } from '../utils/model.js';
+import { serializeMd, parseMd, fileStem, joinHeading, type ParsedNote } from '../utils/frontmatter.js';
+import { nodesOf, outermost, isLockedEffective, subtreeIds, childrenOf, nodeLabel } from '../utils/model.js';
+import { outlineText, type OutlineItem } from '../utils/outline.js';
+import { readJSON, writeJSON } from '../utils/local-json.js';
 import { detachParentId } from '../nav/scope.js';
-import { holderOf } from '../view/layout.js';
+import { holderOf, isSection } from '../view/layout.js';
 import { zipBytes, zipBlob } from '../utils/zip.js';
 import { mkNode, deleteSelection } from './crud.js';
 import { touch } from './history.js';
@@ -86,6 +90,38 @@ function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
 export const cardsToPayload = (files: CardFile[]): string =>
   files.map(f => `${MARK}${f.name} -->\n${f.text}`).join('\n');
 
+
+// The selection as other apps should read it: one card is its own note, more are an outline.
+const readingOrder = (a: MindNode, b: MindNode): number => a.y - b.y || a.x - b.x;
+
+function outlineItem(n: MindNode): OutlineItem {
+  const kids = childrenOf(n.id).sort(readingOrder).map(outlineItem).filter(it => it.text.trim() || it.kids.length);
+  return { text: isSection(n) ? nodeLabel(n) : [n.title.trim(), n.body.trim()].filter(Boolean).join('\n'), kids };
+}
+
+function plainText(ids: string[]): string {
+  const roots = outermost(nodesOf(ids)).sort(readingOrder);
+  if (roots.length === 1 && !isSection(roots[0])) {
+    return joinHeading(roots[0].title, roots[0].body);
+  }
+  return outlineText(roots.map(outlineItem).filter(it => it.text.trim() || it.kids.length));
+}
+
+const COPIED_KEY = 'corkboard-copied';
+interface Copied { text: string; payload: string }
+let copied: Copied | null = null;
+
+// The card payload behind `text`, when `text` is what a copy here put on the clipboard; else `text` itself.
+function payloadBehind(text: string): string {
+  const t = text.trim();
+  for (const c of [copied, readJSON<Copied | null>(COPIED_KEY, null)]) {
+    if (c && c.text.trim() === t) {
+      return c.payload;
+    }
+  }
+  return text;
+}
+
 // Copy the selected cards INCLUDING their subtrees to the system clipboard. Allowed in
 // read-only mode (copying mutates nothing). Resolves true iff the clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
@@ -94,8 +130,12 @@ export async function copySelection(): Promise<boolean> {
   if (!files.length) {
     return false;
   }
+  const payload = cardsToPayload(files);
+  const text = plainText(selectedIds()).trim() || payload;
   try {
-    await navigator.clipboard.writeText(cardsToPayload(files));
+    await navigator.clipboard.writeText(text);
+    copied = { text, payload };
+    writeJSON(COPIED_KEY, copied);
     setStatus(`Copied ${files.length} card${files.length === 1 ? '' : 's'}`);
     return true;
   } catch {
@@ -123,7 +163,8 @@ export async function cutSelection(): Promise<void> {
 // Roots land as children of `parent` (when given), else free at (sx,sy) / the viewport centre,
 // keeping the copied cards' relative offsets plus a small nudge so a paste over the source
 // never lands exactly on top.
-export function tryPasteCards(text: string, at: { sx: number | null; sy: number | null; parent: string | null }): boolean {
+export function tryPasteCards(pasted: string, at: { sx: number | null; sy: number | null; parent: string | null }): boolean {
+  const text = payloadBehind(pasted);
   if (!STARTS_MARK.test(text)) {
     return false;
   }

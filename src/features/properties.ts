@@ -15,6 +15,7 @@ export interface PropEls {
 }
 export interface PropertyControls {
   sync(): void;            // reflect the current target(s) into the controls
+  setColor(color: string): void;   // colour the target(s), one undo step — a chip click, or keys 1–9
 }
 
 // What the custom chip offers before anything custom is picked — a mid blue, so opening the native
@@ -186,6 +187,6 @@ export function createProperties(els: PropEls, getIds: () => string[]): Property
   }
 
   rebuildSwatches();
-  const panel = { sync };
+  const panel = { sync, setColor };
   return panel;
 }

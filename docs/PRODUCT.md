@@ -52,7 +52,8 @@ What it has been used for, and what it must stay good at:
 
 **Core — keep, and make each feel great:** cards with Markdown, free placement, sections to group
 cards, colour and tags, lines between cards (port to port; an end can sit anywhere along a side, FigJam-style), tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
-becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
+becoming one card per item (text or links dropped from another app work the same), copy that other apps read as
+clean text (a note, or an outline), number keys 1–9 to colour the selection, smart alignment and spacing guides while dragging, collapse, opening a
 section to work inside it, and the ⌘P command palette — every action, with its shortcut, in
 one searchable list.
 

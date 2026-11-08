@@ -393,3 +393,42 @@ document.addEventListener('drop', async (e) => {
     await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
   }
 });
+
+// ---------- text and links dragged in from OTHER apps ----------
+// A selection from a web page, Mail or Notes, or a link off a page, dropped on the board becomes a card the
+// way pasting it would (a list becomes one card per item), in the section under the pointer. A drag that
+// began in THIS page — a card's text, a card ⌥-dragged out — is someone else's (text-drag.ts, clipboard.ts).
+let ownDrag = false;
+document.addEventListener('dragstart', () => { ownDrag = true; });
+document.addEventListener('dragend', () => { ownDrag = false; });
+
+function isTextDrop(e: DragEvent): boolean {
+  const types = e.dataTransfer ? [...e.dataTransfer.types] : [];
+  const inField = !!(e.target as HTMLElement).closest?.('input, textarea, [contenteditable]');
+  return !ownDrag && !inField && !types.includes('Files') && (types.includes('text/plain') || types.includes('text/uri-list'));
+}
+document.addEventListener('dragover', (e) => {
+  if (!isTextDrop(e)) {
+    return;
+  }
+  e.preventDefault();
+  e.dataTransfer!.dropEffect = state.readOnly ? 'none' : 'copy';
+});
+document.addEventListener('drop', (e) => {
+  if (!isTextDrop(e)) {
+    return;
+  }
+  e.preventDefault();
+  if (state.readOnly){ setStatus('Read-only — can’t drop'); return; }
+  const dt = e.dataTransfer!;
+  const uri = dt.getData('text/uri-list').split('\n').find(l => l.trim() && !l.startsWith('#'));
+  const text = (dt.getData('text/plain') || uri || '').trim();
+  if (!text) {
+    return;
+  }
+  const w = screenToWorld(e.clientX, e.clientY);
+  const into = sectionAt(w.x, w.y, new Set())?.id ?? null;
+  if (!tryPasteCards(text, { sx: e.clientX, sy: e.clientY, parent: into })) {
+    createCardFromClipboard([], text, e.clientX, e.clientY, cardOptsAt(e.clientX, e.clientY, into));
+  }
+});

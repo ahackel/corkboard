@@ -16,7 +16,7 @@ import { tidyShortcut, TIDY_ACTIONS, canTidySection, tidySection } from './tidy.
 import { setReadOnly } from './read-only.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
-import { autoSizeSelection, groupSelectionIntoSection } from './float-bar.js';
+import { autoSizeSelection, groupSelectionIntoSection, colorSelection, KEY_COLORS } from './float-bar.js';
 import { copySelection, cutSelection } from './clipboard.js';
 import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
@@ -201,6 +201,7 @@ window.addEventListener('keydown', (e) => {
   // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
+  if (/^[1-9]$/.test(key) && !mod && !e.altKey && state.sel.size){ e.preventDefault(); colorSelection(KEY_COLORS[+key - 1]); return; }
   if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: the SMART duplicate (crud.ts copyNext)
   // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
   // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
@@ -315,6 +316,7 @@ function paletteCommands(): Command[] {
     { label: 'Tidy up the section', keywords: 'tidy arrange layout grid clean', when: () => state.sel.size === 1 && canTidySection(oneSel()), run: () => tidySection(oneSel()!) },
     { label: 'Collapse all', keywords: 'fold every card section', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
+    ...KEY_COLORS.map((c, i) => ({ label: `Colour ${c}`, shortcut: String(i + 1), keywords: 'color fill paint', when: hasSel, run: () => colorSelection(c) })),
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
     // ⌘⌫ is listed once: Unstack when only stacks are selected, else Ungroup, which unstacks the stacks among them too
     { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: () => hasStackSelected() && !plainSectionSelected(), run: unstackSelection },
