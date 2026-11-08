@@ -49,6 +49,17 @@ export async function listTree(root: FileSystemDirectoryHandle, under: string, f
   await Promise.all(Array.from({ length: Math.min(READS_AT_ONCE, plan.read.length) }, worker));
   return { files, lazy: plan.lazy, foreign: plan.foreign };
 }
+// What the folder looks like on disk without reading a byte of it: every file's size and modification
+// time, by path. Two stamps that differ mean something changed outside the app (store/fsa.ts changed).
+export async function folderStamp(root: FileSystemDirectoryHandle): Promise<Map<string, string>> {
+  const handles = await listPaths(root, '');
+  const out = new Map<string, string>();
+  await Promise.all([...handles].map(async ([path, h]) => { out.set(path, stampOf(await h.getFile())); }));
+  return out;
+}
+
+export function stampOf(f: File): string { return f.size + ':' + f.lastModified; }
+
 // Remove a folder if it is EMPTY — a section's old folder after its notes moved out. Never recursive:
 // whatever else is still in there (a file another app put there) keeps the folder alive.
 export async function removeEmptyDir(root: FileSystemDirectoryHandle, dir: string): Promise<void> {

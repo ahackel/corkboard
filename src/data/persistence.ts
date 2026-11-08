@@ -12,6 +12,7 @@ import { byId } from '../utils/dom.js';
 import { selectNode } from '../features/selection.js';
 import { settleSave, hasUnsavedChanges } from './save.js';
 import { loadFromDir } from './load.js';
+import { nodeByFile } from '../utils/model.js';
 
 // Everything that is about the BOARD rather than about a note — the free edges, the ink layer, the
 // per-map view prefs — lives in one board.json beside the notes; see data/board.ts, which owns its
@@ -88,7 +89,8 @@ async function reloadFromDisk(): Promise<void> {
   if (Date.now() - (state.lastSelfWrite || 0) < 600) {
     return;
   }
-  const selBefore = state.selId;
+  // By PATH: ids are minted fresh on every load, so a note added on disk would shift them onto a neighbour.
+  const selBefore = state.nodes.get(state.selId ?? '')?.file ?? null;
   // Don't yank the rug out while the user is actively typing in a card or renaming a section.
   if (inPlaceEditActive() || isTypingInField()) {
     return;
@@ -105,6 +107,11 @@ async function reloadFromDisk(): Promise<void> {
     if (inPlaceEditActive() || isTypingInField()) {
       return;   // began during the write
     }
+    // Nothing changed on disk: keep everything, the undo history included, rather than re-reading it all.
+    // Asked last, since asking takes in the new state: a reload skipped above would miss it.
+    if (store.changed && !(await store.changed())) {
+      return;
+    }
     // What was there before, by PATH (ids are minted fresh each load) — and how many unread notes each
     // folded section held — so a note that came in from outside (the phone inbox) can be pointed out.
     const known = new Set<string>(), unread = new Map<string, number>();
@@ -117,11 +124,7 @@ async function reloadFromDisk(): Promise<void> {
       }
     }
     await loadFromDir({ keepView:true });
-    if (selBefore && state.nodes.has(selBefore)) {
-      selectNode(selBefore);
-    } else {
-      selectNode(null);
-    }
+    selectNode((selBefore && nodeByFile(selBefore)?.id) || null);
     flashArrived([...state.nodes.values()]
       .filter(n => n.file && (!known.has(n.file) || (n.lazy ?? 0) > (unread.get(n.file) ?? n.lazy ?? 0)))
       .map(n => n.id));

@@ -274,7 +274,9 @@ function applyEdges(v: unknown): void {
       continue;   // point is gone: so is the edge
     }
     state.edges.push({
-      id: typeof raw.id === 'string' && raw.id ? raw.id : newEdgeId(),
+      // The id goes into SVG markup (view/free-edges.ts), and a board.json can come from anywhere — a
+      // zip, a synced vault — so only the shape this app mints is kept.
+      id: typeof raw.id === 'string' && /^[\w-]+$/.test(raw.id) ? raw.id : newEdgeId(),
       from: fromJ, to: toJ,
       ...(fromJ ? {} : { fromPath: raw.from }), ...(toJ ? {} : { toPath: raw.to }),
       color: (typeof raw.color === 'string' && colorFill(raw.color)) ? raw.color : '',

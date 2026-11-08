@@ -39,4 +39,36 @@ describe('saveAll', () => {
     await flushSave();
     expect(store.files.get('notes.md')).toContain('# Notes');
   });
+
+  it('never deletes a note that took a renamed one’s name in another case', async () => {
+    const store = caseInsensitiveStore();
+    useStore(store);
+    store.files.set('plan.md', '# Plan');
+    store.files.set('b.md', '# b');
+    const a = nodeFrom('# Other', 'Plan.md', 'a');
+    const b = nodeFrom('# plan', 'b.md', 'b');
+    a.dirty = true; b.dirty = true;
+    await flushSave();
+    expect(store.files.get(a.file!.toLowerCase())).toContain('# Other');
+    expect(store.files.get(b.file!.toLowerCase())).toContain('# plan');
+    // the next save, with the old name free, gives it the plain name
+    b.dirty = true;
+    await flushSave();
+    expect(b.file).toBe('plan.md');
+    expect(store.files.get('plan.md')).toContain('# plan');
+  });
+
+  it('a rename moves the file and carries the links that point at it', async () => {
+    const store = caseInsensitiveStore();
+    useStore(store);
+    store.files.set('old.md', '# Old');
+    store.files.set('ref.md', '# Ref\nsee [[old]]');
+    const n = nodeFrom('# New', 'old.md', 'n');
+    nodeFrom('# Ref\nsee [[old]]', 'ref.md', 'r');
+    n.dirty = true;
+    await flushSave();
+    expect(store.files.has('old.md')).toBe(false);
+    expect(store.files.get('new.md')).toContain('# New');
+    expect(store.files.get('ref.md')).toContain('[[New]]');
+  });
 });

@@ -2,7 +2,7 @@
 // prompts and IndexedDB-persisted handles for silent resume at boot. File ops delegate to
 // the shared handle-store helpers (DRY); only handle acquisition is FSA-specific.
 import { idbGet, idbPut } from '../utils/idb.js';
-import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob } from './handle-store.js';
+import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob, folderStamp, stampOf } from './handle-store.js';
 import type { FoldTest } from './tree.js';
 import { rememberFolder, notifyRecentsChanged } from './recents.js';
 import { installWatch } from './watch.js';
@@ -27,6 +27,9 @@ async function rememberedHandle(key: string): Promise<FileSystemDirectoryHandle 
 export const fsaStore = {
   _dir: null as FileSystemDirectoryHandle | null,   // FSA directory handle
   _key: null as string | null,                      // the open folder's registry/handle key
+  // The folder as this app last saw it (handle-store folderStamp): taken before each full load, kept up
+  // to date by our own writes, so a refocus can tell whether anything ELSE touched the folder.
+  _stamp: null as Map<string, string> | null,
   get isOpen(){ return !!this._dir; },
   get name(){ return this._dir ? this._dir.name : ''; },
   // The registry key distinguishes two folders with the same display name. It is assigned before
@@ -91,10 +94,28 @@ export const fsaStore = {
     this._dir = handle; this._key = key; return true;
   },
 
-  listTree(under: string, fold: FoldTest){ return listTree(this._dir!, under, fold); },
+  async listTree(under: string, fold: FoldTest){
+    // Stamped BEFORE the read: a change that lands during it then shows as a change at the next focus.
+    if (!under) {
+      this._stamp = await folderStamp(this._dir!);
+    }
+    return listTree(this._dir!, under, fold);
+  },
   removeDir(dir: string){ return removeEmptyDir(this._dir!, dir); },
-  write(path: string, data: string | Blob){ return writeFile(this._dir!, path, data); },
-  remove(path: string){ return removeFile(this._dir!, path); },
+  async write(path: string, data: string | Blob){
+    await writeFile(this._dir!, path, data);
+    const f = await readFileBlob(this._dir!, path);
+    if (f instanceof File) {
+      this._stamp?.set(path, stampOf(f));
+    }
+  },
+  async remove(path: string){ await removeFile(this._dir!, path); this._stamp?.delete(path); },
+  // Has anything outside this app changed the folder since the last load? Unknown counts as yes.
+  async changed(): Promise<boolean> {
+    const before = this._stamp, now = await folderStamp(this._dir!);
+    this._stamp = now;
+    return !before || before.size !== now.size || [...now].some(([p, s]) => before.get(p) !== s);
+  },
   readBlob(path: string){ return readFileBlob(this._dir!, path); },
 
   // Fire cb when the source may have changed underneath us (window-focus / tab-visible).

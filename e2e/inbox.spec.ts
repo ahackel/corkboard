@@ -100,3 +100,46 @@ test('the palette’s Inbox makes the Inbox section beside the board, then goes 
   await palette(page, 'Inbox');
   await expect(page.locator('#world .node.section', { hasText: 'Inbox' })).toHaveCount(1);
 });
+
+test('coming back to the window with nothing changed on disk keeps the undo history', async ({ page }) => {
+  await openBoard(page);
+  await seedFolder(page, {
+    'Keep.md': 'Keep\n',
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: { 'Keep.md': { x: 100, y: 100 } } }),
+  });
+  await openFolder(page);
+  const keep = card(page, 'Keep');
+  await expect(keep).toBeVisible();
+  const b = (await keep.boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await page.keyboard.press('Backspace');
+  await expect(keep).toHaveCount(0);
+  await page.waitForTimeout(1200);   // past the save and its own-write guard
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(500);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(card(page, 'Keep')).toBeVisible();
+});
+
+test('notes changing on disk leave the selection on the same card', async ({ page }) => {
+  await openBoard(page);
+  await seedFolder(page, {
+    'A.md': 'Ay\n', 'M.md': 'Em\n', 'Z.md': 'Zed\n',
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: {
+      'A.md': { x: 100, y: 100 }, 'M.md': { x: 400, y: 100 }, 'Z.md': { x: 700, y: 100 } } }),
+  });
+  await openFolder(page);
+  const em = card(page, 'Em');
+  const b = (await em.boundingBox())!;
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+  await expect(em).toHaveClass(/\bsel\b/);
+  await page.waitForTimeout(1200);
+  // Another app deletes BOTH its neighbours: whichever way the folder is read, the card's fresh id shifts.
+  await page.evaluate(async () => {
+    const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('picked');
+    await root.removeEntry('A.md'); await root.removeEntry('Z.md');
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(card(page, 'Ay')).toHaveCount(0);
+  await expect(card(page, 'Em')).toHaveClass(/\bsel\b/);
+});

@@ -483,6 +483,11 @@ re-reads from disk but guards against clobbering in-progress typing/renaming and
 own recent writes (`state.lastSelfWrite`). It SETTLES pending writes first (`settleSave`) and refuses to
 reload while anything is still unsaved (`hasUnsavedChanges`): `loadFromDir` replaces every node from disk, so
 it used to read over an edit made just before switching away (it cancelled the queued save instead).
+It reloads only when the folder CHANGED (`store.changed`, FSA only): the store keeps a stamp of every file's
+size and modification time (`folderStamp`), taken before each full load and updated by its own writes, so a
+refocus with nothing new keeps the board as it is — undo history included — instead of re-reading it all.
+The selection survives a reload by PATH, never by id: ids are minted fresh per load, so a note added or
+deleted elsewhere shifts them, and the old id would select a neighbour.
 
 **The phone INBOX is a folder** — `Inbox/` at the top of a FOLDER map, i.e. an ordinary section (the user
 guide is [inbox.md](inbox.md): iCloud Drive plus an iOS Shortcut that saves a dated `.md` there). Nothing

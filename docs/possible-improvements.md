@@ -21,9 +21,6 @@ its own, not a cleanup. Nothing here is a known bug. Line numbers drift — sear
   `descendantCount` and `subtreeHasLocked` are O(subtree × cards). Hot callers: `paintNode` on folded
   sections, a card press after ⌘A, `settleSections`. Better: a parent → children map built once per
   operation, or kept on `state` and updated on reparent/add/delete.
-- **With a folder map, every switch back to the window re-reads every file**
-  (`data/persistence.ts` `reloadFromDisk`). Better: compare each file's `lastModified`/size with the
-  last load and skip the reload — or reload only what changed — when nothing did.
 - **`paintNode` redoes text work on every paint**: the card's markdown, its task count and the search
   tags; a clipped card reads `offsetTop`/`getComputedStyle` mid-paint, forcing a layout per card.
   Better: cache the text-derived values on the body string (as `noteTags` does) and do the clip reads

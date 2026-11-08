@@ -54,9 +54,9 @@ function planPaths(): Map<string, string> {
     const p = parentOf(n);
     const pFile = p ? out.get(p.id) ?? p.file : null;
     const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs);
-    if (n.file) {
-      inUse.delete(n.file.toLowerCase());
-    }
+    // A node's OLD name stays taken for the rest of this save: phase 3 deletes that file, and on a
+    // case-insensitive disk a node handed `plan.md` for a freed `Plan.md` would be deleted with it.
+    // It suffixes instead (`plan 2.md`) and takes the plain name on the next save, once it is free.
     inUse.set(target.toLowerCase(), n.id);
     out.set(n.id, target);
   }
