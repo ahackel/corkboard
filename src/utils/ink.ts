@@ -90,3 +90,15 @@ export function inkFor(bg: string): string {
 export function scrimFor(bg: string): string {
   return inkFor(bg) === INK_LIGHT ? SCRIM_UNDER_LIGHT : SCRIM_UNDER_DARK;
 }
+
+// Everything compares and de-duplicates on this form. The native input always yields lowercase
+// `#rrggbb`, but a hand-authored or imported note can carry `#FFF` or `#FFE9A8` — without folding
+// those together the same colour shows up as two chips.
+export function normalizeColor(c: string): string {
+  const h = c.trim().toLowerCase();
+  if (!isHexColor(h)) {
+    return '';
+  }
+  const d = h.slice(1);
+  return d.length === 3 ? `#${d[0]}${d[0]}${d[1]}${d[1]}${d[2]}${d[2]}` : `#${d}`;
+}

@@ -5,6 +5,7 @@
 // and behave the same: click a row to open it (the click doubles as the FSA permission
 // gesture), with per-row rename / export / delete actions.
 // ============================================================
+import { timeAgo } from './utils/time-ago.js';
 import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
 import { phoneMode } from './core/ui-state.js';
@@ -67,22 +68,6 @@ async function pickFolder(): Promise<void> {
 }
 
 // ---------- the map list ----------
-function timeAgo(ts: number): string {
-  if (!ts) {
-    return '';                       // migrated entries carry no last-opened time yet
-  }
-  const s = (Date.now()-ts)/1000;
-  if (s<60) {
-    return 'just now';
-  }
-  if (s<3600) {
-    return Math.floor(s/60)+'m ago';
-  }
-  if (s<86400) {
-    return Math.floor(s/3600)+'h ago';
-  }
-  return Math.floor(s/86400)+'d ago';
-}
 // the map currently open on the canvas — runtime state, not the persisted last-map key
 // (another tab may rewrite that one)
 function isCurrent(m: MapRef): boolean {

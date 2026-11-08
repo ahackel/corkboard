@@ -1043,6 +1043,23 @@ world geometry that guides, drops and lines measure, and a visual scale would co
 
 ## State and naming
 
+**An edit RUNS through `mutate()` (`features/mutate.ts`).** A one-shot edit — a command, a menu or bar
+button, a paste — is `mutate(ids, fn, { reflow, status?, edges?, canvas? })`, and the runner applies the rules
+each call site used to spell out: read-only refuses it (returning false, changing nothing), it is ONE undo
+step, the `reflow` (`remeasure` / `relayout` / `paint` / `none`) runs INSIDE that step so undo and redo
+restore what layout settled on, and it ends in `scheduleSave()`. Two kinds of edit stay outside it on
+purpose. GESTURES (drag, resize, inline edit, drawing a line, a text or image drag) last longer than one
+call, so they `touch()` as they go and `commitStep()` at their own boundary. FOLDING and the reveal a
+search or link does use `record()` directly, because they must work in read-only and `mutate` would
+refuse them. `record()` counts ANY open half of a step — nodes, canvas colour or the edge list — as an
+outer owner, so an edge-label session and a chip click inside it make one step, not two.
+
+**Pure logic lives in `utils/`, rendering and state in `view/` and `features/`.** A function that only
+computes — geometry, text, colour maths — takes plain values (a `Rect`, a string, `now`) and returns
+one, so vitest can pin it without a browser; the module that owns the DOM or `state` adapts nodes to
+those values and paints the result. `utils/edge-route.ts` is the model: the elbow router knows Rects and
+sides, `view/free-edges.ts` knows cards, the camera and the SVG.
+
 **The mutable `state` (`core/state.ts`) is the MAP:** `nodes` (id → node), `view` (`{x,y,k}`), selection (`selId`
 + `sel` Set), `readOnly`, `canvasColor`, the grid settings, … Every field is either the notes
 themselves or something mirrored to disk/localStorage and restored on load. The render pipeline is `paintNode` /
