@@ -89,7 +89,7 @@ export const ui = {
   // it travelled (features/edge-tools.ts MIN_DRAG_PX), so a twitch on a ring or a handle is a click.
   // `side` is the port a fresh draw started from (a CLICK on it makes a connected card that way, and a
   // line drawn from it is pinned to it); `overSide` the target's port under the pointer, if any.
-  edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string; overSide?: EdgeSide;
+  edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string; overSide?: EdgeSide; overAt?: number;
                       edgeId?: string; end?: 'from' | 'to'; side?: EdgeSide } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,

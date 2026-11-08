@@ -126,10 +126,14 @@ is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts
 
 **A LINE is something the user drew.** A card sits INSIDE the section that is its parent, so no line is ever
 derived from the tree. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
-caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `route` → `polyline`, behind
-`edgeGeometry`, the one place the geometry is computed): along the axis the two cards are further apart
-on, a line runs straight across where they face each other, else leaves the middle of one side, turns
-(rounded, `CORNER_R` 24px, never eating the last `END_STRAIGHT` of an end leg so a cap sits on a straight) halfway across the gap and enters the middle of the other. Overlapping cards get the
+caps, label) and are drawn as FigJam's ELBOWS (`view/free-edges.ts` `routeFor` → `polyline`, behind
+`edgeGeometry`, the one place the geometry is computed). A line ALWAYS runs PORT TO PORT: it leaves the
+middle of a face and enters the middle of a face, never a point shifted along one, with corners rounded
+(`CORNER_R` 24px, never eating the last `END_STRAIGHT` of an end leg so a cap sits on a straight). An
+unpinned end lets `pinnedRoute` pick its face. A pinned end may be SHIFTED along its face, FigJam-style
+(`fromAt`/`toAt`, 0–1 from the face's top/left, absent = the middle): `portAt` pins a drop within `PORT_SNAP`
+of a port dot or a face's middle to the middle, and anywhere else within `PORT_SNAP` of a face to that point
+of it, so the middle is the one place an end snaps to. The point is a fraction, so it rides along a resize. Overlapping cards get the
 plain centre-to-centre line. An end dropped on a PORT is PINNED to that face (`fromPort`/`toPort` in
 `board.json` — new keys: the `fromSide`/`toSide` an older build wrote on every edge stay ignored, or every
 old line would be pinned to a face nobody chose). A pinned line leaves/enters that face square and is
@@ -137,7 +141,7 @@ routed by `pinnedRoute`: a few orthogonal shapes per allowed pair of faces (the 
 detours STUB out and round either box), keeping those that cross neither card, shortest + `BEND_COST` per
 bend wins. Only faces are stored; the route is re-derived on every paint (docs/PRODUCT.md, principle 2). Two
 cards can be joined more than once as long as the ports differ: a draw is a duplicate (and selects the
-existing line instead) only when it joins the same two cards through the same ports (`edgeBetween`). You draw one from the four rings on a selected card
+existing line instead) only when it joins the same two cards at the same points (`edgeBetween`). You draw one from the four rings on a selected card
 onto ANY point of another card; an end handle moves that end. Older boards may carry JUNCTIONS (points
 where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
 into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
@@ -209,11 +213,11 @@ above an expanded labelled section, so Auto-size, Group and the load migration's
 a nested section's name room instead of clipping it. **A section FOLDS to its label pill** (`isSectionFold`,
 `.section-folded`): see "Collapse folds a card to a CHIP and a section to its PILL" below.
 
-**A section's note is drawn on its LABEL: the name, and its DESCRIPTION under it.** The `# ` heading is the
-name; the rest of the note is the description (`sectionDescription`), one muted ellipsised line under the
-name (`.section-desc`). Each stays one line (hence the hover tooltip in `paintNode`). The section's editor is the
-label itself: Enter finishes, ⇧Enter adds a line, and line breaks are kept (read while the editor is still
-pre-wrap).
+**A section's LABEL is its NAME, and nothing else.** The name is the note's `# ` heading, or for a note
+written without one its first line (`sectionName`). Anything else in the note stays in the file, untouched and
+never shown. The name stays one line, ellipsised (hence the hover tooltip in `paintNode`). The section's editor is the
+label itself and holds the name alone, as plain text: Enter (⇧Enter too) finishes, a pasted line break folds to a
+space, and the commit writes it back as the heading (a headless note's first line, which was the name, moves up into it).
 
 **A section with nothing written on it shows NO LABEL** (`sectionLabelled`) — delete its text and it's an
 untitled box, like an untitled FigJam section. Three ways back to writing on it:
@@ -691,8 +695,7 @@ Web Animations on width/height with the content clipped, a section's content wra
 (`autoSizeSelection`) goes through the same path (`animateLayout`).
 
 - **A folded SECTION is a FOLDER ICON and its label** at the box's top-left corner: the folder (`.fold-icon`,
-  coloured like the section's box: its rim for the outline, its pale wash inside), then the very pill an open section wears above its box — name and
-  description. No count on it: what it holds is its TOOLTIP, "10 Cards, 4 Sections" (`heldSummary`, from the
+  coloured like the section's box: its rim for the outline, its pale wash inside), then the very pill an open section wears above its box — its name. No count on it: what it holds is its TOOLTIP, "10 Cards, 4 Sections" (`heldSummary`, from the
   notes in memory and, for a folder never read, the listing's `lazy`/`lazySections`). `nodeW` and `nodeH` both
   MEASURE it (`SECTION_TAB_H`, 30px, only before it has painted). Its cards are HIDDEN (`isHidden`'s fold term) but keep their positions and ride along
   when the pill is dragged (`moveSubtreeTo`'s `insideSection`). It takes no drops (`isSection` is false while

@@ -11,6 +11,7 @@ import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeId
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
 import { layoutH, nodeH, nodeW, SECTION_BORDER } from './geometry.js';
 import { layStacks } from './pile.js';
+import { firstLineLabel } from '../utils/frontmatter.js';
 
 // ---------- absolute <-> relative position ----------
 // Two forms of a node's position: the WORKING form x/y (absolute world coords, what the drag engine
@@ -194,10 +195,9 @@ export function sectionLabelH(f: MindNode): number {
   const row = f.el?.querySelector(':scope > .title-row') as HTMLElement | null;
   return (row?.offsetHeight || 28) + SECTION_LABEL_GAP;
 }
-// A section's DESCRIPTION: its note under its name — the text after the `# ` heading, shown as one muted
-// line under the title on its label. Only a NAMED section has one: an untitled section's label shows the
-// first line of its text, which is its name in all but form, so splitting that again would repeat it.
-export function sectionDescription(f: MindNode): string { return f.title.trim() ? f.body.trim() : ''; }
+// A section's NAME, the one thing its label shows: the `# ` title, or for a note written without one, its
+// first line. Anything else in the note stays in the file, untouched and unshown.
+export function sectionName(f: MindNode): string { return f.title.trim() || firstLineLabel(f.body); }
 // Is `child`'s centre inside `section`'s OUTER box? The test for "a section child is still in its section",
 // the same centre sectionAt is asked about on drop.
 export function centreInSection(child: MindNode, section: MindNode): boolean {

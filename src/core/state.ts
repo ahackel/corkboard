@@ -9,7 +9,7 @@ import { soleImage } from '../utils/markdown.js';
 
 // A node's KIND — the whole of it (docs/PRODUCT.md, "cards are flat, sections are the only container"):
 //   · card  — a note. It never has children: structure inside a thought is written into the note.
-//   · section — a resizable box (mm_w/mm_h) with a title and a description; the cards dropped inside it
+//   · section — a resizable box (mm_w/mm_h) with a name on its label; the cards dropped inside it
 //             are its children, and they sit wherever they were put. Sections nest.
 // Persisted as `mm_type` (omitted for the `card` default).
 export type NodeType = 'card' | 'section';
@@ -149,6 +149,10 @@ export interface BoardEdge {
   toCap: EdgeCap;
   fromPort?: EdgeSide;             // the face each end is pinned to; absent = auto (see EdgeSide)
   toPort?: EdgeSide;
+  // Where along its pinned face an end sits, 0 → 1 from the face's top/left; absent = the middle, where
+  // the port dot is. FigJam's SHIFTED connection: drop an end anywhere on a face and it stays there.
+  fromAt?: number;
+  toAt?: number;
   label: string;
 }
 

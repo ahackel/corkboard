@@ -4,19 +4,24 @@ import { routeFor, polyline, simplify, crosses, rimPoint, type Rect } from '../s
 const rect = (x: number, y: number, w = 100, h = 40): Rect => ({ x, y, w, h });
 
 describe('routeFor, no pinned ends', () => {
-  it('runs straight across the overlap when two cards face each other', () => {
+  it('runs straight from port to port when two cards line up', () => {
+    expect(routeFor(rect(0, 0), undefined, rect(300, 0), undefined))
+      .toEqual([{ x: 100, y: 20 }, { x: 300, y: 20 }]);
+  });
+
+  it('keeps to the ports when the cards are offset, turning halfway across the gap', () => {
     expect(routeFor(rect(0, 0), undefined, rect(300, 10), undefined))
-      .toEqual([{ x: 100, y: 25 }, { x: 300, y: 25 }]);
+      .toEqual([{ x: 100, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 30 }, { x: 300, y: 30 }]);
   });
 
-  it('makes a Z that turns halfway across the gap when they do not face', () => {
-    const pts = routeFor(rect(0, 0), undefined, rect(300, 60), undefined);
-    expect(pts).toEqual([{ x: 100, y: 20 }, { x: 200, y: 20 }, { x: 200, y: 80 }, { x: 300, y: 80 }]);
+  it('takes the one-bend route between the ports when it is shorter than a Z', () => {
+    expect(routeFor(rect(0, 0), undefined, rect(300, 60), undefined))
+      .toEqual([{ x: 50, y: 40 }, { x: 50, y: 80 }, { x: 300, y: 80 }]);
   });
 
-  it('goes vertical when the cards are further apart up and down', () => {
+  it('goes vertical, port to port, when the cards are further apart up and down', () => {
     expect(routeFor(rect(0, 0), undefined, rect(20, 300), undefined))
-      .toEqual([{ x: 60, y: 40 }, { x: 60, y: 300 }]);
+      .toEqual([{ x: 50, y: 40 }, { x: 50, y: 170 }, { x: 70, y: 170 }, { x: 70, y: 300 }]);
   });
 
   it('falls back to a centre-to-centre line when the cards overlap outright', () => {
@@ -26,6 +31,13 @@ describe('routeFor, no pinned ends', () => {
 });
 
 describe('routeFor, pinned ends', () => {
+  it('starts a SHIFTED end that far along its face, and still leaves it square', () => {
+    const pts = routeFor(rect(0, 0, 100, 100), 'right', rect(300, 0, 100, 100), 'left', 0.25, 0.75);
+    expect(pts[0]).toEqual({ x: 100, y: 25 });
+    expect(pts[pts.length - 1]).toEqual({ x: 300, y: 75 });
+    expect(pts[1].y).toBe(25);
+  });
+
   it('leaves a pinned face square and never crosses either card', () => {
     const a = rect(0, 0), b = rect(300, 0);
     const pts = routeFor(a, 'up', b, 'up');

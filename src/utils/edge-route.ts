@@ -82,35 +82,6 @@ export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU, box };
 }
 
-// The elbow between two boxes (`to` may be a bare point — the pointer, while a line is being drawn).
-// The AXIS is the one the boxes are further apart along: side by side → it leaves a left/right side,
-// one above the other → top/bottom. Facing each other across that axis (their spans overlap), it runs
-// straight across the middle of the overlap; otherwise it leaves from the middle of one side, turns
-// halfway across the gap, and enters the middle of the other — a Z. Two boxes that overlap outright
-// have no gap to route through, so they get the plain centre-to-centre line.
-function route(ra: Rect, rb: Rect): Pt[] {
-  const ca = centre(ra), cb = centre(rb);
-  const gapX = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w));
-  const gapY = Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h));
-  if (gapX < 0 && gapY < 0) {
-    return [rimPoint(ra, cb), rimPoint(rb, ca)];
-  }
-  if (gapX >= gapY) {
-    const right = cb.x > ca.x;
-    const ax = right ? ra.x + ra.w : ra.x, bx = right ? rb.x : rb.x + rb.w;
-    const lo = Math.max(ra.y, rb.y), hi = Math.min(ra.y + ra.h, rb.y + rb.h);
-    if (hi >= lo) { const y = (lo + hi) / 2; return [{ x: ax, y }, { x: bx, y }]; }
-    const mx = (ax + bx) / 2;
-    return [{ x: ax, y: ca.y }, { x: mx, y: ca.y }, { x: mx, y: cb.y }, { x: bx, y: cb.y }];
-  }
-  const down = cb.y > ca.y;
-  const ay = down ? ra.y + ra.h : ra.y, by = down ? rb.y : rb.y + rb.h;
-  const lo = Math.max(ra.x, rb.x), hi = Math.min(ra.x + ra.w, rb.x + rb.w);
-  if (hi >= lo) { const x = (lo + hi) / 2; return [{ x, y: ay }, { x, y: by }]; }
-  const my = (ay + by) / 2;
-  return [{ x: ca.x, y: ay }, { x: ca.x, y: my }, { x: cb.x, y: my }, { x: cb.x, y: by }];
-}
-
 // ---------- a line with a PINNED end (dropped on a port) ----------
 // Each pinned end leaves its face square, from the face's midpoint; an unpinned end may use whichever
 // face routes best. The router tries a handful of orthogonal shapes for every allowed pair of faces —
@@ -121,9 +92,10 @@ const DIR: Record<EdgeSide, Pt> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, l
 const SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
 const STUB = 44, BEND_COST = 40;   // a detour clears the card by STUB — room for a round corner and the cap
 
-export function facePoint(r: Rect, s: EdgeSide): Pt {
-  return s === 'up' ? { x: r.x + r.w/2, y: r.y } : s === 'down' ? { x: r.x + r.w/2, y: r.y + r.h }
-       : s === 'left' ? { x: r.x, y: r.y + r.h/2 } : { x: r.x + r.w, y: r.y + r.h/2 };
+// The point `at` of the way along a face (0 → 1 from its top/left; the middle, where the port sits, by default).
+export function facePoint(r: Rect, s: EdgeSide, at = 0.5): Pt {
+  return s === 'up' ? { x: r.x + r.w * at, y: r.y } : s === 'down' ? { x: r.x + r.w * at, y: r.y + r.h }
+       : s === 'left' ? { x: r.x, y: r.y + r.h * at } : { x: r.x + r.w, y: r.y + r.h * at };
 }
 
 // Drop repeated points and the middle of three in a row; null if the path doubles back on itself.
@@ -157,11 +129,11 @@ export function crosses(p: Pt, q: Pt, r: Rect): boolean {
   return x1 > r.x + 1 && x0 < r.x + r.w - 1 && y1 > r.y + 1 && y0 < r.y + r.h - 1;
 }
 
-function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
+function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined, ta = 0.5, tb = 0.5): Pt[] {
   let best: Pt[] | null = null, bestScore = Infinity;
   for (const a of sa ? [sa] : SIDES) {
     for (const b of sb ? [sb] : SIDES) {
-      const pa = facePoint(ra, a), pb = facePoint(rb, b), da = DIR[a], db = DIR[b];
+      const pa = facePoint(ra, a, sa ? ta : 0.5), pb = facePoint(rb, b, sb ? tb : 0.5), da = DIR[a], db = DIR[b];
       const qa = { x: pa.x + da.x * STUB, y: pa.y + da.y * STUB }, qb = { x: pb.x + db.x * STUB, y: pb.y + db.y * STUB };
       const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
       const xs = [qa.x, qb.x, Math.min(ra.x, rb.x) - STUB, Math.max(ra.x + ra.w, rb.x + rb.w) + STUB];
@@ -204,10 +176,17 @@ function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide 
       }
     }
   }
-  return best ?? [facePoint(ra, sa ?? 'right'), facePoint(rb, sb ?? 'left')];
+  return best ?? [facePoint(ra, sa ?? 'right', sa ? ta : 0.5), facePoint(rb, sb ?? 'left', sb ? tb : 0.5)];
 }
 
-// The route for two boxes and their pins: the plain elbow when neither end is pinned, else the router.
-export function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined): Pt[] {
-  return sa || sb ? pinnedRoute(ra, sa, rb, sb) : route(ra, rb);
+// The route for two boxes and their pins. A line ALWAYS runs port to port: from the middle of a face, or
+// for a pinned end, from `ta`/`tb` of the way along it (a SHIFTED end). An unpinned end just lets the router
+// pick its face. Two boxes that overlap outright have no gap to route through, so they get the plain
+// centre-to-centre line.
+export function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined, ta = 0.5, tb = 0.5): Pt[] {
+  const overlap = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w)) < 0 && Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h)) < 0;
+  if (!sa && !sb && overlap) {
+    return [rimPoint(ra, centre(rb)), rimPoint(rb, centre(ra))];
+  }
+  return pinnedRoute(ra, sa, rb, sb, ta, tb);
 }

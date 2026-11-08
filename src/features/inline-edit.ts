@@ -13,13 +13,14 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { cardMarkdown, setNoteText, headingOf, caretIn } from '../utils/frontmatter.js';
+import { cardMarkdown, setNoteText, headingOf, caretIn, firstTextLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, type TextEdit } from '../utils/md-edit.js';
 import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
+import { sectionName } from '../view/layout.js';
 import { extractToCard, discardNewCard, nextSectionTitle } from './crud.js';
 import { syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
@@ -81,11 +82,9 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // included, and a section's child cards may be DOM-nested inside it — so an unscoped
   // `.title` lookup could pick a child card's title instead of this node's own.
   const titleEl = n.el.querySelector(':scope > .title-row > .title') as HTMLElement;
-  // The tab RENDERS markdown, so editing it has to show the SOURCE — swap the rendered HTML for the raw
-  // text for the duration. Otherwise the editor would show `Name` where the file says `# Name`, and
-  // committing would write the rendered text back and silently strip the heading away.
-  const own = cardMarkdown(n);
-  const raw = own.trim() ? own : seed ? '# ' + seed : own;
+  // The label is the section's NAME and nothing else (view/layout.ts sectionName), so that is all the
+  // editor holds: plain text, one line, no `# ` — endTitleEdit writes it back as the heading.
+  const raw = sectionName(n) || seed;
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
   // The raw text REPLACES the rendered tab, so paintNode's render cache no longer describes what's in
@@ -102,10 +101,6 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   titleEl.classList.add('editing');
   titleEl.focus();
   const r = document.createRange(); r.selectNodeContents(titleEl);     // select-all so typing replaces
-  // …or just the seeded NAME, past its `# `, so typing over it keeps the heading
-  if (raw !== own && titleEl.firstChild) {
-    r.setStart(titleEl.firstChild, 2);
-  }
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
 }
 // A card element is `draggable` (the ⌥ card-file export, features/clipboard.ts), and a draggable
@@ -131,13 +126,11 @@ export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.titleEdit || ui.titleEdit.id !== n.id) {
     return;
   }
-  // Enter finishes; ⇧Enter is a new line — the name is the first line, everything after it the
-  // section's description (main.ts paintNode draws it under the name).
-  if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab'){ e.preventDefault(); e.stopPropagation(); endTitleEdit(); }
+  // Enter finishes, ⇧Enter too: a name is one line, and a label shows nothing else.
+  if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); e.stopPropagation(); endTitleEdit(); }
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
-// Commit (or cancel) a section rename. The text is MARKDOWN, so it splits like any card's — `# Name` is a
-// heading on the label with the lines below it the description, `Name` is plain text there — and an
+// Commit (or cancel) a section rename. The text is the NAME, written back as the note's `# ` heading — and an
 // EMPTY commit is accepted: a section may have no name, in which case it shows no label at all (main.ts
 // sectionLabelled), like an untitled FigJam section. The label hangs outside the box, so neither moves
 // the box. The toolbar's title button (features/float-bar.ts) brings a label back.
@@ -150,10 +143,8 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   }
   ui.titleEdit = null;                                // null first → the blur handler becomes a no-op
   const n = state.nodes.get(te.id);
-  // Line breaks KEPT: `# Name` on the first line, the description below it (view/layout.ts
-  // sectionDescription). Read while the editor is still `.editing` (white-space:pre-wrap) — innerText
-  // follows the CSS, and the tab's own nowrap would fold every line break into a space.
-  const val = (te.el.innerText ?? te.el.textContent ?? '').replace(/\r\n?/g, '\n').trim();
+  // One line: a pasted line break folds to a space.
+  const val = (te.el.innerText ?? te.el.textContent ?? '').replace(/\s+/g, ' ').trim();
   setCardDraggable(n, true);
   te.el.removeAttribute('contenteditable');
   te.el.classList.remove('editing');
@@ -164,7 +155,13 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     return;
   }
   if (!cancel) {
-    setNoteText(n, val);
+    // A note written without a heading showed its first line as the name, so that line IS what was edited.
+    if (!n.title.trim()) {
+      const lines = n.body.split('\n');
+      lines.splice(Math.max(0, firstTextLine(lines)), 1);
+      n.body = lines.join('\n').trim();
+    }
+    n.title = val;
   }
   n.dirty = true;
   remeasure();             // the label may have changed width → reflow

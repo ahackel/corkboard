@@ -88,7 +88,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   LIFECYCLE-managed" · "A section can be OPENED, and then the canvas IS its interior" · "A CARD is never opened"
   (scope, crumbs, canvas colour, `detachParentId`) · "A STACK is a section drawn as a PILE" (`isStack`, the fan).
 - The model — "Cards are flat; a SECTION is the only container" (drop rule, never auto-resized, load migration) · "A section's
-  note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
+  LABEL is its NAME"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse folds a card to a CHIP and a section to its PILL" (arrow, peek, fold all) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are

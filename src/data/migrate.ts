@@ -8,7 +8,7 @@ import { arrangeSections } from './load.js';
 // A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
 // ticks. That model is gone (docs/PRODUCT.md: cards are flat, sections are the only container), so a
 // card that still has children on disk opens as a SECTION holding them: its title is the section's tab,
-// its note the section's description, its children cards inside it. Nothing is lost or re-parented —
+// the rest of its note kept in the file, its children cards inside it. Nothing is lost or re-parented —
 // only `mm_type` changes, on the card itself.
 // Where its children SIT has to be decided, though: their saved positions were the outliner's rows,
 // laid out by the app, and a section shows its children where they are. So each converted section — and

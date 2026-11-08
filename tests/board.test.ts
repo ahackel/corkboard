@@ -31,4 +31,15 @@ describe('loadBoard', () => {
     await loadBoard();
     expect(state.edges[0]).toMatchObject({ fromCap: 'arrow', toCap: 'arrow' });
   });
+
+  it('keeps a shifted end only on a pinned face, and only within it', async () => {
+    useStore(storeWithBoard({ model: 2, edges: [
+      { id: 'e1', from: 'A.md', to: 'B.md', fromPort: 'right', fromAt: 0.25, toPort: 'left', toAt: 1.5 },
+      { id: 'e2', from: 'A.md', to: 'B.md', fromAt: 0.25 },
+    ] }));
+    await loadBoard();
+    expect(state.edges[0].fromAt).toBe(0.25);
+    expect(state.edges[0].toAt).toBeUndefined();
+    expect(state.edges[1].fromAt).toBeUndefined();
+  });
 });

@@ -603,7 +603,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* ---------- a section's label: a pill above the box ---------- */
 /* FigJam's section name: a borderless pill a step darker than the section's own colour (a white section's
    is light grey), its text the ink that colour demands (--ink) like any card's. It grows UPWARD from 7px
-   above the box (SECTION_LABEL_GAP, view/layout.ts), so a description never moves anything.
+   above the box (SECTION_LABEL_GAP, view/layout.ts), so a long name never moves anything.
    Direct-child combinators throughout: a section's own label only, never some descendant card's title.
    An absolutely positioned child's containing block is the PADDING box, inside the 2px border, so the
    left offset adds it back to sit flush with the box's outer edge. */
@@ -635,13 +635,6 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* the label's NAME is bigger and bolder than a card's, as FigJam's section names are */
 .node.section > .title-row > .title, .node.section-folded > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
 .node.section > .title-row > .title h1, .node.section-folded > .title-row > .title h1 { font-size:16px; font-weight:600; }
-/* …and under the name, the section's DESCRIPTION (main.ts paintNode, view/layout.ts sectionDescription): one
-   muted, ellipsised line, its markdown flattened inline with a dot between blocks. */
-.node.section > .title-row > .title > .section-desc,
-.node.section-folded > .title-row > .title > .section-desc { display:block; font-size:11px; line-height:16px;
-  font-weight:400; opacity:.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.section-desc * { display:inline; margin:0; padding:0; font-size:inherit; font-weight:inherit; }
-.section-desc > * + *::before, .section-desc li + li::before { content:' · '; }
 /* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
 .node.section > .title-row > .title.editing, .node.section-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 /* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
@@ -657,7 +650,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* the box's radius less its 2px border, so the clip follows the INSIDE of the border */
 .section-content { position:absolute; overflow:hidden; border-radius:calc(var(--r-section) - 2px); pointer-events:none; }
 .section-content > .node { pointer-events:auto; }
-/* a section's note is drawn on its LABEL (name + description line), never in the box, which holds cards. */
+/* a section's NAME is drawn on its LABEL, never in the box, which holds cards; the rest of its note isn't drawn. */
 .node.section > .body { display:none; }
 /* drop-into-a-section preview: the box rings in the selection blue, so it reads as "the card lands in
    here" (see drag.ts updateDropTarget). */
@@ -669,7 +662,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.section.no-title > .title-row { display:none; }
 /* ---------- a FOLDED section: a folder, and its label ---------- */
 /* Folding hides the box: the element is a FOLDER ICON with the section's label beside it — the same pill, the
-   same name and description, as an open section wears above its box (no .section class, so none of the box
+   same name, as an open section wears above its box (no .section class, so none of the box
    rules above apply), at the box's top-left corner. It shrink-wraps, so main.ts nodeW and nodeH MEASURE it.
    What it holds is in its tooltip (main.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
    just the folder. */

@@ -18,7 +18,7 @@ import { state, world, dragLayer, isStack } from './core/state.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
 import { screenToWorld, labelScale } from './view/camera.js';
-import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionDescription } from './view/layout.js';
+import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionName } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
@@ -83,8 +83,7 @@ function nodeEl(n: MindNode): HTMLElement {
   // heldSummary). Worked out when the pointer arrives rather than on every paint, since it walks the folder.
   el.addEventListener('pointerenter', () => {
     if (isSectionFold(n)) {
-      const desc = sectionDescription(n);
-      el.title = (sectionLabelled(n) ? nodeLabel(n) + (desc ? '\n' + desc : '') + '\n' : '') + heldSummary(n);
+      el.title = (sectionLabelled(n) ? sectionName(n) + '\n' : '') + heldSummary(n);
     }
   });
   bindNodeDrag(n);
@@ -494,32 +493,28 @@ export function paintNode(n: MindNode): void {
     // rules, nothing hoisted out of the note into a field of its own. So the slot stays empty (`no-title`
     // below collapses the row away, keeping only the fold chip that lives in it) and cardMarkdown feeds
     // the whole note to the body below.
-    // A SECTION's label renders that same markdown, flattened to ONE inline line (styles.css) — so it
-    // obeys the same rule while staying a label — plus one line of description under it when it has
-    // one. It keeps a `.title` element rather than a body because it hangs OUTSIDE the box (a pill
+    // A SECTION's label renders its NAME as that same markdown, flattened to ONE inline line (styles.css)
+    // — so it obeys the same rule while staying a label. It keeps a `.title` element rather than a body because it hangs OUTSIDE the box (a pill
     // above it, FigJam-style), and its own `.body` is display:none because the box holds cards, not a
     // note.
     if (isSection(n) || isSectionFold(n) || isStack(n)) {
-      // …and under the name, on a second muted line, its DESCRIPTION (sectionDescription — the note
-      // after the heading). The
-      // label grows UPWARD from the box's top edge, so a description never moves the box. FOLDED, the
-      // section is a folder icon and that same label beside it; what it holds is in the tooltip.
-      const desc = isSection(n) || isSectionFold(n) ? sectionDescription(n) : '';
-      const md = desc || isSectionFold(n) || isStack(n) ? joinHeading(n.title, '', false) || collapsedMarkdown(n) : cardMarkdown(n);
+      // A section's label is its NAME and nothing else (sectionName). FOLDED, the section is a folder icon
+      // and that same label beside it; what it holds is in the tooltip.
+      const sect = isSection(n) || isSectionFold(n);
+      const md = sect ? joinHeading(sectionName(n), '') : joinHeading(n.title, '', false) || collapsedMarkdown(n);
       // …and, while a search is on, how many of what a folded one holds match it (features/search.ts).
       const hits = isSectionFold(n) ? searchHitsIn(n.id) : 0;
-      const full = nodeLabel(n) + (desc ? '\n' + desc : '');
+      const full = sect ? sectionName(n) : nodeLabel(n);
       // Guarded on the source text, the way renderQueryResults keys on its result set: paintAll runs
       // once per animation FRAME for the length of a resize drag, and this arm re-parses HTML — which
       // destroys and rebuilds the tab's child nodes — where nothing about the label has changed. The
       // key carries the FALLBACK too, since a blank note renders nodeLabel instead (which can change
       // on its own, e.g. when the file is renamed) and `md` alone would never notice.
       // A section with no text of its own renders NOTHING here.
-      const key = md + '\u0000' + desc + '\u0000' + hits;
+      const key = md + '\u0000' + hits;
       if (titleEl.dataset.md !== key){
         titleEl.dataset.md = key;
         titleEl.innerHTML = (md.trim() ? renderBodyHTML(md) : '')
-          + (desc ? `<div class="section-desc">${renderBodyHTML(desc)}</div>` : '')
           + (hits ? `<span class="section-hits" title="${hits} matching the search">${hits} match${hits === 1 ? '' : 'es'}</span>` : '');
       }
       // Ellipsised lines, so the full text lives in the tooltip — when folded, on the whole element (the icon

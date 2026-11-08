@@ -51,7 +51,7 @@ What it has been used for, and what it must stay good at:
 ## Features
 
 **Core — keep, and make each feel great:** cards with Markdown, free placement, sections to group
-cards, colour and tags, simple lines between cards, tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
+cards, colour and tags, lines between cards (port to port; an end can sit anywhere along a side, FigJam-style), tidy-up of a selection (only on request), search, undo, pasted images, a pasted list
 becoming one card per item, smart alignment and spacing guides while dragging, collapse, opening a
 section to work inside it, and the ⌘P command palette — every action, with its shortcut, in
 one searchable list.
@@ -86,8 +86,10 @@ zoomed out · the phone inbox · export the board or a selection as PNG or PDF f
 - *Sketch / pen layer* — drawing is not sorting.
 - *Tab groups and query cards* — rarely used, and each multiplied the layout rules.
 - *Annotations* — a sticky on a sticky; a coloured card does the job.
-- *Routed lines with ports and junction points* — a line only has to say "these belong together".
-  Lines that reroute themselves broke principle 2.
+- *Junction points, and lines that route around other cards* — a line only has to say "these belong
+  together". Lines that reroute themselves broke principle 2: a line goes port to port, and avoids only
+  the two cards it joins.
+- *A section's description* — its label is its name alone; anything else in its note stays in the file, unshown.
 - *SVG export* — it could only wrap HTML, which each viewer draws differently (or not at all); PNG does the job.
 - *The permanent toolbar* — replaced by ⌘P and the selection bar.
 - *The help map* — the palette lists every action with its shortcut; that is the reference.

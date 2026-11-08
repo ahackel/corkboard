@@ -161,7 +161,7 @@ test('a section clips its cards all the way through an unfold', async ({ page })
   expect(clip[3]).toBeLessThanOrEqual(box[3] + 1);
 });
 
-test('a folded section is a folder and its label; what it holds is in its tooltip, sections apart', async ({ page }) => {
+test('a folded section is a folder and its name; what it holds is in its tooltip, sections apart', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedBoard(page, {
@@ -174,7 +174,7 @@ test('a folded section is a folder and its label; what it holds is in its toolti
   });
   const pill = page.locator('#world .node.section-folded', { hasText: 'Box' });
   await expect(pill.locator('.fold-icon svg')).toBeVisible();
-  await expect(pill.locator('.section-desc')).toHaveText('The things in it');   // the same label an open one wears
-  await expect.poll(() => tooltip(page, pill)).toBe('Box\nThe things in it\n3 Cards, 1 Section');   // unread: counted
+  await expect(pill.locator(':scope > .title-row > .title')).toHaveText('Box');   // the name only, never the note under it
+  await expect.poll(() => tooltip(page, pill)).toBe('Box\n3 Cards, 1 Section');   // unread: counted
   expect(errors).toEqual([]);
 });

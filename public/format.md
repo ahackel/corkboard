@@ -51,8 +51,8 @@ The body: a small Markdown subset.
     Text colour is derived from the fill; never set it.
   - `mm_type: frame` marks a section's `_index.md` (sections: the folder already says so; write it anyway).
   - `mm_locked: true` locks a card.
-- **A section's `_index.md`** holds its name (`# Name`) and an optional one-line description, both shown
-  on its label ABOVE the box.
+- **A section's `_index.md`** holds its name (`# Name`), shown on its label ABOVE the box. The label shows
+  the name only: anything else in the note is kept but never displayed.
 - **Body Markdown**: headings, paragraphs, `-`/`1.` lists, `- [ ]` task lists, `**bold**`, `*italic*`,
   `` `code` ``, `[links](url)`, `#tags`, pipe tables, images `![](attachments/x.png)`.
   A note whose whole body is one image becomes an image card.
@@ -71,7 +71,7 @@ The body: a small Markdown subset.
   },
   "edges": [
     { "id": "e1", "from": "Intro.md", "to": "Ideas/_index.md", "dashed": false,
-      "toCap": "arrow", "fromPort": "down", "toPort": "up", "label": "leads to" }
+      "toCap": "arrow", "fromPort": "down", "toPort": "up", "toAt": 0.25, "label": "leads to" }
   ]
 }
 ```
@@ -89,9 +89,12 @@ The body: a small Markdown subset.
   - `fromCap`/`toCap`: `none` | `dot` | `arrow`. Defaults: `fromCap` none, `toCap` arrow.
   - `fromPort`/`toPort`: `up` | `down` | `left` | `right` pins the line to that face; omitted, the
     face is chosen from where the two boxes are.
+  - `fromAt`/`toAt`: where along its pinned face that end sits, 0–1 from the face's top/left. Omitted =
+    0.5, the middle. Ignored without a port.
   - `color`: a palette key or hex. `label`: short text drawn on the line.
-- **Routing**: lines are orthogonal elbows between the two boxes and avoid ONLY those two boxes.
-  They never route around other cards. Lay cards out so lines don't have to cross anything.
+- **Routing**: lines are orthogonal elbows that always run port to port: from the middle of a face (or the
+  `fromAt`/`toAt` point of a pinned one) to the middle of a face. They avoid ONLY the two boxes they join and
+  never route around other cards, so lay cards out so lines don't have to cross anything.
 - `settings.grid`: `none` | `dot` | `mesh` | `line`. `settings.canvasColor`: optional colour.
 
 ## Layout notes
@@ -100,4 +103,4 @@ The body: a small Markdown subset.
   150 world px above the box. Leave that much space above every section.
 - A card's natural height is about 31px + 20px per line of text (its `# ` title counts as a line), +8px
   per paragraph gap. Text is 14px and wraps at about 28 characters per line at `w: 220`.
-- A section's label (name + description) is clipped to the section's width: keep descriptions short.
+- A section's label is clipped to the section's width: keep names short.

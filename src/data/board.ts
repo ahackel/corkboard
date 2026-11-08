@@ -60,8 +60,13 @@ interface StoredEdge { id: string; from: string; to: string;
                     // (defaulting to right/left): reading those back would pin every old line to a
                     // face nobody chose, so they stay ignored and these are new keys.
                     fromPort?: EdgeSide; toPort?: EdgeSide;
+                    fromAt?: number; toAt?: number;   // a pinned end shifted along its face (BoardEdge)
                     arrows?: 'none' | 'to' | 'both';   // legacy: ONE direction axis, read never written
                     label?: string }
+// A shifted end's place along its face, 0..1: three decimals is finer than any card is wide.
+const shift = (at: number): number => Math.round(at * 1000) / 1000;
+const isShift = (v: unknown): v is number => typeof v === 'number' && v >= 0 && v <= 1;
+
 function serializeEdge(e: BoardEdge): StoredEdge | null {
   // An end held by a PATH is a note inside a folded section nobody has read (resolveEdges): the section
   // stands in for it on the canvas, but the path is still where the line goes.
@@ -78,7 +83,9 @@ function serializeEdge(e: BoardEdge): StoredEdge | null {
            ...(e.color ? { color: e.color } : {}), dashed: e.dashed,
            ...(e.fromCap !== 'none' ? { fromCap: e.fromCap } : {}),
            ...(e.toCap !== 'arrow' ? { toCap: e.toCap } : {}), ...(e.label ? { label: e.label } : {}),
-           ...(e.fromPort ? { fromPort: e.fromPort } : {}), ...(e.toPort ? { toPort: e.toPort } : {}) };
+           ...(e.fromPort ? { fromPort: e.fromPort } : {}), ...(e.toPort ? { toPort: e.toPort } : {}),
+           ...(e.fromPort && e.fromAt != null ? { fromAt: shift(e.fromAt) } : {}),
+           ...(e.toPort && e.toAt != null ? { toAt: shift(e.toAt) } : {}) };
 }
 
 // A persisted id, unlike a node's — a node is identified by its file and an edge has no file.
@@ -290,6 +297,8 @@ function applyEdges(v: unknown): void {
       label: typeof raw.label === 'string' ? raw.label : '',
       ...(port(raw.fromPort) ? { fromPort: port(raw.fromPort) } : {}),
       ...(port(raw.toPort) ? { toPort: port(raw.toPort) } : {}),
+      ...(port(raw.fromPort) && isShift(raw.fromAt) ? { fromAt: raw.fromAt } : {}),
+      ...(port(raw.toPort) && isShift(raw.toAt) ? { toAt: raw.toAt } : {}),
     });
   }
 }

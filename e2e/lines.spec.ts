@@ -141,3 +141,30 @@ test('restyling a line from its bar is one undo step', async ({ page }) => {
   await expect(page.locator('#freeEdges path.fe').first()).not.toHaveAttribute('stroke-dasharray');
   await expect(lines(page)).toHaveCount(1);   // the undo took back the style, not the line
 });
+
+test('a line end dropped anywhere on a face stays there, shifted; near the middle it snaps to the port', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  const a = await makeCard(page, 300, 250, 'Source');
+  const b = await makeCard(page, 750, 300, 'Target');
+  await drawLine(page, a, 'right', b, 'left');
+  const handle = page.locator('circle.fe-handle[data-handle="to"]');
+  const centreY = async () => { const h = (await handle.boundingBox())!; return h.y + h.height / 2; };
+  const dragEndTo = async (x: number, y: number) => {
+    const h = (await handle.boundingBox())!;
+    await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(x, y, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+  };
+  const t = (await b.boundingBox())!;
+  await dragEndTo(t.x, t.y + t.height * 0.25);   // a quarter of the way down the left face
+  await expect.poll(centreY).toBeCloseTo(t.y + t.height * 0.25, 0);
+  await reload(page);
+  await page.locator('#freeEdgeHits path.fe-hit').first().click({ force: true });
+  await expect.poll(centreY).toBeCloseTo(t.y + t.height * 0.25, 0);
+  await dragEndTo(t.x, t.y + t.height / 2 + 5);   // just off the middle: the port takes it
+  await expect.poll(centreY).toBeCloseTo(t.y + t.height / 2, 0);
+  expect(errors).toEqual([]);
+});

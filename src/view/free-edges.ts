@@ -45,7 +45,7 @@ function rimRect(n: MindNode): Rect {
 
 // The four dots on a selected card — only where a NEW line starts from, floating a little OUTSIDE each
 // side the way FigJam's do, clear of the resize handles. The finished line doesn't remember which one:
-// it is routed from where the two cards are, like every other (`route`).
+// it is routed from where the two cards are, like every other (`routeFor`).
 function socketPoints(n: MindNode): Array<{ side: EdgeSide; p: Pt }> {
   const r = rimRect(n), o = SOCKET_OUT;
   return [
@@ -83,20 +83,32 @@ export function edgeGeometry(e: BoardEdge): Geometry | null {
     return null;
   }
   const pa = from.id === e.from ? e.fromPort : undefined, pb = to.id === e.to ? e.toPort : undefined;
-  return polyline(routeFor(rimRect(from), pa, rimRect(to), pb), trim(e.fromCap), trim(e.toCap));
+  return polyline(routeFor(rimRect(from), pa, rimRect(to), pb, e.fromAt, e.toAt), trim(e.fromCap), trim(e.toCap));
 }
 
-// The port under a world point, if any: within PORT_SNAP screen px of a card's floating port dot OR of
-// the middle of that face — what a line end dropped there pins to (features/edge-tools.ts).
+// Where on a card a line end dropped at a world point pins (features/edge-tools.ts), if anywhere: within
+// PORT_SNAP screen px of a floating port dot or the middle of a face, that face's MIDDLE — the port; else
+// within PORT_SNAP of a face anywhere along it, THAT point of it (FigJam's shifted connection), so the
+// middle is the one spot an end snaps to. Further inside, the card's body: no pin at all.
 const PORT_SNAP = 16;
 
-export function portAt(n: MindNode, p: Pt): EdgeSide | null {
-  const k = state.view.k || 1, r = rimRect(n);
-  let best: EdgeSide | null = null, bestD = PORT_SNAP / k;
+export function portAt(n: MindNode, p: Pt): { side: EdgeSide; at: number } | null {
+  const snap = PORT_SNAP / (state.view.k || 1), r = rimRect(n);
+  let best: { side: EdgeSide; at: number } | null = null, bestD = snap;
   for (const { side, p: dot } of socketPoints(n)) {
     const face = facePoint(r, side);
     const d = Math.min(Math.hypot(p.x - dot.x, p.y - dot.y), Math.hypot(p.x - face.x, p.y - face.y));
-    if (d < bestD) { bestD = d; best = side; }
+    if (d < bestD) { bestD = d; best = { side, at: 0.5 }; }
+  }
+  if (best) {
+    return best;
+  }
+  const faces: Array<{ side: EdgeSide; off: number; along: number }> = [
+    { side: 'up', off: p.y - r.y, along: (p.x - r.x) / r.w }, { side: 'down', off: p.y - r.y - r.h, along: (p.x - r.x) / r.w },
+    { side: 'left', off: p.x - r.x, along: (p.y - r.y) / r.h }, { side: 'right', off: p.x - r.x - r.w, along: (p.y - r.y) / r.h },
+  ];
+  for (const { side, off, along } of faces) {
+    if (along >= 0 && along <= 1 && Math.abs(off) < bestD) { bestD = Math.abs(off); best = { side, at: along }; }
   }
   return best;
 }
@@ -271,9 +283,16 @@ export function paintFreeEdges(): void {
     if (over) {
       const r = rimRect(over);
       tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`;
-      // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot
+      // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot — or, for an end
+      // shifted along a face, that dot ON the face where it will sit
+      const shifted = draw.overSide && (draw.overAt ?? 0.5) !== 0.5;
       for (const { side, p } of socketPoints(over)) {
-        tools += `<circle class="fe-drop-port${side === draw.overSide ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${side === draw.overSide ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
+        const on = side === draw.overSide && !shifted;
+        tools += `<circle class="fe-drop-port${on ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${on ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
+      }
+      if (shifted) {
+        const q = facePoint(r, draw.overSide!, draw.overAt);
+        tools += `<circle class="fe-drop-port on" cx="${q.x}" cy="${q.y}" r="${SOCKET_HOVER_R - 3}"/>`;
       }
     }
     const edge = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
@@ -284,7 +303,9 @@ export function paintFreeEdges(): void {
     const anchorCap: EdgeCap = edge ? (movingFrom ? edge.toCap : edge.fromCap) : 'none';
     const movingCap: EdgeCap = edge ? (movingFrom ? edge.fromCap : edge.toCap) : 'arrow';
     const anchorPort = edge ? (movingFrom ? edge.toPort : edge.fromPort) : draw.side;
-    const s = polyline(routeFor(rimRect(src), anchorPort, over ? rimRect(over) : { ...draw.to, w: 0, h: 0 }, over ? draw.overSide : undefined), trim(anchorCap),
+    const anchorAt = edge ? (movingFrom ? edge.toAt : edge.fromAt) : undefined;
+    const s = polyline(routeFor(rimRect(src), anchorPort, over ? rimRect(over) : { ...draw.to, w: 0, h: 0 }, over ? draw.overSide : undefined,
+      anchorAt, over ? draw.overAt : undefined), trim(anchorCap),
       over ? trim(movingCap) : movingCap === 'arrow' ? ARROW_INSET : 0);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${s.d}"/>`
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);

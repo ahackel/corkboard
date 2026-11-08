@@ -56,27 +56,40 @@ export function clearEdgeSelection(): void {
   syncEdgeBar();
 }
 
-// The edge already joining these two cards THROUGH THE SAME PORTS, either way round (an unpinned end
-// counts as its own "port"). Two such lines would lie exactly on top of each other, so a second draw
-// selects the first instead — but the same two cards can be joined again through different ports.
-function edgeBetween(a: string, b: string, pa?: EdgeSide, pb?: EdgeSide): BoardEdge | undefined {
-  return state.edges.find(e => (e.from === a && e.to === b && e.fromPort === pa && e.toPort === pb)
-                            || (e.from === b && e.to === a && e.fromPort === pb && e.toPort === pa));
+// Where an end attaches: a face and how far along it (a PIN), or nothing (the face is picked per paint).
+interface Pin { side: EdgeSide; at: number }
+
+// The edge already joining these two cards AT THE SAME POINTS, either way round (an unpinned end counts
+// as its own "port"). Two such lines would lie exactly on top of each other, so a second draw selects the
+// first instead — but the same two cards can be joined again through other ports, or other points of one.
+const samePin = (side: EdgeSide | undefined, at: number | undefined, p?: Pin): boolean =>
+  side === p?.side && (!side || (at ?? 0.5) === p?.at);
+function edgeBetween(a: string, b: string, pa?: Pin, pb?: Pin): BoardEdge | undefined {
+  return state.edges.find(e => (e.from === a && e.to === b && samePin(e.fromPort, e.fromAt, pa) && samePin(e.toPort, e.toAt, pb))
+                            || (e.from === b && e.to === a && samePin(e.fromPort, e.fromAt, pb) && samePin(e.toPort, e.toAt, pa)));
 }
-// `fromPort`/`toPort` pin the ends to those faces (BoardEdge); left out, an end picks its face itself.
-function addEdge(fromId: string, toId: string, fromPort?: EdgeSide, toPort?: EdgeSide): BoardEdge | null {
+// Write a pin onto one end of an edge — the middle of a face is the plain port, so it stores no `at`.
+function setPin(e: BoardEdge, end: 'from' | 'to', pin?: Pin): void {
+  const port = end === 'from' ? 'fromPort' : 'toPort', at = end === 'from' ? 'fromAt' : 'toAt';
+  delete e[port];
+  delete e[at];
+  if (pin) {
+    e[port] = pin.side;
+    if (pin.at !== 0.5) {
+      e[at] = pin.at;
+    }
+  }
+}
+// The pins fix the ends to those points (BoardEdge); left out, an end picks its face itself.
+function addEdge(fromId: string, toId: string, fromPin?: Pin, toPin?: Pin): BoardEdge | null {
   if (fromId === toId || !connectable(fromId) || !connectable(toId)) {
     return null;
   }
-  const dup = edgeBetween(fromId, toId, fromPort, toPort);
+  const dup = edgeBetween(fromId, toId, fromPin, toPin);
   if (dup) { selectEdge(dup.id); return dup; }
   const e = makeEdge(fromId, toId);
-  if (fromPort) {
-    e.fromPort = fromPort;
-  }
-  if (toPort) {
-    e.toPort = toPort;
-  }
+  setPin(e, 'from', fromPin);
+  setPin(e, 'to', toPin);
   state.edges.push(e);
   return e;
 }
@@ -101,21 +114,21 @@ export function connectSelection(): void {
   setStatus(made ? `Connected ${made + 1} cards` : 'Already connected');
 }
 
-// What a line end dropped at `p` lands on: a card's PORT (pinning the end to that face — the floating
-// dots sit outside the card, so a port wins even off the card's body), else the card under the point,
-// topmost first — the drop target for both a fresh draw and a moved end.
-function dropAt(p: Pt, exclude: string): { id: string; side?: EdgeSide } | null {
-  let hit: { id: string; side?: EdgeSide } | null = null;
+// What a line end dropped at `p` lands on: a point on a card's FACE (pinning the end there — its port or
+// shifted along it; the floating dots sit outside the card, so a face wins even off the card's body), else
+// the card under the point, topmost first — the drop target for both a fresh draw and a moved end.
+function dropAt(p: Pt, exclude: string): { id: string; pin?: Pin } | null {
+  let hit: { id: string; pin?: Pin } | null = null;
   for (const n of state.nodes.values()) {
     if (n.id === exclude || isHidden(n) || !connectable(n.id)) {
       continue;
     }
-    const side = portAt(n, p);
-    if (side) { hit = { id: n.id, side }; continue; }
+    const pin = portAt(n, p);
+    if (pin) { hit = { id: n.id, pin }; continue; }
     if (p.x < n.x || p.y < n.y || p.x > n.x + nodeW(n) || p.y > n.y + nodeH(n)) {
       continue;
     }
-    if (!hit?.side) {
+    if (!hit?.pin) {
       hit = { id: n.id };      // later nodes paint over earlier ones; take the last match
     }
   }
@@ -197,7 +210,7 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
     const draw = ui.edgeDraw!;
     draw.to = screenToWorld(e.clientX, e.clientY);
     const at = dropAt(draw.to, draw.sourceId);
-    draw.overId = at?.id; draw.overSide = at?.side;
+    draw.overId = at?.id; draw.overSide = at?.pin?.side; draw.overAt = at?.pin?.at;
     paintFreeEdges();
   };
   const up = (e: PointerEvent): void => {
@@ -222,21 +235,25 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   // empty space leaves the line where it was — Delete is how a line goes away.
   if (travelled < MIN_DRAG_PX || !target) { paintFreeEdges(); return; }
   const existing = draw.edgeId ? state.edges.find(e => e.id === draw.edgeId) : null;
+  const overPin = draw.overSide ? { side: draw.overSide, at: draw.overAt ?? 0.5 } : undefined;
   if (existing) {
-    const other = draw.end === 'to' ? existing.from : existing.to;
-    const otherPort = draw.end === 'to' ? existing.fromPort : existing.toPort;
-    const dup = edgeBetween(other, target, otherPort, draw.overSide);
+    const toEnd = draw.end === 'to';
+    const other = toEnd ? existing.from : existing.to;
+    const otherSide = toEnd ? existing.fromPort : existing.toPort, otherAt = toEnd ? existing.fromAt : existing.toAt;
+    const dup = edgeBetween(other, target, otherSide ? { side: otherSide, at: otherAt ?? 0.5 } : undefined, overPin);
     if (target === other || (dup && dup !== existing)) { paintFreeEdges(); return; }
     // …and the end lets go of the path it held into a folded section's unread notes, if any (data/board.ts)
     mutate([], () => {
-      if (draw.end === 'to') { existing.to = target; existing.toPort = draw.overSide; delete existing.toPath; }
-      else { existing.from = target; existing.fromPort = draw.overSide; delete existing.fromPath; }
+      if (toEnd) { existing.to = target; delete existing.toPath; }
+      else { existing.from = target; delete existing.fromPath; }
+      setPin(existing, toEnd ? 'to' : 'from', overPin);
     }, { edges: true, reflow: 'paint', status: 'Edge moved' });
     syncEdgeBar();
     return;
   }
   let made = null as BoardEdge | null;
-  mutate([], () => { made = addEdge(draw.sourceId, target, draw.side, draw.overSide); }, { edges: true, reflow: 'none' });
+  mutate([], () => { made = addEdge(draw.sourceId, target, draw.side ? { side: draw.side, at: 0.5 } : undefined, overPin); },
+         { edges: true, reflow: 'none' });
   if (!made) { paintFreeEdges(); return; }
   selectEdge(made.id);
 }
@@ -275,7 +292,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   }
   const opposite: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
   touchEdges();          // into the new card's step, which its rename session commits
-  addEdge(srcId, n.id, side, opposite[side]);
+  addEdge(srcId, n.id, { side, at: 0.5 }, { side: opposite[side], at: 0.5 });
   scheduleSaveBoard();
   paintFreeEdges();
 }
