@@ -53,7 +53,7 @@ export function swatchRowHTML(first: FirstChip): string {
   // recently wrap onto a third row (renderRecentChips). The MAP's canvas alone gets a reset chip in
   // the board's own grey, ahead of them, since there is no other way back to "no canvas colour".
   if (first === 'default') {
-    html += `<span class="swatch-break"></span><div class="swatch" data-color="" title="default board colour" style="--sw:var(--bg)"></div>`;
+    html += `<span class="swatch-break"></span><div class="swatch" data-color="" title="default map colour" style="--sw:var(--bg)"></div>`;
   }
   return html;
 }

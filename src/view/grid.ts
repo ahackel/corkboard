@@ -39,12 +39,10 @@ import gridMeshIcon from '../assets/icons/grid-mesh.svg?raw';
 import gridLineIcon from '../assets/icons/grid-line.svg?raw';
 import { state, GRID_STYLES, GRID_SIZES, type GridStyle, type GridSize } from '../core/state.js';
 import { scheduleSaveBoard } from '../data/board.js';
-import { openMenu } from '../features/context-menu.js';
 import { clamp } from '../utils/num.js';
 
 const GRID_ICONS: Record<GridStyle, string> = { none: gridOffIcon, dot: gridDotIcon, mesh: gridMeshIcon, line: gridLineIcon };
 
-let gridBtn: HTMLElement | null = null;
 const gridEl = document.getElementById('grid');
 const gridFineEl = document.getElementById('gridFine');
 
@@ -147,40 +145,38 @@ export function paintGrid(): void {
   gridEl.style.transform = `translate(${off(state.view.x)}px,${off(state.view.y)}px)`;
 }
 
-// Reflects state.gridStyle/gridSize onto the ONE grid button (its face is the live style) and
-// repaints the layer. Called after a fresh map load (settings.json may have just changed it) and
-// after each pick.
+// Reflects state.gridStyle/gridSize onto the settings panel's grid rows and repaints the layer.
+// Called after a fresh map load (settings.json may have just changed it) and after each pick.
 export function refreshGrid(): void {
-  if (gridBtn) {
-    gridBtn.innerHTML = GRID_ICONS[state.gridStyle] + chevron();
-    gridBtn.title = `Background grid: ${STYLE_LABELS[state.gridStyle]}, ${sizeLabel(state.gridSize)}`;
-  }
+  renderGridControls();
   painted = '';   // force a rebuild — the style may have changed, not just the step
   paintGrid();
 }
 
-// Both axes in ONE menu off ONE button. It used to be two corner circles — a cycle-through-styles
-// button beside a size picker — which spent two slots of chrome on one idea, and left the style you
-// wanted up to three taps away. A menu names every choice and marks the live one.
+// The settings panel's two grid rows (#settingsPop): the style, then the snap step.
 const STYLE_LABELS: Record<GridStyle, string> = { none: 'Off', dot: 'Dots', mesh: 'Mesh', line: 'Lines' };
-const sizeLabel = (size: GridSize): string => size ? `${size} px` : 'No snap';
-const tick = (on: boolean): string => on ? '✓ ' : '\u2007 ';   // figure space, so labels line up either way
 
-export function openGridMenu(): void {
-  const r = gridBtn!.getBoundingClientRect();
-  // sy is clamped to fit above the viewport bottom (see openMenuAt in context-menu.ts), so passing
-  // the button's own top edge naturally pushes the menu up from this bottom-corner button.
-  openMenu([
-    ...GRID_STYLES.map(style => ({
-      label: tick(style === state.gridStyle) + STYLE_LABELS[style],
-      run: () => set({ gridStyle: style }),
-    })),
-    'sep' as const,
-    ...GRID_SIZES.map(size => ({
-      label: tick(size === state.gridSize) + sizeLabel(size),
-      run: () => set({ gridSize: size }),
-    })),
-  ], r.left, r.top);
+const sizeLabel = (z: GridSize): string => z ? `${z} px` : 'Off';
+const tick = (on: boolean): string => `<span class="set-tick">${on ? '✓' : ''}</span>`;
+
+export function renderGridControls(): void {
+  const styleBtn = document.getElementById('gridBtn');
+  const snapBtn = document.getElementById('snapBtn');
+  const styles = document.getElementById('gridStyles');
+  const sizes = document.getElementById('gridSizes');
+  if (!styleBtn || !snapBtn || !styles || !sizes) {
+    return;
+  }
+  styleBtn.innerHTML = GRID_ICONS[state.gridStyle] + `<span class="set-val">${STYLE_LABELS[state.gridStyle]}</span>` + chevron();
+  snapBtn.innerHTML = `<span class="set-val">${sizeLabel(state.gridSize)}</span>` + chevron();
+  styles.innerHTML = GRID_STYLES.map(s => {
+    const on = s === state.gridStyle;
+    return `<button class="set-item" data-style="${s}" aria-pressed="${on}">${tick(on)}${GRID_ICONS[s]}${STYLE_LABELS[s]}</button>`;
+  }).join('');
+  sizes.innerHTML = GRID_SIZES.map(z => {
+    const on = z === state.gridSize;
+    return `<button class="set-item" data-size="${z}" aria-pressed="${on}">${tick(on)}${sizeLabel(z)}</button>`;
+  }).join('');
 }
 
 function set(patch: { gridStyle?: GridStyle; gridSize?: GridSize }): void {
@@ -189,11 +185,19 @@ function set(patch: { gridStyle?: GridStyle; gridSize?: GridSize }): void {
   scheduleSaveBoard();
 }
 
-// Wires the grid button. Called once at startup; the initial paint happens once the first map's
+// Wires the grid rows. Called once at startup; the initial paint happens once the first map's
 // settings.json has loaded (loadFromDir calls refreshGrid()).
 export function setupGrid(): void {
-  gridBtn = document.getElementById('gridBtn');
-  if (gridBtn) {
-    gridBtn.onclick = (e) => { e.stopPropagation(); openGridMenu(); };
-  }
+  document.getElementById('gridStyles')?.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-style]');
+    if (b) {
+      set({ gridStyle: b.dataset.style as GridStyle });
+    }
+  });
+  document.getElementById('gridSizes')?.addEventListener('click', (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-size]');
+    if (b) {
+      set({ gridSize: Number(b.dataset.size) as GridSize });
+    }
+  });
 }

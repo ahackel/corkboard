@@ -24,8 +24,8 @@ import { openImageAt } from '../main.js';
 import { inboxSection, goToInbox } from './inbox.js';
 import { canEnter, canOpen, scopeActive } from '../nav/scope.js';
 import { hasStackSelected, unstackSelection, stackToSection } from './stacks.js';
-import { openGridMenu } from '../view/grid.js';
-import { byId } from '../utils/dom.js';
+import { openSettings } from './canvas-color.js';
+import { byId, IS_MAC } from '../utils/dom.js';
 import { showStart } from '../boot.js';
 import { flushSave } from '../data/save.js';
 import { nodesOf } from '../utils/model.js';
@@ -273,7 +273,7 @@ window.addEventListener('keyup', (e) => {
 // ---------- the ⌘P command palette's list ----------
 // Every action the app has, with the shortcut that does the same — built here because every action
 // function is in scope here. `when` hides what can't apply right now (features/palette.ts).
-const MOD = /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘' : 'Ctrl ';
+const MOD = IS_MAC ? '⌘' : 'Ctrl ';
 const editable = (): boolean => !state.readOnly && store.isOpen;
 const hasSel = (): boolean => state.sel.size > 0 && editable();
 const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : undefined;
@@ -309,7 +309,7 @@ function paletteCommands(): Command[] {
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
-    { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
+    { label: 'Collapse / expand', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
     { label: 'Tidy up the section', keywords: 'tidy arrange layout grid clean', when: () => state.sel.size === 1 && canTidySection(oneSel()), run: () => tidySection(oneSel()!) },
@@ -321,13 +321,12 @@ function paletteCommands(): Command[] {
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
     { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && plainSectionSelected(), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
-    { label: state.readOnly ? 'Edit again (leave read-only)' : 'Read-only mode', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
-    { label: 'Background grid…', keywords: 'dots lines snap', run: openGridMenu },
-    { label: 'Canvas colour…', keywords: 'background', when: () => !state.readOnly, run: () => byId('canvasColorBtn').click() },
+    { label: state.readOnly ? 'Turn off read-only' : 'Turn on read-only', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
+    { label: 'Map settings…', keywords: 'canvas colour color background grid dots lines mesh snap', run: openSettings },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
     { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
     ...(['png', 'pdf'] as ImageFormat[]).map(f => ({
-      label: `Export ${state.sel.size ? 'the selection' : 'the board'} as ${f.toUpperCase()}`, keywords: 'picture image download save print share',
+      label: `Export ${state.sel.size ? 'the selection' : 'the map'} as ${f.toUpperCase()}`, keywords: 'picture image download save print share',
       run: () => {
         exportImage(f).catch((e: unknown) => {
           console.error(e);

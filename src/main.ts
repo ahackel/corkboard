@@ -47,7 +47,7 @@ import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
 import { installEdgeTools } from './features/edge-tools.js';
 import { ui, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
-import { byId } from './utils/dom.js';
+import { byId, keys } from './utils/dom.js';
 import { applyColorVars, colorClass } from './view/color.js';
 import { canFold, isSectionFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
 import { ensureResizeHandles, SECTION_DIRS, clearResizeHandles } from './features/resize.js';
@@ -56,6 +56,7 @@ import { openSection, syncScopeChrome } from './nav/sections.js';
 import { focusByTitle } from './nav/focus.js';
 import { applyReadOnly } from './features/read-only.js';
 
+document.querySelectorAll<HTMLElement>('[title]').forEach(el => { el.title = keys(el.title); });
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
 setupGrid();
 // Wiring only — it must not READ anything back out of main. Everything down here runs while main's

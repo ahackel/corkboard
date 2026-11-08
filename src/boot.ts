@@ -20,6 +20,7 @@ import { esc } from './utils/markdown.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';
+import kebabIcon from './assets/icons/kebab.svg?raw';
 import { byId } from './utils/dom.js';
 import { settleSave } from './data/save.js';
 import { exportZip, openImportPicker } from './data/zip-io.js';
@@ -44,7 +45,10 @@ async function openFolderMap(key: string): Promise<boolean> {
     setStatus('That folder is no longer available — removed from the list.');
     return false;
   }
-  if (r === 'denied') { alert('Write permission was denied for this folder.'); return false; }
+  if (r === 'denied') {
+    setStatus('Corkboard can’t write to that folder. Open it again and choose “Allow”.');
+    return false;
+  }
   if (r !== 'ok') {
     return false;
   }
@@ -56,10 +60,13 @@ async function pickFolder(): Promise<void> {
   await settleSave();   // the old map's pending writes must not land in the picked folder
   const r = await fsaStore.pick();   // the picker needs this click as its user gesture
   if (r === 'unsupported') { setStatus('This browser can’t open a local folder — use Chrome or Edge.'); return; }
-  if (r === 'denied') { setStatus('Folder permission denied.'); alert('Write permission was denied.\nReopen the folder and choose “Edit”/“Allow”.'); return; }
+  if (r === 'denied') {
+    setStatus('Corkboard can’t write to that folder. Open it again and choose “Allow”.');
+    return;
+  }
   if (r !== 'ok') {
     if (r === 'error') {
-      setStatus('Could not open folder.');
+      setStatus('That folder couldn’t be opened. Try choosing it again.');
     }
     return;
   }
@@ -99,7 +106,7 @@ function renderMapList(): void {
     const name = renaming === m.id
       ? `<input class="mi-name-input" value="${esc(m.name)}" aria-label="Map name">`
       : `<span class="mi-name">${esc(m.name)}</span><span class="mi-when">${timeAgo(m.when)}</span>
-         <button class="mi-more" aria-label="Map actions" title="Map actions">⋮</button>`;
+         <button class="mi-more" aria-label="Map actions" title="Map actions">${kebabIcon}</button>`;
     return `<div class="map-item${isCurrent(m) ? ' current' : ''}" data-id="${esc(m.id)}" tabindex="0" role="button" aria-label="Open ${esc(m.name)}">
       <span class="mi-icon">${folderIcon.replace('btn-icon', '')}</span>${name}</div>`;
   }).join('');

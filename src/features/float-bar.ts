@@ -21,7 +21,7 @@ import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter } from '../nav/scope.js';
 import { labelEl, animateLayout } from '../main.js';
-import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets } from '../utils/dom.js';
+import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets, keys } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { MIN_SECTION_W, MIN_SECTION_H } from './resize.js';
 import { toggleCollapse, toggleCollapseSelection } from './fold.js';
@@ -165,7 +165,7 @@ function markOpen(): void {
   // On a stack, Ungroup is UNSTACK (crud.ts deleteSelectionKeepChildren), and a stack can become a section.
   const stacks = hasStackSelected();
   const onlyStacks = stacks && !nodesOf(selectedIds()).some(k => k.type === 'section' && !isStack(k));
-  fbUngroup.title = onlyStacks ? 'Unstack (⌘⌫)' : 'Ungroup (⌘⌫)';
+  fbUngroup.title = keys(onlyStacks ? 'Unstack (⌘⌫)' : 'Ungroup (⌘⌫)');
   fbUngroup.setAttribute('aria-label', onlyStacks ? 'Unstack' : 'Ungroup');
   fbToSection.style.display = stacks ? '' : 'none';
 }

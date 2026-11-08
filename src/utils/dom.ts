@@ -46,6 +46,13 @@ export function classMarker(cls: string): (el: Element | null) => void {
 // into existence beside them (main.ts, features/float-bar.ts, and the since-retired sketch layer).
 // Anything genuinely OPTIONAL in the shell keeps its own nullable lookup — see features/canvas-color.ts,
 // and view/grid.ts, which test for the element before wiring it up.
+export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
+
+// Shortcuts are written with ⌘; elsewhere that key is Ctrl.
+export function keys(s: string): string {
+  return IS_MAC ? s : s.replace(/⌘/g, 'Ctrl+');
+}
+
 export function byId<T extends Element = HTMLElement>(id: string): T { return document.getElementById(id) as unknown as T; }
 
 // The safe-area insets as NUMBERS, for the panels that are placed by SCRIPT rather than by CSS.

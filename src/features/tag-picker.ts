@@ -92,7 +92,7 @@ function tagGroups(): Section[] {
       out.push({ title: 'Recent', rows: recent.map(t => row('add', t)) });
     }
     if (more.length) {
-      out.push({ title: 'On the board', rows: more.map(b => row('add', b.tag, plural(b.count))) });
+      out.push({ title: 'On the map', rows: more.map(b => row('add', b.tag, plural(b.count))) });
     }
   } else {
     const typed = cleanTag(q);

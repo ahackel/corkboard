@@ -14,9 +14,28 @@ function paint(): void {
   const el = byId('saveAlert');
   if (!failing.size) { el.hidden = true; return; }
   const msg = [...new Set([...failing.values()].map(f => f.msg))].join(' · ');   // one disk, one error
-  byId('saveAlertMsg').textContent = `Changes not saved — ${msg}. Retrying…`;
+  byId('saveAlertMsg').textContent = `Changes not saved. ${msg} Retrying…`;
   el.hidden = false;
 }
+
+// The banner says what to DO; the raw error stays in the console (saveFailed logs it).
+function howToFix(err: unknown): string {
+  switch ((err as Error)?.name) {
+    case 'NotAllowedError':
+    case 'SecurityError':
+      return 'Corkboard lost permission to write to the folder. Open the map again from Home.';
+    case 'QuotaExceededError':
+      return 'The disk or browser storage is full. Free some space.';
+    case 'NotFoundError':
+      return 'The map’s folder was moved or deleted. Put it back, or open it again from Home.';
+    case 'NoModificationAllowedError':
+    case 'InvalidStateError':
+      return 'Another app is holding the file. Close it there.';
+    default:
+      return `${(err as Error)?.message || String(err)}.`;
+  }
+}
+
 export function saveFailed(src: Source, err: unknown, retry: () => void): void {
   console.error(`Save failed (${src}):`, err);
   const prev = failing.get(src);
@@ -24,7 +43,7 @@ export function saveFailed(src: Source, err: unknown, retry: () => void): void {
     clearTimeout(prev.timer);
   }
   const attempt = prev ? prev.attempt + 1 : 0;
-  const msg = (err as Error)?.message || (err as Error)?.name || String(err);
+  const msg = howToFix(err);
   const timer = window.setTimeout(retry, DELAYS[Math.min(attempt, DELAYS.length - 1)]);
   failing.set(src, { msg, retry, timer, attempt });
   paint();

@@ -366,11 +366,11 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
   both, `canvasFill`, off `canvasOwner`: the open section, or `null` for "the map". The
   `hasAuthoredColor` test applies only to the section half — `canvasColor` is authored by definition, and `''`
   means the theme's background.
-- **The canvas-colour BUTTON edits whichever of those two you're standing on** (`#canvasColorBtn`, one slot
-  left of `#gridBtn`; `features/canvas-color.ts`). At the top level it writes `state.canvasColor`; inside
+- **The canvas-colour ROW edits whichever of those two you're standing on** (the map settings panel,
+  `#settingsBtn` → `#settingsPop`, beside the grid rows; `features/canvas-color.ts`). At the top level it writes `state.canvasColor`; inside
   an open section it writes that SECTION's `n.color` — the same field the float bar would write if the section were
-  selected, so nothing new exists for the case. It reads `canvasOwner` too, so the chip on its face shows the
-  value it would overwrite. Four things to respect: the chips are `properties.ts`'s row, not a copy
+  selected, so nothing new exists for the case. It reads `canvasOwner` too, so its heading names what it would
+  overwrite. Four things to respect: the chips are `properties.ts`'s row, not a copy
   (`swatchRowHTML`/`markSwatchRow`/`renderRecentChips` were split out of `createProperties` for exactly this —
   what can't be shared is that factory itself, being defined over node ids); the one difference is
   `FirstChip` — the map's own canvas gets a reset chip in the board's grey, since nothing else gets it back
@@ -957,7 +957,7 @@ greys and ending in the custom chip; recently used custom colours wrap onto a th
 key a note may carry (a superset: `slate` still paints but is no longer offered), and its `.c-<key>`
 classes are GENERATED beside their ink (`deriveInk`), so a new key is its `--pal-*` hex plus one array
 entry. There are no "inherit" or "none" chips: a card nobody coloured keeps following its section, and the
-picker rings the colour it SHOWS (`effectiveColor`) — the selected chip wears FigJam's violet ring. A line's
+picker rings the colour it SHOWS (`effectiveColor`) — the selected chip wears the selection blue, like every other selection. A line's
 default ink IS `stone`, so the line picker needs no "default" chip either.
 
 **Selection, ports and lines are FigJam's.** A lone selection shows a white rounded square on each corner
@@ -1007,7 +1007,7 @@ order kept. A section's box counts its label. With several selected, the float b
 selection, not over one card of it.
 
 **The dock** (`#dock`, bottom centre) is FigJam's main toolbar: the sticky you drag a new card off, the
-board's canvas colour and grid, and the Actions button (⌘P), in groups split by hairlines. Its buttons are ordinary
+tag tray, the map settings (one panel: canvas colour, grid style, snap), and the Actions button (⌘P), in groups split by hairlines. Its buttons are ordinary
 `.floating-btn`s that drop their own chrome inside it, and every popover/menu they open is placed from the
 button's rect, so none of them knows where the dock is.
 

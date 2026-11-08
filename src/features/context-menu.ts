@@ -21,7 +21,7 @@ import { scope, scopeRootNode } from '../nav/scope.js';
 import { buildCardMenu } from './float-bar.js';
 import { deleteSelectedEdge } from './edge-tools.js';
 import { nodeLabel } from '../utils/model.js';
-import { byId, placeInViewport } from '../utils/dom.js';
+import { byId, placeInViewport, keys } from '../utils/dom.js';
 import { exitScope, goToScopeDepth } from '../nav/sections.js';
 import { selectAll } from './selection.js';
 
@@ -36,7 +36,7 @@ function addItem(label: string, shortcut: string, run: () => void, opts: ItemOpt
   const b = document.createElement('button');
   b.className = 'cm-item' + (opts.danger ? ' cm-danger' : ''); b.type = 'button';
   const l = document.createElement('span'); l.textContent = label; b.appendChild(l);
-  if (shortcut){ const k = document.createElement('kbd'); k.textContent = shortcut; b.appendChild(k); }
+  if (shortcut){ const k = document.createElement('kbd'); k.textContent = keys(shortcut); b.appendChild(k); }
   if (opts.disabled) {
     b.disabled = true;
   }
@@ -181,7 +181,7 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   // Selecting mutates nothing, so it sits with zooming in the read-only-safe group. Here as well as
   // on ⌘A because a touch user has no ⌘ — and this menu is the only place they'd find it.
   entries.push({ label:'Select all', shortcut:'⌘A', run: () => selectAll(), disabled: !state.nodes.size });
-  entries.push({ label:'Zoom to fit', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
+  entries.push({ label:'Fit the map to the screen', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
   return entries;
 }
 

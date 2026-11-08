@@ -1,5 +1,5 @@
-// ---------- the canvas colour button (#canvasColorBtn, bottom-right beside the grid controls) ----------
-// ONE button meaning "the colour of the canvas I'm standing on". What that IS depends on where you
+// ---------- the map settings panel (#settingsBtn on the dock → #settingsPop) ----------
+// Its colour row means "the colour of the canvas I'm standing on". What that IS depends on where you
 // are, and features/canvas-color.ts's canvasOwner is the single place that decides:
 //   · at the TOP level there's no section, so it edits the MAP's own colour — state.canvasColor,
 //     per-map in settings.json beside the grid, so it travels with the vault rather than the browser.
@@ -21,13 +21,15 @@ import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { paintAll, effectiveColor } from '../main.js';
-import { placePopover, closeOnOutside } from '../utils/dom.js';
+import { placePopover, placeInViewport, closeOnOutside } from '../utils/dom.js';
+import { renderGridControls } from '../view/grid.js';
 import { colorFill, THEME_BG } from '../view/color.js';
 import { scopeRootNode } from '../nav/scope.js';
 import { paleFill, inkFor } from '../utils/ink.js';
 
-const btn = document.getElementById('canvasColorBtn') as HTMLButtonElement | null;
-const pop = document.getElementById('canvasColorPop');
+const btn = document.getElementById('settingsBtn') as HTMLButtonElement | null;
+const pop = document.getElementById('settingsPop');
+const colorBtn = document.getElementById('canvasColorBtn');
 const colors = document.getElementById('canvasColors');
 let built = false;
 
@@ -83,12 +85,11 @@ function setColor(color: string): void {
   if (colors) { renderRecentChips(colors); markSwatchRow(colors, currentColor()); }
 }
 
-// ---------- the button's own chip ----------
-// Mirrors the live value rather than the popover's `.active` swatch, so it's right before the popover
-// has ever been built. Reuses the .swatch look the chips have (see index.html).
+// ---------- the colour field's chip ----------
+// Mirrors the live value, so it's right before the swatch picker has ever been built.
 export function markCanvasColorBtn(): void {
-  const chip = btn?.querySelector<HTMLElement>('.swatch');
-  if (!btn || !chip) {
+  const chip = colorBtn?.querySelector<HTMLElement>('.swatch');
+  if (!colorBtn || !chip) {
     return;
   }
   const v = currentColor();
@@ -102,8 +103,6 @@ export function markCanvasColorBtn(): void {
   else {
     chip.style.setProperty('--sw', fill ?? canvasSurface());
   }
-  const owner = canvasOwner();
-  btn.title = owner ? `Colour of “${nodeLabel(owner)}” — the section you’re in` : 'Canvas colour of this map';
 }
 
 // ---------- the popover ----------
@@ -132,7 +131,7 @@ function build(): void {
       return;   // closing here would tear the row down mid-choice
     }
     setColor(sw.dataset.color ?? '');
-    close();
+    closeSubs();
   });
   bindCustom();
 }
@@ -176,15 +175,45 @@ function bindCustom(): void {
     setColor(input.value);
   });
 }
-function close(): void { pop?.classList.remove('open'); }
-function toggle(): void {
+// The panel's dropdowns: each [data-pop] button opens the popover it names, nested in the panel so a
+// click in it counts as inside.
+const dropdowns = (): HTMLElement[] => [...(pop?.querySelectorAll<HTMLElement>('[data-pop]') ?? [])];
+
+function closeSubs(): void {
+  for (const b of dropdowns()) {
+    document.getElementById(b.dataset.pop!)?.classList.remove('open');
+    b.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function close(): void {
+  closeSubs();
+  pop?.classList.remove('open');
+  btn?.setAttribute('aria-expanded', 'false');
+}
+
+export function openSettings(): void {
   if (!pop || !btn) {
     return;
   }
-  if (pop.classList.contains('open')) { close(); return; }
-  build();
+  const owner = canvasOwner();
+  const head = document.getElementById('setColorHead');
+  if (head) {
+    head.textContent = owner ? `Colour of “${nodeLabel(owner)}”` : 'Canvas colour';
+  }
+  markCanvasColorBtn();
+  renderGridControls();
   pop.classList.add('open');
-  placePopover(pop, btn);   // above its own button, in the bottom-right corner
+  btn.setAttribute('aria-expanded', 'true');
+  placePopover(pop, btn, document.getElementById('dock') ?? btn);   // above the dock, not into it
+}
+
+function toggle(): void {
+  if (pop?.classList.contains('open')) {
+    close();
+  } else {
+    openSettings();
+  }
 }
 
 export function setupCanvasColor(): void {
@@ -193,9 +222,39 @@ export function setupCanvasColor(): void {
   }
   btn.onclick = (e) => { e.stopPropagation(); toggle(); };
   closeOnOutside(pop, btn, close);
-  // Deliberately NOT marking the chip here: no map is loaded yet, the static `.swatch.inherit` in
-  // index.html is already the right default, and the first paintAll marks it for real
-  // (syncCanvasBackground).
+  for (const b of dropdowns()) {
+    const sub = document.getElementById(b.dataset.pop!)!;
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const wasOpen = sub.classList.contains('open');
+      closeSubs();
+      if (wasOpen) {
+        return;
+      }
+      if (b === colorBtn) {
+        build();
+      }
+      sub.classList.add('open');
+      b.setAttribute('aria-expanded', 'true');
+      // beside its field, bottom-aligned with it (the panel sits low on the screen): right if it fits,
+      // else left, else above the field
+      const r = b.getBoundingClientRect(), w = sub.offsetWidth;
+      if (r.right + 8 + w <= innerWidth - 4) {
+        placeInViewport(sub, r.right + 8, r.bottom - sub.offsetHeight);
+      } else if (r.left - 8 - w >= 4) {
+        placeInViewport(sub, r.left - 8 - w, r.bottom - sub.offsetHeight);
+      } else {
+        placePopover(sub, b);
+      }
+    };
+    closeOnOutside(sub, b, closeSubs);
+  }
+  // a pick in a list closes it (colour swatches close themselves in build's handler)
+  pop.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('.set-item')) {
+      closeSubs();
+    }
+  });
 }
 
 // While a section is OPEN the canvas IS its interior, so the canvas takes the section's own fill — the
@@ -254,7 +313,7 @@ export function syncCanvasBackground(): void {
     stage.style.removeProperty('--canvas-bg');
     stage.style.removeProperty('--grid-pat');
   }
-  markCanvasColorBtn();   // the button's own chip mirrors whatever it would edit
+  markCanvasColorBtn();
   syncThemeColor(fill);
 }
 // The browser's theme colour (Safari's bars, an installed app's title bar) is the canvas you're standing

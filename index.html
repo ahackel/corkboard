@@ -44,7 +44,7 @@
        it. #status is the toast setStatus writes (core/state.ts): a pill at the bottom that fades. -->
   <div id="status" role="status" aria-live="polite"></div>
   <!-- the ONE mode that needs to be visible at a glance, since nothing can be edited in it -->
-  <button id="roBadge" hidden title="Read-only — click to edit again (R)">Read-only · click to edit</button>
+  <button id="roBadge" hidden title="Turn off read-only (R)">Read-only. Click to turn off</button>
   <div id="palette" hidden>
     <div class="pal-box" role="dialog" aria-label="Command palette">
       <input id="palInput" type="text" placeholder="Type a command…" autocomplete="off" spellcheck="false" aria-label="Command" />
@@ -67,7 +67,7 @@
   </div>
 
   <div id="stage">
-    <!-- background grid (none/dot/line, toggled by #gridBtn): a SCREEN-SPACE layer, sibling of
+    <!-- background grid (none/dot/mesh/line, set in the map settings): a SCREEN-SPACE layer, sibling of
          (and painted below) #world — deliberately NOT inside #world. A pattern that inherits the
          zoom transform scales its own dots/strokes with it, so at any k≠1 the browser resamples
          a sub-pixel pattern across the whole canvas — that's the moiré. Here the dots/lines are
@@ -165,16 +165,26 @@
 
 
 
-  <!-- canvas colour: one slot further left again. Edits the colour of the canvas you're standing on —
-       the MAP at the top level, the OPEN SECTION once you're inside one (features/canvas-color.ts). Its
-       face is a .swatch rather than an icon, so it shows the colour it would overwrite. The popover
-       holds properties.ts's own swatch row, built on first open. -->
-  <div id="canvasColorPop" class="fb-pop">
-    <div id="canvasColors" class="swatches"></div>
+  <!-- map settings, opened from the dock's #settingsBtn (features/canvas-color.ts). The colour edits the
+       canvas you're standing on: the MAP at the top level, the OPEN SECTION inside one. The grid rows
+       are view/grid.ts's. -->
+  <div id="settingsPop" class="fb-pop" role="dialog" aria-label="Map settings">
+    <span id="setColorHead" class="set-head set-color">Canvas colour</span>
+    <!-- a colour FIELD: the live colour's chip, opening the swatch picker below (nested so a click in it
+         counts as inside the panel) -->
+    <button id="canvasColorBtn" class="fb-dd set-color" data-pop="canvasColorPop" aria-label="Canvas colour" aria-expanded="false">
+      <span class="fb-swatch swatch inherit"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
+    <div id="canvasColorPop" class="fb-pop"><div id="canvasColors" class="swatches"></div></div>
+    <span class="set-head">Grid</span>
+    <button id="gridBtn" class="fb-dd" data-pop="gridPop" aria-label="Grid" aria-expanded="false"></button>
+    <div id="gridPop" class="fb-pop"><div id="gridStyles" class="set-list"></div></div>
+    <span class="set-head">Snap</span>
+    <button id="snapBtn" class="fb-dd" data-pop="snapPop" aria-label="Snap" aria-expanded="false"></button>
+    <div id="snapPop" class="fb-pop"><div id="gridSizes" class="set-list"></div></div>
   </div>
 
-  <!-- the DOCK, bottom centre — FigJam's main toolbar: the sticky you drag a new card off, then the
-       board's own settings, then every command. -->
+  <!-- the DOCK, bottom centre — FigJam's main toolbar: the sticky you drag a new card off, the tag
+       tray, then the map's settings and every command. -->
   <div id="dock">
     <!-- ghost card — drag it onto the canvas to create a new card -->
     <div id="ghostCard" title="Drag to create a new card">+</div>
@@ -182,15 +192,9 @@
     <button id="trayBtn" class="floating-btn" title="Tag tray (T)" aria-label="Tag tray" aria-pressed="false">
       <span class="ic" data-icon="tag"></span></button>
     <span class="dock-sep"></span>
-    <!-- canvas colour: edits the colour of the canvas you're standing on — the MAP at the top level,
-         the OPEN SECTION once you're inside one (features/canvas-color.ts). Its face is a .swatch, so it
-         shows the colour it would overwrite. The popover holds properties.ts's own swatch rows. -->
-    <button id="canvasColorBtn" class="floating-btn fb-dd" title="Canvas colour" aria-label="Canvas colour">
-      <span class="swatch inherit"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
-    <!-- background grid: ONE button for both axes — its face shows the live style and a click opens a
-         menu holding the styles AND the spacings (view/grid.ts). -->
-    <button id="gridBtn" class="floating-btn fb-dd" title="Background grid" aria-label="Background grid"></button>
-    <span class="dock-sep"></span>
+    <!-- the map's own settings (canvas colour, grid): one panel, #settingsPop -->
+    <button id="settingsBtn" class="floating-btn" title="Map settings" aria-label="Map settings" aria-expanded="false">
+      <span class="ic" data-icon="settings"></span></button>
     <!-- Actions: the command palette's own button (FigJam's quick actions), the way in for touch and the
          hint that ⌘P exists. The palette opens just above it. -->
     <button id="paletteBtn" class="floating-btn" title="Actions (⌘P)" aria-label="Actions">
@@ -201,7 +205,7 @@
   <div id="ghostHint" class="emptyhint" aria-hidden="true">
     <svg class="hint-arrow" viewBox="0 0 52 22" width="52" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M50 8 Q 24 20 5 13"/><path d="M5 13l9-3M5 13l6 7"/></svg>
-    <span>Drag to create a card</span>
+    <span>Drag a card out, or press N</span>
   </div>
 
   <!-- home sidebar: slides in from the left (home button). Tabs pick the storage backend,
@@ -214,7 +218,7 @@
           <button id="tabDevice" class="store-tab" role="tab">On device</button>
           <button id="tabFolder" class="store-tab" role="tab">Local folder</button>
         </div>
-        <button id="startClose" class="start-close" aria-label="Close" title="Close">✕</button>
+        <button id="startClose" class="start-close" aria-label="Close" title="Close"><span class="ic" data-icon="close"></span></button>
       </div>
       <button id="newBtn" class="side-row"><span class="ic" data-icon="plus"></span><span id="newBtnLabel">New map</span></button>
       <div id="mapList"></div>

@@ -18,7 +18,7 @@ export function applyReadOnly(): void {
   roBadge.hidden = !ro;
   // ghost card visibility is driven by body.readonly CSS rule
   syncFloatBar();
-  setStatus(ro ? 'Read-only — nothing is saved' : 'Editing enabled');
+  setStatus(ro ? 'Read-only is on. Nothing is saved.' : 'Read-only is off');
   scheduleUrlSync();
 }
 export async function setReadOnly(on: boolean): Promise<void> {

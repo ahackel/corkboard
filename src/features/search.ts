@@ -179,7 +179,7 @@ function runSearch(showList = true): void {
     active = tagRows.length ? 0 : -1;
     searchResults.innerHTML = tagRows.length
       ? tagRows.map((t, i) => `<button class="sr-item sr-tag${i === active ? ' active' : ''}" data-tag="${esc(t)}">${tagChipHTML({ tag: t, inText: false })}<span class="sr-meta">${countOf(t)}</span></button>`).join('')
-      : '<div class="sr-none">No tag like that on the board</div>';
+      : '<div class="sr-none">No tag like that on the map</div>';
   }
   searchResults.classList.toggle('open', showList && document.activeElement === searchBox);
   markActive();
