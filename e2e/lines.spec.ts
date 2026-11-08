@@ -128,3 +128,18 @@ test('right-clicking a line offers Delete', async ({ page }) => {
   await page.locator('#ctxMenu').getByText('Delete', { exact: true }).click();
   await expect(lines(page)).toHaveCount(0);
 });
+
+test('restyling a line from its bar is one undo step', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 300, 250, 'Source');
+  const b = await makeCard(page, 750, 500, 'Target');
+  await drawLine(page, a, 'right', b);
+  const line = page.locator('#freeEdges path.fe').first();
+  await expect(line).not.toHaveAttribute('stroke-dasharray');
+  await page.locator('#ebDash').click();
+  await page.locator('#ebDashChips [data-dash="1"]').click();
+  await expect(line).toHaveAttribute('stroke-dasharray', '7 6');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(page.locator('#freeEdges path.fe').first()).not.toHaveAttribute('stroke-dasharray');
+  await expect(lines(page)).toHaveCount(1);   // the undo took back the style, not the line
+});
