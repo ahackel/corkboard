@@ -30,6 +30,7 @@ import { showStart } from '../boot.js';
 import { flushSave } from '../data/save.js';
 import { nodesOf } from '../utils/model.js';
 import { exportZip } from '../data/zip-io.js';
+import { exportImage, type ImageFormat } from './export-image.js';
 
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
 // what a Space tap used to.
@@ -324,6 +325,9 @@ function paletteCommands(): Command[] {
     { label: 'Canvas colour…', keywords: 'background', when: () => !state.readOnly, run: () => byId('canvasColorBtn').click() },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
     { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
+    ...(['png', 'svg', 'pdf'] as ImageFormat[]).map(f => ({
+      label: `Export ${state.sel.size ? 'the selection' : 'the board'} as ${f.toUpperCase()}`, keywords: 'picture image download save print share',
+      run: () => { exportImage(f).catch(() => setStatus('Export failed')); } })),
   ];
 }
 setPaletteSource(paletteCommands);

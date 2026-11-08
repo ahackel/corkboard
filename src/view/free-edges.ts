@@ -68,7 +68,7 @@ const trim = (cap: EdgeCap): number => END_GAP + (cap === 'arrow' ? ARROW_INSET 
 // editor can never disagree about where the line is.
 // A line to a card tucked inside a FOLDED section attaches to that section's pill instead (firstVisible), and
 // its pinned port there is dropped — the pill's faces aren't the card's. Ends the open section hides map to null.
-function edgeEnd(id: string): MindNode | null {
+export function edgeEnd(id: string): MindNode | null {
   const n = state.nodes.get(id);
   if (!n) {
     return null;
@@ -239,6 +239,9 @@ export function paintFreeEdges(): void {
       tools += `<circle class="fe-handle" data-handle="from" data-edge="${esc(e.id)}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
       tools += `<circle class="fe-handle" data-handle="to" data-edge="${esc(e.id)}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
     }
+
+    // Each line is one group, so a picture export (features/export-image.ts) can keep or drop it whole.
+    svg = svg.slice(0, start) + `<g data-edge="${esc(e.id)}">` + svg.slice(start) + '</g>';
     if (inHand && (inHand.has(edgeEnd(e.from)!.id) || inHand.has(edgeEnd(e.to)!.id))) {
       held += svg.slice(start);
       svg = svg.slice(0, start);
