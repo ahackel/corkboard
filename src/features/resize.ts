@@ -9,7 +9,7 @@ import { guideResize, hideGuides } from './guides.js';
 import { paintNode, relayout } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { settleSections } from './drag.js';
-import { growSectionsToHold, syncFloatBar } from './float-bar.js';
+import { syncFloatBar } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -243,12 +243,9 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
     paintNode(n);
     // NB a west/north drag also moves this node's own x/y, which restales every CHILD's persisted
     // offset — commitRel handles that centrally for every mover, so there's nothing to do here.
-    // A resized SECTION takes in what it now covers and lets go of what it no longer does
-    // (settleSections). It isn't grown back around what it took in — the user just chose its size —
-    // but a card it let go of grows the section it landed in, as any drop does.
+    // A resized SECTION takes in what it now covers and lets go of what it no longer does (settleSections).
     if (n.type === 'section') {
-      const released = settleSections([n.id]).filter(id => state.nodes.get(id)?.parent !== n.id);
-      growSectionsToHold(released);
+      settleSections([n.id]);
     }
     relayout(); scheduleSave(); commitStep();
     syncFloatBar();   // a card that now has an authored height offers Fit (↔)

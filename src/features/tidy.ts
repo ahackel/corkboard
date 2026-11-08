@@ -9,7 +9,6 @@ import { moveSubtreeTo, sectionLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
 import { mutate } from './mutate.js';
-import { growSectionsToHold } from './float-bar.js';
 import { animateLayout } from '../main.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 
@@ -44,7 +43,6 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2):
       const lh = n.type === 'section' ? sectionLabelH(n) : 0;
       moveSubtreeTo(n, p.x, p.y + lh);
     }
-    growSectionsToHold(nodes.map(n => n.id));   // a section holding them shows the new arrangement
   }), { reflow: 'relayout', status: what });
 }
 

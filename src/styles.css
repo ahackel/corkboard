@@ -428,6 +428,7 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
                                         handle sits ON the line it moves and is always grabbable
      8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
      9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
+                                        and, above them in it, every line with an end in hand (#freeEdgesHeld)
    EDGES ABOVE CARDS (6 > 4) is the rule that shapes the middle of the ladder: a line is the thing the
    reader is following, and one that dives under a card in its path loses them at exactly the moment
    they were tracing it. So what sits ABOVE the lines is only what a line may not cover: the drag
@@ -437,6 +438,8 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
    they are lines to be followed. The layer takes NO pointer events at all: the clicks belong to the hit layer below the
    cards (next rule), which is what keeps a line drawn over a card from swallowing that card's press. */
 svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:6; pointer-events:none; }
+/* Inside #dragLayer the in-hand lines sit above the cards in hand, as resting lines sit above resting cards. */
+svg#freeEdgesHeld { position:absolute; top:0; left:0; overflow:visible; z-index:10; pointer-events:none; }
 /* …and the CLICK targets for those same edges, on their own layer BEHIND the cards (1). An edge's hit
    stroke is 18 world px wide (HIT_W in view/free-edges.ts), so over a card it would swallow that
    card's press — a card would stop being draggable in a band either side of every line crossing it.
@@ -450,21 +453,21 @@ svg#toggles { z-index:7; pointer-events:none; }
 /* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
 /* 3px (STROKE_W, view/free-edges.ts): FigJam's connector weight against a sticky — a deliberate line,
    not a hairline, and lighter than the notes it joins. */
-svg#freeEdges path.fe { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+svg.fe-lines path.fe { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
 /* Selected: the same ring a card wears (--node-sel, 2px around the box) expressed as a line — the
    edge's own path drawn thicker and solid beneath it. Solid deliberately: a dashed edge's ring has to
    be continuous or the "outline" reads as just more dashes. */
-svg#freeEdges path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:7;
+svg.fe-lines path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:7;
   stroke-linecap:round; stroke-linejoin:round; }
 svg#freeEdgeHits path.fe-hit { fill:none; stroke:transparent; pointer-events:stroke; cursor:pointer; }
 /* Open head: stroked, never filled, at the line's own weight so the two read as one drawing. */
-svg#freeEdges path.fe-arrow { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+svg.fe-lines path.fe-arrow { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
 /* A draft edge (mid-draw) is painted onto the LINE layer with the finished ones — it IS an edge, and
    it is styled as the finished one rather than as a ghost, so the rules above already cover it. */
 /* An end DOT is centred ON the card's border, which used to mean the card ate half of it while the
    lines ran behind the cards; above them, both caps simply ride with their line. Never a click target:
    the line under it is what you grab (path.fe-hit, on the layer below the cards). */
-svg#freeEdges circle.fe-dot { stroke:none; pointer-events:none; }
+svg.fe-lines circle.fe-dot { stroke:none; pointer-events:none; }
 /* FigJam's PORTS (free-edges.ts socketPoints): a small pale-blue dot in a white rim, floating outside
    each side, that turns into a ⊕ — white disc, blue rim and plus — under the pointer. The invisible
    disc around it is the hit target. They appear only on a SELECTED card, never on hover — an
@@ -1243,8 +1246,8 @@ body.readonly #canvasColorBtn { display:none; }
 #ebLabelEdit.open { display:block; }
 /* The label a curve carries, drawn on the line itself (view/free-edges.ts). A plate behind the text
    so it stays readable where the curve runs under it. */
-svg#freeEdges .fe-label-plate { fill:var(--bg); stroke:none; }
-svg#freeEdges .fe-label { fill:var(--text); font-size:14px; font-weight:600; text-anchor:middle;
+svg.fe-lines .fe-label-plate { fill:var(--bg); stroke:none; }
+svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text-anchor:middle;
   dominant-baseline:middle; paint-order:stroke; pointer-events:none; }
 /* hides instantly the moment a drag/pan/zoom starts (features/float-bar.ts's follow loop),
    then fades back in via the base transition above once the pointer lifts */

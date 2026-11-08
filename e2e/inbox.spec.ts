@@ -31,7 +31,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('a note saved into the Inbox folder from elsewhere shows up beside its cards, and pulses', async ({ page }) => {
+test('a note saved into the Inbox folder from elsewhere shows up inside it, which keeps its size, and pulses', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
   await seedFolder(page, {
@@ -42,6 +42,7 @@ test('a note saved into the Inbox folder from elsewhere shows up beside its card
   });
   await openFolder(page);
   await expect(card(page, 'Old note')).toBeVisible();
+  const before = (await section(page, 'Inbox').boundingBox())!;
 
   // the phone saves a note into the folder; coming back to the window re-reads it
   await seedFolder(page, { 'Inbox/2026-10-27 0915.md': 'Buy oat milk\n' });
@@ -50,11 +51,10 @@ test('a note saved into the Inbox folder from elsewhere shows up beside its card
   const arrived = card(page, 'Buy oat milk');
   await expect(arrived).toBeVisible();
   await expect(arrived).toHaveClass(/arrived/);
-  const old = (await card(page, 'Old note').boundingBox())!, a = (await arrived.boundingBox())!;
-  const box = (await section(page, 'Inbox').boundingBox())!;
-  expect(a.x).toBeGreaterThan(old.x + old.width);          // beside the card already there, not on it
-  expect(a.x + a.width).toBeLessThanOrEqual(box.x + box.width);   // and inside the section, which grew
-  expect(a.y + a.height).toBeLessThanOrEqual(box.y + box.height);
+  const a = (await arrived.boundingBox())!, box = (await section(page, 'Inbox').boundingBox())!;
+  expect(box).toEqual(before);                              // a section is never resized for what arrives
+  expect(a.x).toBeGreaterThanOrEqual(box.x); expect(a.y).toBeGreaterThanOrEqual(box.y);   // it stacks inside, from the top-left
+  expect(a.x + a.width).toBeLessThanOrEqual(box.x + box.width);
   await expect(arrived).not.toHaveClass(/arrived/, { timeout: 4000 });   // the pulse ends
   expect(errors).toEqual([]);
 });

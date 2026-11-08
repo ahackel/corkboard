@@ -331,25 +331,26 @@ export function arrangeSections(sections: MindNode[], fresh?: Set<string>): void
     paintNode(n);
   }
   for (const f of sections.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
+    // A section that was already placed (an Inbox you made) is never resized: what arrives in it stacks
+    // inside its box from the top-left, over its cards if need be. One that arrived with its notes is
+    // sized around them.
+    const keep = !!fresh && !fresh.has(f.id);
     const kids = orderedKids(f, childrenOf(f.id));
-    const settled = fresh ? kids.filter(k => !fresh.has(k.id)) : [];
-    const right = settled.reduce((r, k) => Math.max(r, k.x + nodeW(k)), -Infinity);
-    const x = settled.length ? right + SPACING : f.x + SECTION_BORDER + SPACING;
-    let y = settled.length ? Math.min(...settled.map(k => k.y - sectionLabelH(k))) : f.y + SECTION_BORDER + SPACING, w = 0;
-    for (const k of settled.length ? kids.filter(k => fresh!.has(k.id)) : kids) {
+    const x = f.x + SECTION_BORDER + SPACING;
+    let y = f.y + SECTION_BORDER + SPACING, w = 0;
+    for (const k of keep ? kids.filter(k => fresh.has(k.id)) : kids) {
       y += sectionLabelH(k);   // a section's label hangs above its box — leave it room
       moveSubtreeTo(k, x, y);
       y += nodeH(k) + SPACING;
       w = Math.max(w, nodeW(k));
     }
-    const end = snapPt({ x: x + w + SPACING + SECTION_BORDER, y: y + SECTION_BORDER });
-    // A section that was already placed (an Inbox you made) only GROWS to hold them; one that arrived
-    // with its notes is sized around them.
-    const keep = !!fresh && !fresh.has(f.id);
-    f.w = Math.max(keep ? f.w ?? 0 : MIN_SECTION_W, end.x - f.x);
-    f.h = keep ? Math.max(f.h ?? 0, end.y - f.y) : end.y - f.y;
-    f.dirtyLayout = true;
-    paintNode(f);
+    if (!keep) {
+      const end = snapPt({ x: x + w + SPACING + SECTION_BORDER, y: y + SECTION_BORDER });
+      f.w = Math.max(MIN_SECTION_W, end.x - f.x);
+      f.h = end.y - f.y;
+      f.dirtyLayout = true;
+      paintNode(f);
+    }
   }
   scope.rootId = keepScope;
   for (const a of unfolded) {

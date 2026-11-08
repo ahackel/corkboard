@@ -45,6 +45,64 @@ test('a section collects what it is moved over, and lets go when moved away', as
   expect(errors).toEqual([]);
 });
 
+test('a card dropped half past a section\'s edge joins it, and the section keeps its size', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const todo = section(page, 'Todo');
+  const before = (await todo.boundingBox())!, lc = (await card(page, 'A loose card').boundingBox())!;
+  // its centre lands just inside the box's bottom-right corner, so most of the card sticks out
+  await page.mouse.move(lc.x + lc.width / 2, lc.y + lc.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(before.x + before.width - 10, before.y + before.height - 10, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await hostOf(page, 'A loose card')).toBe('Todo');
+  expect(await todo.boundingBox()).toEqual(before);
+});
+
+test('a dragged section\'s lines, inside it and leaving it, are drawn above its box', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, {
+    'Box.md': note('# Box', { 'mm_type': 'frame' }),
+    'A.md': note('Card A', { 'mm_parent': 'Box.md' }),
+    'B.md': note('Card B', { 'mm_parent': 'Box.md' }),
+    'Out.md': note('Outside'),
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [{ id: 'in', from: 'A.md', to: 'B.md' }, { id: 'out', from: 'B.md', to: 'Out.md' }],
+      nodes: { 'Box.md': { x: 0, y: 0, w: 500, h: 220 }, 'A.md': { x: 30, y: 40 }, 'B.md': { x: 280, y: 40 }, 'Out.md': { x: 0, y: 400 } } }),
+  });
+  const lb = (await section(page, 'Box').locator(':scope > .title-row').boundingBox())!;
+  await page.mouse.move(lb.x + 10, lb.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(lb.x + 80, lb.y + 60, { steps: 8 });
+  await expect(page.locator('#freeEdgesHeld path.fe')).toHaveCount(2);   // A→B and B→Out ride in hand
+  await expect(page.locator('#freeEdges path.fe')).toHaveCount(0);
+  await page.mouse.up();
+  await expect(page.locator('#freeEdgesHeld path.fe')).toHaveCount(0);
+  await expect(page.locator('#freeEdges path.fe')).toHaveCount(2);
+});
+
+test('a multi-selection dropped with the pointer in a section goes in whole, even the cards outside it', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, {
+    'Box.md': note('# Box', { 'mm_type': 'frame' }),
+    'P.md': note('Card P'),
+    'Q.md': note('Card Q'),
+    'board.json': JSON.stringify({ version: 1, model: 2, edges: [],
+      nodes: { 'Box.md': { x: 0, y: 0, w: 300, h: 200 }, 'P.md': { x: 500, y: 0 }, 'Q.md': { x: 850, y: 0 } } }),
+  });
+  await select(page, card(page, 'Card P'));
+  await card(page, 'Card Q').click({ modifiers: ['ControlOrMeta'] });
+  await expect(page.locator('#world .node.sel')).toHaveCount(2);
+  const box = (await section(page, 'Box').boundingBox())!, p = (await card(page, 'Card P').boundingBox())!;
+  await page.mouse.move(p.x + p.width / 2, p.y + p.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });   // Q trails well right of the box
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  expect(await hostOf(page, 'Card P')).toBe('Box');
+  expect(await hostOf(page, 'Card Q')).toBe('Box');
+});
+
 test('a section folds to its label pill: its cards hide, its lines meet the pill, → unfolds it', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

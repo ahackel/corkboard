@@ -21,7 +21,7 @@ import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { extractToCard, discardNewCard, nextSectionTitle } from './crud.js';
-import { growSectionsToHold, syncFloatBar } from './float-bar.js';
+import { syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 import { selectNode } from './selection.js';
 import { scheduleSave } from '../data/save.js';
@@ -460,10 +460,6 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change
-  // A note that grew past its section's edge would be clipped out of sight — grow the section instead.
-  if (changed && growSectionsToHold([n.id])) {
-    relayout();
-  }
   // The text decides what the bar offers (a card with lines to tuck away can fold): the bar was synced for
   // the text the edit STARTED with, and the card often stays selected after it ends.
   if (changed) { scheduleSave(); syncFloatBar(); }

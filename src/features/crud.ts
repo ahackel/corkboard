@@ -17,7 +17,6 @@ import { touch, touchEdges, commitStep } from './history.js';
 import { mutate } from './mutate.js';
 import { SPACING, slidePast } from '../utils/guides.js';
 import { boxOf } from './guides.js';
-import { growSectionsToHold } from './float-bar.js';
 import { settleSections } from './drag.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
@@ -99,8 +98,8 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout();
-  // a card made past its section's edge is shown, not clipped; a new SECTION takes in what it covers
-  if (growSectionsToHold([id, ...(n.type === 'section' ? settleSections([id]) : [])])) {
+  // a new SECTION takes in what it covers
+  if (n.type === 'section' && settleSections([id]).length) {
     relayout();
   }
   selectNode(id);
@@ -139,7 +138,6 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
     remeasure();
     let y = at.y;
     for (const n of made) { n.y = y; y += nodeH(n) + LIST_GAP; }
-    growSectionsToHold(made.map(n => n.id));
   }, { reflow: 'relayout' });
   setSelectionSet(made.map(n => n.id));
   made.forEach(popIn);
@@ -231,11 +229,7 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
     return;
   }
   const copies = srcs.map(next ? copyNext : copyNode);
-  // paint first so the new cards get real DOM heights, then settle and commit.
   remeasure();
-  if (next && growSectionsToHold(copies.map(c => c.id))) {
-    relayout();
-  }
   const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
     : `${next ? 'Made the next of' : 'Duplicated'} ${copies.length} cards`;
   if (copies.length === 1){
@@ -675,8 +669,6 @@ export function extractImage(sourceId: string, path: string, alt: string,
       body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
-    relayout();
-    growSectionsToHold([n.id]);
     setStatus('Image extracted');
   }
   relayout();

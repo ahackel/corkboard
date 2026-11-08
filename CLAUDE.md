@@ -61,7 +61,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, `mm_locked`, `mm_blank`; cut keys are dropped on write). `serializeMd` rewrites ONLY app-owned keys (`tags`, `color`, `mm_*`) and preserves
   every other field and the body verbatim. `mm_*` is the file format — never rename it.
 - **Two kinds, card and section (`mm_type`, `foldType`); CARDS NEVER HOLD CARDS.** Every create/paste goes
-  through `holderOf`; a drop lands in the innermost section under the card's centre (`sectionAt`), else the top level.
+  through `holderOf`; a drop lands in the innermost section under the card's centre (a group: the POINTER's), else the top level.
 - **`n.w`/`n.h` are AUTHORED; a plain card's `n.h` is a MIN-height its text can exceed** (dragged shorter, `n.clip`: exact, clipped). An IMAGE card is a card whose note is
   one `![](…)` and nothing else: no padding, aspect-locked resize, a 40px icon when folded.
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
@@ -87,7 +87,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - Sections — "A section COLLECTS what it covers" · "A section's BOUNDS are its box" · "A container's content wrapper is
   LIFECYCLE-managed" · "A section can be OPENED, and
   then the canvas IS its interior" · "A CARD is never opened" (scope, crumbs, canvas colour, `detachParentId`).
-- The model — "Cards are flat; a SECTION is the only container" (drop rule, grow-to-hold, load migration) · "A section's
+- The model — "Cards are flat; a SECTION is the only container" (drop rule, never auto-resized, load migration) · "A section's
   note is drawn on its LABEL"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image".
 - Interaction — "Collapse folds a card to a CHIP and a section to its PILL" (arrow, peek, fold all) · "A plain double-click

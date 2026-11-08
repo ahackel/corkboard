@@ -12,7 +12,7 @@
 //   · #freeEdgeHits — the same lines as invisible 18px CLICK targets, BEHIND the cards, so the
 //     stretch of a line that crosses a card is still the card's to press (see HIT_W);
 //   · #toggles — the rings and endpoint handles, above every card so they are always grabbable.
-import { state, freeEdgesSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
+import { state, freeEdgesSvg, freeEdgesHeldSvg, freeEdgeHitsSvg, togglesSvg, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { clamp } from '../utils/num.js';
 import { isHidden, firstVisible, resolveWikilink } from '../utils/model.js';
 import { ui, type Pt } from '../core/ui-state.js';
@@ -174,8 +174,11 @@ function linkEdges(n: MindNode): string {
 
 export function paintFreeEdges(): void {
   // Searching hides every line: dimmed cards are translucent, so lines behind them read as clutter.
-  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
-  let svg = '', hits = '', tools = '';
+  if (state.searchMatch){ freeEdgesSvg.innerHTML = ''; freeEdgesHeldSvg.innerHTML = ''; freeEdgeHitsSvg.innerHTML = ''; togglesSvg.innerHTML = ''; return; }
+  let svg = '', held = '', hits = '', tools = '';
+  // A line with an end in hand rides in #dragLayer, above the cards in hand, so a dragged section's box can't
+  // cover the lines in it or leaving it — as resting lines are drawn above resting cards.
+  const inHand = ui.drag?.moved ? ui.drag.origins : null;
   // A label is a small patch of the CANVAS laid over the line, so its ink is derived from the canvas
   // fill (inkFor).
   const plate = canvasSurface(), labelInk = inkFor(plate);
@@ -189,6 +192,7 @@ export function paintFreeEdges(): void {
     if (!g) {
       continue;
     }
+    const start = svg.length;
     const ink = colorFill(e.color) ?? 'var(--edge)';
     const sel = state.selEdges.has(e.id);
     const dash = e.dashed ? ' stroke-dasharray="7 6"' : '';
@@ -232,6 +236,10 @@ export function paintFreeEdges(): void {
       const hb = { x: g.b.x + g.tipTan.x * tb, y: g.b.y + g.tipTan.y * tb };
       tools += `<circle class="fe-handle" data-handle="from" data-edge="${esc(e.id)}" cx="${ha.x}" cy="${ha.y}" r="${HANDLE_R}"/>`;
       tools += `<circle class="fe-handle" data-handle="to" data-edge="${esc(e.id)}" cx="${hb.x}" cy="${hb.y}" r="${HANDLE_R}"/>`;
+    }
+    if (inHand && (inHand.has(edgeEnd(e.from)!.id) || inHand.has(edgeEnd(e.to)!.id))) {
+      held += svg.slice(start);
+      svg = svg.slice(0, start);
     }
   }
   // The four rings on the selected card. On SELECTION, never on hover: a ring that only appears once
@@ -277,6 +285,7 @@ export function paintFreeEdges(): void {
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);
   }
   freeEdgesSvg.innerHTML = svg;
+  freeEdgesHeldSvg.innerHTML = held;
   freeEdgeHitsSvg.innerHTML = hits;
   togglesSvg.innerHTML = tools;
 }

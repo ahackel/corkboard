@@ -1,9 +1,8 @@
 // ---------- node dragging & reparent-by-drop ----------
 // Per-node pointer gestures: drag moves the whole subtree (or the multi-selection, as one group);
-// Shift clones while dragging, ⌥-dropping onto a card merges into it, and on release every true root
-// of the drag (see selRoots/trueRoots) belongs to the section its centre is in — or the top level. That
-// is the whole drop rule (view/layout.ts sectionAt), so a multi-selected group moves in and out of
-// sections together in one gesture. Edge
+// Shift clones while dragging, ⌥-dropping onto a card merges into it, and on release one dragged card
+// belongs to the section its centre is in, and a multi-selection ALL to the section under the POINTER —
+// or the top level. That is the whole drop rule (view/layout.ts sectionAt, dropSection below). Edge
 // auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
@@ -11,7 +10,7 @@ import { state, stage, setStatus, isImageCard, type MindNode } from '../core/sta
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds } from '../utils/model.js';
 import { detachParentId, scope } from '../nav/scope.js';
 import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection, moveSubtreeTo } from '../view/layout.js';
-import { cancelViewAnim, applyView } from '../view/camera.js';
+import { cancelViewAnim, applyView, screenToWorld } from '../view/camera.js';
 import { ui, inPlaceEditOn, type Pt, type Drag, type Chute } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
@@ -23,7 +22,6 @@ import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
 import { bodyImageAt } from './images.js';
 import { guidePull, hideGuides } from './guides.js';
-import { growSectionsToHold } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { selectNode, setSelectionSet, toggleSel } from './selection.js';
@@ -459,9 +457,9 @@ function dragPointerUp(): void {
         // activateNode) — the slow-second-click rename this used to schedule was a 260ms timer racing
         // that double-click, and every fresh interaction had to remember to cancel it.
       } else {
-        // ⌥ over a card merges into it; otherwise every dragged root belongs to the section its
-        // centre is in, else the top level (sectionAt — the same test the preview ran).
+        // ⌥ over a card merges into it; otherwise the drop rule (dropSection — the same test the preview ran).
         const { cloned, targets, clones, selRoots, cardMerge, chute } = drag;
+        const group = selRoots.length > 1 ? dropSection(drag, act) : undefined;
         clearDropTarget();
         // Null drag NOW so every paint in the commit phase sees no active drag and draws all edges.
         ui.drag = null;
@@ -486,27 +484,25 @@ function dragPointerUp(): void {
           fileAway(selRoots, chute);
           return;
         }
-        // THE drop rule. Per root, from its own centre, so a group straddling a section's edge splits
-        // the way it looks. Positions stay exactly where they were dropped — snappedDelta already put
-        // them on the grid (or on a guide) on every move, so a release changes nothing about WHERE.
+        // THE drop rule: a group goes together, into the section under the pointer; a lone root by its
+        // own centre. Positions stay exactly where they were dropped — snappedDelta already put them on
+        // the grid (or on a guide) on every move, so a release changes nothing about WHERE.
         const moving = new Set(targets.keys());
         for (const rootId of selRoots){
           const r = state.nodes.get(rootId);
           if (!r) {
             continue;
           }
-          const f = sectionAt(r.x + nodeW(r) / 2, r.y + nodeH(r) / 2, moving);
+          const f = group !== undefined ? group : sectionAt(r.x + nodeW(r) / 2, r.y + nodeH(r) / 2, moving);
           const np = f?.id ?? detachParentId();
           if (np !== r.parent) {
             reparentOnly(rootId, np);
           }
         }
-        // Paint first so freshly-created clone cards have real DOM heights, then let each section that
-        // now holds a dropped card grow to show all of it (it clips, so part of it would be lost).
-        // A dropped SECTION also collects whatever it now covers (settleSections).
+        // Paint first so freshly-created clone cards have real DOM heights. A dropped SECTION collects
+        // whatever it now covers (settleSections); no section is resized to fit a drop.
         remeasure();
-        const settled = settleSections(selRoots.filter(id => state.nodes.get(id)?.type === 'section'));
-        if (growSectionsToHold([...selRoots, ...settled]) || settled.length) {
+        if (settleSections(selRoots.filter(id => state.nodes.get(id)?.type === 'section')).length) {
           relayout();
         }
         // select the new clone(s) you just dragged out
@@ -672,6 +668,17 @@ window.addEventListener('keyup',   (e) => {
   if (e.key === 'Shift'){ drag.shift = false; applyDragClone(); dragFollow(); }
 });
 
+// The section a drop lands in: for a MULTI-selection the one under the pointer, so the whole group goes
+// where you aim it; for one card the one its centre is in. Null = the top level (or the open section).
+function dropSection(drag: NonNullable<typeof ui.drag>, dragged: MindNode): MindNode | null {
+  const skip = new Set(drag.targets.keys());
+  if (drag.selRoots.length > 1) {
+    const p = screenToWorld(drag.cx, drag.cy);
+    return sectionAt(p.x, p.y, skip);
+  }
+  return sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, skip);
+}
+
 // ---------- the drop preview ----------
 // What a release right now would do, shown while it's still a choice: with ⌥ held over a plain card,
 // a MERGE into it (a dashed outline on that card); otherwise the section the dragged card would land in
@@ -704,7 +711,7 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     }
   }
   const chute = fuse ? null : chuteAt(e.clientX, e.clientY, sub);
-  const f = fuse || chute ? null : sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, sub);
+  const f = fuse || chute ? null : dropSection(drag, dragged);
   const target = fuse ? dragged.parent : chute ? chute.parent : (f?.id ?? detachParentId());
   const changed = drag.dropTarget !== target;
   drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute;
@@ -780,7 +787,6 @@ function fileAway(roots: string[], chute: Chute): void {
         moveSubtreeTo(r, beside.x + nodeW(beside) + SPACING, y);
         y += nodeH(r) + SPACING;
       }
-      growSectionsToHold(ids);
     }
     setSelectionSet([]);
     setStatus(`Moved ${ids.length > 1 ? `${ids.length} cards` : `“${nodeLabel(state.nodes.get(ids[0])!)}”`} to “${p ? nodeLabel(p) : 'the top level'}”`);
@@ -798,8 +804,7 @@ function fileAway(roots: string[], chute: Chute): void {
 // its own whose centre is now OUTSIDE it goes to whatever it's over instead (a shrink lets go of what
 // it no longer covers, rather than hiding it under the clip). A SECTION is collected only when its whole
 // box is inside — by its centre alone, a big section could be swallowed by a small one laid across it.
-// Locked and hidden things stay where they are. Returns the ids it reparented, for the caller to grow
-// their new sections by (growSectionsToHold) — or not, on a resize, where the user is setting the size.
+// Locked and hidden things stay where they are. Returns the ids it reparented. It never resizes a section.
 export function settleSections(sectionIds: Iterable<string>): string[] {
   const moved: string[] = [];
   for (const id of sectionIds) {

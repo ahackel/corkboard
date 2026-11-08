@@ -86,13 +86,16 @@
            press. So the stretch of a line that crosses a card is visible there but belongs to the
            card, exactly as it did when the whole layer sat behind them. -->
       <svg id="freeEdgeHits"></svg>
-      <svg id="freeEdges"></svg>
+      <svg id="freeEdges" class="fe-lines"></svg>
       <!-- toggles overlay renders ABOVE node divs so collapse dots are always visible -->
       <svg id="toggles"></svg>
       <!-- drag GROUP layer: while dragging, the dragged cards are moved in here so the whole set
            composites as ONE translucent group (opacity on the layer, not per item) — you see the
            canvas below but the dragged items never shine through each other. -->
-      <div id="dragLayer"></div>
+      <div id="dragLayer">
+        <!-- the lines with an end in hand, drawn above the cards in hand (view/free-edges.ts) -->
+        <svg id="freeEdgesHeld" class="fe-lines"></svg>
+      </div>
     </div>
   </div>
 
