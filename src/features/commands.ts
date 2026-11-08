@@ -12,7 +12,7 @@ import { store } from '../data/persistence.js';
 import { openPalette, type Command, setPaletteSource, paletteOpen, closePalette } from './palette.js';
 import { undo, redo } from './history.js';
 import { clearEdgeSelection, deleteSelectedEdge, connectSelection } from './edge-tools.js';
-import { tidyShortcut, TIDY_ACTIONS } from './tidy.js';
+import { tidyShortcut, TIDY_ACTIONS, canTidySection, tidySection } from './tidy.js';
 import { setReadOnly } from './read-only.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
@@ -312,6 +312,7 @@ function paletteCommands(): Command[] {
     { label: 'Fold / unfold', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
+    { label: 'Tidy up the section', keywords: 'tidy arrange layout grid clean', when: () => state.sel.size === 1 && canTidySection(oneSel()), run: () => tidySection(oneSel()!) },
     { label: 'Collapse all', keywords: 'fold every card section', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },

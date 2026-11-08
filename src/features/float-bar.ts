@@ -16,7 +16,7 @@ import { settleSections } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode, nextSectionTitle } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
 import { pasteFromClipboard } from './attachments.js';
-import { canTidy, tidyMenuEntries } from './tidy.js';
+import { canTidy, tidyMenuEntries, canTidySection, tidySection } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter } from '../nav/scope.js';
@@ -39,6 +39,7 @@ const fbLock = byId<HTMLButtonElement>('fbLock');
 const fbTidy = byId<HTMLButtonElement>('fbTidy');
 const fbOpen = byId<HTMLButtonElement>('fbOpen');
 const fbFit = byId<HTMLButtonElement>('fbFit');
+const fbTidySection = byId<HTMLButtonElement>('fbTidySection');
 const fbFold = byId<HTMLButtonElement>('fbFold');
 const fbTitle = byId<HTMLButtonElement>('fbTitle');
 const fbWrap = byId<HTMLButtonElement>('fbWrap');
@@ -155,6 +156,7 @@ function markOpen(): void {
   fbFold.setAttribute('aria-label', expand ? 'Expand' : 'Collapse');
   fbTidy.style.display = canTidy() ? '' : 'none';
   const n = anchorNode();
+  fbTidySection.style.display = state.sel.size === 1 && canTidySection(n) ? '' : 'none';
   const oneSection = state.sel.size === 1 && n?.type === 'section';
   fbTitle.style.display = oneSection ? '' : 'none';
   fbWrap.style.display = !state.readOnly && state.sel.size > 1 ? '' : 'none';
@@ -350,16 +352,22 @@ const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its �
 // kinds with no interior and for the card you are already inside, both of which openSection would refuse.
 fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openSection(anchorNode()); });
 fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
+fbTidySection.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closePopovers();
+  const n = anchorNode();
+  if (canTidySection(n)) {
+    tidySection(n);
+  }
+});
 fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;
 }
-// What the bar centres itself over HORIZONTALLY: the node's TITLE, not its box. A section's box can be
-// many times wider than its label, and the bar belongs over the thing you selected and are about to
-// rename/recolour — centred on a wide box it drifts far from the tab it acts on. labelEl (main.ts) owns
-// WHICH element that is, so the folded case needs no second spelling here; an image card renders its
-// title row empty, hence the width guard falling back to the whole box.
+// A node's TITLE: the bar stays clear of it (a section's label hangs above its box), but centres on the box.
+// labelEl (main.ts) owns WHICH element that is, so the folded case needs no second spelling here; an image
+// card renders its title row empty, hence the width guard falling back to the whole box.
 function labelRect(n: MindNode): DOMRect {
   const el = n.el!;
   const lr = labelEl(n)?.getBoundingClientRect();
@@ -386,7 +394,7 @@ function positionBar(): boolean {
   if (!r.width && !r.height) {
     return false;   // hidden (display:none) — nothing to hang off
   }
-  let lr: { left: number; top: number; width: number } = labelRect(n);
+  let lr: { top: number } = labelRect(n);
   // Several selected: over the WHOLE selection (labels included), centred on it — FigJam's — so the
   // bar never sits on one of the cards it acts on.
   if (state.sel.size > 1) {
@@ -405,11 +413,11 @@ function positionBar(): boolean {
     }
     if (isFinite(x0)) {
       r = { left: x0, top: y0, right: x1, bottom: y1, width: x1 - x0, height: y1 - y0 };
-      lr = { left: x0, top: y0, width: x1 - x0 };
+      lr = { top: y0 };
     }
   }
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
-  const left = lr.left + lr.width / 2 - bw / 2;
+  const left = r.left + r.width / 2 - bw / 2;   // centred on the box, however wide a section's is
   // Over whichever is higher, the box or its label: a section's label hangs ABOVE its box (outside its
   // bounds), and the bar mustn't sit on top of the name it's about to edit.
   let top = Math.min(r.top, lr.top) - bh - GAP;

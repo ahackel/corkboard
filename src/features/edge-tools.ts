@@ -18,9 +18,8 @@ import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
 import { paintAll } from '../main.js';
 import { createNode } from './crud.js';
-import { SPACING } from '../utils/guides.js';
 import { trackPointer } from '../utils/dom.js';
-import { nodeW, nodeH, snapPt, NODE_W } from '../view/geometry.js';
+import { nodeW, nodeH, NODE_W } from '../view/geometry.js';
 
 // Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
@@ -242,12 +241,12 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   selectEdge(made.id);
 }
 
-// FigJam's ⊕: click a port and a new card appears CONNECT_GAP away on that side — the same colour and
+// FigJam's ⊕: click a port and a new card appears CONNECT_GAP away on that side, exactly (no grid snap) — the same colour and
 // size as the card it came from, joined to it by a line, and open for typing. Click again and the
 // next one lands beside the last instead of on it. Its home is the source's: a card's section, or for a
 // section the place the section itself sits. One undo step with the card (createNode's rename session
 // commits it), so an abandoned empty card takes its line with it (crud.ts discardNewCard).
-const CONNECT_GAP = 80;
+const CONNECT_GAP = 60;
 function spawnConnected(srcId: string, side: EdgeSide): void {
   const src = state.nodes.get(srcId);
   if (!src || state.readOnly) {
@@ -264,13 +263,12 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
     && x < o.x + nodeW(o) && x + w > o.x && y < o.y + nodeH(o) && y + h > o.y);
   for (let i = 0; i < 50 && blocked(); i++) {
     if (horiz) {
-      y += h + SPACING;
+      y += h + CONNECT_GAP;
     } else {
-      x += w + SPACING;
+      x += w + CONNECT_GAP;
     }
   }
-  const at = snapPt({ x, y });
-  const n = createNode({ ...at, parent: src.parent, color: isCard ? src.color : undefined,
+  const n = createNode({ x, y, parent: src.parent, color: isCard ? src.color : undefined,
                          w: isCard ? src.w : undefined, h: isCard ? src.h : undefined });
   if (!n) {
     return;

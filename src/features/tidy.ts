@@ -4,13 +4,14 @@
 // applies the answer as ONE undo step with the reflow glide, and lets sections grow to show the result.
 // Nothing here runs on its own: the float bar's tidy menu, ⌘P and the ⌥ shortcuts are the only ways in.
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
-import { isLockedEffective, nodesOf, outermost, subtreeIds } from '../utils/model.js';
-import { moveSubtreeTo, sectionLabelH } from '../view/layout.js';
+import { childrenOf, isLockedEffective, nodesOf, outermost, subtreeIds } from '../utils/model.js';
+import { isSection, moveSubtreeTo, sectionLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
 import { mutate } from './mutate.js';
 import { animateLayout } from '../main.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
+import { SECTION_FIT_PAD } from './float-bar.js';
 
 // What a tidy acts on: the selected nodes that aren't inside another selected one (a section carries its
 // own cards along) and aren't locked.
@@ -25,11 +26,10 @@ function boxOf(n: MindNode): Box {
 
 export function canTidy(): boolean { return !state.readOnly && targets().length >= 2; }
 
-function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2): void {
+function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2, nodes = targets()): void {
   if (state.readOnly) {
     return;
   }
-  const nodes = targets();
   if (nodes.length < min) { setStatus(min > 2 ? 'Select three or more to distribute' : 'Select two or more to tidy'); return; }
   const boxes = nodes.map(boxOf);
   const pos = place(boxes);
@@ -51,6 +51,22 @@ function tidyUp(): void {
   apply('Tidied up', boxes => tidyGrid(boxes, SPACING,
     snapPt({ x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)) })));
 }
+
+// A section's own tidy, the tidy button on its bar: its cards, laid out as Tidy up lays out a selection, from the
+// box's corner inside the margin Resize to fit leaves. The box keeps its size: only you resize a section.
+function sectionKids(s: MindNode): MindNode[] {
+  return childrenOf(s.id).filter(n => !isLockedEffective(n));
+}
+
+export function canTidySection(s: MindNode | undefined): s is MindNode {
+  return !!s && !state.readOnly && isSection(s) && !isLockedEffective(s) && sectionKids(s).length >= 2;
+}
+
+export function tidySection(s: MindNode): void {
+  apply('Tidied up', boxes => tidyGrid(boxes, SPACING, snapPt({ x: s.x + SECTION_FIT_PAD, y: s.y + SECTION_FIT_PAD })),
+    2, sectionKids(s));
+}
+
 const ALIGN_NAME: Record<AlignEdge, string> = { left: 'left', center: 'centres', right: 'right', top: 'top', middle: 'middles', bottom: 'bottom' };
 function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edge]}`, boxes => align(boxes, edge)); }
 function distributeSelection(axis: 'x' | 'y'): void {
