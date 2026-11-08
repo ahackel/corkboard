@@ -167,7 +167,6 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
   transition:opacity .2s ease, transform .2s ease; }
 #status.show { opacity:1; transform:translate(-50%, 0); }
 body:has(#saveAlert:not([hidden])) #status { display:none; }
-@media (prefers-reduced-motion: reduce) { #status { transition:none; } }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
 
 /* The group dividers are .fb-sep (see the floating bars) — the same 1px rule, so a group of
@@ -531,8 +530,8 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .section-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
-.node.lt-anim { transition: opacity .2s ease, scale .12s ease,
-  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts) */
+.node.lt-anim { transition: opacity .2s ease, scale .12s ease, rotate .5s cubic-bezier(.45,0,.25,1), filter .5s cubic-bezier(.45,0,.25,1),
+  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts); rotate: a fanned card's tilt */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
    so the only thing left to remove here is the space that was separating the title from a body that
    isn't there. The `min-height:0` this rule used to carry is what `.node` itself does now. */
@@ -578,7 +577,6 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.arrived { animation:arrived .8s ease-out 3; }
 @keyframes arrived { from { box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
   to { box-shadow:0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent); } }
-@media (prefers-reduced-motion: reduce) { .node.arrived { animation:none; outline:3px solid var(--accent); } }   /* tags step aside while the card's edge is dragged */
 /* a checklist's progress (paintNode): a rounded green bar across the top of the card, inset to the text's
    margins, filled to --done over a faint track of the card's own ink. The card makes room for it above
    the title. The element is a taller strip than the bar it draws, so its "3/5" tooltip is easy to find. */
@@ -750,10 +748,20 @@ body.grabbing .stack-pin { cursor:grabbing; }
 .node.stack.fan-open > .stack-face > .pile { visibility:hidden; }
 .node.stack.fan-open > .stack-face { min-height:60px; border-radius:var(--r-card);
   outline:2px dashed color-mix(in srgb, var(--text) 30%, transparent); outline-offset:2px; }
+/* The dimming and the cards' shadows come and go WITH the glide (LAYOUT_ANIM_MS, main.ts): in by a keyframe as
+   the fan opens, out by a transition while it closes (body.fan-closing, features/stacks.ts closeFan). */
 #fanScrim { position:absolute; left:-100000px; top:-100000px; width:200000px; height:200000px; z-index:60;
-  background:rgba(40,40,46,.16); }
+  background:rgba(40,40,46,.16); animation:fan-fade .5s cubic-bezier(.45,0,.25,1);
+  transition:opacity .5s cubic-bezier(.45,0,.25,1); }
 #fanScrim.grid { background:rgba(40,40,46,.28); }
-.node.fanned { z-index:61; rotate:var(--tilt, 0deg); }
+body.fan-closing #fanScrim { opacity:0; }
+@keyframes fan-fade { from { opacity:0; } }
+/* Held up over the board, a fanned card casts a shadow on it — a `filter`, so it never fights the selection
+   ring's box-shadow. The flat value keeps the same two shadows, so the change between them interpolates. */
+.node.fanned { z-index:61; rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
+  --fan-shadow:drop-shadow(0 2px 3px rgba(0,0,0,.12)) drop-shadow(0 8px 18px rgba(0,0,0,.18)); }
+body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); }
+@keyframes fan-lift { from { filter:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); } }
 /* dragging a fanned card within the fan: a line down the gap it would drop into (features/stacks.ts
    showFanInsert) — over the fanned cards, under the one in hand */
 #fanInsert { position:absolute; width:4px; margin-left:-2px; border-radius:2px; background:var(--node-sel);
@@ -912,7 +920,6 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
 /* A card in hand keeps its exact size and stays flat, so the smart guides (features/guides.ts) line up
    with the edges you actually see; a selected card keeps its ring while it travels. */
-@media (prefers-reduced-motion: reduce) { .node[data-pop] { animation:none; } }
 /* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
    .section-content wrapper at the ordinary card z-index:2 (see the .node.section comment above), so
    raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
@@ -1259,7 +1266,6 @@ body.readonly #ghostCard { opacity:.35; pointer-events:none; }
   opacity:0; transition:opacity .45s ease;   /* fade in/out only when the "no cards" state changes */
 }
 body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
-@media (prefers-reduced-motion: reduce) { .emptyhint { transition:none; } }
 /* above the dock, pointing down at the sticky you drag */
 #ghostHint { left:50%; transform:translateX(-50%); bottom:calc(70px + var(--sa-b)); }
 #ghostHint .hint-arrow { display:none; }

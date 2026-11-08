@@ -19,7 +19,7 @@ import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld, frameBox, stageSize } from '../view/camera.js';
 import { applyColorVars, colorClass, colorFill } from '../view/color.js';
 import { SPACING } from '../utils/guides.js';
-import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout } from '../main.js';
+import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout, placeSelf, LAYOUT_ANIM_MS } from '../main.js';
 import { startNodeDrag, feedDragMove, commitDrag } from './drag.js';
 import { mkNode, deleteNodes } from './crud.js';
 import { touch, record } from './history.js';
@@ -234,18 +234,42 @@ export function openFan(id: string): void {
   }
 }
 
+// The cards glide back onto the pile, straightening as they go, and only then become the pile again: the fan
+// stays open (scrim and all) for the length of the glide. A second close meanwhile is the same close.
+let closing: string | null = null;
 export function closeFan(): void {
   const id = ui.fan;
-  if (!id) {
+  if (!id || closing === id) {
     return;
   }
-  ui.fan = null;
 
   // a card picked out of the fan goes back into the pile, and can't stay selected there
   if ([...state.sel].some(k => state.nodes.get(k)?.parent === id)) {
     setSelectionSet([]);
   }
-  relayout();
+  const s = state.nodes.get(id);
+  const kids = childrenOf(id).filter(k => k.el && !isHidden(k));
+  const done = (): void => {
+    closing = null;
+    document.body.classList.remove('fan-closing');
+    kids.forEach(k => k.el?.classList.remove('lt-anim'));   // or a later drag of the card would glide too
+    if (ui.fan === id) {
+      ui.fan = null;
+      relayout();
+    }
+  };
+  if (!s || !kids.length) {
+    done();
+    return;
+  }
+  closing = id;
+  document.body.classList.add('fan-closing');   // the dimming and the shadows fade as the cards go home
+  for (const k of kids) {
+    k.el!.classList.add('lt-anim');
+    k.el!.style.setProperty('--tilt', '0deg');
+    placeSelf(k, s.x, s.y);
+  }
+  setTimeout(done, LAYOUT_ANIM_MS);
 }
 
 // The scrim and the body class follow ui.fan, whatever cleared it — a close, or the stack dissolving under

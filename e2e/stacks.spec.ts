@@ -117,6 +117,34 @@ test('a click fans the stack out, and Esc puts it back', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('the fan glides out of the pile and back onto it, even with Reduce motion on', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const pile = (await stack(page).boundingBox())!;
+  const card = page.locator('#world .node.fanned', { hasText: 'Top card' });
+  const dist = async (): Promise<number> => { const b = (await card.boundingBox())!; return Math.hypot(b.x - pile.x, b.y - pile.y); };
+  const scrimOpacity = async (): Promise<number> => Number(await page.locator('#fanScrim').evaluate(e => getComputedStyle(e).opacity));
+  await stack(page).click();
+  await page.waitForTimeout(120);
+  const midOpen = await dist();
+  const dimming = await scrimOpacity();
+  await page.waitForTimeout(700);
+  const open = await dist();
+  expect(midOpen).toBeGreaterThan(2);           // on its way out…
+  expect(midOpen).toBeLessThan(open - 2);       // …not there yet
+  expect(dimming).toBeGreaterThan(0);           // and the board dims along with it
+  expect(dimming).toBeLessThan(1);
+  expect(await scrimOpacity()).toBe(1);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  await expect(card).toBeVisible();             // still gliding home, not gone at once
+  expect(await scrimOpacity()).toBeLessThan(1); // the dimming lifts as they go
+  expect(await dist()).toBeLessThan(open - 2);
+  await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
+  await expect(page.locator('#fanScrim')).toHaveCount(0);
+});
+
 test('Unstack spreads the cards out; Turn into section keeps them in a box', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

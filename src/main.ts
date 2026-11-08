@@ -703,7 +703,7 @@ function contentOrigin(host: MindNode): Pt {
 }
 // Put a node's OWN element where it belongs: its host container's content wrapper, or straight under
 // #world. The single decision point, shared by paintNode and sectionContentEl's ordering guard.
-function placeSelf(n: MindNode, absX: number, absY: number): void {
+export function placeSelf(n: MindNode, absX: number, absY: number): void {
   place(nodeEl(n), absX, absY, settledHost(n));
   orderContentAfterBox(n);
 }
@@ -791,7 +791,8 @@ function updateEmptyHints(): void {
 }
 
 // ---------- animated relayout (expand / collapse) ----------
-function prefersReducedMotion(): boolean { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } }
+// Every glide plays whatever the system's "Reduce motion" says: the motion IS how a fold or a fan reads.
+
 // The animation writes left/top itself (that's what it interpolates), so it must go through the SAME
 // placement authority paintNode's own final branch uses — placeSelf, not a bare place() — so a hosted
 // card stays in its container's wrapper for the duration.
@@ -904,11 +905,8 @@ function sizeSnapshot(): Map<HTMLElement, Size> {
 const SIZE_EASE = 'cubic-bezier(.45,0,.25,1)';
 // How long a fold / Fit / reflow glides — one number for the sizes here, the positions (animateReflow) and
 // `.lt-anim`'s left/top transition in styles.css, which must say the same.
-const LAYOUT_ANIM_MS = 500;
+export const LAYOUT_ANIM_MS = 500;
 function animateSizes(before: Map<HTMLElement, Size>): void {
-  if (prefersReducedMotion()) {
-    return;
-  }
   // A section that has just UNFOLDED had no content wrapper to snapshot: it starts as small as the box
   // it grows out of (the pill, less the box's own border), so its cards stay clipped all the way open.
   for (const m of state.nodes.values()) {
@@ -935,7 +933,6 @@ function animateSizes(before: Map<HTMLElement, Size>): void {
 export function animateReflow(before: Map<string, Pt>): void {
   const visible = [...state.nodes.values()].filter(m => m.el && !isHidden(m));
   const tok = ++ui.animToken;                           // supersede any in-flight animation
-  if (prefersReducedMotion()){ for (const m of visible){ m.el!.classList.remove('lt-anim'); placeSelf(m, m.x, m.y); } document.body.classList.remove('layout-anim'); paintFreeEdges(); return; }
   // While cards glide and change size (this and animateSizes), the ports and resize handles would sit at
   // stale spots and sizes: they stand down until the glide ends (styles.css body.layout-anim).
   document.body.classList.add('layout-anim');
@@ -943,7 +940,8 @@ export function animateReflow(before: Map<string, Pt>): void {
   //    also start invisible so they fade in (covers free layouts where nothing reflows).
   //    A card INSIDE a section doesn't glide when it's the section that changed (a fold, an unfold, a Fit):
   //    a revealed one fades in where it lands, and one whose place in its section is unchanged just rides
-  //    along with it. Only a card that moved WITHIN its section (a tidy-up) glides.
+  //    along with it. Only a card that moved WITHIN its section (a tidy-up) glides — and one coming out of
+  //    a STACK's pile as it fans out, which it leaves from (ancestorStart).
   const stays = (m: MindNode): boolean => {
     const p = parentOf(m);
     if (!p || isScopeRoot(p)) {
@@ -951,7 +949,7 @@ export function animateReflow(before: Map<string, Pt>): void {
     }
     const bm = before.get(m.id), bp = before.get(p.id);
     if (!bm) {
-      return true;
+      return !isStack(p);
     }
     return !!bp && Math.abs((bm.x - bp.x) - (m.x - p.x)) < 0.5 && Math.abs((bm.y - bp.y) - (m.y - p.y)) < 0.5;
   };
