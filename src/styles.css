@@ -496,16 +496,12 @@ svg#toggles .fe-port-hit { fill:transparent; }
 svg#toggles .fe-port-dot { fill:#7cc4fa; stroke:#fff; stroke-width:2; }
 svg#toggles .fe-port-plus { display:none; }
 /* while a line end is being dragged, the TARGET card's ports — the one it would pin to filled in blue */
-svg#toggles .fe-drop-port { fill:#7cc4fa; stroke:#fff; stroke-width:2; pointer-events:none; }
-svg#toggles .fe-drop-port.on { fill:var(--node-sel); }
+svg#toggles .fe-drop-port { fill:#fff; stroke:var(--node-sel); stroke-width:2; pointer-events:none; }
+svg#toggles .fe-drop-port.on { fill:var(--node-sel); stroke:#fff; }
 svg#toggles .fe-port-plus circle { fill:#fff; stroke:var(--node-sel); stroke-width:2; }
 svg#toggles .fe-port-plus path { fill:none; stroke:var(--node-sel); stroke-width:2; stroke-linecap:round; }
 svg#toggles g.fe-socket:hover .fe-port-dot { display:none; }
 svg#toggles g.fe-socket:hover .fe-port-plus { display:inline; }
-/* The card a line being drawn would land on: its rim outlined in the accent, the one "this is where it
-   goes" cue — there are no ports to aim at, the whole card is the target. */
-svg#toggles rect.fe-target { fill:none; stroke:var(--accent, #6ea8fe); stroke-width:2; stroke-dasharray:6 4;
-  pointer-events:none; }
 /* A line end shifted along a face: the card's rim traced thick, notched white at each port (free-edges.ts) */
 svg#toggles rect.fe-rim { fill:none; stroke:var(--node-sel); stroke-width:3; pointer-events:none; }
 svg#toggles circle.fe-rim-gap { fill:#fff; pointer-events:none; }

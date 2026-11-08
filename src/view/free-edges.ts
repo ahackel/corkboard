@@ -33,6 +33,7 @@ const HANDLE_R = 8;          // endpoint grab handles (FigJam's white disc, thic
 // rim, floating SOCKET_OUT outside each side, that becomes a ⊕ under the pointer (styles.css).
 const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
 const SOCKET_OUT = 18;
+const DROP_PORT_R = 6;       // a target card's hollow port ring while a line end is dragged
 const RIM_GAP_R = 3;         // the white notch a shifted end's rim outline shows at each port
 
 // The rectangle a line meets: the node's bounds, grown by half the selection ring (so a line ends ON
@@ -281,27 +282,18 @@ export function paintFreeEdges(): void {
   const src = draw ? state.nodes.get(draw.sourceId) : null;
   if (draw && src) {
     const over = draw.overId ? state.nodes.get(draw.overId) : null;
-    if (over) {
-      const r = rimRect(over);
-      const shifted = draw.overSide && (draw.overAt ?? 0.5) !== 0.5;
-      if (shifted) {
-        // FigJam's shifted end: no ports, the card's rim traced thick with a GAP where each port is (the
-        // spots it would snap to), and the end's dot ON the face where it will sit
-        tools += `<rect class="fe-rim" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="4"/>`;
-        for (const side of ['up', 'down', 'left', 'right'] as const) {
-          const m = facePoint(r, side);
-          tools += `<circle class="fe-rim-gap" cx="${m.x}" cy="${m.y}" r="${RIM_GAP_R}"/>`;
-        }
-        const q = facePoint(r, draw.overSide!, draw.overAt);
-        tools += `<circle class="fe-drop-port on" cx="${q.x}" cy="${q.y}" r="${SOCKET_HOVER_R - 3}"/>`;
-      } else {
-        // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot
-        tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`;
-        for (const { side, p } of socketPoints(over)) {
-          const on = side === draw.overSide;
-          tools += `<circle class="fe-drop-port${on ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${on ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
-        }
+    const rim = over ? rimRect(over) : null, sides = ['up', 'down', 'left', 'right'] as const;
+    const shifted = !!draw.overSide && (draw.overAt ?? 0.5) !== 0.5;
+    if (rim && shifted) {
+      // FigJam's shifted end: no ports, the card's rim traced thick with a GAP where each port is (the
+      // spots it would snap to), and the end's dot ON the face where it will sit
+      tools += `<rect class="fe-rim" x="${rim.x}" y="${rim.y}" width="${rim.w}" height="${rim.h}" rx="4"/>`;
+      for (const side of sides) {
+        const m = facePoint(rim, side);
+        tools += `<circle class="fe-rim-gap" cx="${m.x}" cy="${m.y}" r="${RIM_GAP_R}"/>`;
       }
+      const q = facePoint(rim, draw.overSide!, draw.overAt);
+      tools += `<circle class="fe-drop-port on" cx="${q.x}" cy="${q.y}" r="${SOCKET_HOVER_R - 3}"/>`;
     }
     const edge = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
     const ink = colorFill(edge?.color ?? '') ?? 'var(--edge)';
@@ -317,6 +309,16 @@ export function paintFreeEdges(): void {
       over ? trim(movingCap) : movingCap === 'arrow' ? ARROW_INSET : 0);
     svg += `<path class="fe" style="stroke:${ink}"${edge?.dashed ? ' stroke-dasharray="7 6"' : ''} d="${s.d}"/>`
          + endCap(movingCap, s.b, s.tipTan, ink) + endCap(anchorCap, s.a, s.tailTan, ink);
+    if (rim && !shifted) {
+      // FigJam's ports while an end is aimed at a card: hollow rings ON its rim, no outline — the one the
+      // line will meet filled blue (with no pin, the side the route chose: the face nearest its end)
+      const near = (side: EdgeSide): number => { const f = facePoint(rim, side); return Math.hypot(f.x - s.b.x, f.y - s.b.y); };
+      const pick = draw.overSide ?? sides.reduce((a, b) => near(b) < near(a) ? b : a);
+      for (const side of sides) {
+        const m = facePoint(rim, side), on = side === pick;
+        tools += `<circle class="fe-drop-port${on ? ' on' : ''}" cx="${m.x}" cy="${m.y}" r="${on ? SOCKET_HOVER_R - 3 : DROP_PORT_R}"/>`;
+      }
+    }
   }
   freeEdgesSvg.innerHTML = svg;
   freeEdgesHeldSvg.innerHTML = held;
