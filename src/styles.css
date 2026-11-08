@@ -1514,10 +1514,8 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 /* storage-backend tabs — FigJam's segmented control: a grey track, the active side a flat white segment */
 .store-tabs { display:inline-flex; gap:2px; padding:2px; border-radius:var(--r-full); background:var(--bg); }
 .store-tab { padding:6px 14px; font-size:13px; background:transparent; border:0; border-radius:var(--r-full); color:var(--muted); cursor:pointer; }
-.store-tab:hover:not(:disabled):not(.active) { color:var(--text); background:var(--hover); }
 .store-tab.active { color:var(--text); background:var(--hover); }
 .store-tab:disabled { opacity:.35; cursor:default; }
-.store-tab:disabled:hover { color:var(--muted); background:transparent; }
 /* plain sidebar rows (the "+ New" action and the footer buttons) — Claude-desktop style */
 .side-row { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px;
   background:transparent; border:0; border-radius:var(--r-ctl); color:var(--text);
