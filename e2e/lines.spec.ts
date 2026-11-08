@@ -150,21 +150,25 @@ test('a line end dropped anywhere on a face stays there, shifted; near the middl
   await drawLine(page, a, 'right', b, 'left');
   const handle = page.locator('circle.fe-handle[data-handle="to"]');
   const centreY = async () => { const h = (await handle.boundingBox())!; return h.y + h.height / 2; };
-  const dragEndTo = async (x: number, y: number) => {
+  // mid-drag, `shifted` says which cue the target shows: FigJam's thick rim notched at each port, or the ports
+  const dragEndTo = async (x: number, y: number, shifted: boolean) => {
     const h = (await handle.boundingBox())!;
     await page.mouse.move(h.x + h.width / 2, h.y + h.height / 2);
     await page.mouse.down();
     await page.mouse.move(x, y, { steps: 8 });
+    await expect(page.locator('rect.fe-rim')).toHaveCount(shifted ? 1 : 0);
+    await expect(page.locator('circle.fe-rim-gap')).toHaveCount(shifted ? 4 : 0);
+    await expect(page.locator('circle.fe-drop-port')).toHaveCount(shifted ? 1 : 4);
     await page.mouse.up();
     await page.waitForTimeout(200);
   };
   const t = (await b.boundingBox())!;
-  await dragEndTo(t.x, t.y + t.height * 0.25);   // a quarter of the way down the left face
+  await dragEndTo(t.x, t.y + t.height * 0.25, true);   // a quarter of the way down the left face
   await expect.poll(centreY).toBeCloseTo(t.y + t.height * 0.25, 0);
   await reload(page);
   await page.locator('#freeEdgeHits path.fe-hit').first().click({ force: true });
   await expect.poll(centreY).toBeCloseTo(t.y + t.height * 0.25, 0);
-  await dragEndTo(t.x, t.y + t.height / 2 + 5);   // just off the middle: the port takes it
+  await dragEndTo(t.x, t.y + t.height / 2 + 5, false);   // just off the middle: the port takes it
   await expect.poll(centreY).toBeCloseTo(t.y + t.height / 2, 0);
   expect(errors).toEqual([]);
 });

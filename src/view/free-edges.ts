@@ -33,6 +33,7 @@ const HANDLE_R = 8;          // endpoint grab handles (FigJam's white disc, thic
 // rim, floating SOCKET_OUT outside each side, that becomes a ⊕ under the pointer (styles.css).
 const SOCKET_R = 5, SOCKET_HOVER_R = 11, SOCKET_HIT_R = 13;
 const SOCKET_OUT = 18;
+const RIM_GAP_R = 3;         // the white notch a shifted end's rim outline shows at each port
 
 // The rectangle a line meets: the node's bounds, grown by half the selection ring (so a line ends ON
 // the rim the user reads as the card's edge). A section's label hangs outside its bounds, so a line meets
@@ -282,17 +283,24 @@ export function paintFreeEdges(): void {
     const over = draw.overId ? state.nodes.get(draw.overId) : null;
     if (over) {
       const r = rimRect(over);
-      tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`;
-      // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot — or, for an end
-      // shifted along a face, that dot ON the face where it will sit
       const shifted = draw.overSide && (draw.overAt ?? 0.5) !== 0.5;
-      for (const { side, p } of socketPoints(over)) {
-        const on = side === draw.overSide && !shifted;
-        tools += `<circle class="fe-drop-port${on ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${on ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
-      }
       if (shifted) {
+        // FigJam's shifted end: no ports, the card's rim traced thick with a GAP where each port is (the
+        // spots it would snap to), and the end's dot ON the face where it will sit
+        tools += `<rect class="fe-rim" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="4"/>`;
+        for (const side of ['up', 'down', 'left', 'right'] as const) {
+          const m = facePoint(r, side);
+          tools += `<circle class="fe-rim-gap" cx="${m.x}" cy="${m.y}" r="${RIM_GAP_R}"/>`;
+        }
         const q = facePoint(r, draw.overSide!, draw.overAt);
         tools += `<circle class="fe-drop-port on" cx="${q.x}" cy="${q.y}" r="${SOCKET_HOVER_R - 3}"/>`;
+      } else {
+        // the target's ports, the one the end would pin to drawn as FigJam's filled blue dot
+        tools += `<rect class="fe-target" x="${r.x - 4}" y="${r.y - 4}" width="${r.w + 8}" height="${r.h + 8}" rx="12"/>`;
+        for (const { side, p } of socketPoints(over)) {
+          const on = side === draw.overSide;
+          tools += `<circle class="fe-drop-port${on ? ' on' : ''}" cx="${p.x}" cy="${p.y}" r="${on ? SOCKET_HOVER_R - 3 : SOCKET_R}"/>`;
+        }
       }
     }
     const edge = draw.edgeId ? state.edges.find(x => x.id === draw.edgeId) : null;
