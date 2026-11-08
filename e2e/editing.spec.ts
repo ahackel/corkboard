@@ -134,3 +134,17 @@ test('an image dropped beside the open editor keeps the card\'s title', async ({
   await clickAway(page);
   await expect(c.locator('.body h1')).toHaveText('Shopping');
 });
+
+test('confirming an edit never changes the card\'s size, though the raw note stands taller', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, 'many\n\n' + Array.from({ length: 14 }, (_, i) => `line ${i}`).join('\n\n'));
+  await c.dblclick();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' more');
+  const editing = (await c.boundingBox())!;
+  await page.keyboard.press('ControlOrMeta+Enter');
+  await expect(c.locator('textarea.body-edit')).toHaveCount(0);
+  const after = (await c.boundingBox())!;
+  expect(after.width).toBeCloseTo(editing.width, 0);
+  expect(after.height).toBeCloseTo(editing.height, 0);
+});

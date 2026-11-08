@@ -20,6 +20,7 @@ import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines
 import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
+import { heightIsDeclared } from '../view/geometry.js';
 import { sectionName } from '../view/layout.js';
 import { extractToCard, discardNewCard, nextSectionTitle } from './crud.js';
 import { syncFloatBar } from './float-bar.js';
@@ -433,6 +434,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     return;
   }
   ui.bodyEdit = null;                                   // null first → the blur handler becomes a no-op
+  const editH = state.nodes.get(be.id)?.el?.offsetHeight ?? 0;   // read before anything repaints the card
   be.ta.blur();                                         // ensure keyboard closes on iOS when ended by keypress
   const n = state.nodes.get(be.id);
   be.el.classList.remove('editing');
@@ -457,8 +459,17 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.dirty = true;
   }
   remeasure();               // re-render and reflow the height change
+
+  // Confirming never changes the card's size: the raw markdown usually stands taller than the rendered
+  // note, so where the card would shrink back it keeps the height the editor gave it (an authored min-height).
+  const pinned = !cancel && !n.clip && !n.collapsed && !heightIsDeclared(n) && (n.el?.offsetHeight ?? editH) < editH;
+  if (pinned) {
+    n.h = editH;
+    n.dirty = true;
+    remeasure();
+  }
   // The text decides what the bar offers (a card with lines to tuck away can fold): the bar was synced for
   // the text the edit STARTED with, and the card often stays selected after it ends.
-  if (changed) { scheduleSave(); syncFloatBar(); }
+  if (changed || pinned) { scheduleSave(); syncFloatBar(); }
   commitStep();                                         // no-op sessions (cancel/unchanged) are discarded
 }
