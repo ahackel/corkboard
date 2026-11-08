@@ -718,12 +718,11 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .stack-pin:hover { filter:brightness(.92); }
 body.grabbing .stack-pin { cursor:grabbing; }
 /* SELECTED, a stack is ringed round the whole pile as it lies (features/stacks.ts ringPile), rather than round
-   its element — the top card's footprint, unrotated: a DASHED line, like the outline a fanned pile leaves */
+   its element — the top card's footprint, unrotated: a DASHED line */
 .node.stack.sel { box-shadow:none; }
 .stack-ring { position:absolute; display:none; pointer-events:none; border-radius:var(--r-card);
   outline:2px dashed var(--node-sel); outline-offset:2px; }
 .node.stack.sel > .stack-face > .stack-ring { display:block; }
-.node.stack.fan-open > .stack-face > .stack-ring { display:none; }
 /* a NAMED stack wears its name on a small tab above the pile, the way a section does; unnamed, none. Neutral
    grey whatever the stack's colour, which is its pin's alone. */
 .node.stack > .title-row { position:absolute; left:0; bottom:calc(100% + 10px * var(--ls, 1)); z-index:4;
@@ -743,11 +742,9 @@ body.grabbing .stack-pin { cursor:grabbing; }
 .node.drop-pile { scale:1.06; filter:drop-shadow(0 8px 12px rgba(0,0,0,.16)); }
 .node.drop-pile.sel { box-shadow:none; }
 .node.drop-pile > .stack-face > .stack-ring { display:none; }
-/* FANNED OUT: the pile steps back to an outline of where it lies, under a dimmed board, and its cards are
-   held up above both — over every line and card, and the cards in hand above them. */
-.node.stack.fan-open > .stack-face > .pile { visibility:hidden; }
-.node.stack.fan-open > .stack-face { min-height:60px; border-radius:var(--r-card);
-  outline:2px dashed color-mix(in srgb, var(--text) 30%, transparent); outline-offset:2px; }
+/* FANNED OUT: the stack itself — pile, pin, name — is gone from the board while its cards are held up over a
+   dimmed board, above every line and card, and the cards in hand above them. */
+.node.stack.fan-open { visibility:hidden; }
 /* The dimming and the cards' shadows come and go WITH the glide (LAYOUT_ANIM_MS, main.ts): in by a keyframe as
    the fan opens, out by a transition while it closes (body.fan-closing, features/stacks.ts closeFan). */
 #fanScrim { position:absolute; left:-100000px; top:-100000px; width:200000px; height:200000px; z-index:60;
