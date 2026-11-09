@@ -1253,20 +1253,8 @@ body.zoom-far .node > .top-edge { display:none; }
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
 body.readonly #ghostCard { opacity:.35; pointer-events:none; }
 
-/* first-run hint next to the + ghost card — only while empty */
-.emptyhint {
-  position:fixed; z-index:21; display:flex; align-items:center; gap:6px;
-  color:var(--muted); font-size:14px; font-weight:500;
-  pointer-events:none; user-select:none;
-  opacity:0; transition:opacity .45s ease;   /* fade in/out only when the "no cards" state changes */
-}
-body.empty-canvas:not(.readonly) .emptyhint { opacity:1; }
-/* above the dock, pointing down at the sticky you drag */
-#ghostHint { left:50%; transform:translateX(-50%); bottom:calc(70px + var(--sa-b)); }
-#ghostHint .hint-arrow { display:none; }
 /* Nothing to pick in read-only — setColor refuses there, so the colour row would be dead. */
 body.readonly #settingsPop .set-color { display:none; }
-.hint-arrow { flex:none; opacity:.85; }
 
 /* the `#` field (features/tag-picker.ts): a field, then one list — matches, then the selection's own
    tags, ticked. Over everything but the palette. */

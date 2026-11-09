@@ -42,7 +42,7 @@ import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { readOpenUnread } from './data/lazy.js';
 import { showStart, boot } from './boot.js';
-import { scopeActive, isScopeRoot, canOpen } from './nav/scope.js';
+import { isScopeRoot, canOpen } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
 import { installEdgeTools } from './features/edge-tools.js';
@@ -764,7 +764,6 @@ export function paintAll(): void {
   refreshTray();      // the tag tray's stickers, when it's out
   syncFan();          // the scrim under a fanned-out stack (features/stacks.ts)
   paintFreeEdges();
-  updateEmptyHints();
   syncScopeChrome();   // crumbs + reading class + the recovery when the section you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
@@ -777,14 +776,6 @@ export function paintAll(): void {
 //                 only in that first paint — kept apart so callers still say which they mean.
 export function relayout(): void { applyLayouts(); paintAll(); }
 export function remeasure(): void { paintAll(); applyLayouts(); paintAll(); }
-
-// The first-run hint ("Drag to create a card") shows only on an empty canvas.
-// "Empty" means empty OF WHAT'S ON SCREEN, so an open section with nothing in it gets the hints too —
-// opening an empty folder to start filling it is the whole point of being able to open one.
-function updateEmptyHints(): void {
-  const empty = scopeActive() ? ![...state.nodes.values()].some(n => !isHidden(n)) : state.nodes.size === 0;
-  document.body.classList.toggle('empty-canvas', empty);
-}
 
 // ---------- animated relayout (expand / collapse) ----------
 // Every glide plays whatever the system's "Reduce motion" says: the motion IS how a fold or a fan reads.
