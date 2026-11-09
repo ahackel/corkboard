@@ -13,6 +13,7 @@ import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStor
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
+import { MOTION } from './utils/motion.js';
 import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary } from './utils/model.js';
 import { state, world, dragLayer, isStack } from './core/state.js';
 import { setupGrid } from './view/grid.js';
@@ -892,7 +893,7 @@ function sizeSnapshot(): Map<HTMLElement, Size> {
 const SIZE_EASE = 'cubic-bezier(.45,0,.25,1)';
 // How long a fold / Fit / reflow glides — one number for the sizes here, the positions (animateReflow) and
 // `.lt-anim`'s left/top transition in styles.css, which must say the same.
-export const LAYOUT_ANIM_MS = 500;
+export const LAYOUT_ANIM_MS = MOTION ? 500 : 0;
 function animateSizes(before: Map<HTMLElement, Size>): void {
   // A section that has just UNFOLDED had no content wrapper to snapshot: it starts as small as the box
   // it grows out of (the pill, less the box's own border), so its cards stay clipped all the way open.

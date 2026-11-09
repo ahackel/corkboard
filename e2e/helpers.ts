@@ -14,7 +14,7 @@ export async function settled(page: Page): Promise<void> {
     const world = document.getElementById('world')!;
     const snap = (): string => world.style.transform + [...world.querySelectorAll<HTMLElement>('.node')]
       .map(n => { const r = n.getBoundingClientRect(); return `${r.x},${r.y},${r.width},${r.height}`; }).join(';');
-    const animating = (): boolean => document.getAnimations().some(a =>
+    const animating = (): boolean => document.body.classList.contains('layout-anim') || document.getAnimations().some(a =>
       a.playState === 'running' && a.effect?.getComputedTiming().endTime !== Infinity);
     let last = '', still = 0;
     const tick = (): void => {
@@ -36,7 +36,12 @@ export async function saved(page: Page): Promise<void> {
   await expect(page.locator('html')).not.toHaveAttribute('data-saving');
 }
 
-export async function openBoard(page: Page): Promise<void> {
+// Open a fresh board. Motion is OFF unless a spec is about the motion itself (`{ motion: true }`): every
+// glide, fold and fade lands at once (utils/motion.ts), so no step waits out an animation.
+export async function openBoard(page: Page, { motion = false }: { motion?: boolean } = {}): Promise<void> {
+  if (!motion) {
+    await page.addInitScript(() => { (window as Window & { corkboardMotion?: boolean }).corkboardMotion = false; });
+  }
   await page.goto('/');
   await expect(page.locator('#stage')).toBeVisible();
   await expect(page.locator('#folderName .sc-name')).toBeVisible();   // booted onto the (fresh) map

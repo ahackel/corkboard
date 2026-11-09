@@ -85,7 +85,7 @@ test('a checklist card wears its progress bar, open only', async ({ page }) => {
 });
 
 test('folding and Fit animate the size instead of jumping', async ({ page }) => {
-  await openBoard(page);
+  await openBoard(page, { motion: true });
   const c = await makeCard(page, 400, 300, '# Groceries\nmilk\neggs\nbread');
   await select(page, c);
   const running = () => c.evaluate(el => el.getAnimations().length);
@@ -103,7 +103,7 @@ test('folding and Fit animate the size instead of jumping', async ({ page }) => 
 });
 
 test('a folded card has no resize handles; ports and handles stand down while a fold animates', async ({ page }) => {
-  await openBoard(page);
+  await openBoard(page, { motion: true });
   const g = await makeCard(page, 400, 300, '# Groceries\nmilk\neggs');
   await select(page, g);
   await expect(g.locator(':scope > .fh')).not.toHaveCount(0);

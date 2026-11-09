@@ -1587,3 +1587,10 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 }
 
 
+
+/* Motion switched off (utils/motion.ts — the e2e specs only): every CSS transition and animation lands
+   at once. A 0s animation still fires animationend, which crud.ts's pop relies on. */
+html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after {
+  transition-duration:0s !important; transition-delay:0s !important;
+  animation-duration:0s !important; animation-delay:0s !important;
+}

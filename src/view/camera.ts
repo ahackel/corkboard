@@ -9,6 +9,7 @@ import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
 import { nodeW, nodeH } from './geometry.js';
+import { MOTION } from '../utils/motion.js';
 
 // Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
 // chip, the lock badge, the tags on its top edge — is a handful of unreadable pixels
@@ -97,6 +98,10 @@ export function jumpViewTo(tx: number, ty: number, tk: number = state.view.k): v
 }
 
 export function animateViewTo(tx: number, ty: number, tk: number = state.view.k): void {
+  if (!MOTION) {
+    jumpViewTo(tx, ty, tk);
+    return;
+  }
   cancelViewAnim();
   const sx = state.view.x, sy = state.view.y, sk = state.view.k;
   if (Math.abs(tx-sx) < 1 && Math.abs(ty-sy) < 1 && Math.abs(tk-sk) < .001){

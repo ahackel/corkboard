@@ -119,7 +119,7 @@ test('a click fans the stack out, and Esc puts it back', async ({ page }) => {
 
 test('the fan glides out of the pile and back onto it, even with Reduce motion on', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await openBoard(page);
+  await openBoard(page, { motion: true });
   await seedBoard(page, BOARD);
   const pile = (await stack(page).boundingBox())!;
   const card = page.locator('#world .node.fanned', { hasText: 'Top card' });

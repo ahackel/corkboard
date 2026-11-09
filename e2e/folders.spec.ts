@@ -131,7 +131,7 @@ test('a double-click on a folded section goes into it, like a folder in Finder',
 });
 
 test('unfolding a section does not glide its cards: they appear where they sit', async ({ page }) => {
-  await openBoard(page);
+  await openBoard(page, { motion: true });
   await seedBoard(page, FOLDERS);
   await page.locator('#world .node.section-folded', { hasText: 'Box' }).click();
   await page.keyboard.press('ArrowRight');
@@ -144,7 +144,7 @@ test('unfolding a section does not glide its cards: they appear where they sit',
 });
 
 test('a section clips its cards all the way through an unfold', async ({ page }) => {
-  await openBoard(page);
+  await openBoard(page, { motion: true });
   await seedBoard(page, FOLDERS);
   await page.locator('#world .node.section-folded', { hasText: 'Box' }).click();
   await page.keyboard.press('ArrowRight');
