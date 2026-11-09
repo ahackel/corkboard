@@ -214,7 +214,7 @@ describe('taskLines', () => {
   it('turns a line or a bullet into a task, and a task into done and back', () => {
     expect(task('milk|')).toBe('- [ ] milk|');
     expect(task('  - milk|')).toBe('  - [ ] milk|');
-    expect(task('3. milk|')).toBe('- [ ] milk|');
+    expect(task('3. milk|')).toBe('3. [ ] milk|');
     expect(task('- [ ] milk|')).toBe('- [x] milk|');
     expect(task('- [x] milk|')).toBe('- [ ] milk|');
     expect(task('|')).toBe('- [ ] |');

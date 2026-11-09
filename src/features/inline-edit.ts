@@ -134,7 +134,7 @@ stage.addEventListener('scroll', () => {
 // jump away when the editor closes. Find that line's block in the rendered note — by its text, the
 // markdown marks stripped — so the view can be panned to keep it where it was on screen.
 const strip = (s: string): string => s
-  .replace(/^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)/, '')
+  .replace(/^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+(?:\[[ xX]\]\s+)?)/, '')
   .replace(/\]\([^)]*\)/g, '').replace(/[*_`~[\]]/g, '').replace(/\s+/g, ' ').trim();
 function renderedBlockFor(bodyEl: HTMLElement, text: string, pos: number): HTMLElement | null {
   const from = text.lastIndexOf('\n', pos - 1) + 1, nl = text.indexOf('\n', pos);
@@ -386,7 +386,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   const text = cardMarkdown(n);
   // A double-click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
   const clicked = typeof caret === 'object' ? clickedOffset(bodyEl, text, caret) : null;
-  ta.className = 'body-edit'; ta.spellcheck = false; ta.value = text;
+  ta.className = 'body-edit'; ta.spellcheck = true; ta.value = text;
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
   // than just reverting the edit the way it does for an existing card.
   ta.rows = 1;   // a textarea's default is 2 rows: a one-line card would grow a line just by opening

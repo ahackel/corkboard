@@ -1116,6 +1116,10 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    That nested list is indented from the task's TEXT, as a bullet's children are from its text. */
 .node .body li.task > .task-text { flex:1 1 0; min-width:0; }
 .node .body li.task > :is(ul, ol) { flex-basis:100%; padding-left:calc(14px + 1.9em); }
+/* A NUMBERED task keeps its number: an ordinary list item, the box sitting inline before its text. */
+.node .body ol > li.task { display:list-item; list-style:decimal; margin-left:0; }
+.node .body ol > li.task .taskbox { margin:0 .4em 0 0; vertical-align:-2px; }
+.node .body ol > li.task > :is(ul, ol) { padding-left:1.5em; }
 /* A nested list's spacing is its items' own; the block margin above is for a list among paragraphs. */
 .node .body li > :is(ul, ol) { margin:0; }
 /* A checkbox is a FILLED square in the card's own ink, never a fixed colour, and with no border: 20% of

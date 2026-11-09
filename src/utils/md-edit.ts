@@ -434,9 +434,8 @@ export function moveLines(text: string, start: number, end: number, up: boolean)
 
 // ⌘L: make the touched lines tasks, or tick them. Lines that are all tasks flip together — all done
 // becomes all open, anything else becomes all done; otherwise every line that isn't a task yet gets a
-// box (a bullet keeps its marker, a plain line gets `- [ ] `, a NUMBERED item turns bullet — the card draws
-// and counts tasks as bullets only, main.ts toggleTask). Headings are left alone: the first one is the
-// card's title. ⌘L on an empty line starts a task there.
+// box (a list item keeps its marker, bullet or number; a plain line gets `- [ ] `). Headings are left
+// alone: the first one is the card's title. ⌘L on an empty line starts a task there.
 const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
 export function taskLines(text: string, start: number, end: number): TextEdit {
   const { first, last } = linesOf(text, start, end);
@@ -456,9 +455,6 @@ export function taskLines(text: string, start: number, end: number): TextEdit {
     }
     if (it?.task) {
       return l;
-    }
-    if (it && /\d/.test(it.marker)) {
-      return it.indent + '- [ ] ' + l.slice(it.lead);
     }
     if (it) {
       return l.slice(0, it.lead) + '[ ] ' + l.slice(it.lead);

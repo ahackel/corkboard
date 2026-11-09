@@ -164,7 +164,7 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   // leaving isn't a mutation.
   const open = scopeRootNode();
   if (open){
-    entries.push({ label:`Leave “${nodeLabel(open)}”`, shortcut:'↓', run: () => exitScope() });
+    entries.push({ label:`Leave “${nodeLabel(open)}”`, shortcut:'⌘↑', run: () => exitScope() });
     if (scope.stack.length > 1) {
       entries.push({ label:'Back to the whole map', run: () => goToScopeDepth(0) });
     }

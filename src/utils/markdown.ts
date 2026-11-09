@@ -106,9 +106,10 @@ export function stripImageRef(body: string, src: string): string {
 }
 
 // ---------- the tasks in a note ----------
-// The lines renderList draws as checkboxes, in body order: a BULLET, `[ ]`/`[x]`, then text. A numbered
-// `1. [ ]` isn't one, and fenced code is skipped, so a markdown sample in a code block isn't counted.
-const TASK_LINE = /^(\s*[-*+]\s+\[)([ xX])\]\s+\S/;
+// The lines renderList draws as checkboxes, in body order: a list item — bullet or numbered `1.`, as
+// Obsidian reads both — then `[ ]`/`[x]`, then text. Fenced code is skipped, so a markdown sample in a code
+// block isn't counted.
+const TASK_LINE = /^(\s*(?:[-*+]|\d+\.)\s+\[)([ xX])\]\s+\S/;
 
 function* taskLines(lines: string[]): Generator<{ i: number; mark: string; markAt: number }> {
   let fence = '';
@@ -219,18 +220,27 @@ function imgTag(src: string, alt: string): string {
     + `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`
     + `</button></span>`;
 }
+// A BACKSLASH ESCAPE (`\*`, `\[`, `\#`, …) prints its character and means nothing more, as in CommonMark and
+// Obsidian. The escaped character is swapped for a private-use stand-in BEFORE the link, tag and emphasis
+// passes, so none of them can read it as markup, and swapped back (escaped for HTML) at the very end.
+// A backtick isn't escapable here: code spans are found first, and inside one a backslash is literal.
+const ESCAPED = /\\([\\*_[\]()#!=~<>{}+\-.|])/g;
+const STAND_IN = /[\uE000-\uE07F]/g;
+const hideEscapes = (s: string): string => s.replace(ESCAPED, (_m, c: string) => String.fromCharCode(0xE000 + c.charCodeAt(0)));
+const showEscapes = (s: string): string => s.replace(STAND_IN, c => esc(String.fromCharCode(c.charCodeAt(0) - 0xE000)));
+
 // Full inline pass: protect `code` spans first (no formatting inside), then links + emphasis.
 function mdInline(text: string): string {
   let out = '', last = 0;
   const re = /`([^`]+)`/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text))){
-    out += mdLinks(text.slice(last, m.index));
+    out += mdLinks(hideEscapes(text.slice(last, m.index)));
     out += `<code>${esc(m[1])}</code>`;
     last = re.lastIndex;
   }
-  out += mdLinks(text.slice(last));
-  return out;
+  out += mdLinks(hideEscapes(text.slice(last)));
+  return showEscapes(out);
 }
 // ---- GFM pipe tables -------------------------------------------------------------
 // A table is a header row, a DELIMITER row (`|:--|--:|`) with the SAME number of cells,
@@ -311,8 +321,8 @@ function renderTable(lines: string[], start: number, cols: number): { html: stri
 // than the open level opens a list INSIDE the item above (where CommonMark and Obsidian put it), less
 // closes back out to the level it matches. Indent is compared, never counted in fixed steps, so `  -`
 // and `    -` both nest under `-`, and a `1. ` item's three-space children do too. A change of marker
-// kind at the same level starts a sibling list (`<ul>` → `<ol>`). Only bullets make TASKS — `data-ti`
-// numbers checkboxes in body order for write-back (main.ts toggleTask), which counts `- [ ]` lines only.
+// kind at the same level starts a sibling list (`<ul>` → `<ol>`). Bullets and numbered items both make TASKS —
+// `data-ti` numbers checkboxes in body order for write-back (main.ts toggleTask), counted by TASK_LINE above.
 // A task's text is wrapped in a span because the row is a flex box (styles.css li.task): bare, the text
 // would wrap under the checkbox, and a nested list would sit BESIDE it instead of below.
 const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+/;
@@ -322,8 +332,8 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
   // an ordered list starts at its FIRST item's number (`3.` → 3), as in CommonMark; later numbers are ignored
   const opener = (tag: 'ul' | 'ol', marker: string): string =>
     tag === 'ol' && parseInt(marker, 10) !== 1 ? `<ol start="${parseInt(marker, 10)}">` : `<${tag}>`;
-  const li = (body: string, tag: 'ul' | 'ol'): string => {
-    const tm = tag === 'ul' && body.match(/^\[([ xX])\]\s+(\S.*)$/);
+  const li = (body: string): string => {
+    const tm = body.match(/^\[([ xX])\]\s+(\S.*)$/);
     if (tm) {
       return `<li class="task"><input type="checkbox" class="taskbox" data-ti="${taskIdx++}"`
                  + `${tm[1].toLowerCase()==='x' ? ' checked' : ''}><span class="task-text">${mdInline(tm[2])}</span>`;
@@ -344,7 +354,7 @@ function renderList(lines: string[], taskIdx: number): { html: string; taskIdx: 
       html += '</li>';
       if (tag !== top.tag){ html += `</${top.tag}>` + opener(tag, m[2]); top.tag = tag; }
     }
-    html += li(m[3], tag);
+    html += li(m[3]);
   }
   while (open.length) {
     html += `</li></${open.pop()!.tag}>`;

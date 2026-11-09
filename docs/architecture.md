@@ -853,7 +853,7 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   ⌥↑/⌥↓ move the touched lines past their neighbour, an item carrying its nested children and hopping a
   whole neighbouring item — in a table only a BODY row moves, and only among the body rows (a row moved over
   the delimiter would become the header); ⌘L makes the lines tasks or ticks them (all open → all done → all open; a
-  numbered item turns a bullet, since tasks are bullets-only). A NUMBERED list renumbers itself after any of
+  line that is a list item keeps its marker, bullet or number). A NUMBERED list renumbers itself after any of
   these, after Enter and Tab, and after a native delete/cut/paste that changed the line count — only the
   run of non-blank lines around the edit, so a list elsewhere that skips on purpose is left alone. A
   top-level list keeps its first number; a nested one counts from 1.
@@ -874,7 +874,8 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   maps into its match. It is read before the textarea replaces the render; a miss leaves the caret at the end.
 - **The renderer nests lists by indentation** (`renderList`): deeper than the open level opens a list inside
   the item above, shallower closes back to the level it matches, a marker change at one level starts a
-  sibling list. Tasks stay bullets-only, numbered in body order, because `toggleTask` counts `- [ ]` lines.
+  sibling list. A bullet OR a numbered item can be a task (`1. [ ]`, as Obsidian draws it): each checkbox is
+  numbered in body order, and `toggleTask` counts the same lines (`TASK_LINE`). A numbered task keeps its number.
 - **What else the renderer reads**: `---`/`***`/`___` is a RULE even straight under a line of text (not
   CommonMark's setext heading — nobody heads a note that way, everybody draws a line that way), an ordered list
   starts at its first number, code fences are ``` or ~~~, `<https://…>` is a link, and `==text==` is Obsidian's

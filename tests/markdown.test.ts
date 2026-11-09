@@ -54,8 +54,11 @@ describe('taskProgress', () => {
   it('counts the bullet tasks a card draws as checkboxes, and how many are ticked', () => {
     expect(taskProgress('- [x] a\n- [ ] b\n  * [X] c\n+ [ ] d')).toEqual({ done: 2, total: 4 });
   });
-  it('leaves out numbered items, empty boxes, plain bullets and fenced code', () => {
-    expect(taskProgress('1. [x] no\n- [ ]\n- plain\n```\n- [x] sample\n```\n- [ ] yes')).toEqual({ done: 0, total: 1 });
+  it('counts numbered tasks too, as Obsidian draws them', () => {
+    expect(taskProgress('1. [x] a\n2. [ ] b')).toEqual({ done: 1, total: 2 });
+  });
+  it('leaves out empty boxes, plain bullets and fenced code', () => {
+    expect(taskProgress('- [ ]\n- plain\n```\n- [x] sample\n```\n- [ ] yes')).toEqual({ done: 0, total: 1 });
     expect(taskProgress('')).toEqual({ done: 0, total: 0 });
   });
 });
@@ -73,9 +76,28 @@ describe('toggleTaskAt', () => {
   });
 
   it('numbers exactly the checkboxes the card draws', () => {
-    for (const md of ['- [x] a\n- [ ] b', '1. [ ] no\n- [ ]\n- [ ] yes', '~~~\n- [ ] x\n~~~\n* [X] y', '- [ ]  \n- [ ] b']) {
+    for (const md of ['- [x] a\n- [ ] b', '1. [ ] yes\n- [ ]\n- [ ] yes', '~~~\n- [ ] x\n~~~\n* [X] y', '- [ ]  \n- [ ] b']) {
       expect(checkboxes(md)).toBe(taskProgress(md).total);
     }
+  });
+});
+
+describe('backslash escapes', () => {
+  it('print the character and nothing more', () => {
+    expect(renderBodyHTML('\\*not italic\\*')).toBe('<p>*not italic*</p>');
+    expect(renderBodyHTML('\\#notatag and \\[[not a link]]')).toBe('<p>#notatag and [[not a link]]</p>');
+    expect(renderBodyHTML('a \\<b\\> c')).toBe('<p>a &lt;b&gt; c</p>');
+  });
+  it('are literal inside code', () => {
+    expect(renderBodyHTML('`\\*x\\*`')).toBe('<p><code>\\*x\\*</code></p>');
+  });
+});
+
+describe('numbered tasks', () => {
+  it('draw a checkbox and keep their number', () => {
+    const html = renderBodyHTML('1. [ ] one\n2. [x] two');
+    expect(html).toMatch(/^<ol><li class="task"><input type="checkbox" class="taskbox" data-ti="0">/);
+    expect(html).toContain('data-ti="1" checked');
   });
 });
 
