@@ -12,7 +12,7 @@ import { relayout } from '../main.js';
 import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
-import { appendMd } from '../utils/markdown.js';
+import { appendMd, imageMd } from '../utils/markdown.js';
 import { nodeLabel } from '../utils/model.js';
 import { autosizeBody, syncOpenEditor } from './inline-edit.js';
 import { touch } from './history.js';
@@ -90,7 +90,7 @@ async function markdownForImages(files: File[]): Promise<string> {
   const out: string[] = [];
   for (const f of files){
     const path = await storeImage(f);
-    out.push(`![${altFromFile(f)}](${path})`);
+    out.push(imageMd(altFromFile(f), path));
   }
   return out.join('\n');
 }
@@ -168,7 +168,7 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
       // UNTITLED, deliberately: a card whose whole note is one image IS that image (core/state.ts
       // isImageCard), and a title would both draw a row over the picture and end image mode. The alt
       // still names the FILE — utils/filenames.ts slugStem reads it straight off the markdown.
-      parent, title: '', body: `![${alt}](${path})`,
+      parent, title: '', body: imageMd(alt, path),
       color: 'none', w, h, edit: false,
     });
     i++;

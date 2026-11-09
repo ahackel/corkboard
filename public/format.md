@@ -56,8 +56,11 @@ The body: a small Markdown subset.
   - `mm_locked: true` locks a card.
 - **A section's `_index.md`** holds its name (`# Name`), shown on its label ABOVE the box. The label shows
   the name only: anything else in the note is kept but never displayed.
-- **Body Markdown**: headings, paragraphs, `-`/`1.` lists, `- [ ]` task lists, `**bold**`, `*italic*`,
-  `` `code` ``, `[links](url)`, `#tags`, pipe tables, images `![](attachments/x.png)`.
+- **Body Markdown**: headings, paragraphs, `-`/`1.` lists, `- [ ]` and `1. [ ]` task lists, `**bold**`, `*italic*`,
+  `` `code` ``, `[links](url)`, `[[wikilinks]]`, `#tags`, pipe tables, `\` escapes, images `![](attachments/x.png)`.
+  Obsidian's forms are read too: `![[x.png]]` / `![[x.png|200]]` (a width), `[[Note#Heading]]`, `[text](Note.md)`.
+  A link or image path is looked up as written from the map's root, then beside the note, then by file name
+  anywhere in the map. A path with a space is written `![](<attachments/my pic.png>)`.
   A note whose whole body is one image becomes an image card.
 
 ## board.json

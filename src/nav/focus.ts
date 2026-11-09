@@ -1,7 +1,7 @@
 // ---------- focus: bring a card (or everything on the canvas) into view ----------
 import { type MindNode, state, setStatus } from '../core/state.js';
 import { layoutSnapshot, relayout, animateReflow } from '../main.js';
-import { ancestors, subtreeIds, resolveWikilink } from '../utils/model.js';
+import { ancestors, subtreeIds, resolveWikilink, linkName } from '../utils/model.js';
 import { record } from '../features/history.js';
 import { frameBox } from '../view/camera.js';
 import { store } from '../data/persistence.js';
@@ -11,6 +11,7 @@ import { popScopeFor } from './sections.js';
 import { isScopeRoot } from './scope.js';
 import { selectNode } from '../features/selection.js';
 import { scheduleSave } from '../data/save.js';
+import { afterReading } from '../data/lazy.js';
 
 // Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {
@@ -54,9 +55,14 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
 // The way to be exact is the PATH form, `[[Sections/Notes]]` or `[[Notes 2]]`, matched against the node's
 // file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
 // there rather than in some new syntax.
-export function focusByTitle(title: string, from?: MindNode): void {
-  const hits = resolveWikilink(title);
+export function focusByTitle(link: string, from?: MindNode, readFolded = false): void {
+  const hits = resolveWikilink(link), title = linkName(link);
   const target = hits[0];
+  // A FOLDED section's notes aren't read yet (data/lazy.ts), so a link to one of them finds nothing — read
+  // them and follow it then, rather than writing a second card of the same name.
+  if (!target && !readFolded && afterReading([...state.nodes.keys()], () => focusByTitle(link, from, true))) {
+    return;
+  }
   // A link to a card that isn't there yet WRITES it (Obsidian's gesture): the new card lands beside
   // the one you clicked from, free-standing — a wikilink is a relation, never containment. Only the
   // TITLE form can be created: the PATH form names a folder nothing here chooses.

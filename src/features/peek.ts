@@ -61,7 +61,7 @@ function show(cardEl: HTMLElement): void {
     }
   }
   panelBody.innerHTML = renderBodyHTML(cardMarkdown(n));
-  hydrateImages(panelBody);
+  hydrateImages(panelBody, n.file);
   panel.scrollTop = 0;
   // beside the card — to its right, or its left when the right has no room
   const r = cardEl.getBoundingClientRect();

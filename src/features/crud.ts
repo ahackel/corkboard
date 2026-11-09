@@ -5,7 +5,7 @@
 import { state, setStatus, singleNoteRefuses, isStack, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
-import { stripImageRef, appendMd } from '../utils/markdown.js';
+import { stripImageRef, appendMd, imageMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading, setNoteText } from '../utils/frontmatter.js';
 import { sectionInterior, holderOf, sectionAt } from '../view/layout.js';
@@ -667,7 +667,7 @@ export function extractImage(sourceId: string, path: string, alt: string,
   source.body = stripImageRef(source.body, path);
   source.dirty = true;
   syncOpenEditor(source);
-  const md = `![${alt}](${path})`;
+  const md = imageMd(alt, path);
   if ('toCardId' in target){
     const tgt = state.nodes.get(target.toCardId);
     if (tgt){

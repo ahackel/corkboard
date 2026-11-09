@@ -33,8 +33,10 @@ filename. Three things follow:
   second later never reached the filename. A vault filled up with `Untitled 47.md`.
 - **Tracking is paid for in renames, and everything holding a path follows one.** A renamed SECTION renames
   its folder, which moves every note inside it (`saveAll` phase 1, `planPaths`, which settles every path
-  top-down before anything is serialized), and a rename re-points the inbound PATH-form `[[wikilinks]]` (phase 1b, `retargetWikilinks`, alias
-  half kept verbatim). Title-form links need no fixup: re-slugging a file never changes a title.
+  top-down before anything is serialized), and a rename re-points the inbound links that name the PATH (phase 1b,
+  `retargetWikilinks`): a whole-path `[[Ideas/Old]]` or `[x](Ideas/Old.md)`, and Obsidian's SHORT `[[Old]]` for a note
+  in a folder — but only when nothing else in the map still answers to that name. Alias, `#heading` and the
+  link's spelling (`<…>`, `%20`) are kept verbatim. Title-form links need no fixup: re-slugging a file never changes a title.
 - **It is not a rename per keystroke.** While any of the four editors holds the note's text the name is
   FROZEN (`ui-state.ts frozenFileNodeId`), so the rename lands once, when the edit session commits —
   never as `M.md`, `Ma.md`, `Mag.md`. That freeze is what makes tracking affordable at all.
@@ -121,8 +123,9 @@ is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts
   (`rememberGeom`), their lines PARK on the section (an end keeps its path, `fromPath`/`toPath`, and the section
   stands in for it the way a pill always did — `parkEdges` / `unparkEdges`), their pictures' blob URLs are
   revoked (`forgetImages`). Demo and read-only mode never let go.
-- **What doesn't see unread notes:** search, and `[[wikilink]]` resolution and fix-up — a path-form link
-  INSIDE an unread note isn't re-pointed when its target is renamed.
+- **What doesn't see unread notes:** search, and `[[wikilink]]` fix-up — a path-form link INSIDE an unread note
+  isn't re-pointed when its target is renamed. FOLLOWING a link that names nothing in memory reads every folded
+  section first (`focusByTitle` → `afterReading`), so it goes to the note rather than writing a second one.
 
 **A LINE is something the user drew.** A card sits INSIDE the section that is its parent, so no line is ever
 derived from the tree. Lines live in `board.json` (`BoardEdge`: two card ids written as PATHS, colour, dash, end
@@ -880,6 +883,13 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   CommonMark's setext heading — nobody heads a note that way, everybody draws a line that way), an ordered list
   starts at its first number, code fences are ``` or ~~~, `<https://…>` is a link, and `==text==` is Obsidian's
   highlight. A highlight is the card's derived `--scrim` and a checkbox a fill of its ink, so both hold on any fill.
+- **Links and pictures read the way Obsidian writes them** (`mdLinks`, one `PICTURE` matcher shared by `soleImage`,
+  `bodyImages` and `stripImageRef`): `![[x.png]]` is a picture (`|200` a width, other text its alt) and `![[Note]]` a
+  link; a destination may be `<with spaces>` or hold balanced `(…)`; `[x](Note.md)` follows like a wikilink; and a
+  `[[Note#Heading]]` goes to the note (`linkName`), matched by whole path, then a path ENDING the file's, then title.
+  A picture is looked for as written from the root (`%20` read), beside its note, then by NAME anywhere in the map
+  (`features/images.ts candidates`; every non-note file is listed with the tree, `TreePlan.assets`). The app writes
+  a path with a space in the `<…>` form (`imageMd`). A backslash escape (`\*`) prints its character.
 
 **A SMART duplicate makes the NEXT card of a series** (⇧D; `crud.ts copyNext`). A daily log, sprints, versions: the copy's title steps to its next value
 (`utils/advance.ts advanceTitle`, tested — a `YYYY-MM-DD` date by one day with any weekday name beside it,

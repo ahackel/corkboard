@@ -92,7 +92,7 @@ function show(): void {
     return;
   }
   const mine = ++token;
-  void imageUrl(shot.path).then(url => {
+  void imageUrl(shot.path, state.nodes.get(shot.nodeId)?.file).then(url => {
     if (mine !== token || !imgEl || !url) {
       return;   // stepped again while this one was loading
     }

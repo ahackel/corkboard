@@ -119,14 +119,16 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
   return n.file && path.toLowerCase() === n.file.toLowerCase() ? n.file : path;
 }
 
-// Re-point the PATH-form [[wikilinks]] in one body that name a file a save just renamed, so a link
-// written before the rename still resolves after it (utils/model.ts resolveWikilink matches a target
-// against the node's path, `.md` optional). Only the path form moves: a `[[Title]]` names the title,
-// which re-slugging a file never touches — and the keys here are whole paths, so a bare title can only
-// collide with one by BEING that path, which resolveWikilink already reads path-first anyway.
-// The alias half is carried through verbatim: `[[Untitled 7|see this]]` keeps the words the reader sees.
+// Re-point the links in one body that name a file a save just renamed, so a link written before the rename
+// still resolves after it (utils/model.ts resolveWikilink). Two forms move:
+//   - a WHOLE path, `[[Ideas/Old]]` (`.md` optional), and a markdown link to the note, `[x](Ideas/Old.md)`;
+//   - the END of one, `[[Old]]` — Obsidian's "shortest path" link to a note in a folder — rewritten to the
+//     same number of segments, but only when nothing else in the map (`existing`: every path after the
+//     rename, lowercased, without `.md`) answers to that name, so a link that meant another note stays.
+// A `[[Title]]` that matched by title is never touched: re-slugging a file doesn't change a title. The alias,
+// a `#heading` and a link's `<…>`/`%20` spelling are carried through verbatim.
 // `renames` maps old path -> new path; returns the body unchanged (the same string) if nothing moved.
-export function retargetLinks(body: string, renames: Map<string, string>): string {
+export function retargetLinks(body: string, renames: Map<string, string>, existing: Set<string> = new Set()): string {
   if (!renames.size) {
     return body;
   }
@@ -135,11 +137,41 @@ export function retargetLinks(body: string, renames: Map<string, string>): strin
   for (const [from, into] of renames) {
     to.set(dropMd(from).toLowerCase(), dropMd(into));
   }
-  // Same shape as the renderer's wikilink arm (utils/markdown.ts mdInline).
-  return body.replace(/\[\[([^\]|]+)(\|[^\]]*)?\]\]/g, (m, target: string, alias?: string) => {
-    const into = to.get(dropMd(target.trim()).toLowerCase());
-    return into ? `[[${into}${alias ?? ''}]]` : m;
-  });
+  const retarget = (target: string): string | null => {
+    const key = dropMd(target.trim()).toLowerCase();
+    const whole = to.get(key);
+    if (whole) {
+      return whole;
+    }
+    if (!key || existing.has(key) || [...existing].some(e => e.endsWith('/' + key))) {
+      return null;
+    }
+    const hits = [...to].filter(([from]) => from.endsWith('/' + key));
+    return hits.length === 1 ? hits[0][1].split('/').slice(-key.split('/').length).join('/') : null;
+  };
+  // Same shapes as the renderer's (utils/markdown.ts mdLinks).
+  return body
+    .replace(/\[\[([^\]|#^]+)([#^][^\]|]*)?(\|[^\]]*)?\]\]/g, (m, target: string, place?: string, alias?: string) => {
+      const into = retarget(target);
+      return into ? `[[${into}${place ?? ''}${alias ?? ''}]]` : m;
+    })
+    .replace(/(\[[^\]]*\]\()(<[^<>\n]+>|[^()\s]+)\)/g, (m, head: string, dest: string) => {
+      const angled = dest.startsWith('<'), raw = angled ? dest.slice(1, -1) : dest;
+      let path = raw;
+      try {
+        path = decodeURIComponent(raw);
+      } catch { /* not %-encoded: read as written */ }
+      const parts = path.match(/^((?:\.\.?\/)*)([^:#?]+?)\.md(#.*)?$/i);
+      const into = parts && retarget(parts[2]);
+      if (!parts || !into) {
+        return m;
+      }
+      const out = `${parts[1]}${into}.md${parts[3] ?? ''}`;
+      if (angled) {
+        return `${head}<${out}>)`;
+      }
+      return `${head}${raw.includes('%') ? encodeURI(out) : /\s/.test(out) ? `<${out}>` : out})`;
+    });
 }
 
 // The folders to try removing after notes left `emptied` folders: each of those and every folder above

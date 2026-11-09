@@ -85,10 +85,10 @@ test('Backspace takes a marker, ⌥↑ moves an item, ⌘L makes and ticks a tas
   await page.keyboard.press('Alt+ArrowUp');                  // c above b — and renumbered
   await expect(ta).toHaveValue('1. a\n2. c\n3. b');
   await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ControlOrMeta+l');                // a numbered item turns a bullet task
-  await expect(ta).toHaveValue('1. a\n2. c\n- [ ] b');
+  await page.keyboard.press('ControlOrMeta+l');                // a numbered item becomes a numbered task
+  await expect(ta).toHaveValue('1. a\n2. c\n3. [ ] b');
   await page.keyboard.press('ControlOrMeta+l');
-  await expect(ta).toHaveValue('1. a\n2. c\n- [x] b');
+  await expect(ta).toHaveValue('1. a\n2. c\n3. [x] b');
   await page.keyboard.press('Escape');
 });
 

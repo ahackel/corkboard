@@ -6,6 +6,7 @@
 // ============================================================
 
 import { INLINE_TAG } from './tags.js';
+import { IMAGE_FILE_RE } from './image-types.js';
 
 // escape text for safe insertion into SVG/HTML markup
 const ESC_MAP: Record<string, string> = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' };
@@ -45,52 +46,118 @@ function mdStyle(s: string): string {
     .replace(/~~([^~]+)~~/g, '<del>$1</del>')
     .replace(/==([^=\s][^=]*?)==/g, '<mark>$1</mark>');            // Obsidian's highlight
 }
+// ---------- links and pictures, as Obsidian writes them ----------
+// A link or picture DESTINATION is `<…>` (which may hold spaces — Obsidian writes a path with spaces that
+// way) or a run with no space whose parentheses balance one level deep (`Foo_(bar)`), as in CommonMark.
+const DEST = String.raw`<[^<>\n]+>|(?:[^()\s]|\([^()\s]*\))+`;
+const unwrapDest = (d: string): string => d.startsWith('<') && d.endsWith('>') ? d.slice(1, -1) : d;
+// A picture is `![alt](src)` or Obsidian's EMBED `![[src]]`, whose `|…` is a width (`|200`, `|200x100`) or
+// else alt text. An embed of anything but a picture (`![[Note]]`) isn't one: it reads as a link to it.
+const IMG_MD = String.raw`!\[([^\]]*)\]\((${DEST})\)`;
+const IMG_EMBED = String.raw`!\[\[([^\]|]+)(?:\|([^\]]*))?\]\]`;
+const PICTURE = new RegExp(`${IMG_MD}|${IMG_EMBED}`, 'g');
+const SIZE = /^\s*(\d+)(?:x\d+)?\s*$/;
+
+export interface SoleImage { alt: string; src: string; width?: number }
+// The picture one PICTURE match (or the same four groups at `at` in a longer pattern) stands for, if any.
+function pictureOf(g: Array<string | undefined>, at = 1): SoleImage | null {
+  const [alt, dest, embed, after] = g.slice(at, at + 4);
+  if (dest !== undefined) {
+    return { alt: (alt ?? '').trim(), src: unwrapDest(dest) };
+  }
+  const src = embed?.trim() ?? '';
+  if (!IMAGE_FILE_RE.test(src)) {
+    return null;
+  }
+  const size = (after ?? '').match(SIZE);
+  return size ? { alt: '', src, width: +size[1] } : { alt: (after ?? '').trim(), src };
+}
+// How to write a picture back: in the `<…>` form when its path holds a space or a bracket.
+export function imageMd(alt: string, src: string): string {
+  return `![${alt}](${/[\s()<>]/.test(src) ? `<${src}>` : src})`;
+}
+// A path as written in a link (`My%20Note.md`) → the path on disk; one that isn't valid %-encoding stays as is.
+export function decodePath(p: string): string {
+  try {
+    return decodeURIComponent(p);
+  } catch {
+    return p;
+  }
+}
+// A `[label](dest)` to a NOTE in the map — a relative `.md` path, maybe `#heading` after it — is a link to that
+// note, followed like a wikilink; the name it gives resolveWikilink (`./` and `../` dropped, `.md` and `#…` kept
+// off). Anything else (a web page, a file) is not one: null.
+function noteLinkTarget(dest: string): string | null {
+  const m = decodePath(dest).match(/^([^:#?]+?)\.md(#.*)?$/i);
+  return m ? m[1].replace(/^(?:\.\.?\/)+/, '').replace(/^\//, '') + (m[2] ?? '') : null;
+}
+
 // Links/wikilinks within a text run; emphasis is applied to the gaps and link labels.
-//   ![alt](src)                  → image (vault-relative path, or a remote/data URL)
+//   ![alt](src) / ![[src]]       → image (vault-relative path, or a remote/data URL)
 //   [text](url) / <https://…> / bare https?:// → external link (new tab)
+//   [text](Some Note.md)         → a link to that note, like a wikilink
 //   [[Note]] or [[Note|alias]]   → wikilink → focuses that node in the map
-// NOTE: the image alternative comes first so ![..](..) isn't mis-read as a link with a stray "!".
+// NOTE: the image alternatives come first so ![..](..) isn't mis-read as a link with a stray "!".
 // A link may go to the web, to mail, or to a relative path — never to a scheme that RUNS something
 // (`javascript:`), since notes arrive from outside the app: the phone inbox, a zip, Obsidian.
 const SAFE_HREF = /^(https?:|mailto:|[^:]*$)/i;
+const LINKS = new RegExp([
+  IMG_MD, IMG_EMBED,                                          // 1 alt, 2 dest · 3 embed, 4 after its |
+  String.raw`\[([^\]]+)\]\((${DEST})\)`,                       // 5 label, 6 dest
+  String.raw`\[\[([^\]|]+)(?:\|([^\]]+))?\]\]`,                 // 7 target, 8 alias
+  String.raw`<(https?:\/\/[^\s>]+)>`, String.raw`(https?:\/\/[^\s)]+)`,   // 9, 10
+].join('|'), 'g');
+const wikilinkTag = (target: string, label: string): string =>
+  `<a class="lk wikilink" data-target="${esc(target.trim())}">${esc(label.trim())}</a>`;
 
 function mdLinks(text: string): string {
-  const re = /!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s)]+)/g;
   let out = '', last = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))){
+  for (const m of text.matchAll(LINKS)){
     out += mdEmphasis(text.slice(last, m.index));
-    if (m[2]) {
-      out += imgTag(m[2], m[1]);                                                         // ![alt](src)
-    } else if (m[4] && !SAFE_HREF.test(m[4])) {
-      out += mdEmphasis(m[3]);                                                           // javascript: etc. — text only
-    } else if (m[4]) {
-      out += `<a class="lk" href="${esc(m[4])}" target="_blank" rel="noopener">${mdEmphasis(m[3])}</a>`;
-    } else if (m[5]) {
-      out += `<a class="lk wikilink" data-target="${esc(m[5].trim())}">${esc((m[6]||m[5]).trim())}</a>`;
-    } else { const u = m[7] ?? m[8];                                                                    // <url> or a bare one
-           out += `<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`; }
-    last = re.lastIndex;
+    last = m.index + m[0].length;
+    const pic = m[2] !== undefined || m[3] !== undefined ? pictureOf(m) : null;
+    if (pic) {
+      out += imgTag(pic.src, pic.alt, pic.width);
+    } else if (m[3] !== undefined) {
+      out += wikilinkTag(m[3], m[4] || m[3]);                                            // ![[Note]]
+    } else if (m[6] !== undefined) {
+      const dest = unwrapDest(m[6]), note = noteLinkTarget(dest);
+      if (note) {
+        out += `<a class="lk wikilink" data-target="${esc(note)}">${mdEmphasis(m[5])}</a>`;
+      } else if (!SAFE_HREF.test(dest)) {
+        out += mdEmphasis(m[5]);                                                         // javascript: etc. — text only
+      } else {
+        out += `<a class="lk" href="${esc(dest)}" target="_blank" rel="noopener">${mdEmphasis(m[5])}</a>`;
+      }
+    } else if (m[7] !== undefined) {
+      out += wikilinkTag(m[7], m[8] || m[7]);
+    } else {
+      const u = m[9] ?? m[10];                                                           // <url> or a bare one
+      out += `<a class="lk" href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`;
+    }
   }
   out += mdEmphasis(text.slice(last));
   return out;
 }
 // ---------- a note that is nothing but a picture ----------
-// There is no image KIND: a card whose whole note is one `![alt](src)` — and which carries no title
-// to draw — IS that image, and renders as one (no padding, both axes authored, the picture flush to
+// There is no image KIND: a card whose whole note is one `![alt](src)` (or `![[src]]`) — and which carries no
+// title to draw — IS that image, and renders as one (no padding, both axes authored, the picture flush to
 // its corners; see isImageCard in core/state.ts and isImageBox in main.ts). The test is deliberately
 // the WHOLE body, so the rule is one a user can see in the text: type a word or a heading and the
 // card is an ordinary card again, with its padding and its measured height back.
 // Returns the alt + src so the callers that name a file after the picture don't re-parse it.
-export interface SoleImage { alt: string; src: string }
+const SOLE = new RegExp(`^(?:${IMG_MD}|${IMG_EMBED})$`);
 export function soleImage(body: string | null | undefined): SoleImage | null {
-  const m = (body ?? '').trim().match(/^!\[([^\]]*)\]\(([^)\s]+)\)$/);
-  return m ? { alt: m[1].trim(), src: m[2] } : null;
+  const m = (body ?? '').trim().match(SOLE);
+  return m ? pictureOf(m) : null;
 }
-// Every `![alt](src)` in a note, in reading order — the one spelling of "the pictures in a body".
+// Every picture in a note, in reading order — the one spelling of "the pictures in a body".
 export function* bodyImages(body: string | null | undefined): Generator<SoleImage> {
-  for (const m of (body ?? '').matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) {
-    yield { alt: m[1].trim(), src: m[2] };
+  for (const m of (body ?? '').matchAll(PICTURE)) {
+    const pic = pictureOf(m);
+    if (pic) {
+      yield pic;
+    }
   }
 }
 // A note with `md` added at its end, a blank line between.
@@ -101,8 +168,26 @@ export function appendMd(body: string, md: string): string {
 export const escRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // A note with one picture's reference taken out (its line too, if that was all the line held).
 export function stripImageRef(body: string, src: string): string {
-  const re = new RegExp(`[ \\t]*!\\[[^\\]]*\\]\\(\\s*${escRe(src)}\\s*\\)[ \\t]*\\n?`);
-  return body.replace(re, '').replace(/\n{3,}/g, '\n\n').trim();
+  for (const m of body.matchAll(PICTURE)) {
+    if (pictureOf(m)?.src !== src) {
+      continue;
+    }
+    let from = m.index, to = m.index + m[0].length;
+    const before = body.slice(0, from).match(/[ \t]*$/)![0].length, after = body.slice(to).match(/^[ \t]*/)![0].length;
+    const lineStart = from - before === 0 || body[from - before - 1] === '\n';
+    const lineEnd = to + after === body.length || body[to + after] === '\n';
+    if (lineStart && lineEnd) {
+      from -= before;
+      to += after + (body[to + after] === '\n' ? 1 : 0);   // the picture was the whole line: take the line
+    } else {
+      to += after;                                            // one side's space, so the words keep theirs
+      if (!after) {
+        from -= before;
+      }
+    }
+    return (body.slice(0, from) + body.slice(to)).replace(/\n{3,}/g, '\n\n').trim();
+  }
+  return body.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // ---------- the tasks in a note ----------
@@ -213,9 +298,10 @@ export function linkPaste(text: string, start: number, end: number, url: string)
 // context menu can map a rendered <img> back to its markdown reference / vault file.
 // Wrapped in .img-wrap so the magnifier button (shown only on a selected card, see styles.css)
 // can position over the image; the button opens the full-screen viewer (main.ts nodeEl click).
-function imgTag(src: string, alt: string): string {
-  const s = esc(src.trim());
-  return `<span class="img-wrap"><img class="md-img" data-img-src="${s}" data-path="${s}" alt="${esc(alt || '')}">`
+// A width from Obsidian's `![[src|200]]` caps the picture at that many px, never wider than the card.
+function imgTag(src: string, alt: string, width?: number): string {
+  const s = esc(src.trim()), w = width ? ` style="max-width:${width}px"` : '';
+  return `<span class="img-wrap"><img class="md-img" data-img-src="${s}" data-path="${s}" alt="${esc(alt || '')}"${w}>`
     + `<button type="button" class="img-zoom" tabindex="-1" aria-label="View image">`
     + `<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.5" y1="15.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`
     + `</button></span>`;

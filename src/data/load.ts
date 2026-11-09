@@ -12,7 +12,7 @@ import { type FoldTest } from '../store/tree.js';
 import { scope, resolveScopeAfterLoad } from '../nav/scope.js';
 import { clearHistory } from '../features/history.js';
 import { resetSaveState, scheduleSave } from './save.js';
-import { resetImageCache } from '../features/images.js';
+import { resetImageCache, knowAssets } from '../features/images.js';
 import { refreshGrid } from '../view/grid.js';
 import { store, updateMapTitle } from './persistence.js';
 import { flattenLegacyBranches, foldCardsIntoSections } from './migrate.js';
@@ -135,6 +135,7 @@ function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
   for (const d of listing.foreign) {
     foreignDirs.add(d);
   }
+  knowAssets(listing.assets ?? []);
   const known = new Set([...state.nodes.values()].map(n => n.file));
   const added: MindNode[] = [];
   const add = (n: MindNode): void => { state.nodes.set(n.id, n); known.add(n.file); added.push(n); };

@@ -82,7 +82,7 @@ export const idbStore = (() => {
         }
       });
       const plan = planTree([...all.keys()], under, fold);
-      return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign };
+      return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign, assets: plan.assets };
     },
     async removeDir(): Promise<void> { /* a flat key space has no folders to leave behind */ },
     async write(path: string, data: string | Blob): Promise<void> { return put(prefixOf(_mapId) + path, data); },

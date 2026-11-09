@@ -54,7 +54,7 @@ export async function listTree(root: FileSystemDirectoryHandle, under: string, f
     const unread = [...handles].filter(([path]) => !stamp.has(path));
     await Promise.all(unread.map(async ([path, h]) => { stamp.set(path, stampOf(await h.getFile())); }));
   }
-  return { files, lazy: plan.lazy, foreign: plan.foreign };
+  return { files, lazy: plan.lazy, foreign: plan.foreign, assets: plan.assets };
 }
 // What the folder looks like on disk without reading a byte of it: every file's size and modification
 // time, by path. Two stamps that differ mean something changed outside the app (store/fsa.ts changed).

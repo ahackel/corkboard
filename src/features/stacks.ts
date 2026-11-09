@@ -90,7 +90,7 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
       card.style.translate = `${mess[i].dx}px ${mess[i].dy}px`;
       const body = card.firstElementChild as HTMLElement;
       body.innerHTML = renderBodyHTML(md);
-      hydrateImages(body);
+      hydrateImages(body, k.file);
     }
     return key;
   });

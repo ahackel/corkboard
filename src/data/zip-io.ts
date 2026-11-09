@@ -8,10 +8,11 @@ import { BOARD_FILE, boardJSON } from './board.js';
 import { hideStart } from '../boot.js';
 import { readAll } from './lazy.js';
 import { commitRel } from '../view/layout.js';
-import { slugStem, safeName } from '../utils/filenames.js';
+import { slugStem, safeName, dirOf } from '../utils/filenames.js';
 import { serializeMd } from '../utils/frontmatter.js';
 import { bodyImages } from '../utils/markdown.js';
 import { downloadBlob } from '../utils/download.js';
+import { readImage } from '../features/images.js';
 import { loadFromDir } from './load.js';
 
 const importInput = document.createElement('input');
@@ -101,25 +102,26 @@ export async function exportZip(): Promise<void> {
     return { name, data: serializeMd(n) };
   });
   // collect every vault-relative image referenced in a body, and pack the files alongside the notes
-  const refs = new Set<string>();
+  // (by where each was FOUND — beside its note, or by name, as Obsidian writes them — so the zip holds the
+  // file the note shows, at the path it lives at)
+  const refs = new Map<string, { src: string; file: string | null | undefined }>();
   for (const n of nodes) {
     for (const { src } of bodyImages(n.body)) {
       if (!/^(https?:|data:)/i.test(src)) {
-        refs.add(src);
+        refs.set(dirOf(n.file ?? '') + '\0' + src, { src, file: n.file });
       }
     }
   }
   // read every referenced image concurrently, then pack the ones that resolved
-  const images = await Promise.all([...refs].map(async path => {
-    const blob = await store.readBlob(path);
-    return blob ? { name: path, bytes: new Uint8Array(await blob.arrayBuffer()) } : null;
-  }));
-  const attached = images.filter(Boolean).length;
-  for (const img of images) {
-    if (img) {
-      files.push(img);
+  const found = await Promise.all([...refs.values()].map(r => readImage(r.src, r.file)));
+  const packed = new Set<string>();
+  for (const img of found) {
+    if (img && !packed.has(img.path)) {
+      packed.add(img.path);
+      files.push({ name: img.path, bytes: new Uint8Array(await img.blob.arrayBuffer()) });
     }
   }
+  const attached = packed.size;
   // Always: the board file now carries every node's position and size, so a zip without it would
   // unpack as a pile of notes with no layout.
   files.push({ name: BOARD_FILE, data: boardJSON() });

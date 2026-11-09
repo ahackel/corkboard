@@ -32,8 +32,9 @@ function retargetWikilinks(renames: Map<string, string>): string[] {
     return [];
   }
   const touched: string[] = [];
+  const existing = new Set([...state.nodes.values()].map(n => (n.file ?? '').replace(/\.md$/i, '').toLowerCase()));
   for (const n of state.nodes.values()) {
-    const body = retargetLinks(n.body, renames);
+    const body = retargetLinks(n.body, renames, existing);
     if (body === n.body) {
       continue;
     }

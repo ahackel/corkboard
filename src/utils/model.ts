@@ -229,21 +229,29 @@ export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
 }
 
 // ---------- what a [[wikilink]] names ----------
-// The PATH form first (the node's file, with `.md` optional — the one name guaranteed unique), else
-// every card whose TITLE matches; in map order, so the first hit is the one a click goes to. Two
-// callers share it, and that is the point: nav/focus.ts's jump, and the link lines a selected card draws
-// (view/free-edges.ts). A line that pointed somewhere the click doesn't go would be a lie.
+// The note a link names, the way Obsidian reads it: a `#heading` or `^block` after the name is a place IN
+// the note, so it's dropped here (a click goes to the card), and `.md` is optional.
+export function linkName(name: string): string {
+  return name.replace(/[#^].*$/, '').trim().replace(/\.md$/i, '');
+}
+// The PATH form first (the node's file — the one name guaranteed unique), then a path that ENDS the file's
+// (`[[Notes]]` for `Ideas/Notes.md`: Obsidian's "shortest path" link to a note in a folder), else every card
+// whose TITLE matches; in map order, so the first hit is the one a click goes to. Two callers share it, and
+// that is the point: nav/focus.ts's jump, and the link lines a selected card draws (view/free-edges.ts).
+// A line that pointed somewhere the click doesn't go would be a lie.
 export function resolveWikilink(name: string): MindNode[] {
-  const t = name.trim().toLowerCase();
+  const t = linkName(name).toLowerCase();
   if (!t) {
     return [];
   }
   const nodes = [...state.nodes.values()];
-  const byFile = nodes.filter(n => {
-    const f = (n.file ?? '').toLowerCase();
-    return f === t || f === t + '.md';
-  });
-  return byFile.length ? byFile : nodes.filter(n => n.title.trim().toLowerCase() === t);
+  const file = (n: MindNode): string => (n.file ?? '').toLowerCase();
+  const byFile = nodes.filter(n => file(n) === t + '.md');
+  if (byFile.length) {
+    return byFile;
+  }
+  const byTail = nodes.filter(n => file(n).endsWith('/' + t + '.md'));
+  return byTail.length ? byTail : nodes.filter(n => n.title.trim().toLowerCase() === t);
 }
 
 // The node whose card on the canvas holds `t` (an event target, or what is under a point).

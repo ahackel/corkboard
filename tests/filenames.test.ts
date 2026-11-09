@@ -56,8 +56,20 @@ describe('retargetLinks', () => {
     expect(retargetLinks('[[dir/A]]', renames)).toBe('[[dir/B]]');
   });
   it('leaves other links and plain text alone', () => {
-    const body = '[[Other]] and Old and [Old](Old.md)';
+    const body = '[[Other]] and Old and [Old](https://x.y/Old.md)';
     expect(retargetLinks(body, renames)).toBe(body);
+  });
+  it('re-points a markdown link to the note, in the spelling it was written in', () => {
+    expect(retargetLinks('[a](Old.md) [b](<dir/A.md#Plan>)', renames)).toBe('[a](New.md) [b](<dir/B.md#Plan>)');
+    const spaced = new Map([['Ideas/My Old.md', 'Ideas/My New.md']]);
+    expect(retargetLinks('[c](Ideas/My%20Old.md)', spaced)).toBe('[c](Ideas/My%20New.md)');
+  });
+  it('re-points a SHORT link to a note in a folder, keeping its heading', () => {
+    expect(retargetLinks('[[A#Plan]] [[a|x]]', renames)).toBe('[[B#Plan]] [[B|x]]');
+  });
+  it('leaves a short link alone when another note still answers to it', () => {
+    expect(retargetLinks('[[A]]', renames, new Set(['a']))).toBe('[[A]]');
+    expect(retargetLinks('[[A]]', renames, new Set(['other/a']))).toBe('[[A]]');
   });
 });
 

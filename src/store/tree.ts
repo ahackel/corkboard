@@ -13,6 +13,7 @@ export interface TreePlan {
   read: string[];                      // the .md paths to read, in listing order
   lazy: Map<string, LazyFolder>;       // folder ('A/B/') -> its unread notes
   foreign: Set<string>;                // lowercased folders holding no notes at all: not sections
+  assets: string[];                    // every file that isn't a note (pictures…), for a link that names one by NAME
 }
 export type FoldTest = (dir: string, hasIndex: boolean) => boolean;
 
@@ -62,5 +63,5 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
     const l = lazyDirs.find(d => p.startsWith(d));
     return !l || index.get(l) === p;          // a lazy folder still gives up its own section note
   });
-  return { read, lazy, foreign };
+  return { read, lazy, foreign, assets: paths.filter(p => !/\.md$/i.test(p)) };
 }

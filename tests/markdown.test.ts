@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderBodyHTML, taskProgress, toggleTaskAt, appendMd, xmlSafe } from '../src/utils/markdown.js';
+import { renderBodyHTML, taskProgress, toggleTaskAt, appendMd, xmlSafe, bodyImages, soleImage, stripImageRef, imageMd } from '../src/utils/markdown.js';
 
 describe('renderBodyHTML', () => {
   it('draws a rule for ---, ***, ___ — even straight under a line of text', () => {
@@ -19,7 +19,7 @@ describe('renderBodyHTML', () => {
     expect(renderBodyHTML('see <https://x.y/a>')).toBe('<p>see <a class="lk" href="https://x.y/a" target="_blank" rel="noopener">https://x.y/a</a></p>');
   });
   it('links only to addresses that cannot run code', () => {
-    expect(renderBodyHTML('[go](javascript:alert(1))')).toBe('<p>go)</p>');
+    expect(renderBodyHTML('[go](javascript:alert(1))')).toBe('<p>go</p>');
     expect(renderBodyHTML('[w](https://x.y)')).toContain('href="https://x.y"');
     expect(renderBodyHTML('[m](mailto:a@b.c)')).toContain('href="mailto:a@b.c"');
   });
@@ -79,6 +79,43 @@ describe('toggleTaskAt', () => {
     for (const md of ['- [x] a\n- [ ] b', '1. [ ] yes\n- [ ]\n- [ ] yes', '~~~\n- [ ] x\n~~~\n* [X] y', '- [ ]  \n- [ ] b']) {
       expect(checkboxes(md)).toBe(taskProgress(md).total);
     }
+  });
+});
+
+describe('Obsidian links and pictures', () => {
+  const img = (html: string): string | undefined => html.match(/data-img-src="([^"]*)"/)?.[1];
+  it('draws an embed as a picture, its |number a width and anything else its alt', () => {
+    expect(img(renderBodyHTML('![[Pasted image 1.png]]'))).toBe('Pasted image 1.png');
+    expect(renderBodyHTML('![[x.png|200]]')).toContain('style="max-width:200px"');
+    expect(renderBodyHTML('![[x.png|a cat]]')).toContain('alt="a cat"');
+  });
+  it('reads an embed of a note as a link to it', () => {
+    const html = renderBodyHTML('![[Some Note]]');
+    expect(html).toContain('class="lk wikilink" data-target="Some Note"');
+    expect(html).not.toContain('!');
+  });
+  it('takes a <…> path with spaces, and parentheses that balance', () => {
+    expect(img(renderBodyHTML('![](<my pic.png>)'))).toBe('my pic.png');
+    expect(renderBodyHTML('[w](https://en.wikipedia.org/wiki/Foo_(bar))')).toContain('href="https://en.wikipedia.org/wiki/Foo_(bar)"');
+  });
+  it('follows a markdown link to a .md note like a wikilink', () => {
+    expect(renderBodyHTML('[n](Other%20Note.md)')).toContain('data-target="Other Note"');
+    expect(renderBodyHTML('[n](<../Ideas/My Note.md#Plan>)')).toContain('data-target="Ideas/My Note#Plan"');
+    expect(renderBodyHTML('[f](attachments/a.pdf)')).toContain('href="attachments/a.pdf"');
+  });
+  it('finds every kind of picture, and a sole embed makes an image card', () => {
+    expect([...bodyImages('![a](x.png) ![[y.jpg|50]] ![[Note]]')]).toEqual([
+      { alt: 'a', src: 'x.png' }, { alt: '', src: 'y.jpg', width: 50 }]);
+    expect(soleImage('![[y.jpg]]')).toEqual({ alt: '', src: 'y.jpg' });
+    expect(soleImage('![[Note]]')).toBeNull();
+  });
+  it('takes out one picture of either kind, with its line', () => {
+    expect(stripImageRef('a\n![[y.jpg]]\nb', 'y.jpg')).toBe('a\nb');
+    expect(stripImageRef('a ![](<my pic.png>) b', 'my pic.png')).toBe('a b');
+  });
+  it('writes a path with a space back in the <…> form', () => {
+    expect(imageMd('', 'my pic.png')).toBe('![](<my pic.png>)');
+    expect(imageMd('x', 'a.png')).toBe('![x](a.png)');
   });
 });
 

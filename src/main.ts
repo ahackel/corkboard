@@ -555,7 +555,7 @@ export function paintNode(n: MindNode): void {
     if (fresh){
       bodyEl.dataset.md = md;
       bodyEl.innerHTML = renderBodyHTML(md);
-      hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
+      hydrateImages(bodyEl, n.file);   // swap inline-image placeholders for resolved (blob/remote) URLs
     }
     // a table's fit changes with the text and with the card's width (squeezeTables)
     const tw = String(nodeW(n));

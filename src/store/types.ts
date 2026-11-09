@@ -5,7 +5,7 @@
 export interface NoteFile { path: string; text: string; }
 
 import type { FoldTest, LazyFolder } from './tree.js';
-export interface TreeListing { files: NoteFile[]; lazy: Map<string, LazyFolder>; foreign: Set<string>; }
+export interface TreeListing { files: NoteFile[]; lazy: Map<string, LazyFolder>; foreign: Set<string>; assets?: string[]; }
 
 // Outcome of an open attempt. Different backends use different subsets.
 export type PickResult = 'ok' | 'cancel' | 'denied' | 'unsupported' | 'error' | 'gone' | 'needs-click';
