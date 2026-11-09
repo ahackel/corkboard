@@ -208,6 +208,7 @@ function foldTest(keep: string[]): FoldTest {
     return g ? !!g.collapsed : true;
   };
 }
+const NOTE_READ_W = 720;
 // Folders on disk that are NOT sections (`attachments/`, …), lowercased: a section may not move into one.
 export const foreignDirs = new Set<string>();
 const scopeFiles = (): string[] => scope.stack.map(l => l.file).filter((f): f is string => !!f);
@@ -231,6 +232,15 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   state.idSeq = 1;
   const seeds = newSeeds();
   const added = addListed(await store.listTree('', foldTest(scopeFiles())), seeds);
+  // A note opened ON ITS OWN (store/note.ts) is a document: the first time, it opens at a reading width
+  // rather than a sticky's. After that its width is whatever was saved, like any card's.
+  if (state.singleNote) {
+    for (const n of added) {
+      if (n.w == null && !boardGeom(n.file!)) {
+        n.w = NOTE_READ_W;
+      }
+    }
+  }
   const byPath = settle(added, seeds);
   resolveEdges(byPath, standInFor);   // the board's edges hold paths too — same index, same drop-if-missing rule
   resolveOrder(byPath);   // …and so does each parent's stored child order

@@ -150,9 +150,30 @@ export function stageSize(): { width: number; height: number } {
   return { width: r.width || window.innerWidth, height: r.height || window.innerHeight };
 }
 
+// A lone card TALLER than the screen would be framed whole at a zoom nobody can read (a 120-line note
+// came out at 7%). It is framed by its WIDTH instead, its TOP at the top of the screen — a document is read
+// from its start, and the wheel scrolls on down. Only for one card: framing a group still shows all of it.
+// Returns the view, or null when the box fits at a readable zoom anyway.
+function frameTop(box: { x: number; y: number; w: number; h: number }, availW: number, availH: number,
+                  pad: number, maxK: number): { x: number; y: number; k: number } | null {
+  const kW = (availW - 2 * pad) / box.w, kH = (availH - 2 * pad) / box.h;
+  if (kH >= FAR_ZOOM || kH >= kW) {
+    return null;
+  }
+  const k = clamp(kW, FAR_ZOOM, maxK);
+  return { x: availW / 2 - (box.x + box.w / 2) * k, y: pad - box.y * k, k };
+}
+
 export function fit(): void {
   const ns = [...state.nodes.values()].filter(n => !isHidden(n));
   if (!ns.length) {
+    return;
+  }
+  const one = ns.length === 1 ? ns[0] : null;
+  const top = one && frameTop({ x: one.x, y: one.y, w: nodeW(one), h: nodeH(one) }, stageSize().width, stageSize().height, 60, 1.4);
+  if (top) {
+    state.view.x = top.x; state.view.y = top.y; state.view.k = top.k;
+    applyView();
     return;
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -173,7 +194,7 @@ export function fit(): void {
 // narrow one styles.css docks it along the bottom edge (same 700px breakpoint NARROW_MQ mirrors)
 // and it eats height. Every camera move that has to land a node in the VISIBLE canvas subtracts
 // this — frameBox — so it lands nodes above the docked bar.
-function bottomInset(): number {
+export function bottomInset(): number {
   const fb = byId('floatBar');
   return (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
 }
@@ -195,6 +216,11 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, instant = f
   const r = stageSize();   // available canvas = stage minus the docked edit bar (bottomInset)
   const availW = r.width;
   const availH = r.height - bottomInset();
+  const top = group.length === 1 ? frameTop({ x: minX, y: minY, w: bw, h: bh }, availW, availH, FOCUS_PAD, FOCUS_MAX_K) : null;
+  if (top) {
+    (instant ? jumpViewTo : animateViewTo)(top.x, top.y, top.k);
+    return;
+  }
   const k = clamp(Math.min((availW - 2*FOCUS_PAD) / bw, (availH - 2*FOCUS_PAD) / bh),
                   FOCUS_MIN_K, FOCUS_MAX_K);
   (instant ? jumpViewTo : animateViewTo)(availW/2 - cx*k, availH/2 - cy*k, k);

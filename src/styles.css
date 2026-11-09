@@ -1141,7 +1141,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    A card is narrow and a table can be far wider than it, so the table always FITS instead of
    scrolling: width:100% with `auto` layout so columns still size to their content. A cell wraps
    BETWEEN WORDS only (break-word leaves its min-content at its longest word): with `anywhere` on
-   the whole cell, the short columns gave way first and `A1` / `Cost` broke between letters.
+   the whole cell, the short columns gave way first and `A1` / `Cost` broke between letters. When
+   even that is wider than the card, the table is squeezed instead (below).
    Only a link or inline code may break anywhere — the one unbroken run that could outgrow the
    card's clip edge. Widen the card (drag its side) to give the columns more room. */
 .node .body table { width:100%; margin:.3em 0; border-collapse:collapse; table-layout:auto; }
@@ -1149,6 +1150,9 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 .node .body th, .node .body td { padding:3px 8px; text-align:left; vertical-align:top;
   overflow-wrap:break-word; }
 .node .body :is(th, td) :is(.lk, code) { overflow-wrap:anywhere; }
+/* …and a table whose longest words are still wider than the card is SQUEEZED (main.ts squeezeTables):
+   then any cell may break inside a word, which is what lets it fit at all. */
+.node .body table.squeezed :is(th, td) { overflow-wrap:anywhere; }
 /* flush with the body's text column at both edges */
 .node .body th:first-child, .node .body td:first-child { padding-left:0; }
 .node .body th:last-child,  .node .body td:last-child  { padding-right:0; }

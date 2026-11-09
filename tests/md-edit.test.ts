@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
-         tableTab, tableEnter, type TextEdit } from '../src/utils/md-edit.js';
+         tableTab, tableEnter, headingSection, type TextEdit } from '../src/utils/md-edit.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
 function at(s: string): [string, number, number] {
@@ -123,6 +123,17 @@ describe('tableTab', () => {
     expect(ttab('| a\\|b^ | c |\n|---|---|')).toBe('| a\\|b | «c»   |\n| ---- | --- |');
     expect(ttab('| 日本^ | c |\n|---|---|')).toBe('| 日本 | «c»   |\n| ---- | --- |');
   });
+  it('puts the caret at the END of a cell with several words, so typing can\'t wipe it out', () => {
+    expect(ttab('| a^ | two words |\n|---|---|')).toBe('| a   | two words^ |\n| --- | --------- |');
+  });
+  it('writes a table too wide to line up COMPACT, rather than padding every row', () => {
+    const long = 'x'.repeat(80);
+    expect(ttab(`| a^ | b |\n|---|---|\n| ${long} | y |`))
+      .toBe(`| a | «b» |\n| --- | --- |\n| ${long} | y |`);
+  });
+  it('counts ✅ and ❌ two columns wide', () => {
+    expect(ttab('| ✅^ | c |\n|---|---|\n| ab | d |')).toBe('| ✅  | «c»   |\n| --- | --- |\n| ab  | d   |');
+  });
   it('stands aside off a table, so Tab can indent', () => {
     expect(ttab('a | b^')).toBeNull();
     expect(ttab('| a | b |\nno delimiter^')).toBeNull();
@@ -185,6 +196,14 @@ describe('moveLines', () => {
   it('carries an item\'s children and hops a whole neighbouring item', () => {
     expect(move('- a\n  - a1\n- b|\n  - b1', true)).toBe('- b|\n  - b1\n- a\n  - a1');
     expect(move('- a|\n  - a1\n- b\n  - b1', false)).toBe('- b\n  - b1\n- a|\n  - a1');
+  });
+  it('moves a table\'s body rows only among themselves', () => {
+    const tmove = (x: string, up: boolean) => tshow(moveLines(...tat(x), up));
+    const t = '| h | i |\n|---|---|\n';
+    expect(tmove(t + '| a | 1 |\n| b^ | 2 |\n| c | 3 |', true)).toBe(t + '| b^ | 2 |\n| a | 1 |\n| c | 3 |');
+    expect(tmove(t + '| a^ | 1 |\n| b | 2 |', true)).toBeNull();          // not above the delimiter
+    expect(tmove(t + '| a | 1 |\n| b^ | 2 |\nafter', false)).toBeNull();  // not out of the table
+    expect(tmove('| h^ | i |\n|---|---|\n| a | 1 |', false)).toBeNull();   // the header stays
   });
   it('moves a selection of lines, and renumbers', () => {
     expect(move('1. a\n2. b\n[3. c]', true)).toBe('1. a\n[2. c]\n3. b');
@@ -261,5 +280,18 @@ describe('sourceOffset', () => {
   });
   it('is null when the text is not in the source', () => {
     expect(sourceOffset('abc', 0, ['zzz'], 0, 1)).toBeNull();
+  });
+});
+
+describe('headingSection', () => {
+  const sec = (s: string) => { const r = headingSection(...at(s).slice(0, 2) as [string, number]); return r && at(s)[0].slice(r.start, r.end); };
+  it('runs from the heading to the next one of the same or a higher level', () => {
+    expect(sec('# T\n## A|\none\n### A1\ntwo\n\n## B\nthree')).toBe('## A\none\n### A1\ntwo');
+    expect(sec('## A\n### A1|\ntwo\n## B')).toBe('### A1\ntwo');
+    expect(sec('## B|\nthree\n')).toBe('## B\nthree');
+  });
+  it('is nothing off a heading', () => {
+    expect(sec('## A\none|')).toBeNull();
+    expect(sec('#tag|')).toBeNull();
   });
 });

@@ -51,7 +51,9 @@ export interface Chute { parent: string | null; beside?: string }
 // cancels the CREATION rather than just the edit (it used to live on the title editor).
 // `holdH` is the card's height when the editor opened: held as its min-height until it closes, so a
 // card never jumps between its rendered and its raw size (main.ts paintNode).
-export interface BodyEdit { id: string; orig: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
+// `saved` is the text the NOTE holds right now: `orig` until the open editor is written through mid-edit
+// (features/inline-edit.ts flushOpenEdit), then whatever that last wrote.
+export interface BodyEdit { id: string; orig: string; saved: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
 // A SECTION's label being renamed in place, on its tab.
 // A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
 // A section can't do that, and the reason is structural rather than stylistic — its `.body` is

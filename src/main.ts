@@ -550,10 +550,17 @@ export function paintNode(n: MindNode): void {
     // querySelectorAll, all to produce what is already there. Keyed on the source text, so a paint
     // that only MOVED cards skips the lot.
     const md = collapsed ? collapsedMarkdown(n) : cardMarkdown(n);
-    if (bodyEl.dataset.md !== md){
+    const fresh = bodyEl.dataset.md !== md;
+    if (fresh){
       bodyEl.dataset.md = md;
       bodyEl.innerHTML = renderBodyHTML(md);
       hydrateImages(bodyEl);   // swap inline-image placeholders for resolved (blob/remote) URLs
+    }
+    // a table's fit changes with the text and with the card's width (squeezeTables)
+    const tw = String(nodeW(n));
+    if ((fresh || bodyEl.dataset.tw !== tw) && md.includes('|')) {
+      bodyEl.dataset.tw = tw;
+      queueTableCheck(bodyEl);
     }
   }
   // Its TAGS, stuck along the top edge at the right — emoji as stamps, words as labels (styles.css
@@ -756,12 +763,39 @@ function sectionContentEl(f: MindNode): HTMLElement {
   w.style.height = box.h + 'px';
   return w;
 }
+// A table wraps BETWEEN WORDS (styles.css), so the narrowest it can get is its longest words — and in a
+// narrow card that can still be wider than the card, which clips its last columns. Such a table is
+// SQUEEZED: its cells may then break inside a word, so it always fits. Checked only when a card's note
+// or width changed, and in one batch — every read, then every write — so a paint costs one extra layout
+// at most, not one per table.
+const tablesToCheck = new Set<HTMLElement>();
+let tableFrame = 0;
+function queueTableCheck(body: HTMLElement): void {
+  tablesToCheck.add(body);
+  if (!tableFrame) {
+    tableFrame = requestAnimationFrame(squeezeTables);   // for a lone paintNode; paintAll settles sooner
+  }
+}
+function squeezeTables(): void {
+  cancelAnimationFrame(tableFrame);
+  tableFrame = 0;
+  const tables = [...tablesToCheck].filter(b => b.isConnected).flatMap(b => [...b.querySelectorAll('table')]);
+  tablesToCheck.clear();
+  for (const t of tables) {
+    t.classList.remove('squeezed');
+  }
+  const over = tables.filter(t => t.offsetWidth > (t.parentElement?.clientWidth ?? Infinity) + 1);
+  for (const t of over) {
+    t.classList.add('squeezed');
+  }
+}
 export function paintAll(): void {
   readOpenUnread();   // an open section whose notes are still on disk reads them (data/lazy.ts)
   refreshSearch();    // what the search lights, off the tags and text as they are now
   for (const n of state.nodes.values()) {
     paintNode(n);
   }
+  squeezeTables();    // before anything measures a card's height
   refreshTray();      // the tag tray's stickers, when it's out
   syncFan();          // the scrim under a fanned-out stack (features/stacks.ts)
   paintFreeEdges();

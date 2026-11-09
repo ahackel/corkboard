@@ -152,7 +152,8 @@ export function toggleWrap(text: string, start: number, end: number, mark: strin
 }
 
 // ---------- tables ----------
-// In a pipe table Tab walks the CELLS (selecting each one's text, so typing replaces it), Tab past the
+// In a pipe table Tab walks the CELLS (selecting a one-word cell's text, so typing replaces it; the caret
+// goes to the END of a longer one, which a keystroke must not wipe out), Tab past the
 // last cell adds a row, and Enter adds a row under the caret's — the moves of every spreadsheet and of
 // Obsidian's Advanced Tables. Each of them also TIDIES the table it's in: cells padded so the pipes line
 // up (worth it now the editor is monospace), the delimiter row rebuilt from its own `:` alignments.
@@ -203,8 +204,9 @@ function tableAround(text: string, pos: number): TableAt | null {
            indent: lines[h].match(/^[ \t]*/)![0], row: li - h, col: Math.min(cols - 1, Math.max(0, pipes - lead)) };
 }
 // How many monospace columns a string takes: East Asian wide characters and emoji take two, combining
-// marks and joiners none — close enough that a table of names or emoji still lines up.
-const WIDE = /[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
+// marks and joiners none — close enough that a table of names or emoji still lines up. "Emoji" is every
+// character DRAWN as one by default (Emoji_Presentation), which takes in ✅ and ❌ outside the emoji block.
+const WIDE = /\p{Emoji_Presentation}|[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
 // eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
 const ZERO = /[\p{M}\u200D\uFE0F]/u;
 function cellWidth(s: string): number {
@@ -214,12 +216,20 @@ function cellWidth(s: string): number {
   }
   return w;
 }
+// Padding lines the pipes up only while a row still fits a line: a table of sentences padded to its
+// widest cell made EVERY row hundreds of characters long, a wall of spaces in the editor and the file.
+// Wider than this, the table is written COMPACT — one space either side of each cell, no padding.
+const TIDY_WIDTH = 80;
 // Write the table back tidied, and say where cell (r, c)'s text sits in what was written.
 function writeTable(t: TableAt, r: number, c: number): { text: string; start: number; end: number } {
   const cells = t.rows.map(row => row.map(x => x.replace(/\|/g, '\\|')));
   const n = Math.max(t.cols, ...cells.map(row => row.length));
-  const w = Array.from({ length: n }, (_, k) =>
+  let w = Array.from({ length: n }, (_, k) =>
     Math.max(3, ...cells.map((row, i) => i === 1 ? 0 : cellWidth(row[k] ?? ''))));
+  const compact = w.reduce((a, b) => a + b, 0) + 3 * n + 1 > TIDY_WIDTH;
+  if (compact) {
+    w = w.map(() => 3);   // the delimiter row's dashes; the cells themselves get no padding
+  }
   let out = '', start = 0, end = 0;
   cells.forEach((row, i) => {
     if (i) {
@@ -240,7 +250,7 @@ function writeTable(t: TableAt, r: number, c: number): { text: string; start: nu
         out += ' | ';
       }
       if (i === r && k === c) { start = out.length; end = start + x.length; }
-      out += x + ' '.repeat(w[k] - cellWidth(x));
+      out += x + (compact ? '' : ' '.repeat(w[k] - cellWidth(x)));
     }
     out += ' |';
   });
@@ -248,7 +258,9 @@ function writeTable(t: TableAt, r: number, c: number): { text: string; start: nu
 }
 function placeTable(text: string, t: TableAt, r: number, c: number): TextEdit {
   const wr = writeTable(t, r, c);
-  return { text: text.slice(0, t.from) + wr.text + text.slice(t.to), start: t.from + wr.start, end: t.from + wr.end };
+  const out = text.slice(0, t.from) + wr.text + text.slice(t.to);
+  const start = t.from + wr.start, end = t.from + wr.end;
+  return /\s/.test(out.slice(start, end)) ? { text: out, start: end, end } : { text: out, start, end };
 }
 const emptyRow = (t: TableAt): string[] => Array(t.cols).fill('');
 
@@ -359,9 +371,25 @@ export function listBackspace(text: string, start: number, end: number): TextEdi
   return { text: splice(text, from, start, ''), start: from, end: from };
 }
 
+// In a table only the BODY rows move, and only among themselves: the header and its delimiter stay put,
+// or a row moved above the delimiter would become the header, and one moved out the bottom would stop
+// being part of the table at all.
+function tableRowsMayMove(text: string, start: number, end: number, up: boolean): boolean {
+  const ta = tableAround(text, start), tb = tableAround(text, end);
+  if (!ta && !tb) {
+    return true;
+  }
+  if (!ta || !tb || ta.from !== tb.from || ta.row < 2) {
+    return false;
+  }
+  return up ? ta.row > 2 : tb.row < ta.rows.length - 1;
+}
 // ⌥↑ / ⌥↓: swap the selected lines with the ones above / below. An item travels WITH its nested
 // children, and hops a whole neighbouring item (children included) rather than landing inside it.
 export function moveLines(text: string, start: number, end: number, up: boolean): TextEdit | null {
+  if (!tableRowsMayMove(text, start, end, up)) {
+    return null;
+  }
   const lines = text.split('\n');
   const lineNo = (pos: number) => text.slice(0, pos).split('\n').length - 1;
   const blank = (i: number) => !lines[i].trim();
@@ -599,4 +627,34 @@ export function sourceOffset(source: string, from: number, texts: string[], hit:
     cur = m.index + m[0].length;
   }
   return null;
+}
+
+// A HEADING's section: from the heading line to just before the next heading of the same or a higher
+// level (or the note's end), less the blank lines it ends on. Triple-click on a heading selects it
+// (features/inline-edit.ts), so a whole section drags out as its own card in one gesture. Null off a heading.
+export function headingSection(text: string, pos: number): { start: number; end: number } | null {
+  const level = (l: string): number => {
+    const m = /^ {0,3}(#{1,6})(?:\s|$)/.exec(l);
+    return m ? m[1].length : 0;
+  };
+  const { from, to } = lineAt(text, pos);
+  const own = level(text.slice(from, to));
+  if (!own) {
+    return null;
+  }
+  let end = text.length;
+  for (let at = to + 1; at < text.length; ) {
+    const next = text.indexOf('\n', at);
+    const lineEnd = next < 0 ? text.length : next;
+    const l = level(text.slice(at, lineEnd));
+    if (l && l <= own) {
+      end = at;
+      break;
+    }
+    at = lineEnd + 1;
+  }
+  while (end > to && /\s/.test(text[end - 1])) {
+    end--;
+  }
+  return { start: from, end };
 }

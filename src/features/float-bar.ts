@@ -70,12 +70,39 @@ export function fitSectionToContent(n: MindNode, orDefault = false): void {
 }
 // FIT — the float bar's ↔, ⌥⇧⌘R and the menu's "Resize to fit": every selected section hugs its cards
 // (fitSectionToContent), every selected card drops its authored height — a minimum it was dragged out to,
-// or a CLIP it was dragged in to — and measures its text again. Width stays: it's what the text wraps at.
+// or a CLIP it was dragged in to — and measures its text again. Width stays (it's what the text wraps at),
+// except that a card WIDENS to its widest table, up to TABLE_FIT_W: a table is the one thing in a note
+// that needs width rather than wrapping. Only ever on request — nothing resizes on its own.
+const TABLE_FIT_W = 960;
+// The width a card's tables want — laid out at their natural width, unwrapped — or 0 when they fit as is.
+function tableFitW(n: MindNode): number {
+  const body = n.el?.querySelector<HTMLElement>('.body');
+  const tables = body ? [...body.querySelectorAll('table')] : [];
+  if (!body || !tables.length || n.collapsed) {
+    return 0;
+  }
+  let natural = 0;
+  for (const t of tables) {
+    const was = t.className;
+    t.className = '';
+    t.style.width = 'max-content';
+    natural = Math.max(natural, t.offsetWidth);
+    t.style.width = '';
+    t.className = was;
+  }
+  const extra = natural - body.clientWidth;
+  if (extra <= 1) {
+    return 0;
+  }
+  const step = gridSnap();
+  const w = Math.min(TABLE_FIT_W, Math.ceil(((n.w ?? n.el!.offsetWidth) + extra) / step) * step);
+  return w > (n.w ?? n.el!.offsetWidth) ? w : 0;
+}
 function canFit(n: MindNode): boolean {
   if (isLockedEffective(n)) {
     return false;
   }
-  return isSection(n) || (n.h != null && !isImageCard(n) && !isStack(n));
+  return isSection(n) || (!isImageCard(n) && !isStack(n) && (n.h != null || tableFitW(n) > 0));
 }
 export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
@@ -92,6 +119,7 @@ export function autoSizeSelection(): void {
       if (n.type === 'section') {
         fitSectionToContent(n);
       } else {
+        n.w = tableFitW(n) || n.w;
         n.h = undefined;
         n.clip = undefined;
       }

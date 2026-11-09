@@ -36,6 +36,7 @@ test('a single note opens as one card, edits in place, and keeps its file and it
   await expect(page.locator('#world .node')).toHaveCount(1);
   await expect(page.locator('#folderName .sc-name')).toHaveText('Shopping');
   await expect(page.locator('#ghostCard')).toBeHidden();
+  expect(await card(page, 'Shopping').evaluate(el => el.offsetWidth)).toBe(720);   // a document opens at a reading width
 
   // nothing adds a card beside it, or takes it away
   await page.mouse.move(300, 200);

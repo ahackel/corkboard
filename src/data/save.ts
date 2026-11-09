@@ -2,7 +2,7 @@
 import { state, setStatus } from '../core/state.js';
 import { retargetLinks, desiredFileFor, folderOf, dirOf, prunableDirs } from '../utils/filenames.js';
 import { ancestorDepth, commitRel } from '../view/layout.js';
-import { frozenFileNodeId } from '../core/ui-state.js';
+import { ui, frozenFileNodeId } from '../core/ui-state.js';
 import { parentOf, childrenOf } from '../utils/model.js';
 import { store } from './persistence.js';
 import { serializeMd } from '../utils/frontmatter.js';
@@ -237,6 +237,10 @@ function notesUnsaved(): boolean {
     return false;
   }
   if (state.toDelete.length || pendingRemovals.size) {
+    return true;
+  }
+  // …and the open card editor, until what it holds has been written into its note (inline-edit.ts flushOpenEdit)
+  if (ui.bodyEdit && ui.bodyEdit.ta.value !== ui.bodyEdit.saved) {
     return true;
   }
   for (const n of state.nodes.values()) {

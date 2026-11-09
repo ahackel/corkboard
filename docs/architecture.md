@@ -445,7 +445,16 @@ dragged size and nothing else — never a value a layout pass computed. What the
   rest is simply cut (a fade was tried and read as a smudge on a short card). No scrolling — it's a sticky note, not a
   viewport. Folded, opened as a page or open in the editor it doesn't clip (the editor shows the whole
   note). **Fit** (`autoSizeSelection`: the float bar's ↔, `⌥⇧⌘R`, "Resize to fit") drops a card's `h` and
-  `clip` — and fits a section to its cards, as before; `canFit` says which selections offer it.
+  `clip`, WIDENS a card to its widest table laid out unwrapped (`tableFitW`, up to 960px — a table is the one
+  thing in a note that needs width rather than wrapping) — and fits a section to its cards, as before;
+  `canFit` says which selections offer it.
+
+**A table wraps between WORDS, and is SQUEEZED only when even that won't fit** (styles.css, `squeezeTables`
+in `main.ts`). Cells wrap with `overflow-wrap:break-word`, so a column is never narrower than its longest
+word: with `anywhere` on every cell, the short columns gave way first and `A1` / `Cost` broke between letters.
+But then a narrow card can be narrower than the table's words, which would clip its last columns, so a table
+wider than its box gets `.squeezed` and its cells may break anywhere again. Checked only when a card's note or
+width changed, in one batch per paint (all reads, then all writes), before anything measures a height.
 
 **A card whose whole note is one image IS that image** (`soleImage` in `utils/markdown.ts` → `isImageCard`
 in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
@@ -582,8 +591,9 @@ more short bare lines with no blank line. Then `createCards` (`features/crud.ts`
 item in a column under the pointer, stacked from MEASURED heights with `LIST_GAP`, in one undo step.
 Anything with a heading, paragraphs or a lead-in line is a note and stays one card. Enter on a
 top-level card puts the next card below it, below whatever already sits there, so Enter-Enter-Enter
-builds a column. Every new card pops in (`popIn`, `data-pop`). Esc on a fresh card with text KEEPS
-it (only Esc on an empty fresh card cancels it): Esc means "done typing"; ⌘Z is how a card is unmade.
+builds a column. Every new card pops in (`popIn`, `data-pop`). Esc KEEPS what was typed, on a fresh card
+and an old one alike (only Esc on an empty fresh card cancels it): Esc means "done typing", like a click
+away, and ⌘Z takes back the whole edit session in one step — a stray Esc must not cost a long edit.
 
 **A status message is a TOAST, and most messages are not shown.** `setStatus` (`core/state.ts`) pops
 `#status` at the bottom for about two seconds — for what the canvas can't show by itself: a refusal
@@ -595,6 +605,10 @@ visible change belongs in `QUIET`; a failed save is NOT a toast (it must stay up
 **A save is never LOST, and never SILENT.** Four rules in `data/persistence.ts` + `data/save-alert.ts`:
 - The 400ms debounce is flushed on `visibilitychange → hidden` and `pagehide`, and `beforeunload` asks the
   browser to hold the page while `hasUnsavedChanges()` — an edit made just before closing still lands.
+- An OPEN card editor is never only in its textarea (`flushOpenEdit`, features/inline-edit.ts): what it holds
+  is written into the note 1.5s after you stop typing, and at once on those same events, WITHOUT closing it —
+  the filename stays frozen until the edit ends and the session stays one undo step. `ui.bodyEdit.saved` is
+  what the note holds, so `hasUnsavedChanges` counts an editor ahead of it, and a cancel puts back `orig`.
 - A failed write shows `#saveAlert` (the `#status` toast fades, so a failure can't live there) and
   retries on its own (2s, 5s, 15s, then every 30s) until a write lands; "Retry now" forces it.
 - `saveAll` records progress AS it lands, so a throw half-way leaves exactly the rest pending: every note
@@ -812,19 +826,33 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   `applyTextEdit`, which replaces only the changed span with `execCommand('insertText')`: assigning
   `ta.value` wipes the textarea's own undo stack, so ⌘Z inside the editor would undo nothing.
 - **In a pipe TABLE, Tab walks the cells and Enter adds rows** (`tableTab`/`tableEnter`, tried before the list
-  keys): Tab selects the next cell's text, stepping over the delimiter row, and adds a row past the last cell;
+  keys): Tab selects the next cell's text — a ONE-WORD cell's; in a longer one the caret goes to its end, since a
+  keystroke must not wipe out a sentence — stepping over the delimiter row, and adds a row past the last cell;
   Enter adds a row under the caret's, an empty LAST row ends the table, and Enter at the end of a lone
   `| a | b |` line starts one. Each also TIDIES that table — cells padded so the pipes line up in the monospace
-  editor (wide characters count two), the delimiter rebuilt keeping its `:` alignment. Only on those keys and
+  editor (wide characters, emoji like ✅ included, count two), the delimiter rebuilt keeping its `:` alignment —
+  unless a padded row would pass 80 columns (`TIDY_WIDTH`): a table of sentences is then written COMPACT, one
+  space round each cell, instead of every row padded to hundreds of characters. Only on those keys and
   only that table, so no note is rewritten behind your back. What counts as a table is the renderer's own
   `tableAt`/`tableRow`, so the editor never tidies something the card doesn't draw as one.
 - **More list keys**: Backspace just past a marker takes the MARKER (a nested item steps out first);
   ⌥↑/⌥↓ move the touched lines past their neighbour, an item carrying its nested children and hopping a
-  whole neighbouring item; ⌘L makes the lines tasks or ticks them (all open → all done → all open; a
+  whole neighbouring item — in a table only a BODY row moves, and only among the body rows (a row moved over
+  the delimiter would become the header); ⌘L makes the lines tasks or ticks them (all open → all done → all open; a
   numbered item turns a bullet, since tasks are bullets-only). A NUMBERED list renumbers itself after any of
   these, after Enter and Tab, and after a native delete/cut/paste that changed the line count — only the
   run of non-blank lines around the edit, so a list elsewhere that skips on purpose is left alone. A
   top-level list keeps its first number; a nested one counts from 1.
+- **A triple-click on a HEADING selects its section** (`headingSection`): down to the next heading of the same or
+  a higher level, trailing blank lines left out — so a section drags out as a card of its own in one gesture
+  (or ⌘⇧E), and drops back in with ⌥.
+- **A TALL note stays readable while you edit it.** The view follows the caret (`followCaret`): typing or
+  moving past the screen's edge PANS the camera, never zooms, the caret's line found by a hidden copy of the
+  textarea (`caretTop`). #stage is `overflow:hidden` but the browser would still scroll it to show a focused
+  field, shifting the canvas under every hit test, so it is pinned at 0. Leaving the editor of a card taller
+  than the screen pans so the line you were on stays where it was (`renderedBlockFor` finds its block in the
+  render by text). F on one card too tall to read framed whole frames it by WIDTH, its top at the top
+  (`frameTop`, camera.ts; `fit` too, for a map of one card) — and a single NOTE opens at 720px the first time.
 - **Cells pasted from a spreadsheet become a table** (`pasteTable`): two or more tab-separated rows of the
   same 2+ columns (quoted cells read), first row the header, written tidied on lines of their own.
 - **A double-click on the card lands the caret on the word it hit** (`sourceOffset`): the text nodes of the
