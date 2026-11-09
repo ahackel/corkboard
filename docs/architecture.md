@@ -629,6 +629,10 @@ visible change belongs in `QUIET`; a failed save is NOT a toast (it must stay up
   would never be written and a reload would drop them at the origin.
 `tests/` (`npm test`) pins the format these writes produce: the `parseMd`/`serializeMd` round-trip, foreign
 frontmatter kept verbatim, CRLF/BOM notes, and the pure naming rules in `utils/filenames.ts`.
+**A save writes no frontmatter that says nothing**: no empty `tags: []`, no `date` stamp (nothing ever read
+it), and no block at all for a note with nothing in it — a note opened from elsewhere (a single note, a
+vault) comes back as the text it was. The one exception is a note whose text opens on a `---` line: it keeps
+an empty block, or a reader would take that line for the start of one.
 
 ## Interaction
 

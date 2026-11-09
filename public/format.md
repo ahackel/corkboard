@@ -31,7 +31,6 @@ kept in the browser, not beside it.
 
 ```markdown
 ---
-date: 2026-11-08
 tags: [idea, draft]
 color: blue
 ---
@@ -47,7 +46,8 @@ The body: a small Markdown subset.
   whitespace collapsed, at most 120 chars, plus `.md`. On a clash, append ` 2`, ` 3` (`Notes 2.md`).
   The app re-derives it on save, so a mismatch is harmless, but writing it right keeps `board.json` stable.
 - **Frontmatter is optional.** App-owned keys: `tags` (Obsidian tags, written bare), `color`, and `mm_*`.
-  Every other key is kept verbatim.
+  Every other key is kept verbatim. The app writes a key only when it says something (no `tags: []`, no
+  date), and no block at all when a note has nothing in it.
   - `color`: a palette key or a custom hex, QUOTED (`color: "#ff8800"`; bare `#` is a YAML comment).
     Sticky (pastel) keys: `grey red orange amber green teal blue violet pink silver`.
     Strong keys: `black stone bold-red bold-orange bold-yellow bold-green bold-teal bold-blue bold-violet bold-pink white`.

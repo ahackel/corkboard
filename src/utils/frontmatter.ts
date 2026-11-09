@@ -245,24 +245,26 @@ export function parseMd(text: string): ParsedNote {
     },
   };
 }
-function todayISO(): string { return new Date().toISOString().slice(0,10); }
+
 // Rebuild the file from the ORIGINAL frontmatter entries, touching only the app-owned keys:
 // tags, color, and the mm_* layout. `date`, `category`, `aliases`, custom fields, etc. are
-// kept verbatim; `date` is stamped only when the note has none yet (never overwritten).
+// kept verbatim. Nothing is written that says nothing — no empty `tags`, no date stamp — so a
+// note that has nothing for the app to record is written as its text alone.
 export function serializeMd(n: MindNode): string {
   const entries: FmEntry[] = (n.fmEntries || []).map(e => ({ key: e.key, lines: [...e.lines] }));
   // strip any stale mm_* (re-added fresh below); the prefix match covers every layout key
   entries.filter(e => e.key && e.key.startsWith('mm_')).forEach(e => fmRemove(entries, e.key as string));
-  fmSet(entries, 'tags', `tags: ${n.tags.length ? `[${n.tags.join(', ')}]` : '[]'}`);
+  if (n.tags.length) {
+    fmSet(entries, 'tags', `tags: [${n.tags.join(', ')}]`);
+  } else {
+    fmRemove(entries, 'tags');
+  }
   // A custom colour is a hex, and `color: #ff8800` reads as an EMPTY value plus a comment to any
   // real YAML parser — so quote it. Palette keys stay bare, the way every existing vault has them.
   if (n.color) {
     fmSet(entries, 'color', `color: ${n.color.startsWith('#') ? `"${n.color}"` : n.color}`);
   } else {
     fmRemove(entries, 'color');
-  }
-  if (!fmEntry(entries, 'date')) {
-    entries.unshift({ key:'date', lines:[`date: ${todayISO()}`] });
   }
   // GEOMETRY IS NOT WRITTEN HERE any more — position, size and collapse live in board.json
   // (data/board.ts), which is what "frontmatter describes the NOTE, board.json describes the BOARD's
@@ -293,6 +295,11 @@ export function serializeMd(n: MindNode): string {
   // of the splitHeading parseMd read it with, so a load/save round-trip changes nothing, down to
   // whether the note's first line sits under a blank one).
   const body = cardMarkdown(n);
+  // No block at all when there's nothing in it — unless the text opens on a `---` line, which a
+  // reader would take for the start of one.
+  if (!entries.length && !/^---\s*(\n|$)/.test(body)) {
+    return body ? body + '\n' : '';
+  }
   return `---\n${fm}\n---\n` + (body ? '\n' + body + '\n' : '\n');
 }
 

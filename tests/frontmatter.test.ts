@@ -33,19 +33,19 @@ describe('splitHeading / joinHeading', () => {
 describe('parseMd / serializeMd round-trip', () => {
   const files = {
     'titled card':
-      '---\ndate: 2026-01-02\ntags: []\n---\n\n# Groceries\n\n- milk\n- eggs\n',
+      '---\ndate: 2026-01-02\n---\n\n# Groceries\n\n- milk\n- eggs\n',
     'untitled card':
       '---\ndate: 2026-01-02\ntags: [home, todo]\ncolor: blue\n---\n\nJust a sticky note.\n',
     'custom hex colour':
-      '---\ndate: 2026-01-02\ntags: []\ncolor: "#ff8800"\n---\n\n# Orange\n',
+      '---\ndate: 2026-01-02\ncolor: "#ff8800"\n---\n\n# Orange\n',
     'tight heading':
-      '---\ndate: 2026-01-02\ntags: []\n---\n\n# Title\nNo gap below.\n',
+      '---\ndate: 2026-01-02\n---\n\n# Title\nNo gap below.\n',
     'foreign frontmatter':
-      '---\ndate: 2026-01-02\naliases:\n  - one\n  - two\ncategory: work  # a comment\ntags: []\nstatus: open\n---\n\n# Kept\n\nBody.\n',
+      '---\ndate: 2026-01-02\naliases:\n  - one\n  - two\ncategory: work  # a comment\nstatus: open\n---\n\n# Kept\n\nBody.\n',
     'app-owned flags':
-      '---\ndate: 2026-01-02\ntags: []\nmm_locked: true\nmm_type: frame\n---\n\n# Box\n',
+      '---\ndate: 2026-01-02\nmm_locked: true\nmm_type: frame\n---\n\n# Box\n',
     'body with a markdown table and code':
-      '---\ndate: 2026-01-02\ntags: []\n---\n\n# T\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```\n---\nnot frontmatter\n---\n```\n',
+      '---\ndate: 2026-01-02\n---\n\n# T\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n```\n---\nnot frontmatter\n---\n```\n',
   };
   for (const [name, text] of Object.entries(files)) {
     it(`leaves a ${name} unchanged`, () => {
@@ -60,7 +60,7 @@ describe('parseMd / serializeMd round-trip', () => {
   });
 
   it('quotes a custom hex colour (a bare #rrggbb is a YAML comment)', () => {
-    const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\n---\n\n# X\n');
+    const n = nodeFrom('---\ndate: 2026-01-02\n---\n\n# X\n');
     n.color = '#123abc';
     expect(serializeMd(n)).toContain('color: "#123abc"');
     expect(parseMd(serializeMd(n)).color).toBe('#123abc');
@@ -70,13 +70,25 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(parseMd('---\ntags:\n  - one\n  - "two"\n---\n\nx').tags).toEqual(['one', 'two']);
   });
 
-  it('stamps a date only when there is none, never overwriting one', () => {
-    expect(serializeMd(nodeFrom('# New'))).toMatch(/^---\ndate: \d{4}-\d{2}-\d{2}\n/);
-    expect(serializeMd(nodeFrom('---\ndate: 1999-01-01\n---\n\n# Old'))).toContain('date: 1999-01-01');
+  it('writes no frontmatter that says nothing: no date stamp, no empty tags, no empty block', () => {
+    expect(serializeMd(nodeFrom('# New\n\nText'))).toBe('# New\n\nText\n');
+    expect(serializeMd(nodeFrom('---\ndate: 1999-01-01\n---\n\n# Old'))).toBe('---\ndate: 1999-01-01\n---\n\n# Old\n');
+    const tagged = nodeFrom('---\ntags: [a]\n---\n\n# Was tagged');
+    tagged.tags = [];
+    expect(serializeMd(tagged)).toBe('# Was tagged\n');
+  });
+
+  it('keeps an empty block when the text opens on a `---` line, so it is not read as one', () => {
+    const n = nodeFrom('x');
+    n.body = '---\n\nAfter a rule';
+    const out = serializeMd(n);
+    expect(out).toBe('---\n\n---\n\n---\n\nAfter a rule\n');
+    expect(parseMd(out).body).toBe('---\n\nAfter a rule');
+    expect(serializeMd(nodeFrom(out))).toBe(out);
   });
 
   it('drops legacy geometry keys (board.json owns them now)', () => {
-    const out = serializeMd(nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_x: 10\nmm_position_y: 4\nmm_w: 300\nmm_collapsed: true\n---\n\n# X\n'));
+    const out = serializeMd(nodeFrom('---\ndate: 2026-01-02\nmm_x: 10\nmm_position_y: 4\nmm_w: 300\nmm_collapsed: true\n---\n\n# X\n'));
     expect(out).not.toMatch(/mm_x|mm_position|mm_w|mm_collapsed/);
   });
 
@@ -88,7 +100,7 @@ describe('parseMd / serializeMd round-trip', () => {
   });
 
   it('marks a note that was emptied on purpose', () => {
-    const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\n---\n\n# Gone\n');
+    const n = nodeFrom('---\ndate: 2026-01-02\n---\n\n# Gone\n');
     n.title = ''; n.body = '';
     const out = serializeMd(n);
     expect(out).toContain('mm_blank: true');
@@ -104,15 +116,15 @@ describe('parseMd / serializeMd round-trip', () => {
   });
 
   it('drops the cut arrangement and checklist keys on the next write', () => {
-    const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_checklist: true\nmm_done: true\nmm_type: frame\nmm_layout: horizontal\n---\n\n# Box\n');
+    const n = nodeFrom('---\ndate: 2026-01-02\nmm_checklist: true\nmm_done: true\nmm_type: frame\nmm_layout: horizontal\n---\n\n# Box\n');
     expect(n.type).toBe('section');
-    expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\nmm_type: frame\n---\n\n# Box\n');
+    expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\nmm_type: frame\n---\n\n# Box\n');
   });
 
   it('opens a retired query card as a plain card, keeping its title and body', () => {
-    const n = nodeFrom('---\ndate: 2026-01-02\ntags: []\nmm_type: query\nmm_query: p:Ideas\nmm_w: 280\nmm_h: 320\n---\n\n# Find ideas\n\nnotes\n');
+    const n = nodeFrom('---\ndate: 2026-01-02\nmm_type: query\nmm_query: p:Ideas\nmm_w: 280\nmm_h: 320\n---\n\n# Find ideas\n\nnotes\n');
     expect(n.type).toBe('card');
-    expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\ntags: []\n---\n\n# Find ideas\n\nnotes\n');
+    expect(serializeMd(n)).toBe('---\ndate: 2026-01-02\n---\n\n# Find ideas\n\nnotes\n');
   });
 
   it('reads frontmatter from a file with Windows line endings', () => {
