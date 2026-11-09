@@ -17,6 +17,7 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { cardMarkdown, setNoteText, headingOf, caretIn, firstTextLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
+import { highlightMarkdown } from '../utils/md-highlight.js';
 import { htmlToMarkdown } from '../utils/html-md.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, headingSection, type TextEdit } from '../utils/md-edit.js';
@@ -40,6 +41,7 @@ import { jumpViewTo, stageSize, bottomInset } from '../view/camera.js';
 export function syncOpenEditor(n: MindNode): void {
   if (ui.bodyEdit?.id === n.id) {
     ui.bodyEdit.ta.value = ui.bodyEdit.saved = cardMarkdown(n);
+    paintHighlight(ui.bodyEdit.ta);
   }
 }
 
@@ -315,7 +317,21 @@ export function endInPlaceEdit(): void { endBodyEdit(); endTitleEdit(); }
 // with the rendered `.title-row` hidden for the duration (styles.css `.node.card-editing`), since the
 // title is in the textarea and showing it twice would read as two fields. Enter inserts a newline
 // (continuing a list item — utils/md-edit.ts has the writing helpers); Esc and blur both commit.
-export function autosizeBody(ta: HTMLTextAreaElement): void { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+export function autosizeBody(ta: HTMLTextAreaElement): void {
+  ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px';
+  paintHighlight(ta);
+}
+
+// The syntax highlight laid BEHIND the card editor's transparent text (styles.css `.body-hl`). Repainted
+// with every size check, since every path that changes the text — typing, the editor's own helpers, an
+// image paste — already ends in one.
+function paintHighlight(ta: HTMLTextAreaElement): void {
+  const hl = ta.nextElementSibling as HTMLElement | null;
+  if (hl?.classList.contains('body-hl')) {
+    hl.innerHTML = highlightMarkdown(ta.value) + '\n';
+    hl.style.top = ta.offsetTop + 'px';
+  }
+}
 // Paste a URL over selected text and the text becomes a LINK — or, if it already is one, keeps its
 // label and takes the new URL (utils/markdown.ts linkPaste owns that rule). Bound by every editor
 // that holds a note's text: the card's own textarea, the outline's and the mobile sheet's. It writes
@@ -407,7 +423,9 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   // describing what's in there — clear it, or committing an edit that changed nothing would leave the
   // textarea sitting in the card (the guarded re-render would see a matching key and skip).
   delete bodyEl.dataset.md;
-  bodyEl.innerHTML = ''; bodyEl.appendChild(ta);
+  const hl = document.createElement('pre');
+  hl.className = 'body-hl'; hl.setAttribute('aria-hidden', 'true');
+  bodyEl.innerHTML = ''; bodyEl.append(ta, hl);   // the textarea stays first: .body's first-child spacing is its
   bodyEl.classList.add('editing');
   // typing: keep the textarea sized to its content and reflow siblings as the card grows/shrinks
   let lineCount = text.split('\n').length;

@@ -1078,13 +1078,32 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    wide as the card's 14px rounded text, so opening the editor barely rewraps a note. The line pitch is
    the TITLE's (--h1-lh, 16.8px), the shortest line a card draws: at the body's 19.6px a card holding only
    `# Title` grew 3px the moment it opened (e2e "opening a card for editing does not change its size"). */
-.node .body.editing { overflow:visible; opacity:1; }
-.node .body-edit { display:block; width:100%; box-sizing:border-box; margin:0;
+.node .body.editing { overflow:visible; opacity:1; position:relative; }
+.node .body-edit, .node .body .body-hl { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:13px; line-height:var(--h1-lh); color:inherit;
   caret-color:var(--accent);
   background:transparent; border:none; border-radius:0; padding:0;
   outline:none; resize:none; overflow:hidden;
-  white-space:pre-wrap; overflow-wrap:anywhere; }
+  white-space:pre-wrap; overflow-wrap:anywhere; letter-spacing:normal; tab-size:8; }
+/* The SYNTAX HIGHLIGHT (utils/md-highlight.ts): the same text, painted in a <pre> under the textarea, whose
+   own glyphs are transparent — so the caret, selection and spellcheck stay the browser's, over coloured
+   text. Both boxes share every metric above; the spans below change only colour, opacity, background and
+   decoration, never weight, size or spacing, which would slide the painted text out from under the caret.
+   Everything is a shade of the card's own ink (currentColor), so it reads on any fill. */
+.node .body .body-hl { position:absolute; left:0; right:0; pointer-events:none; }   /* top: paintHighlight */
+.node .body-edit:has(+ .body-hl) { position:relative; z-index:1; color:transparent; }
+.node .body-edit::selection { color:transparent; background:color-mix(in srgb, var(--accent) 35%, transparent); }
+.body-hl .hl-mk   { opacity:.45; }
+.body-hl .hl-q, .body-hl .hl-done { opacity:.6; }
+.body-hl .hl-done { text-decoration:line-through; }
+.body-hl .hl-s    { text-decoration:line-through; }
+.body-hl .hl-i    { font-style:italic; }
+.body-hl .hl-b    { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:2px; text-decoration-color:color-mix(in srgb, currentColor 40%, transparent); }
+.body-hl .hl-mark { background:color-mix(in srgb, #ffd84d 55%, transparent); border-radius:2px; }
+.body-hl .hl-code { background:color-mix(in srgb, currentColor 12%, transparent); border-radius:2px; }
+.body-hl .hl-link { text-decoration:underline; text-decoration-color:color-mix(in srgb, currentColor 50%, transparent); text-underline-offset:2px; }
+.body-hl .hl-tag  { background:color-mix(in srgb, currentColor 14%, transparent); border-radius:6px; }
+.body-hl .hl-h    { text-shadow:0 0 .6px currentColor; }
 /* markdown elements inside a card body — tight spacing, clipped preview */
 .node .body > :last-child  { margin-bottom:0; }
 .node .body ul, .node .body ol,
