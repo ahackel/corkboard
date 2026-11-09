@@ -70,17 +70,21 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     pile.insertAdjacentHTML('beforeend', '<div class="pile-card"><div class="body"></div></div>');
   }
   const mess = shown.map((_, i) => messAt(kids.length - shown.length + i));
+  const topW = shown.length ? nodeW(shown[shown.length - 1]) : 0;
   const keys = shown.map((k, i) => {
     const card = pile.children[i] as HTMLElement;
     const under = shown.length - 1 - i;   // 0 = the top card
     const col = effectiveColor(k), image = isImageCard(k), md = cardMarkdown(k);
     const minH = !under && !image && k.h != null ? k.h : null;
-    const key = [col, imageLook(k), under, nodeW(k), image ? nodeH(k) : '', minH, i, md].join('\u0000');
+    const key = [col, imageLook(k), under, nodeW(k), topW, image ? nodeH(k) : '', minH, i, md].join('\u0000');
     if (card.dataset.key !== key) {
       card.dataset.key = key;
       card.className = 'pile-card ' + colorClass(col) + (imageLook(k) ? ' image-card' : '') + (under ? ' under' : '');
       applyColorVars(card, col);
       card.style.width = nodeW(k) + 'px';
+
+      // Centred under the top card, whose width is the pile's.
+      card.style.left = under ? (topW - nodeW(k)) / 2 + 'px' : '';
       card.style.height = image ? nodeH(k) + 'px' : '';
       card.style.minHeight = minH != null ? minH + 'px' : '';
 
@@ -106,7 +110,7 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   const ringKey = keys.join('\u0001');
   if (face.dataset.ring !== ringKey) {
     face.dataset.ring = ringKey;
-    ringPile(face, pile, shown, mess);
+    ringPile(face, pile, shown, mess, topW);
   }
 }
 
@@ -126,7 +130,7 @@ const PILE_MESS = [
 // The selection ring goes round the WHOLE pile — every card as it lies, askew — not just the element's box,
 // which is the top card's footprint unrotated. Each card turns about its own centre, so its bounds are those of
 // the rotated rectangle; the ones underneath are as tall as the pile (styles.css .pile-card).
-function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess: Mess[]): void {
+function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess: Mess[], topW: number): void {
   const ring = face.querySelector<HTMLElement>(':scope > .stack-ring')!;
   const h = pile.offsetHeight;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -134,7 +138,7 @@ function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess:
     const w = nodeW(k), { dx, dy } = mess[i];
     const a = mess[i].tilt * Math.PI / 180;
     const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
-    const cx = w / 2 + dx, cy = h / 2 + dy, hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
+    const cx = topW / 2 + dx, cy = h / 2 + dy, hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
     x0 = Math.min(x0, cx - hw); y0 = Math.min(y0, cy - hh); x1 = Math.max(x1, cx + hw); y1 = Math.max(y1, cy + hh);
   });
   if (!isFinite(x0)) {
