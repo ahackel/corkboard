@@ -1025,6 +1025,17 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #tagTray .tray-suggest { position:absolute; bottom:calc(100% + 8px); right:0; width:220px; display:none; flex-direction:column;
   padding:6px; box-sizing:border-box; background:var(--panel); border-radius:var(--r-menu); box-shadow:var(--shadow-pop); }
 #tagTray .tray-suggest.open { display:flex; }
+/* The names offered while a `[[link` or `#tag` is typed in a card (features/complete.ts): a light list under
+   the caret, at screen size whatever the zoom, rows like the tag picker's. */
+.md-complete { position:fixed; z-index:45; display:none; flex-direction:column; min-width:180px; max-width:320px;
+  max-height:260px; overflow-y:auto; padding:6px; box-sizing:border-box; background:var(--panel);
+  border-radius:var(--r-menu); box-shadow:var(--shadow-pop); font-size:13px; }
+.md-complete.open { display:flex; }
+.md-complete .mc-row { display:flex; align-items:center; gap:12px; height:30px; flex:none; padding:0 8px;
+  border-radius:6px; color:var(--text); cursor:default; }
+.md-complete .mc-row.active { background:var(--row-sel); }
+.md-complete .mc-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.md-complete .mc-hint { flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:12px; }
 #tagTray .tray-new { flex:none; width:120px; height:30px; padding:0 8px; box-sizing:border-box; font:inherit; font-size:12px;
   border:1px dashed var(--node-border); border-radius:var(--r-full); background:transparent; color:var(--text); }
 #tagTray .tray-new:focus { outline:none; border:1px solid var(--accent); }

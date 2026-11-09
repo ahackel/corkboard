@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { openBoard, makeCard, clickAway, select } from './helpers';
+import { openBoard, makeCard, clickAway, select, card } from './helpers';
 
 const editor = (c: Locator) => c.locator('textarea.body-edit');
 // Open a fresh card with N and leave its editor open, for the keys under test.
@@ -147,4 +147,29 @@ test('confirming an edit never changes the card\'s size, though the raw note sta
   const after = (await c.boundingBox())!;
   expect(after.width).toBeCloseTo(editing.width, 0);
   expect(after.height).toBeCloseTo(editing.height, 0);
+});
+
+test('typing [[ offers the map’s cards, and # its tags; Enter or Tab writes the choice', async ({ page }) => {
+  await openBoard(page);
+  await makeCard(page, 700, 200, '# Plan for May\nship it #project');
+  await makeCard(page, 700, 400, '# Planets');
+  const ta = await freshEditor(page);
+  const list = page.locator('#mdComplete');
+  await page.keyboard.type('See [[pla');
+  await expect(list).toBeVisible();
+  await expect(list.locator('.mc-row')).toHaveText(['Planets', 'Plan for May']);
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(ta).toHaveValue('See [[Plan for May]]');
+  await expect(list).toBeHidden();
+  await page.keyboard.type(' and #pro');
+  await expect(list.locator('.mc-row.active')).toContainText('#project');
+  await page.keyboard.press('Tab');
+  await expect(ta).toHaveValue('See [[Plan for May]] and #project ');
+  await page.keyboard.type('#pro');
+  await page.keyboard.press('Escape');                       // puts the list away, keeps the editor open
+  await expect(list).toBeHidden();
+  await expect(ta).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(card(page, 'See Plan for May').locator('a.wikilink')).toHaveText('Plan for May');
 });

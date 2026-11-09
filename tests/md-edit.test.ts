@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
+import { completingAt, completeAt, listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
          tableTab, tableEnter, headingSection, type TextEdit } from '../src/utils/md-edit.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
@@ -293,5 +293,31 @@ describe('headingSection', () => {
   it('is nothing off a heading', () => {
     expect(sec('## A\none|')).toBeNull();
     expect(sec('#tag|')).toBeNull();
+  });
+});
+
+describe('completingAt / completeAt', () => {
+  const at = (s: string) => completingAt(s.replace('¦', ''), s.indexOf('¦'));   // ¦ is the caret
+  it('sees a link or a tag being typed', () => {
+    expect(at('see [[Pla¦')).toEqual({ kind: 'link', from: 6, query: 'Pla' });
+    expect(at('see [[¦')).toEqual({ kind: 'link', from: 6, query: '' });
+    expect(at('a #pro¦')).toEqual({ kind: 'tag', from: 3, query: 'pro' });
+    expect(at('#pro¦')).toEqual({ kind: 'tag', from: 1, query: 'pro' });
+  });
+  it('ignores a heading, a closed link, an alias, a URL fragment and code', () => {
+    expect(at('# ¦')).toBeNull();
+    expect(at('#¦')).toBeNull();
+    expect(at('[[Plan]] ¦')).toBeNull();
+    expect(at('[[Plan|al¦')).toBeNull();
+    expect(at('x.com/page#pa¦')).toBeNull();
+    expect(at('`#pro¦')).toBeNull();
+    expect(at('```\n#pro¦')).toBeNull();
+  });
+  it('writes the choice: a link closed, a tag spaced', () => {
+    const show = (r: { text: string; start: number }) => r.text.slice(0, r.start) + '|' + r.text.slice(r.start);
+    expect(show(completeAt('see [[Pl', { kind: 'link', from: 6, query: 'Pl' }, 8, 'Plan'))).toBe('see [[Plan]]|');
+    expect(show(completeAt('see [[Pl]] x', { kind: 'link', from: 6, query: 'Pl' }, 8, 'Plan'))).toBe('see [[Plan]]| x');
+    expect(show(completeAt('a #pr', { kind: 'tag', from: 3, query: 'pr' }, 5, 'project'))).toBe('a #project |');
+    expect(show(completeAt('a #pr\nb', { kind: 'tag', from: 3, query: 'pr' }, 5, 'project'))).toBe('a #project|\nb');
   });
 });

@@ -29,6 +29,7 @@ import { syncFloatBar } from './float-bar.js';
 import { touch, commitStep } from './history.js';
 import { selectNode } from './selection.js';
 import { scheduleSave, flushSave } from '../data/save.js';
+import { updateCompletion, completionKey, closeCompletion } from './complete.js';
 import { jumpViewTo, stageSize, bottomInset } from '../view/camera.js';
 
 // The text the editor holds is the note with its title back on the front as a heading — exactly the
@@ -80,7 +81,7 @@ window.addEventListener('beforeunload', flushNow);
 // ---------- the view follows the caret ----------
 // Where the caret's line sits, in the textarea's own CSS px from its top: a hidden copy of the textarea
 // laid out with the text up to the caret (the browser reports no caret position for a textarea).
-function caretTop(ta: HTMLTextAreaElement): { top: number; line: number } {
+function caretTop(ta: HTMLTextAreaElement): { top: number; left: number; line: number } {
   const cs = getComputedStyle(ta), m = document.createElement('div');
   for (const p of ['font', 'letterSpacing', 'lineHeight', 'padding', 'border', 'boxSizing', 'width', 'tabSize',
                    'textIndent', 'textTransform', 'wordSpacing', 'overflowWrap', 'wordBreak'] as const) {
@@ -91,7 +92,7 @@ function caretTop(ta: HTMLTextAreaElement): { top: number; line: number } {
   const mark = m.appendChild(document.createElement('span'));
   mark.textContent = '\u200b';
   document.body.appendChild(m);
-  const out = { top: mark.offsetTop, line: mark.offsetHeight || parseFloat(cs.lineHeight) || 20 };
+  const out = { top: mark.offsetTop, left: mark.offsetLeft, line: mark.offsetHeight || parseFloat(cs.lineHeight) || 20 };
   m.remove();
   return out;
 }
@@ -99,6 +100,15 @@ function caretTop(ta: HTMLTextAreaElement): { top: number; line: number } {
 function caretOnScreen(ta: HTMLTextAreaElement): { top: number; bottom: number } {
   const k = state.view.k || 1, c = caretTop(ta), top = ta.getBoundingClientRect().top + c.top * k;
   return { top, bottom: top + c.line * k };
+}
+// …and where the caret is on screen, for the list of names under it (features/complete.ts).
+function caretPoint(ta: HTMLTextAreaElement): { left: number; bottom: number } {
+  const k = state.view.k || 1, c = caretTop(ta), r = ta.getBoundingClientRect();
+  return { left: r.left + c.left * k, bottom: r.top + (c.top + c.line) * k };
+}
+// Offer the map's cards after `[[` and its tags after `#`, if that's what the caret is typing.
+function offerNames(ta: HTMLTextAreaElement, n: MindNode): void {
+  updateCompletion(ta, n.id, () => caretPoint(ta), r => applyTextEdit(ta, r));
 }
 // Typing past the edge of the screen PANS the view to keep the caret's line in sight — never zooms: the
 // canvas is still the canvas, the camera just walks down the note with you.
@@ -413,6 +423,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
     lineCount = ta.value.split('\n').length;
     autosizeBody(ta); onBodyInput(n);
     followCaret(ta);
+    offerNames(ta, n);
     clearTimeout(idleSave);
     idleSave = window.setTimeout(flushOpenEdit, IDLE_SAVE_MS);
   });
@@ -420,6 +431,9 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   ta.addEventListener('keyup', (e) => {
     if (/^(Arrow|Page|Home|End)/.test(e.key)) {
       followCaret(ta);
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+        offerNames(ta, n);
+      }
     }
   });
   // A triple-click on a HEADING selects its whole section (md-edit.ts headingSection) — ready to drag out
@@ -429,6 +443,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
     if (r) {
       ta.setSelectionRange(r.start, r.end);
     }
+    offerNames(ta, n);
   });
   ta.addEventListener('keydown', (e) => onBodyKeydown(e, n));
   ta.addEventListener('blur',    () => {
@@ -505,6 +520,7 @@ export function dropBodyEdit(): void {
     return;
   }
   ui.bodyEdit = null;
+  closeCompletion();
   be.el.classList.remove('editing');
 }
 // Live, as the user types: only this card's height and the lines meeting it can change (nothing flows),
@@ -524,6 +540,9 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   e.stopPropagation();                                  // keep canvas/card shortcuts out while typing
   if (e.isComposing) {
     return;                            // an IME owns Enter/Tab while it composes
+  }
+  if (completionKey(e)) {
+    return;                            // ↑↓, Enter, Tab and Esc are the list's while it's up
   }
   const ta = ui.bodyEdit.ta, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
   const edit = (r: TextEdit | null): void => { if (r){ e.preventDefault(); applyTextEdit(ta, r); } };
@@ -579,6 +598,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     return;
   }
   ui.bodyEdit = null;                                   // null first → the blur handler becomes a no-op
+  closeCompletion();
   clearTimeout(idleSave);
   const editH = state.nodes.get(be.id)?.el?.offsetHeight ?? 0;   // read before anything repaints the card
   // A card taller than the screen is a document you are IN: remember where the caret's line is on screen,

@@ -7,6 +7,7 @@
 // table line. The editor applies the result through ONE path (features/inline-edit.ts applyTextEdit), which writes
 // only the changed span via the browser's own insert, so the textarea's ⌘Z keeps working.
 import { tableAt, tableRow, escRe } from './markdown.js';
+import { TYPING_TAG } from './tags.js';
 
 export interface TextEdit { text: string; start: number; end: number }
 
@@ -653,4 +654,35 @@ export function headingSection(text: string, pos: number): { start: number; end:
     end--;
   }
   return { start: from, end };
+}
+
+// ---------- what the caret is in the middle of typing: a link or a tag ----------
+// `[[Pla|` is a link being typed, `#proj|` a tag — the card editor offers the map's cards and tags for them
+// (features/complete.ts). `from` is where the typed name starts, `query` the name so far. Nothing inside code
+// (a fenced block, or an open `inline span`) is either, and a link stops being one at `|`, `#` or `^`.
+export interface Completing { kind: 'link' | 'tag'; from: number; query: string }
+export function completingAt(text: string, caret: number): Completing | null {
+  const lineStart = text.lastIndexOf('\n', caret - 1) + 1, before = text.slice(lineStart, caret);
+  const fences = text.slice(0, lineStart).split('\n').filter(l => /^(```|~~~)/.test(l)).length;
+  if (fences % 2 || (before.match(/`/g) ?? []).length % 2) {
+    return null;
+  }
+  const link = before.match(/\[\[([^[\]|#^]*)$/);
+  if (link) {
+    return { kind: 'link', from: caret - link[1].length, query: link[1] };
+  }
+  const tag = before.match(TYPING_TAG);
+  return tag ? { kind: 'tag', from: caret - tag[1].length, query: tag[1] } : null;
+}
+// The text with `choice` written in place of what was typed: a link CLOSED (`]]`, unless it already was) with
+// the caret after it, a tag followed by a space unless one is already there.
+export function completeAt(text: string, c: Completing, caret: number, choice: string): TextEdit {
+  if (c.kind === 'link') {
+    const ins = choice + ']]', rest = text.slice(caret);
+    const at = c.from + ins.length;
+    return { text: text.slice(0, c.from) + ins + (rest.startsWith(']]') ? rest.slice(2) : rest), start: at, end: at };
+  }
+  const rest = text.slice(caret), ins = choice + (/^\s/.test(rest) ? '' : ' ');
+  const at = c.from + ins.length;
+  return { text: text.slice(0, c.from) + ins + rest, start: at, end: at };
 }

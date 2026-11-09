@@ -16,6 +16,11 @@ const NOT_CH = new RegExp(`(?!${CH}).`, 'gsu');
 // eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
 export const INLINE_TAG = new RegExp(`(^|[\\s(\\[{,;])#(${CH}+)`, 'gu');
 
+// …and a `#tag` being TYPED: one that ends where the text does (the caret), at least one character in, so a
+// heading's lone `#` doesn't count.
+// eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
+export const TYPING_TAG = new RegExp(`(?:^|[\\s(\\[{,;])#(${CH}+)$`, 'u');
+
 const valid = (t: string): boolean => !!t && !/^[\d/]+$/.test(t);
 
 // What a person typed (or a file held) as a tag, made into one: no `#`, spaces become `-`, anything

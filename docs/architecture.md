@@ -870,6 +870,10 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   than the screen pans so the line you were on stays where it was (`renderedBlockFor` finds its block in the
   render by text). F on one card too tall to read framed whole frames it by WIDTH, its top at the top
   (`frameTop`, camera.ts; `fit` too, for a map of one card) — and a single NOTE opens at 720px the first time.
+- **`[[` offers the map's cards and `#word` its tags** (`features/complete.ts`; what is being typed is the pure
+  `completingAt`, the write `completeAt`). A light list under the caret, there only while a name is typed — not a
+  toolbar. A card goes in by TITLE when that names one card, else by PATH; a link is closed with `]]` and a tag
+  followed by a space. ↑↓ choose, Enter/Tab write, Esc puts the list away (not the editor); nothing in code offers.
 - **Cells pasted from a spreadsheet become a table** (`pasteTable`): two or more tab-separated rows of the
   same 2+ columns (quoted cells read), first row the header, written tidied on lines of their own.
 - **A double-click on the card lands the caret on the word it hit** (`sourceOffset`): the text nodes of the
