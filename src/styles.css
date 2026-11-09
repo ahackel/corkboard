@@ -1505,11 +1505,17 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   padding:calc(12px + var(--sa-t)) 12px calc(12px + var(--sa-b)) calc(12px + var(--sa-l));
   transition:transform .22s ease; }
 #startScreen.hidden #storeSidebar { transform:translateX(calc(-100% - 30px)); }
-.side-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
-/* storage-backend tabs — FigJam's segmented control: a grey track, the active side a flat white segment */
-.store-tabs { display:inline-flex; gap:2px; padding:2px; border-radius:var(--r-full); background:var(--bg); }
-.store-tab { padding:6px 14px; font-size:13px; background:transparent; border:0; border-radius:var(--r-full); color:var(--muted); cursor:pointer; }
-.store-tab.active { color:var(--text); background:var(--hover); }
+.side-head { display:flex; align-items:center; justify-content:space-between; }
+.side-title { margin:0; padding-left:4px; font-size:15px; font-weight:600; }
+/* storage-backend tabs — a segmented control the sidebar's full width, three equal segments of an icon and ONE
+   word each, so no label ever wraps; the active one is a raised segment on the dark track */
+.store-tabs { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px; padding:3px; margin-bottom:4px;
+  border-radius:12px; background:var(--bg); }
+.store-tab { display:flex; align-items:center; justify-content:center; gap:6px; min-width:0; padding:7px 4px;
+  font-size:13px; white-space:nowrap; background:transparent; border:0; border-radius:9px; color:var(--muted); cursor:pointer; }
+.store-tab svg { width:16px; height:16px; flex:none; display:block; }
+.store-tab:hover:not(.active, :disabled) { color:var(--text); }
+.store-tab.active { color:var(--text); background:var(--hover); box-shadow:0 1px 2px rgba(0,0,0,.35); }
 .store-tab:disabled { opacity:.35; cursor:default; }
 /* plain sidebar rows (the "+ New" action and the footer buttons) — Claude-desktop style */
 .side-row { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px;

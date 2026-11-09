@@ -207,12 +207,13 @@
   <div id="startScreen" class="hidden">
     <aside id="storeSidebar" aria-label="Your maps">
       <div class="side-head">
-        <div class="store-tabs" role="tablist">
-          <button id="tabDevice" class="store-tab" role="tab">On device</button>
-          <button id="tabFolder" class="store-tab" role="tab">Local folder</button>
-          <button id="tabNote" class="store-tab" role="tab" title="One Markdown note, opened as a single card">Note</button>
-        </div>
+        <h2 class="side-title">Your maps</h2>
         <button id="startClose" class="start-close" aria-label="Close" title="Close"><span class="ic" data-icon="close"></span></button>
+      </div>
+      <div class="store-tabs" role="tablist">
+        <button id="tabDevice" class="store-tab" role="tab" title="Maps kept in this browser"><span class="ic" data-icon="device"></span>Device</button>
+        <button id="tabFolder" class="store-tab" role="tab" title="A folder of Markdown notes on your computer"><span class="ic" data-icon="folder"></span>Folder</button>
+        <button id="tabNote" class="store-tab" role="tab" title="One Markdown note, opened as a single card"><span class="ic" data-icon="document"></span>Note</button>
       </div>
       <button id="newBtn" class="side-row"><span class="ic" data-icon="plus"></span><span id="newBtnLabel">New map</span></button>
       <div id="mapList"></div>

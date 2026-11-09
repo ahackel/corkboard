@@ -4,7 +4,7 @@ Jot a thought on your iPhone; it's waiting on the board, in the **Inbox** sectio
 Mac. The phone writes a small Markdown file into the map's `Inbox/` folder, iCloud carries it to the Mac,
 and the board picks it up the next time its window comes to the front.
 
-This needs the board to be a **folder** (Home → *Local folder* → *Open folder…*, Chrome or Edge), and
+This needs the board to be a **folder** (Home → *Folder* → *Open folder…*, Chrome or Edge), and
 that folder to live in **iCloud Drive**. A map in the browser's own storage can't be reached from a phone.
 
 ## 1. On the Mac: put the map in iCloud Drive
@@ -12,7 +12,7 @@ that folder to live in **iCloud Drive**. A map in the browser's own storage can'
 1. In Finder, move the map's folder into iCloud Drive — e.g. `iCloud Drive/Corkboard/My map/`.
 2. Right-click the folder → **Keep Downloaded**. Otherwise macOS may keep a new note in the cloud until
    something opens it, and it can show up on the board one switch-back late.
-3. In Corkboard: Home → *Local folder* → *Open folder…* → pick the folder in iCloud Drive.
+3. In Corkboard: Home → *Folder* → *Open folder…* → pick the folder in iCloud Drive.
 4. Press **⌘P** and run **Inbox**. It makes the Inbox section (and its `Inbox/` folder) beside your board.
    Run it again any time to jump there.
 
@@ -60,6 +60,6 @@ empties as you sort.
 - **Is the file on the Mac yet?** Look in Finder under `Inbox/`. iCloud usually takes seconds, sometimes a
   minute. If it shows a cloud icon, step 1.2 (Keep Downloaded) is missing.
 - **Chrome asks for the folder again after a restart.** That's Chrome's permission rule for local
-  folders: Home → click the folder in *Local folder* → *Allow*.
+  folders: Home → click the folder in *Folder* → *Allow*.
 - **The Shortcut can't find the folder.** Open the Files app once, browse to `iCloud Drive › Corkboard ›
   My map › Inbox` so the phone has it, then pick it again in step 5.
