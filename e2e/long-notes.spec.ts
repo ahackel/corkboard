@@ -27,12 +27,12 @@ const diskText = async (page: Page): Promise<string> => Object.values(await disk
 test('a table wider than a narrow card is squeezed to fit it, and Resize to fit widens the card for it', async ({ page }) => {
   await openBoard(page);
   const c = await seedDoc(page);
-  const fits = () => c.locator('table').evaluate(t => t.offsetWidth <= t.parentElement!.clientWidth + 1);
+  const fits = () => c.locator('table').evaluate((t: HTMLElement) => t.offsetWidth <= t.parentElement!.clientWidth + 1);
   expect(await fits()).toBe(true);
   await c.locator('h1').click();   // its top: a tall card's middle is off the screen
   await settled(page);
   await palette(page, 'Resize to fit');
-  expect(await c.evaluate(el => el.offsetWidth)).toBeGreaterThan(400);
+  expect(await c.evaluate((el: HTMLElement) => el.offsetWidth)).toBeGreaterThan(400);
   await expect(c.locator('table')).not.toHaveClass(/squeezed/);
   expect(await fits()).toBe(true);
 });

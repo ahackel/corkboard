@@ -23,7 +23,7 @@ import { scope, scopeActive } from '../nav/scope.js';
 import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';
 import { byId } from '../utils/dom.js';
-import { FOLDER_SVG } from '../view/icons.js';
+import { FOLDER_SVG, DOCUMENT_SVG } from '../view/icons.js';
 import { applyColorVars, colorClass, THEME_BG } from '../view/color.js';
 import { effectiveColor } from '../main.js';
 import { goToScopeDepth } from '../nav/sections.js';
@@ -50,14 +50,16 @@ function crumb(depth: number, label: string, current: boolean): string {
     + `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(label)}</span></button>`;
 }
 // The MAP's segment is a folder like the rest, in the map's own canvas colour (the theme's board grey when it
-// has none) — the root folder of the path. Empty while no map is open, so the bar is the home button alone.
+// has none) — the root folder of the path; a single note's is a page, since it has no folder. Empty while
+// no map is open, so the bar is the home button alone.
 // Also run by data/persistence.ts the moment a map opens, ahead of any paint.
 export function paintMapCrumb(): void {
   if (!store.name) {
     mapCrumb.textContent = '';
     return;
   }
-  mapCrumb.innerHTML = `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(store.name)}</span>`;
+  const icon = state.singleNote ? DOCUMENT_SVG : FOLDER_SVG;
+  mapCrumb.innerHTML = `<span class="fold-icon">${icon}</span><span class="sc-name">${esc(store.name)}</span>`;
   tint(mapCrumb, state.canvasColor || THEME_BG);
 }
 
@@ -89,7 +91,7 @@ const foldedLevels = (): number[] =>
 // the signature guard: paintAll runs once per animation FRAME for the length of a resize drag, and
 // rebuilding this innerHTML per section would be pure waste (cf. queryKey in main.ts).
 export function renderCrumbs(): void {
-  const sig = store.name + '|' + state.canvasColor + (!scopeActive() ? ''
+  const sig = store.name + '|' + state.singleNote + '|' + state.canvasColor + (!scopeActive() ? ''
     : '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i) + ':' + levelColor(i)).join('/'));
   if (bar.dataset.sig === sig) {
     return;

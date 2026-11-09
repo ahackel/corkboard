@@ -33,3 +33,6 @@ export const ICON_LOCK_OPEN = `<svg viewBox="0 0 24 24" fill="none" stroke="curr
 
 // A closed folder: what a FOLDED section is drawn as, ahead of its label (styles.css .fold-icon).
 export const FOLDER_SVG = ICONS.folder ?? '';
+
+// A page: what a map that is ONE note (store/note.ts) is drawn as, where a folder map shows a folder.
+export const DOCUMENT_SVG = ICONS.document ?? '';

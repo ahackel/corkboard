@@ -8,6 +8,9 @@ import { openBoard, card, clickAway, palette, saved, settled, watchErrors } from
 
 const NOTE = '---\nauthor: me\n---\n\n# Shopping\n\n- milk\n';
 
+// the folded corner of the document icon, which a folder icon lacks
+const DOC_ICON = 'svg path[d="M14 3v5h5"]';
+
 async function stubPicker(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const proto = FileSystemHandle.prototype as unknown as Record<string, unknown>;
@@ -35,8 +38,9 @@ test('a single note opens as one card, edits in place, and keeps its file and it
   await expect(card(page, 'Shopping')).toBeVisible();
   await expect(page.locator('#world .node')).toHaveCount(1);
   await expect(page.locator('#folderName .sc-name')).toHaveText('Shopping');
+  await expect(page.locator(`#folderName .fold-icon ${DOC_ICON}`)).toHaveCount(1);
   await expect(page.locator('#ghostCard')).toBeHidden();
-  expect(await card(page, 'Shopping').evaluate(el => el.offsetWidth)).toBe(720);   // a document opens at a reading width
+  expect(await card(page, 'Shopping').evaluate((el: HTMLElement) => el.offsetWidth)).toBe(720);   // a document opens at a reading width
 
   // nothing adds a card beside it, or takes it away
   await page.mouse.move(300, 200);
@@ -59,5 +63,10 @@ test('a single note opens as one card, edits in place, and keeps its file and it
   expect(text).toContain('# Groceries\n\n- milk\n- eggs');
   expect(await readNote(page, 'Groceries.md')).toBeNull();   // the file keeps the name it was opened by
   await expect(card(page, 'Groceries')).toBeVisible();
+
+  // the home list draws it as a page too
+  await page.locator('#homeBtn').click();
+  await expect(page.locator('#tabNote')).toHaveClass(/active/);
+  await expect(page.locator(`#mapList .map-item .mi-icon ${DOC_ICON}`)).toHaveCount(1);
   expect(errors).toEqual([]);
 });

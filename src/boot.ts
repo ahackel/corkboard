@@ -20,6 +20,7 @@ import { esc } from './utils/markdown.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
 import folderIcon from './assets/icons/folder-open.svg?raw';
+import documentIcon from './assets/icons/document.svg?raw';
 import kebabIcon from './assets/icons/kebab.svg?raw';
 import { byId } from './utils/dom.js';
 import { settleSave } from './data/save.js';
@@ -149,7 +150,7 @@ function renderMapList(): void {
       : `<span class="mi-name">${esc(m.name)}</span><span class="mi-when">${timeAgo(m.when)}</span>
          <button class="mi-more" aria-label="Map actions" title="Map actions">${kebabIcon}</button>`;
     return `<div class="map-item${isCurrent(m) ? ' current' : ''}" data-id="${esc(m.id)}" tabindex="0" role="button" aria-label="Open ${esc(m.name)}">
-      <span class="mi-icon">${folderIcon.replace('btn-icon', '')}</span>${name}</div>`;
+      <span class="mi-icon">${m.kind === 'note' ? documentIcon : folderIcon.replace('btn-icon', '')}</span>${name}</div>`;
   }).join('');
 
   box.querySelectorAll<HTMLElement>('.map-item').forEach((row, i) => {
