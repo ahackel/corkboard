@@ -65,8 +65,7 @@ function line(s: string): string {
     return span('hl-mk', m[1]) + `<span class="hl-q">${inline(m[2])}</span>`;
   }
   if ((m = s.match(ITEM))) {
-    const done = m[2] && m[2][1] !== ' ';
-    return span('hl-mk', m[1] + (m[2] ?? '')) + (done ? `<span class="hl-done">${inline(m[3])}</span>` : inline(m[3]));
+    return span('hl-mk', m[1] + (m[2] ?? '')) + inline(m[3]);
   }
   if (s.trimStart().startsWith('|')) {
     return s.split('|').map(inline).join(span('hl-mk', '|'));
@@ -74,9 +73,13 @@ function line(s: string): string {
   return inline(s);
 }
 
-export function highlightMarkdown(src: string): string {
+// FOCUS: given the caret, the lines outside the block it is in (the run of lines between blank ones) are
+// wrapped in `hl-far`, which fades them — iA Writer's focus mode, so a long note reads as the one
+// paragraph you're writing. Each line's HTML is self-contained, so wrapping whole lines is safe.
+export function highlightMarkdown(src: string, caret?: number): string {
+  const lines = src.split('\n');
   let fence = '';
-  return src.split('\n').map((s) => {
+  const html = lines.map((s) => {
     const f = s.match(FENCE)?.[1];
     if (fence) {
       if (f && f[0] === fence[0] && f.length >= fence.length && !s.trim().slice(f.length).trim()) {
@@ -90,5 +93,22 @@ export function highlightMarkdown(src: string): string {
       return span('hl-mk', s);
     }
     return line(s);
-  }).join('\n');
+  });
+  if (caret != null) {
+    const [from, to] = blockAround(lines, src.slice(0, caret).split('\n').length - 1);
+    return html.map((h, i) => i < from || i > to ? `<span class="hl-far">${h}</span>` : h).join('\n');
+  }
+  return html.join('\n');
+}
+
+function blockAround(lines: string[], at: number): [number, number] {
+  const blank = (i: number): boolean => !lines[i].trim();
+  let from = at, to = at;
+  while (from > 0 && !blank(from - 1)) {
+    from--;
+  }
+  while (to < lines.length - 1 && !blank(to + 1)) {
+    to++;
+  }
+  return [from, to];
 }

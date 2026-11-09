@@ -1074,36 +1074,38 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* in-place card editor (double-click, F2, E, the pen): the whole note as raw markdown in a textarea —
    bare, so the text stays exactly where it was; the CARD shows it's being edited (.node.sel:has above).
    MONOSPACE, the face `code` renders in below: what's in here is the note's SOURCE, not its rendering,
-   and a fixed pitch lines up list markers, nesting indents and table pipes. 13px keeps a line about as
-   wide as the card's 14px rounded text, so opening the editor barely rewraps a note. The line pitch is
+   and a fixed pitch lines up list markers, nesting indents and table pipes. 12px, a size under the
+   card's 14px rounded text, since a monospace glyph is wider: it fits more of each line on a narrow card. The line pitch is
    the TITLE's (--h1-lh, 16.8px), the shortest line a card draws: at the body's 19.6px a card holding only
    `# Title` grew 3px the moment it opened (e2e "opening a card for editing does not change its size"). */
 .node .body.editing { overflow:visible; opacity:1; position:relative; }
 .node .body-edit, .node .body .body-hl { display:block; width:100%; box-sizing:border-box; margin:0;
-  font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:13px; line-height:var(--h1-lh); color:inherit;
+  font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:12px; line-height:var(--h1-lh); color:inherit;
   caret-color:var(--accent);
   background:transparent; border:none; border-radius:0; padding:0;
   outline:none; resize:none; overflow:hidden;
   white-space:pre-wrap; overflow-wrap:anywhere; letter-spacing:normal; tab-size:8; }
 /* The SYNTAX HIGHLIGHT (utils/md-highlight.ts): the same text, painted in a <pre> under the textarea, whose
    own glyphs are transparent — so the caret, selection and spellcheck stay the browser's, over coloured
-   text. Both boxes share every metric above; the spans below change only colour, opacity, background and
-   decoration, never weight, size or spacing, which would slide the painted text out from under the caret.
-   Everything is a shade of the card's own ink (currentColor), so it reads on any fill. */
+   text. Both boxes share every metric above. Each mark below copies how the RENDERED note draws it (the
+   `.node .body` rules further down), so opening the editor looks like the note with its markers showing.
+   Weight and italic are safe in a monospace face (every weight has the same advance); a SIZE is not, so
+   a heading is bold here rather than bigger. Markers fade; everything else is a shade of the card's ink. */
 .node .body .body-hl { position:absolute; left:0; right:0; pointer-events:none; }   /* top: paintHighlight */
 .node .body-edit:has(+ .body-hl) { position:relative; z-index:1; color:transparent; }
 .node .body-edit::selection { color:transparent; background:color-mix(in srgb, var(--accent) 35%, transparent); }
-.body-hl .hl-mk   { opacity:.45; }
-.body-hl .hl-q, .body-hl .hl-done { opacity:.6; }
-.body-hl .hl-done { text-decoration:line-through; }
-.body-hl .hl-s    { text-decoration:line-through; }
+.body-hl .hl-mk   { opacity:.4; font-weight:400; font-style:normal; }
+.body-hl .hl-h    { font-weight:750; }
+.body-hl .hl-b    { font-weight:700; }
 .body-hl .hl-i    { font-style:italic; }
-.body-hl .hl-b    { text-decoration:underline; text-decoration-thickness:2px; text-underline-offset:2px; text-decoration-color:color-mix(in srgb, currentColor 40%, transparent); }
-.body-hl .hl-mark { background:color-mix(in srgb, #ffd84d 55%, transparent); border-radius:2px; }
-.body-hl .hl-code { background:color-mix(in srgb, currentColor 12%, transparent); border-radius:2px; }
-.body-hl .hl-link { text-decoration:underline; text-decoration-color:color-mix(in srgb, currentColor 50%, transparent); text-underline-offset:2px; }
-.body-hl .hl-tag  { background:color-mix(in srgb, currentColor 14%, transparent); border-radius:6px; }
-.body-hl .hl-h    { text-shadow:0 0 .6px currentColor; }
+.body-hl .hl-s    { text-decoration:line-through; opacity:.7; }
+.body-hl .hl-mark { background:var(--scrim, rgba(255,255,255,.62)); border-radius:3px; }
+.body-hl .hl-code { background:color-mix(in srgb, var(--ink) 16%, transparent); border-radius:3px; }
+.body-hl .hl-link { text-decoration:underline; text-underline-offset:2px; }
+.body-hl .hl-tag  { font-weight:700; opacity:.75; }
+.body-hl .hl-q    { opacity:.85; }
+/* FOCUS: the blocks the caret isn't in fade back, so a long note reads as the paragraph being written. */
+.body-hl .hl-far  { opacity:.35; }
 /* markdown elements inside a card body — tight spacing, clipped preview */
 .node .body > :last-child  { margin-bottom:0; }
 .node .body ul, .node .body ol,

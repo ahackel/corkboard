@@ -38,9 +38,15 @@ describe('highlightMarkdown', () => {
     expect(h).toContain('<span class="hl-tag">#tag</span>');
     expect(h).toContain('<span class="hl-b"><span class="hl-mk">**</span>bold');
     expect(h).toContain('<span class="hl-mark">');
-    expect(h).toContain('<span class="hl-done">done task</span>');
     expect(h).toContain('<span class="hl-code">const x');
     expect(h).not.toContain('hl-tag">#notatag');
+  });
+  it('fades every line outside the block the caret is in', () => {
+    const src = '# Title\n\nfirst line\nsecond line\n\nlast';
+    const h = highlightMarkdown(src, src.indexOf('second'));
+    expect(text(h)).toBe(src);
+    expect(h.split('\n').map(l => l.startsWith('<span class="hl-far">'))).toEqual([true, true, false, false, true, true]);
+    expect(highlightMarkdown(src)).not.toContain('hl-far');
   });
   it('leaves an arithmetic star and a snake_case word alone', () => {
     const h = highlightMarkdown('5 * 3 * 2 and snake_case_word');

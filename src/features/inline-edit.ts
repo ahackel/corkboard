@@ -328,7 +328,7 @@ export function autosizeBody(ta: HTMLTextAreaElement): void {
 function paintHighlight(ta: HTMLTextAreaElement): void {
   const hl = ta.nextElementSibling as HTMLElement | null;
   if (hl?.classList.contains('body-hl')) {
-    hl.innerHTML = highlightMarkdown(ta.value) + '\n';
+    hl.innerHTML = highlightMarkdown(ta.value, ta.selectionEnd) + '\n';
     hl.style.top = ta.offsetTop + 'px';
   }
 }
@@ -449,6 +449,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   // moving the caret by keyboard walks the view along too
   ta.addEventListener('keyup', (e) => {
     if (/^(Arrow|Page|Home|End)/.test(e.key)) {
+      paintHighlight(ta);              // the focus follows the caret
       followCaret(ta);
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
         offerNames(ta, n);
@@ -462,6 +463,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
     if (r) {
       ta.setSelectionRange(r.start, r.end);
     }
+    paintHighlight(ta);
     offerNames(ta, n);
   });
   ta.addEventListener('keydown', (e) => onBodyKeydown(e, n));
@@ -482,6 +484,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   relayout();    // …then reflow siblings around it (not just after a newline)
   const [from, to] = clicked != null ? [clicked, clicked] : caretIn(text, caret === 'title' ? 'title' : 'end');
   ta.setSelectionRange(from, to);
+  paintHighlight(ta);            // the focus starts where the caret landed
 }
 // Rich text copied from a web page, Google Docs, Word… pastes as markdown (utils/html-md.ts), keeping its links,
 // bold, lists and tables; ⌘⇧V (the system's "paste as plain text") pastes the plain text, as it always did.
