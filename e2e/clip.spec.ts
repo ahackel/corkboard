@@ -4,8 +4,10 @@ import { openBoard, makeCard, select, reload, card, settled } from './helpers';
 test('a card dragged shorter than its text clips it, keeps that height, and Fit gives it back', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 400, 200, '# Long\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\neleven\ntwelve');
-  const full = (await c.boundingBox())!.height;
   await select(page, c);
+  await page.locator('#fbFit').click();                   // written in a fresh card it kept the card's height: Fit shows it all
+  await settled(page);
+  const full = (await c.boundingBox())!.height;
   const s = (await c.locator(':scope > .fh-s').boundingBox())!;
   await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
   await page.mouse.down();

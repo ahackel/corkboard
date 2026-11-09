@@ -13,7 +13,7 @@ import { childrenOf, isHidden, isLockedEffective, nodeLabel, nodesOf, nodeAtTarg
 import { cardMarkdown } from '../utils/frontmatter.js';
 import { renderBodyHTML } from '../utils/markdown.js';
 import { trackPointer } from '../utils/dom.js';
-import { pileKids, topOfPile, fanSlotAt, fanTilt, gridOf, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
+import { pileKids, pileX, topOfPile, fanSlotAt, fanTilt, gridOf, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
 import { nodeW, nodeH, imageLook } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld, frameBox, stageSize } from '../view/camera.js';
@@ -61,7 +61,12 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     el.appendChild(face);
   }
   const kids = pileKids(n);
-  const shown = kids.slice(-PILE_SHOWN);
+
+  // The bottom card is always drawn — it's what the pile stands on and is measured by — and over it the top ones.
+  const places = kids.length > PILE_SHOWN
+    ? [0, ...kids.map((_, i) => i).slice(1 - PILE_SHOWN)]
+    : kids.map((_, i) => i);
+  const shown = places.map(i => kids[i]);
   const pile = face.querySelector<HTMLElement>(':scope > .pile')!;
   while (pile.children.length > shown.length) {
     pile.lastElementChild!.remove();
@@ -69,23 +74,25 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   while (pile.children.length < shown.length) {
     pile.insertAdjacentHTML('beforeend', '<div class="pile-card"><div class="body"></div></div>');
   }
-  const mess = shown.map((_, i) => messAt(kids.length - shown.length + i));
-  const topW = shown.length ? nodeW(shown[shown.length - 1]) : 0;
+  const mess = places.map(messAt);
+  const baseW = shown.length ? nodeW(shown[0]) : 0;
   const keys = shown.map((k, i) => {
     const card = pile.children[i] as HTMLElement;
     const under = shown.length - 1 - i;   // 0 = the top card
     const col = effectiveColor(k), image = isImageCard(k), md = cardMarkdown(k);
-    const minH = !under && !image && k.h != null ? k.h : null;
-    const key = [col, imageLook(k), under, nodeW(k), topW, image ? nodeH(k) : '', minH, i, md].join('\u0000');
+
+    // Every card keeps its OWN height on the pile: an image its box, a clipped card exactly n.h, any other
+    // card its text over its authored minimum.
+    const exactH = image ? nodeH(k) : k.clip && k.h != null ? k.h : null;
+    const minH = !image && !k.clip && k.h != null ? k.h : null;
+    const key = [col, imageLook(k), under, nodeW(k), baseW, exactH, minH, places[i], md].join('\u0000');
     if (card.dataset.key !== key) {
       card.dataset.key = key;
       card.className = 'pile-card ' + colorClass(col) + (imageLook(k) ? ' image-card' : '') + (under ? ' under' : '');
       applyColorVars(card, col);
       card.style.width = nodeW(k) + 'px';
-
-      // Centred under the top card, whose width is the pile's.
-      card.style.left = under ? (topW - nodeW(k)) / 2 + 'px' : '';
-      card.style.height = image ? nodeH(k) + 'px' : '';
+      card.style.left = i ? (baseW - nodeW(k)) / 2 + 'px' : '';   // centred over the bottom card (pileX)
+      card.style.height = exactH != null ? exactH + 'px' : '';
       card.style.minHeight = minH != null ? minH + 'px' : '';
 
       // The mess: each card lies askew by its PLACE in the pile, counted from the bottom (messAt), so a card
@@ -110,7 +117,7 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   const ringKey = keys.join('\u0001');
   if (face.dataset.ring !== ringKey) {
     face.dataset.ring = ringKey;
-    ringPile(face, pile, shown, mess, topW);
+    ringPile(face, pile, shown, mess, baseW);
   }
 }
 
@@ -128,17 +135,16 @@ const PILE_MESS = [
 ];
 
 // The selection ring goes round the WHOLE pile — every card as it lies, askew — not just the element's box,
-// which is the top card's footprint unrotated. Each card turns about its own centre, so its bounds are those of
-// the rotated rectangle; the ones underneath are as tall as the pile (styles.css .pile-card).
-function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess: Mess[], topW: number): void {
+// which is the bottom card's footprint unrotated. Each card turns about its own centre — all of them over the
+// bottom card's middle — so its bounds are those of the rotated rectangle, at its own measured height.
+function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess: Mess[], baseW: number): void {
   const ring = face.querySelector<HTMLElement>(':scope > .stack-ring')!;
-  const h = pile.offsetHeight;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   shown.forEach((k, i) => {
-    const w = nodeW(k), { dx, dy } = mess[i];
+    const w = nodeW(k), h = (pile.children[i] as HTMLElement).offsetHeight, { dx, dy } = mess[i];
     const a = mess[i].tilt * Math.PI / 180;
     const cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
-    const cx = topW / 2 + dx, cy = h / 2 + dy, hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
+    const cx = baseW / 2 + dx, cy = h / 2 + dy, hw = (w * cos + h * sin) / 2, hh = (w * sin + h * cos) / 2;
     x0 = Math.min(x0, cx - hw); y0 = Math.min(y0, cy - hh); x1 = Math.max(x1, cx + hw); y1 = Math.max(y1, cy + hh);
   });
   if (!isFinite(x0)) {
@@ -271,7 +277,7 @@ export function closeFan(): void {
   for (const k of kids) {
     k.el!.classList.add('lt-anim');
     k.el!.style.setProperty('--tilt', '0deg');
-    placeSelf(k, s.x, s.y);
+    placeSelf(k, pileX(s, k), s.y);
   }
   setTimeout(done, LAYOUT_ANIM_MS);
 }

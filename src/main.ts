@@ -442,7 +442,7 @@ export function paintNode(n: MindNode): void {
     el.style.minHeight = '';
   }
   if (isStack(n)) {
-    // a pile: its top card's width, its height whatever the face measures, and nothing to resize
+    // a pile: its bottom card's width, its height whatever the face measures, and nothing to resize
     el.style.width = nodeW(n) + 'px';
     el.style.height = ''; el.style.maxWidth = '';
     clearResizeHandles(el);
@@ -598,9 +598,10 @@ export function paintNode(n: MindNode): void {
   paintPile(n, el);
 
   // A CLIPPED card (n.clip — dragged shorter than its text) is exactly n.h tall: the body is capped to
-  // what's left under the padding and the rest is simply cut. Not while folded, opened as a page, or
-  // edited — the editor shows the whole note, then it clips again.
-  const clipH = clipHeight(n, !!editingBody);
+  // what's left under the padding and the rest is simply cut. Not while folded or opened as a page. While
+  // EDITED any card is exactly the height it opened at (BodyEdit.holdH) and its editor scrolls inside it:
+  // typing never changes a card's height — only dragging its edge does.
+  const clipH = editingBody && !n.collapsed && !heightIsDeclared(n) ? ui.bodyEdit!.holdH ?? null : clipHeight(n);
   if (clipH != null) {
     const cap = Math.max(0, clipH - bodyEl.offsetTop - parseFloat(getComputedStyle(el).paddingBottom));
     if (bodyEl.style.maxHeight !== cap + 'px') {
@@ -610,8 +611,8 @@ export function paintNode(n: MindNode): void {
     bodyEl.style.maxHeight = '';
   }
 }
-function clipHeight(n: MindNode, editing: boolean): number | null {
-  return n.clip && n.h != null && !n.collapsed && !editing && !heightIsDeclared(n) ? n.h : null;
+function clipHeight(n: MindNode): number | null {
+  return n.clip && n.h != null && !n.collapsed && !heightIsDeclared(n) ? n.h : null;
 }
 // Whether `n` currently holds its children in a content wrapper of its own (sectionContentEl) — the two
 // case paintNode's sizing chain creates one for, spelled once so its cleanup can't drift from it: an

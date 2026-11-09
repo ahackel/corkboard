@@ -180,6 +180,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
         n.clip = n.h < natural0 - 1 || undefined;
       }
     }
+
+    // A card being edited is held at its height (main.ts paintNode): the edge drag is what moves that.
+    if (!sizeH && ui.bodyEdit?.id === n.id && (north || south)) {
+      ui.bodyEdit.holdH = n.h;
+    }
     n.dirty = true;
   };
   const move = (ev: PointerEvent): void => {
@@ -216,6 +221,9 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   const up = (): void => {
     stop();
     ui.resizingId = null; n.el?.classList.remove('resizing');
+    if (ui.bodyEdit?.id === n.id) {
+      ui.bodyEdit.ta.focus({ preventScroll: true });   // the press took the focus; the editor stays open (inline-edit.ts)
+    }
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // the final delta; the size was already on the grid throughout
     hideGuides();

@@ -264,12 +264,15 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   away. A rule that must reach a stack keys on `isStack`.
 - **Its cards are HIDDEN while it's piled** — `isHidden`'s third term, `p.stack && ui.fan !== p.id` — so they
   aren't selectable, searchable on the canvas or drawn as nodes. What you see is the stack's own element
-  painting a FACE (`paintPile`): its top three cards as plain divs (`.pile-card`, keyed on their markdown like
+  painting a FACE (`paintPile`): its BOTTOM card and the top two over it as plain divs (`.pile-card`, keyed on their markdown like
   `paintNode`), each askew by its PLACE in the pile counted from the bottom (`messAt`: the bottom card square, the
   rest from a fixed list), so a card keeps its angle as more are piled on; and the pin, a plain disc a tag label's size just reaching
   over the top edge. **A stack's colour is its PIN's** (`bold-red` until one is picked — `STACK_DEFAULT_COLOR`, returned by
   `effectiveColor` so the colour picker rings what the pin shows); its cards don't inherit it — the walk passes a
-  stack by — and its name tab stays neutral grey. No count. Its footprint is its top card's (`pileW`, `nodeW`); its height is measured.
+  stack by — and its name tab stays neutral grey. No count. **A pile stands on its BOTTOM card**: its footprint is
+  that card's box (`pileW`, `nodeW`, the in-flow `.pile-card`), and every card piled on lies centred over it, top
+  edges level (`pileX`) — so piling a wider card on a narrow one never moves the narrow one. Each card keeps its
+  OWN height on the pile (an image its box, a clipped card exactly `n.h`, any other its text over its minimum).
   Selected, it's ringed with a DASHED line round the whole askew pile (`ringPile`), like the outline a fanned
   pile leaves, not its element's box; with cards held over
   it, it lifts — scaled, with a soft drop shadow, the one time a board node casts one — and shows no ring.
@@ -1053,8 +1056,12 @@ being EDITED the card itself is the field: the textarea is bare (no box, no scri
 3px blue (`--edit-ring`) round the card's border and the corner handles stand down
 (`.node.sel.card-editing`); a section's label being renamed rings its PILL the same way. The card never
 changes size as editing starts: the textarea is one row (`rows = 1`) and the card holds the height it
-had (`BodyEdit.holdH` → min-height in paintNode) until the editor closes — it only grows if you type
-past it. While a line end is dragged, the target card shows FigJam's ports — hollow rings ON its rim, no outline; the one within `PORT_SNAP` fills. An end SHIFTED along a face shows FigJam's cue instead: no ports, the card's rim traced 3px blue (`.fe-rim`) with a white notch at each port (`.fe-rim-gap`) — the spots it would snap to — and the end's dot on the face. A shifted end is also pulled level with the line's fixed end (`STRAIGHT_SNAP`, half `PORT_SNAP`'s reach) so the line runs straight. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
+had (`BodyEdit.holdH`). **Typing never changes a card's height**: while edited the card is exactly `holdH`
+(paintNode caps `.body`, which scrolls; `scrollCaretIntoCard` keeps the caret's line in it), and confirming
+keeps it — text now taller is CLIPPED (`n.h` = `holdH`, `n.clip`), text now shorter leaves `n.h` standing as
+the minimum (`endBodyEdit`). The one way to change it is the card's EDGE, which stays live while editing:
+the drag moves `holdH` (`startNodeResize`), and its press keeps the editor open (the blur handler skips a
+card mid-resize; the drag's end gives the focus back). While a line end is dragged, the target card shows FigJam's ports — hollow rings ON its rim, no outline; the one within `PORT_SNAP` fills. An end SHIFTED along a face shows FigJam's cue instead: no ports, the card's rim traced 3px blue (`.fe-rim`) with a white notch at each port (`.fe-rim-gap`) — the spots it would snap to — and the end's dot on the face. A shifted end is also pulled level with the line's fixed end (`STRAIGHT_SNAP`, half `PORT_SNAP`'s reach) so the line runs straight. The float bar sits `GAP` (36px) above the selection, clear of the top port. Lines
 are 3px (`STROKE_W`), stop `END_GAP` short of the cards they join, and end in a wide open chevron. A lone selected line shows FigJam's end
 handles — white discs with a 3px blue rim, ON the card rims where it attaches (the drawn ends stepped back
 by their trim) — and no outline; a multi-selection, which has no handles, outlines each line instead. The

@@ -227,3 +227,32 @@ test('Ungroup on a stack and a section together lets both go, in one step', asyn
   await expect(page.locator('#world .node.section')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
+
+test('a pile stands on its BOTTOM card: a wider card on it is centred over it, and every card keeps its height', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, {
+    'Pile/_index.md': note('', { 'mm_type': 'frame', 'mm_blank': 'true' }),
+    'Pile/Narrow.md': note('Narrow card'),
+    'Pile/Wide.md': note('Wide card'),
+    'board.json': board({
+      'Pile/_index.md': { x: 0, y: 0, stack: true, order: ['Pile/Narrow.md', 'Pile/Wide.md'] },
+      'Pile/Narrow.md': { x: 0, y: 0 }, 'Pile/Wide.md': { x: 0, y: 0, w: 360, h: 300 },
+    }),
+  });
+  const cards = await stack(page).locator('.pile-card').evaluateAll(els => els.map(e => {
+    const el = e as HTMLElement;
+    return { left: el.offsetLeft, w: el.offsetWidth, h: el.offsetHeight };
+  }));
+  const el = await stack(page).evaluate(e => ({ w: (e as HTMLElement).offsetWidth, h: (e as HTMLElement).offsetHeight }));
+  expect(cards[0].left).toBe(0);                                        // the narrow bottom card stays put…
+  expect(el.w).toBe(cards[0].w);                                        // …and is the pile's footprint
+  expect(el.h).toBe(cards[0].h);
+  expect(cards[1].left + cards[1].w / 2).toBeCloseTo(cards[0].w / 2);   // the wide one is centred over it
+  expect(cards[1].h).toBe(300);                                         // at its own height
+  expect(cards[0].h).toBeLessThan(300);
+
+  // what hangs over the bottom card is still the pile: a click there fans it out
+  const box = (await stack(page).boundingBox())!;
+  await page.mouse.click(box.x - 40, box.y + 150);
+  await expect(page.locator('body')).toHaveClass(/fan-open/);
+});

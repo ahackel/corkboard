@@ -41,6 +41,32 @@ test('opening a card for editing does not change its size', async ({ page }) => 
   }
 });
 
+test('typing never changes a card\'s height, and its edge can be dragged while it is edited', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 300, 300, 'Hi');
+  const h0 = (await c.boundingBox())!.height;
+  await c.dblclick();
+  const ta = c.locator('textarea.body-edit');
+  await expect(ta).toBeFocused();
+  await page.keyboard.insertText('\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten');
+  expect(Math.abs((await c.boundingBox())!.height - h0)).toBeLessThan(1);
+
+  const s = (await c.locator(':scope > .fh-s').boundingBox())!;
+  await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(s.x + s.width / 2, s.y + 100, { steps: 6 });
+  await page.mouse.up();
+  await expect(ta).toBeFocused();                              // still editing
+  const h1 = (await c.boundingBox())!.height;
+  expect(h1).toBeGreaterThan(h0 + 60);
+  await page.keyboard.insertText('\neleven\ntwelve\nthirteen\nfourteen');
+  expect(Math.abs((await c.boundingBox())!.height - h1)).toBeLessThan(1);
+
+  await clickAway(page);
+  await settled(page);
+  expect(Math.abs((await c.boundingBox())!.height - h1)).toBeLessThan(1);   // and committing keeps it
+});
+
 test('⇧D duplicates a card as the next of its series: next day, next slot of the row', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

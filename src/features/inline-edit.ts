@@ -123,6 +123,7 @@ function followCaret(ta: HTMLTextAreaElement): void {
     if (!ui.bodyEdit || ui.bodyEdit.ta !== ta) {
       return;
     }
+    scrollCaretIntoCard(ta);
     const c = caretOnScreen(ta), top = stage.getBoundingClientRect().top;
     const bottom = top + stageSize().height - bottomInset();
     const dy = c.bottom > bottom - CARET_MARGIN ? bottom - CARET_MARGIN - c.bottom
@@ -132,6 +133,21 @@ function followCaret(ta: HTMLTextAreaElement): void {
     }
   });
 }
+
+// A note longer than its card scrolls inside it while edited (main.ts paintNode): keep the caret's line in that box.
+function scrollCaretIntoCard(ta: HTMLTextAreaElement): void {
+  const box = ta.parentElement!;
+  if (box.scrollHeight <= box.clientHeight) {
+    return;
+  }
+  const c = caretTop(ta), y = ta.offsetTop + c.top;
+  if (y < box.scrollTop) {
+    box.scrollTop = y;
+  } else if (y + c.line > box.scrollTop + box.clientHeight) {
+    box.scrollTop = y + c.line - box.clientHeight;
+  }
+}
+
 // The browser scrolls a focused field into view by scrolling its nearest scrollable box — #stage, which is
 // `overflow:hidden` and must never scroll (it would shift the canvas under every hit test). followCaret
 // does that job with the camera instead.
@@ -468,7 +484,8 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   });
   ta.addEventListener('keydown', (e) => onBodyKeydown(e, n));
   ta.addEventListener('blur',    () => {
-    if (ui.bodyEdit && ui.bodyEdit.id === n.id) {
+    // (Dragging this card's edge takes the focus too, but the editor stays open: features/resize.ts gives it back.)
+    if (ui.bodyEdit && ui.bodyEdit.id === n.id && ui.resizingId !== n.id) {
       endBodyEdit();
     }
   });
@@ -484,6 +501,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   relayout();    // …then reflow siblings around it (not just after a newline)
   const [from, to] = clicked != null ? [clicked, clicked] : caretIn(text, caret === 'title' ? 'title' : 'end');
   ta.setSelectionRange(from, to);
+  scrollCaretIntoCard(ta);
   paintHighlight(ta);            // the focus starts where the caret landed
 }
 // Rich text copied from a web page, Google Docs, Word… pastes as markdown (utils/html-md.ts), keeping its links,
@@ -676,11 +694,13 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   }
   remeasure();               // re-render and reflow the height change
 
-  // Confirming never changes the card's size: the raw markdown usually stands taller than the rendered
-  // note, so where the card would shrink back it keeps the height the editor gave it (an authored min-height).
-  const pinned = !cancel && !n.clip && !n.collapsed && !heightIsDeclared(n) && (n.el?.offsetHeight ?? editH) < editH;
+  // Confirming never changes the card's height either: it stays what it was while edited (BodyEdit.holdH).
+  // Text now taller than that is CLIPPED (n.clip), text now shorter leaves it standing at that minimum.
+  const hold = be.holdH ?? 0;
+  const pinned = !n.collapsed && !heightIsDeclared(n) && hold > 0 && Math.abs((n.el?.offsetHeight ?? hold) - hold) > 1;
   if (pinned) {
-    n.h = editH;
+    n.clip = (n.el?.offsetHeight ?? hold) > hold || undefined;
+    n.h = hold;
     n.dirty = true;
     remeasure();
   }

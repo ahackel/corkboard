@@ -1,6 +1,6 @@
 // ---------- a STACK's geometry: where its cards lie, in the pile and fanned out ----------
 // A stack is a section drawn as a PILE (features/stacks.ts). Its cards don't sit where they were put: they
-// lie on the pile, every one at the stack's own corner — or, while it's FANNED OUT (ui.fan), at their spot
+// lie on the pile, centred over its bottom card (pileX) — or, while it's FANNED OUT (ui.fan), at their spot
 // in the fan. Both are derived on every layout (layStacks), never authored, so nothing here is a choice
 // the user made and lost.
 import { state, isStack, type MindNode } from '../core/state.js';
@@ -26,19 +26,24 @@ export function topOfPile(s: MindNode): MindNode | null {
   return kids[kids.length - 1] ?? null;
 }
 
-// The pile's footprint is its TOP card's: that's the face you see and grab. Asked on every paint and drag
-// frame (nodeW), so it reads the top off the stored order — the last id still a card of this stack — and only
-// falls back to the full child scan when that order has nothing to say.
+// The pile's footprint is its BOTTOM card's: the card the pile was made on, which every card piled on top
+// is centred over — so piling a wider card on a narrow one never moves the narrow one. Asked on every paint
+// and drag frame (nodeW), so it reads the bottom off the stored order — the first id still a card of this
+// stack — and only falls back to the full child scan when that order has nothing to say.
 export function pileW(s: MindNode): number {
-  const order = s.kidOrder ?? [];
-  for (let i = order.length - 1; i >= 0; i--) {
-    const k = state.nodes.get(order[i]);
+  for (const id of s.kidOrder ?? []) {
+    const k = state.nodes.get(id);
     if (k?.parent === s.id) {
       return nodeW(k);
     }
   }
-  const top = topOfPile(s);
-  return top ? nodeW(top) : NODE_W;
+  const bottom = pileKids(s)[0];
+  return bottom ? nodeW(bottom) : NODE_W;
+}
+
+// Where a card lies on its pile: centred over the bottom card, top edges level.
+export function pileX(s: MindNode, k: MindNode): number {
+  return s.x + (pileW(s) - nodeW(k)) / 2;
 }
 
 // Cards in a GRID: ⌈√n⌉ columns as wide as the widest card, each row as tall as its tallest, `gap` apart.
@@ -79,7 +84,7 @@ export function layStacks(): void {
     const kids = pileKids(s);
     const spots = ui.fan === s.id ? fanSpots(s, kids) : null;
     for (const k of kids) {
-      const at = spots?.get(k.id) ?? { x: s.x, y: s.y, tilt: 0 };
+      const at = spots?.get(k.id) ?? { x: pileX(s, k), y: s.y, tilt: 0 };
       if (Math.abs(k.x - at.x) >= 0.5 || Math.abs(k.y - at.y) >= 0.5) {
         k.x = at.x; k.y = at.y; k.dirtyLayout = true;
       }

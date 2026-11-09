@@ -703,21 +703,21 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.section-folded > .title-row > .title > .section-hits { display:inline-block; margin-left:6px; padding:0 7px;
   border-radius:var(--r-full); font-size:11px; line-height:18px; font-weight:700; background:var(--accent); color:#fff; }
 /* ---------- a STACK: a section drawn as a PILE of its cards (features/stacks.ts) ---------- */
-/* The element is the pile's footprint — its top card's width, the face's height — and nothing of its own:
+/* The element is the pile's footprint — its bottom card's box — and nothing of its own:
    no fill, no padding. What you see is .stack-face: the top cards as drawings, the pin, the selection ring. Its
    cards aren't nodes on the board while piled (utils/model.ts isHidden), so these are plain divs. */
 .node.stack { padding:0; background:transparent; min-height:0; }
 .node.stack > .body, .node.stack > .fold-more, .node.stack > .task-bar { display:none; }
 .stack-face { position:relative; }
 .stack-face > .pile { position:relative; }
-/* Each card as a card looks — its fill and ink from its own .c-* class, a card's padding and corner. The ones
-   underneath lie askew (paintPile sets `rotate`/`translate`), behind the top one, at its height; the top one
-   is in flow, so it is what the pile measures. A shade darker underneath reads as depth without a shadow
+/* Each card as a card looks — its fill and ink from its own .c-* class, a card's padding and corner, its own
+   height. The BOTTOM one is in flow, so it is what the pile measures; the ones on it lie centred over it
+   (paintPile sets `left`), askew (`rotate`/`translate`), the top one last. A shade darker underneath reads as depth without a shadow
    (board nodes never cast one). */
-.pile-card { position:absolute; left:0; top:0; height:100%; box-sizing:border-box; overflow:hidden;
+.pile-card { position:absolute; left:0; top:0; box-sizing:border-box; overflow:hidden;
   background:var(--card, var(--node)); color:var(--ink, #fff); border-radius:var(--r-card);
-  padding:var(--pad-y) var(--pad-x); pointer-events:none; }
-.pile-card:last-child { position:relative; height:auto; }
+  padding:var(--pad-y) var(--pad-x); }
+.pile-card:first-child { position:relative; }
 .pile-card.under { filter:brightness(.93); }
 .pile-card.image-card { padding:0; }   /* the picture itself: the image-card .body rules further down */
 .pile-card .img-zoom { display:none !important; }
@@ -816,9 +816,9 @@ body.fan-open #dragLayer { z-index:63; }
      a one-line card a 12px inset either side would leave an 8px strip nobody can hit. */
 .node:not(.section):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
 .node:not(.section):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
-/* Nothing to grab while the card is being typed into (the zones would sit over the text caret's own
-   edges) or while it's read-only/locked. */
-.node:has(.title.editing) > .fh, .node:has(.body.editing) > .fh,
+/* Nothing to grab while a section's name is typed into or while it's read-only/locked. A card being edited
+   keeps its edges: typing never grows it, so dragging one is how it gets room. */
+.node:has(.title.editing) > .fh,
 body.readonly .node > .fh, .node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
 /* no title/body chrome at all — just the image filling the box (see isImageBox in main.ts).
@@ -1078,7 +1078,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    card's 14px rounded text, since a monospace glyph is wider: it fits more of each line on a narrow card. The line pitch is
    the TITLE's (--h1-lh, 16.8px), the shortest line a card draws: at the body's 19.6px a card holding only
    `# Title` grew 3px the moment it opened (e2e "opening a card for editing does not change its size"). */
-.node .body.editing { overflow:visible; opacity:1; position:relative; }
+/* The card keeps its height while edited (main.ts paintNode caps the body), so a note longer than it SCROLLS. */
+.node .body.editing { overflow:hidden auto; overscroll-behavior:contain; opacity:1; position:relative; }
 .node .body-edit, .node .body .body-hl { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:12px; line-height:var(--h1-lh); color:inherit;
   caret-color:var(--accent);

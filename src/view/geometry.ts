@@ -69,7 +69,7 @@ function boxDefaultH(n: MindNode): number { return isImageBox(n) ? IMAGE_H : SEC
 // title instead.
 export function nodeW(n: MindNode): number {
   if (isStack(n)) {
-    return pileW(n);   // its top card's, the face of the pile
+    return pileW(n);   // its bottom card's, the footing of the pile
   }
   if (isBoxNode(n)) {
     return n.w ?? boxDefaultW(n);
