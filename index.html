@@ -43,6 +43,10 @@
   <!-- No toolbar: every action is in the ⌘P palette (features/palette.ts), with its shortcut beside
        it. #status is the toast setStatus writes (core/state.ts): a pill at the bottom that fades. -->
   <div id="status" role="status" aria-live="polite"></div>
+  <!-- shown while ONE note or folder is dragged in from the OS: dropped here it opens to be edited in place,
+       dropped on the board it's added as a card (features/open-drop.ts) -->
+  <button id="openDrop" type="button" hidden><span class="ic" data-icon="document"></span>
+    <span class="od-text"><b id="openDropTitle"></b><span id="openDropSub"></span></span></button>
   <!-- the ONE mode that needs to be visible at a glance, since nothing can be edited in it -->
   <button id="roBadge" hidden title="Turn off read-only (R)">Read-only. Click to turn off</button>
   <div id="palette" hidden>

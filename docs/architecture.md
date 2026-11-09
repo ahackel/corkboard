@@ -551,6 +551,16 @@ second document format: the map is that card and nothing else. Four rules make i
 It reloads on focus like a folder (`changed` compares the file's size + modification time). Its reopen at
 boot is not e2e-tested: headless Chromium crashes reading a stored OPFS handle back out of IndexedDB.
 
+**A note dragged in from the OS is OPENED on the pill, ADDED anywhere else** (`features/open-drop.ts`). While
+ONE item that may be a note or a folder is dragged over the window (Chrome/Edge: `getAsFileSystemHandle`), a
+pill at the top centre offers "Drop here to edit it in place": dropped there, the map BECOMES that file (or
+folder), through the same `adopt` the pickers use (`boot.ts openDropped`). Dropped on the board it's added as
+a copy, where it lands (`attachments.ts`) — so the drop point still picks the section. A single note can't
+take a card, so there a drop ANYWHERE opens. The handle must be asked for inside the drop handler (the items
+are gone once it returns). Write access needs a click, which a drop may not count as: `ensureWrite`
+(`store/permission.ts`) reports `'needs-click'` when Chrome refuses to ask, and the pill stays as a button
+naming the file whose click finishes the open.
+
 **Boot order (`boot()`):** if the last store was `folder` (or `note`) and its `resume()` succeeds → reopen it; else
 `openDevice()` (the on-device vault). On-device is per-device — there is no built-in cross-device sync.
 **Moving maps:** `.zip` import (`importFiles` → `unzip`, accepts `.zip` or loose `.md`, strips a common top

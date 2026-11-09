@@ -340,7 +340,8 @@ document.addEventListener('dragover', (e) => {
     return;
   }
   e.preventDefault();
-  if (state.readOnly){ setImgDropTarget(null); return; }
+  // a single note takes nothing dropped into it (core/state.ts singleNoteRefuses)
+  if (state.readOnly || state.singleNote){ setImgDropTarget(null); return; }
   const t = e.target as HTMLElement;
   const cardNode = nodeAtTarget(t);
   if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint

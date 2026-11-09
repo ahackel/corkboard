@@ -7,12 +7,9 @@ import type { FoldTest } from './tree.js';
 import { rememberFolder, notifyRecentsChanged } from './recents.js';
 import { installWatch } from './watch.js';
 import type { Store, PickResult } from './types.js';
+import { ensureWrite, hasWrite } from './permission.js';
 
-// The File System Access permission API + window.showDirectoryPicker aren't in lib.dom.
-interface Permable {
-  queryPermission(d: { mode: string }): Promise<PermissionState>;
-  requestPermission(d: { mode: string }): Promise<PermissionState>;
-}
+// window.showDirectoryPicker isn't in lib.dom.
 type DirectoryPicker = (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle>;
 const showDirectoryPicker = (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
 
@@ -38,22 +35,13 @@ export const fsaStore = {
   // as the MapRef id instead of guessing it back out of the registry.
   get currentKey(){ return this._key; },
 
-  // Re-confirm READWRITE. The picker's mode:'readwrite' asks, but the grant can
-  // sit in 'prompt' until requested — without it every write silently fails.
-  async _ensurePerm(handle: FileSystemDirectoryHandle): Promise<boolean> {
-    const opts = { mode: 'readwrite' };
-    const h = handle as unknown as Permable;
-    if ((await h.queryPermission(opts)) === 'granted') {
-      return true;
-    }
-    return (await h.requestPermission(opts)) === 'granted';
-  },
-
-  // The tail both ways IN share: confirm read-write permission, adopt the handle as the live root,
-  // and remember it for the recents list.
-  async _adopt(handle: FileSystemDirectoryHandle): Promise<PickResult> {
-    if (!(await this._ensurePerm(handle))) {
-      return 'denied';
+  // Adopt a picked, remembered or DROPPED folder as the live root, once read-write access is confirmed (the
+  // picker's mode:'readwrite' asks, but the grant can sit in 'prompt' until requested — without it every write
+  // silently fails), and remember it for the recents list.
+  async adopt(handle: FileSystemDirectoryHandle): Promise<PickResult> {
+    const r = await ensureWrite(handle);
+    if (r !== 'ok') {
+      return r;
     }
     this._dir = handle;
     await this._remember(handle);
@@ -68,7 +56,7 @@ export const fsaStore = {
     let handle: FileSystemDirectoryHandle;
     try { handle = await showDirectoryPicker({ mode: 'readwrite' }); }
     catch (e){ return (e as DOMException).name === 'AbortError' ? 'cancel' : 'error'; }
-    return this._adopt(handle);
+    return this.adopt(handle);
   },
 
   // Reopen a REMEMBERED source by its recents key (the click is the gesture).
@@ -77,7 +65,7 @@ export const fsaStore = {
     if (!handle) {
       return 'gone';
     }
-    return this._adopt(handle);
+    return this.adopt(handle);
   },
 
   // Silent reopen at boot — only succeeds if permission is ALREADY granted (no prompt/gesture).
@@ -86,11 +74,9 @@ export const fsaStore = {
     if (!handle) {
       return false;
     }
-    try {
-      if ((await (handle as unknown as Permable).queryPermission({ mode:'readwrite' })) !== 'granted') {
-        return false;
-      }
-    } catch { return false; }
+    if (!(await hasWrite(handle))) {
+      return false;
+    }
     this._dir = handle; this._key = key; return true;
   },
 
@@ -131,4 +117,4 @@ export const fsaStore = {
     notifyRecentsChanged();                    // main re-renders the recents UI
   },
 };
-fsaStore satisfies Store;   // compile-time contract check (extra _dir/_ensurePerm/_remember allowed on a reference)
+fsaStore satisfies Store;   // compile-time contract check (extra _dir/_remember allowed on a reference)

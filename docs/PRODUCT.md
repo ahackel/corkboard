@@ -49,7 +49,8 @@ What it has been used for, and what it must stay good at:
   No mobile canvas work is a priority.
 - **One note on its own.** A single `.md` file (a note in an Obsidian vault, a file from Finder) opens as a
   map of that ONE card, to edit it as a sticky. It is not a second kind of board: nothing adds a card beside
-  it, and sorting many notes still means a folder.
+  it, and sorting many notes still means a folder. Dragged in from Finder, a note OPENS when dropped on the
+  pill that appears at the top, and is ADDED as a card when dropped anywhere on the board.
 
 ## Features
 

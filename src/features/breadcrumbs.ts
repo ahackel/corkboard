@@ -37,9 +37,9 @@ const bar = byId('scopeBar');
 // the path, which the map segment already stands in for.
 const TAIL = 2;
 
-// A level's own segment, drawn the way that section is drawn FOLDED on the canvas: a folder in its colour, and
-// its name on a pill in that colour (styles.css .sc-section; paintCrumbColors tints it) — so the path reads as
-// the very folders you went into. `depth` is what goToScopeDepth takes: the crumb for scope.stack[i] carries
+// A level's own segment: a pill in that section's colour holding a folder and its name, both in the ink that
+// colour demands (styles.css .sc-pill; paintCrumbColors tints it) — so the path reads as the very folders you
+// went into. `depth` is what goToScopeDepth takes: the crumb for scope.stack[i] carries
 // i + 1, i.e. "leave the level below me", which lands you IN this one.
 // The CURRENT level is inert — you are already there, so there is nothing for a click to do and a
 // hover highlight would promise one (styles.css takes its pointer-events away).
@@ -47,8 +47,11 @@ function crumb(depth: number, label: string, current: boolean): string {
   return `<span class="sc-sep" aria-hidden="true">›</span>`
     + `<button type="button" class="sc-crumb sc-section${current ? ' sc-cur' : ''}" data-depth="${depth}"`
     + `${current ? ' aria-current="page"' : ''} title="${esc(label)}">`
-    + `<span class="fold-icon">${FOLDER_SVG}</span><span class="sc-name">${esc(label)}</span></button>`;
+    + `${pill(FOLDER_SVG, label)}</button>`;
 }
+const pill = (icon: string, label: string): string =>
+  `<span class="sc-pill"><span class="fold-icon">${icon}</span><span class="sc-name">${esc(label)}</span></span>`;
+
 // The MAP's segment is a folder like the rest, in the map's own canvas colour (the theme's board grey when it
 // has none) — the root folder of the path; a single note's is a page, since it has no folder. Empty while
 // no map is open, so the bar is the home button alone.
@@ -59,7 +62,7 @@ export function paintMapCrumb(): void {
     return;
   }
   const icon = state.singleNote ? DOCUMENT_SVG : FOLDER_SVG;
-  mapCrumb.innerHTML = `<span class="fold-icon">${icon}</span><span class="sc-name">${esc(store.name)}</span>`;
+  mapCrumb.innerHTML = pill(icon, store.name);
   tint(mapCrumb, state.canvasColor || THEME_BG);
 }
 

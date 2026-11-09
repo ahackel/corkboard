@@ -94,6 +94,25 @@ export async function pickNote(): Promise<void> {
   await loadNote(noteStore.currentKey!);
   hideStart();
 }
+// Open a note or a folder dragged in from the OS to edit it in place (features/open-drop.ts) — the file
+// itself, where a drop on the board adds a copy. 'needs-click' when the drop couldn't ask for write
+// access; the caller offers a click to finish with.
+export async function openDropped(handle: FileSystemHandle): Promise<'ok' | 'needs-click' | 'failed'> {
+  await settleSave();   // the old map's pending writes must not land in the dropped one
+  const isNote = handle.kind === 'file';
+  const r = isNote ? await noteStore.adopt(handle as FileSystemFileHandle)
+    : await fsaStore.adopt(handle as FileSystemDirectoryHandle);
+  if (r === 'needs-click') {
+    return r;
+  }
+  if (r !== 'ok') {
+    setStatus(`Corkboard can’t write to that ${isNote ? 'note' : 'folder'}. Drop it again and choose “Allow”.`);
+    return 'failed';
+  }
+  await (isNote ? loadNote(noteStore.currentKey!) : loadFolder(fsaStore.currentKey!));
+  hideStart();
+  return 'ok';
+}
 // Pick a NEW local folder (Chrome/Edge only) and open it right away.
 async function pickFolder(): Promise<void> {
   await settleSave();   // the old map's pending writes must not land in the picked folder

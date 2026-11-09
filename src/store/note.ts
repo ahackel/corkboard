@@ -12,12 +12,9 @@ import { installWatch } from './watch.js';
 import { stampOf } from './handle-store.js';
 import type { FoldTest } from './tree.js';
 import type { Store, PickResult, TreeListing } from './types.js';
+import { ensureWrite, hasWrite } from './permission.js';
 
-// The FSA permission API and window.showOpenFilePicker aren't in lib.dom.
-interface Permable {
-  queryPermission(d: { mode: string }): Promise<PermissionState>;
-  requestPermission(d: { mode: string }): Promise<PermissionState>;
-}
+// window.showOpenFilePicker isn't in lib.dom.
 type FilePicker = (opts?: {
   types?: Array<{ description: string; accept: Record<string, string[]> }>;
   excludeAcceptAllOption?: boolean; multiple?: boolean;
@@ -27,7 +24,6 @@ const showOpenFilePicker = (window as Window & { showOpenFilePicker?: FilePicker
 // The board's stand-in for the board.json a folder would hold — the only other path this store answers.
 const BOARD_PATH = 'board.json';
 const boardKey = (key: string): string => 'note-board:' + key;
-const RW = { mode: 'readwrite' };
 
 async function rememberedHandle(key: string): Promise<FileSystemFileHandle | undefined> {
   try {
@@ -62,10 +58,11 @@ export const noteStore = {
   get name(){ return this._file ? this._file.name.replace(/\.(md|markdown)$/i, '') : ''; },
   get currentKey(){ return this._key; },
 
-  async _adopt(handle: FileSystemFileHandle): Promise<PickResult> {
-    const h = handle as unknown as Permable;
-    if ((await h.queryPermission(RW)) !== 'granted' && (await h.requestPermission(RW)) !== 'granted') {
-      return 'denied';
+  // Adopt a picked, remembered or DROPPED note as the open map, once read-write access is confirmed.
+  async adopt(handle: FileSystemFileHandle): Promise<PickResult> {
+    const r = await ensureWrite(handle);
+    if (r !== 'ok') {
+      return r;
     }
     const key = await keyFor(handle);
     await idbPut(key, handle);
@@ -87,13 +84,13 @@ export const noteStore = {
         multiple: false,
       });
     } catch (e) { return (e as DOMException).name === 'AbortError' ? 'cancel' : 'error'; }
-    return handle ? this._adopt(handle) : 'cancel';
+    return handle ? this.adopt(handle) : 'cancel';
   },
 
   // Reopen a remembered note by its key (the click is the gesture for the permission prompt).
   async openRecent(key: string): Promise<PickResult> {
     const handle = await rememberedHandle(key);
-    return handle ? this._adopt(handle) : 'gone';
+    return handle ? this.adopt(handle) : 'gone';
   },
 
   // Silent reopen at boot — only if read-write permission is still granted.
@@ -102,11 +99,9 @@ export const noteStore = {
     if (!handle) {
       return false;
     }
-    try {
-      if ((await (handle as unknown as Permable).queryPermission(RW)) !== 'granted') {
-        return false;
-      }
-    } catch { return false; }
+    if (!(await hasWrite(handle))) {
+      return false;
+    }
     this._file = handle; this._key = key; this._stamp = null;
     return true;
   },

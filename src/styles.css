@@ -174,6 +174,20 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
 #status.show { opacity:1; transform:translate(-50%, 0); }
 body:has(#saveAlert:not([hidden])) #status { display:none; }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
+/* Open-in-place drop target (features/open-drop.ts): a dark pill at the top centre while a note is dragged in,
+   which lights up in the accent when the drag is over it (.hot) — a drop anywhere else adds a card. */
+#openDrop { position:fixed; top:calc(16px + var(--sa-t)); left:50%; z-index:55; transform:translateX(-50%);
+  display:flex; align-items:center; gap:12px; padding:12px 22px 12px 18px; border-radius:16px;
+  max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r)); box-sizing:border-box;
+  background:var(--bar-bg); color:var(--bar-ink); border:2px dashed var(--bar-muted); font:inherit; text-align:left;
+  box-shadow:var(--shadow-pop); cursor:pointer; transition:background .12s ease, border-color .12s ease; }
+#openDrop[hidden] { display:none; }
+#openDrop.hot, #openDrop.ask:hover { background:var(--accent); border-color:#fff; }
+#openDrop svg { width:22px; height:22px; flex:none; display:block; }
+#openDrop .od-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+#openDrop b { font-size:14px; font-weight:600; }
+#openDrop .od-text > span { font-size:12px; opacity:.75; }
+#openDrop.hot .od-text > span, #openDrop.ask:hover .od-text > span { opacity:.9; }
 
 /* The group dividers are .fb-sep (see the floating bars) — the same 1px rule, so a group of
    buttons is marked the same way wherever it appears. It used to be `.sep { flex:1 }`, which in a
@@ -258,7 +272,7 @@ body.scoped #scopeBar { display:flex; }
 .sc-sep { flex:none; color:var(--muted); font-size:13px; opacity:.65; }
 .sc-crumb { display:inline-flex; align-items:center; gap:5px; min-width:0; max-width:190px;
   padding:4px 8px; border:none; border-radius:var(--r-full);
-  background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:600;
+  background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:500;
   cursor:pointer; }
 .sc-crumb:hover { background:var(--hover); color:var(--text); }
 /* The level you're IN is a label, not a control: you're already there, so a click has nothing to do
@@ -266,15 +280,16 @@ body.scoped #scopeBar { display:flex; }
    segment unscoped for the same reason (nothing sits above the whole map). */
 .sc-crumb.sc-cur { color:var(--text); pointer-events:none; }
 .sc-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* A SECTION's segment is drawn the way that section is drawn folded (.node.section-folded): a folder in its
-   colour, then its name on a pill in that colour, in the ink that colour demands. Muted levels you can go back
-   to fade a little; the one you're in is full strength. */
-.sc-crumb.sc-section { gap:4px; padding:2px 4px; color:var(--ink, var(--text)); }
-.sc-crumb.sc-section:not(.sc-cur) { opacity:.75; }
-.sc-crumb.sc-section:not(.sc-cur):hover { opacity:1; }
-.sc-crumb.sc-section > .fold-icon { flex:none; width:18px; height:18px; }
-.sc-crumb.sc-section > .sc-name { padding:1px 7px; border-radius:6px;
-  background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
+/* A SECTION's segment is a pill in that section's colour holding its folder (a page, for a single note) and its
+   name, both in the ink that colour demands — an outline icon, so it reads as part of the label. Every level
+   is drawn alike; the one you're IN is ringed in that ink. */
+.sc-crumb.sc-section { padding:2px 4px; color:var(--ink, var(--text)); }
+.sc-pill { display:inline-flex; align-items:center; gap:5px; min-width:0; padding:1px 7px 1px 6px; border-radius:6px;
+  background:color-mix(in srgb, var(--card, #fff), #000 9%); }
+.sc-crumb.sc-section:not(.sc-cur):hover .sc-pill { background:color-mix(in srgb, var(--card, #fff), #000 16%); }
+.sc-cur .sc-pill { box-shadow:0 0 0 1.5px color-mix(in srgb, var(--ink, var(--text)) 70%, transparent); }
+.sc-pill > .fold-icon { flex:none; width:14px; height:14px; color:inherit; }
+.sc-pill > .fold-icon svg path { fill:none; }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
 /* The pill stops short of the CENTRED search / read-only bar (~260px wide, hence half of it plus a gap). */
 @media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }

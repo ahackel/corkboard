@@ -23,8 +23,9 @@ My Map/
 - Other folders (e.g. `attachments/` for images) are not sections.
 
 To open a map: "Open folder" in Chrome/Edge, or zip it and use Import in any browser.
-One note on its own opens too ("Open a note…", Chrome/Edge): it is a map of that single card, edited
-in place under its own filename; its layout is kept in the browser, not beside it.
+One note on its own opens too ("Open a note…", or drag it onto the window's "edit in place" pill;
+Chrome/Edge): it is a map of that single card, edited in place under its own filename; its layout is
+kept in the browser, not beside it.
 
 ## A note
 
