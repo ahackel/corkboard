@@ -2,7 +2,7 @@
 // on a pile to add to it, drag the pile's body to lift its top card off, drag its pin to move it whole, click
 // it to fan it out. Down to one card, it's no stack any more.
 import { test, expect, type Page, type Locator } from '@playwright/test';
-import { openBoard, seedBoard, note, card, makeCard, watchErrors, diskFiles, palette, select, centre, dragTo } from './helpers';
+import { openBoard, seedBoard, note, card, makeCard, watchErrors, diskFiles, palette, select, centre, dragTo, settled } from './helpers';
 
 const NODES = {
   'Loose.md': { x: 400, y: 0 },
@@ -33,7 +33,7 @@ test('holding a card over another makes a stack; a quick pass does not', async (
   await page.mouse.move((await centre(b)).x, (await centre(b)).y, { steps: 8 });
   await page.mouse.move(1000, 560, { steps: 8 });
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  await settled(page);
   await expect(stack(page)).toHaveCount(0);
   await dragTo(page, await centre(a), await centre(b), { hold: 700 });
   await expect(stack(page)).toHaveCount(1);
@@ -102,7 +102,7 @@ test('a click fans the stack out, and Esc puts it back', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, BOARD);
   await stack(page).click();
-  await page.waitForTimeout(700);
+  await settled(page);
   await expect(page.locator('#world .node.fanned:visible')).toHaveCount(3);
   await expect(page.locator('#fanScrim')).toBeVisible();
   // a fanned card dragged out onto the board leaves the stack
@@ -129,7 +129,7 @@ test('the fan glides out of the pile and back onto it, even with Reduce motion o
   await page.waitForTimeout(120);
   const midOpen = await dist();
   const dimming = await scrimOpacity();
-  await page.waitForTimeout(700);
+  await settled(page);
   const open = await dist();
   expect(midOpen).toBeGreaterThan(2);           // on its way out…
   expect(midOpen).toBeLessThan(open - 2);       // …not there yet
@@ -173,7 +173,7 @@ test('dragging a card within the fan shows a line where it will go, and drops it
   await openBoard(page);
   await seedBoard(page, BOARD);
   await stack(page).click();
-  await page.waitForTimeout(700);
+  await settled(page);
   const top = page.locator('#world .node.fanned:visible', { hasText: 'Top card' });
   const last = (await page.locator('#world .node.fanned:visible', { hasText: 'Bottom card' }).boundingBox())!;
   await page.mouse.move((await centre(top)).x, (await centre(top)).y);

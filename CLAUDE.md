@@ -33,7 +33,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
-  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts`.
+  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts`, `save-flag.ts` (`data-saving`, for e2e).
 - `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
   grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.

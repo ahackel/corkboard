@@ -2,7 +2,7 @@
 // open-section path (up to that level) — features/drag.ts chuteAt/fileAway. And the search's "1/2" and
 // chevrons, which find a match even inside a folded section never read.
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, section, card, watchErrors, diskFiles, tooltip, dragOnto } from './helpers';
+import { openBoard, seedBoard, note, section, card, watchErrors, diskFiles, tooltip, dragOnto, settled } from './helpers';
 
 const BOARD = {
   'Loose.md': note('A loose card'),
@@ -35,7 +35,7 @@ test('inside an open section, a card dropped on the map crumb moves up to the to
   await seedBoard(page, BOARD);
   await section(page, 'Shelf').locator(':scope > .title-row').click();
   await page.keyboard.press('ControlOrMeta+ArrowDown');   // open it
-  await page.waitForTimeout(500);
+  await settled(page);
   await dragOnto(page, card(page, 'Inner card'), page.locator('#folderName'));
   await expect(card(page, 'Inner card')).toBeHidden();   // it left the section you are in
   expect(Object.keys(await diskFiles(page))).toContain('Inner card.md');
@@ -65,7 +65,7 @@ test('leaving a section never moves or resizes it, even when a card inside was d
   const before = await at();
   await shelf.locator(':scope > .title-row').click();
   await page.keyboard.press('ControlOrMeta+ArrowDown');
-  await page.waitForTimeout(300);
+  await settled(page);
   // inside, the canvas is the section's interior: drag its card up and to the left, past where the box was
   const c = (await card(page, 'Inner card').boundingBox())!;
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
@@ -73,7 +73,7 @@ test('leaving a section never moves or resizes it, even when a card inside was d
   await page.mouse.move(c.x + c.width / 2 - 250, c.y + c.height / 2 - 120, { steps: 10 });
   await page.mouse.up();
   await page.keyboard.press('ControlOrMeta+ArrowUp');
-  await page.waitForTimeout(300);
+  await settled(page);
   expect(await at()).toEqual(before);
   expect(errors).toEqual([]);
 });
@@ -117,11 +117,11 @@ test('stepping through the matches glides the camera to each, selecting nothing'
   const view = (): Promise<string> => page.locator('#world').evaluate(el => el.style.transform);
   const before = await view();
   await page.locator('#searchNext').click();
-  await page.waitForTimeout(700);
+  await settled(page);
   const after = await view();
   expect(after).not.toBe(before);
   await page.keyboard.press('ArrowDown');   // the list arrows go there too
-  await page.waitForTimeout(700);
+  await settled(page);
   expect(await view()).not.toBe(after);
   await expect(page.locator('#world .node.sel')).toHaveCount(0);
   await expect(page.locator('#world .node.search-active')).toHaveCount(1);

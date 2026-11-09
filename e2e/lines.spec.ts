@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, makeCard, drawLine, select, clickPort, clickAway, reload, card, watchErrors } from './helpers';
+import { openBoard, seedBoard, note, makeCard, drawLine, select, clickPort, clickAway, reload, card, watchErrors, settled } from './helpers';
 
 const lines = (page: import('@playwright/test').Page) => page.locator('#freeEdgeHits path.fe-hit');
 
@@ -160,7 +160,7 @@ test('a line end dropped anywhere on a face stays there, shifted; near the middl
     await expect(page.locator('circle.fe-rim-gap')).toHaveCount(shifted ? 4 : 0);
     await expect(page.locator('circle.fe-drop-port')).toHaveCount(shifted ? 1 : 4);
     await page.mouse.up();
-    await page.waitForTimeout(200);
+    await settled(page);
   };
   const t = (await b.boundingBox())!;
   await dragEndTo(t.x, t.y + t.height * 0.25, true);   // a quarter of the way down the left face
@@ -186,7 +186,7 @@ test('a shifted line end snaps level with the other end, so the line runs straig
     await page.mouse.down();
     await page.mouse.move(x, y, { steps: 8 });
     await page.mouse.up();
-    await page.waitForTimeout(200);
+    await settled(page);
   };
   const s = (await a.boundingBox())!, t = (await b.boundingBox())!;
   const level = s.y + s.height / 2;                 // the source's right port, where the line leaves

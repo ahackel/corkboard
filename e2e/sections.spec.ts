@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { openBoard, seedBoard, makeCard, select, note, section, card, clickAway, reload, watchErrors, palette, tooltip } from './helpers';
+import { openBoard, seedBoard, makeCard, select, note, section, card, clickAway, reload, watchErrors, palette, tooltip, settled } from './helpers';
 
 const BOARD = {
   'Todo.md': note('# Todo', { 'mm_type': 'frame' }),
@@ -37,7 +37,7 @@ test('a section collects what it is moved over, and lets go when moved away', as
   await page.mouse.down();
   await page.mouse.move(lb.x + 10 + dx, lb.y + 8 + dy, { steps: 12 });
   await page.mouse.up();
-  await page.waitForTimeout(300);
+  await settled(page);
   expect(await hostOf(page, 'A loose card')).toBe('Todo');
   expect(await hostOf(page, 'Buy milk')).toBe('Todo');   // it carried its own card along
   await reload(page);
@@ -55,7 +55,7 @@ test('a card dropped half past a section\'s edge joins it, and the section keeps
   await page.mouse.down();
   await page.mouse.move(before.x + before.width - 10, before.y + before.height - 10, { steps: 12 });
   await page.mouse.up();
-  await page.waitForTimeout(300);
+  await settled(page);
   expect(await hostOf(page, 'A loose card')).toBe('Todo');
   expect(await todo.boundingBox()).toEqual(before);
 });
@@ -98,7 +98,7 @@ test('a multi-selection dropped with the pointer in a section goes in whole, eve
   await page.mouse.down();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });   // Q trails well right of the box
   await page.mouse.up();
-  await page.waitForTimeout(300);
+  await settled(page);
   expect(await hostOf(page, 'Card P')).toBe('Box');
   expect(await hostOf(page, 'Card Q')).toBe('Box');
 });
@@ -131,7 +131,7 @@ test('a section folds to its label pill: its cards hide, its lines meet the pill
   await again.click();
   await page.keyboard.press('ArrowRight');                       // unfold
   await expect(section(page, 'Todo')).toBeVisible();
-  await page.waitForTimeout(650);                                // the box grows back, animated
+  await settled(page);                                  // the box grows back, animated
   const milk = (await card(page, 'Buy milk').boundingBox())!, box = (await section(page, 'Todo').boundingBox())!;
   expect(milk.x).toBeGreaterThan(box.x); expect(milk.x + milk.width).toBeLessThan(box.x + box.width);
   expect(errors).toEqual([]);

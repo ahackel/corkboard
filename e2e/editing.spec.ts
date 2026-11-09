@@ -6,7 +6,7 @@ const editor = (c: Locator) => c.locator('textarea.body-edit');
 async function freshEditor(page: Page): Promise<Locator> {
   await page.mouse.move(400, 300);
   await page.keyboard.press('n');
-  await page.waitForTimeout(120);
+  await expect(page.locator('textarea.body-edit')).toBeFocused();
   return page.locator('textarea.body-edit');
 }
 

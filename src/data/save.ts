@@ -9,6 +9,7 @@ import { serializeMd } from '../utils/frontmatter.js';
 import { flushBoard, scheduleSaveBoard, boardSavePending } from './board.js';
 import { releaseFolded } from './lazy.js';
 import { saveSucceeded, saveFailed } from './save-alert.js';
+import { setSaving } from './save-flag.js';
 import { foreignDirs, readFolder } from './load.js';
 
 // The lowercased filename -> node index the collision test reads. Built ONCE per save rather than
@@ -191,6 +192,7 @@ export function scheduleSave(): void {
   // ends in scheduleSave(), and a great many of them move something.
   scheduleSaveBoard();
   setStatus('Saving…');
+  setSaving('notes', true);
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(flushSave, 400);
 }
@@ -200,6 +202,7 @@ export function flushSave(): Promise<void> {
   }
   clearTimeout(saveTimer); saveTimer = undefined;
   if (savePromise) { saveAgain = true; return savePromise; }   // coalesce overlapping writes
+  setSaving('notes', true);
   savePromise = (async () => {
     try {
       await saveAll();
@@ -209,6 +212,9 @@ export function flushSave(): Promise<void> {
     }
     savePromise = null;
     if (saveAgain) { saveAgain = false; await flushSave(); }
+    if (saveTimer == null && !savePromise) {
+      setSaving('notes', false);
+    }
   })();
   return savePromise;
 }

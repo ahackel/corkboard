@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, makeCard, select, reload, card } from './helpers';
+import { openBoard, makeCard, select, reload, card, settled } from './helpers';
 
 test('a card dragged shorter than its text clips it, keeps that height, and Fit gives it back', async ({ page }) => {
   await openBoard(page);
@@ -19,6 +19,6 @@ test('a card dragged shorter than its text clips it, keeps that height, and Fit 
   expect(Math.abs((await again.boundingBox())!.height - short)).toBeLessThan(2);
   await select(page, again);
   await page.locator('#fbFit').click();
-  await page.waitForTimeout(650);                                // the resize animates
+  await settled(page);                                  // the resize animates
   expect(Math.abs((await again.boundingBox())!.height - full)).toBeLessThan(2);
 });

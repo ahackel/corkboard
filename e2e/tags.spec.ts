@@ -1,7 +1,7 @@
 // Tags are Obsidian's: frontmatter `tags:` plus `#tags` in the text. `#` adds and removes them, a click on
 // one filters the board by it (features/tags.ts, tag-picker.ts, tag-filter.ts).
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors, dragOnto } from './helpers';
+import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors, dragOnto, settled } from './helpers';
 
 const BOARD = {
   'Login.md': note('# Fix login\nSessions drop. Try #idea', { tags: '[🔥, backend]' }),
@@ -214,6 +214,6 @@ async function dragOff(page: import('@playwright/test').Page, from: import('@pla
   await page.mouse.down();
   await page.mouse.move(a.x + 60, 200, { steps: 10 });
   await page.mouse.up();
-  await page.waitForTimeout(200);
+  await settled(page);
 }
 

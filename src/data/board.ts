@@ -16,6 +16,7 @@ import { store } from './persistence.js';
 import { commitRel } from '../view/layout.js';
 import { flattenJunctions } from '../utils/edge-graph.js';
 import { saveFailed, saveSucceeded } from './save-alert.js';
+import { setSaving } from './save-flag.js';
 import { colorFill } from '../view/color.js';
 
 export const BOARD_FILE = 'board.json';
@@ -394,6 +395,7 @@ export function scheduleSaveBoard(): void {
   if (state.readOnly || !store.isOpen) {
     return;   // read-only / demo mode: never write
   }
+  setSaving('board', true);
   clearTimeout(boardTimer);
   boardTimer = window.setTimeout(flushBoard, 400);
 }
@@ -404,8 +406,10 @@ export function boardSavePending(): boolean { return boardTimer != null || board
 export async function flushBoard(): Promise<void> {
   clearTimeout(boardTimer); boardTimer = undefined;
   if (state.readOnly || !store.isOpen) {
+    setSaving('board', false);
     return;
   }
+  setSaving('board', true);
   try {
     await store.write(BOARD_FILE, boardJSON());
     state.lastSelfWrite = Date.now();            // so the focus-reload ignores our own write
@@ -414,5 +418,8 @@ export async function flushBoard(): Promise<void> {
   } catch (err) {
     boardFailed = true;
     saveFailed('board', err, () => { void flushBoard(); });
+  }
+  if (boardTimer == null) {
+    setSaving('board', false);
   }
 }

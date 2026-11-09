@@ -33,7 +33,7 @@ test('an image card resized by its edge is pulled onto a neighbour edge, keeping
   const svg = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="tomato"/></svg>');
   await page.mouse.move(400, 500);
   await page.keyboard.press('n');
-  await page.waitForTimeout(120);
+  await expect(page.locator('textarea.body-edit')).toBeFocused();
   await page.keyboard.insertText(`![](data:image/svg+xml;utf8,${svg})`);
   await clickAway(page);
   const img = page.locator('#world .node:has(img)');   // no text to find it by (makeCard's way)

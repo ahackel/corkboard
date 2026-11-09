@@ -1,7 +1,7 @@
 // A section is a FOLDER on disk (`<Name>/_index.md` plus its cards), and a folded section's notes are not
 // read until it is unfolded (data/lazy.ts).
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, section, card, reload, watchErrors, diskFiles, palette, tooltip } from './helpers';
+import { openBoard, seedBoard, note, section, card, reload, watchErrors, diskFiles, palette, tooltip, settled, saved } from './helpers';
 
 // The flat, pre-folder format: the parent named in mm_parent.
 const LEGACY = {
@@ -55,7 +55,8 @@ test('a folded section is not read until it unfolds, and lets go of its notes wh
   // fold it again: once saved, its notes leave memory (and the DOM) again
   await section(page, 'Box').locator(':scope > .title-row').click();
   await page.locator('#fbFold').click();
-  await page.waitForTimeout(1500);
+  await saved(page);
+  await settled(page);
   await expect(page.locator('#world .node', { hasText: 'First inside' })).toHaveCount(0);
   await expect.poll(() => tooltip(page, page.locator('#world .node.section-folded'))).toMatch(/\b2 Cards\b/);
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);
@@ -110,7 +111,7 @@ test('opening a folded section and leaving it again keeps it folded, where it wa
   await page.keyboard.press('ControlOrMeta+ArrowDown');             // go in
   await expect(card(page, 'First inside')).toBeVisible();
   await page.keyboard.press('ControlOrMeta+ArrowUp');               // and out
-  await page.waitForTimeout(700);
+  await settled(page);
   await expect(pill).toBeVisible();
   await expect(card(page, 'First inside')).toBeHidden();
   // the camera glides back to where it was, so the pill is exactly where it was on screen
@@ -137,7 +138,7 @@ test('unfolding a section does not glide its cards: they appear where they sit',
   const one = card(page, 'First inside');
   await expect(one).toBeVisible();
   const early = (await one.boundingBox())!;                          // mid-animation
-  await page.waitForTimeout(700);
+  await settled(page);
   const late = (await one.boundingBox())!;
   expect([Math.round(early.x), Math.round(early.y)]).toEqual([Math.round(late.x), Math.round(late.y)]);
 });
