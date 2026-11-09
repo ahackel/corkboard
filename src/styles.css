@@ -180,7 +180,7 @@ body:has(#saveAlert:not([hidden])) #status { display:none; }
   display:flex; align-items:center; gap:12px; padding:12px 22px 12px 18px; border-radius:16px;
   max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r)); box-sizing:border-box;
   background:var(--bar-bg); color:var(--bar-ink); border:2px dashed var(--bar-muted); font:inherit; text-align:left;
-  box-shadow:var(--shadow-pop); cursor:pointer; transition:background .12s ease, border-color .12s ease; }
+  box-shadow:var(--shadow-ui); cursor:pointer; transition:background .12s ease, border-color .12s ease; }
 #openDrop[hidden] { display:none; }
 #openDrop.hot, #openDrop.ask:hover { background:var(--accent); border-color:#fff; }
 #openDrop svg { width:22px; height:22px; flex:none; display:block; }
@@ -287,7 +287,7 @@ body.scoped #scopeBar { display:flex; }
 .sc-pill { display:inline-flex; align-items:center; gap:5px; min-width:0; padding:1px 7px 1px 6px; border-radius:6px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); }
 .sc-crumb.sc-section:not(.sc-cur):hover .sc-pill { background:color-mix(in srgb, var(--card, #fff), #000 16%); }
-.sc-cur .sc-pill { box-shadow:0 0 0 1.5px color-mix(in srgb, var(--ink, var(--text)) 70%, transparent); }
+.sc-cur .sc-pill { box-shadow:0 0 0 1px color-mix(in srgb, var(--ink, var(--text)) 30%, transparent); }
 .sc-pill > .fold-icon { flex:none; width:14px; height:14px; color:inherit; }
 .sc-pill > .fold-icon svg path { fill:none; }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
