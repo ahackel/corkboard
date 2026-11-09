@@ -1139,14 +1139,16 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
    lines (a small card can't afford that many lines, and the row gaps already separate rows).
    Mixed toward --ink like the marks above so it follows the fill.
    A card is narrow and a table can be far wider than it, so the table always FITS instead of
-   scrolling: width:100% with `auto` layout so columns still size to their content, plus
-   overflow-wrap:anywhere, which is what lets a cell's min-content shrink far enough for that
-   100% to hold — without it a long unbroken cell would push the table past the card's clip
-   edge. Widen the card (drag its side) to give the columns more room. */
+   scrolling: width:100% with `auto` layout so columns still size to their content. A cell wraps
+   BETWEEN WORDS only (break-word leaves its min-content at its longest word): with `anywhere` on
+   the whole cell, the short columns gave way first and `A1` / `Cost` broke between letters.
+   Only a link or inline code may break anywhere — the one unbroken run that could outgrow the
+   card's clip edge. Widen the card (drag its side) to give the columns more room. */
 .node .body table { width:100%; margin:.3em 0; border-collapse:collapse; table-layout:auto; }
 /* The body's own size: a table is part of the note, not a footnote to it (it used to be 11px). */
 .node .body th, .node .body td { padding:3px 8px; text-align:left; vertical-align:top;
-  overflow-wrap:anywhere; }
+  overflow-wrap:break-word; }
+.node .body :is(th, td) :is(.lk, code) { overflow-wrap:anywhere; }
 /* flush with the body's text column at both edges */
 .node .body th:first-child, .node .body td:first-child { padding-left:0; }
 .node .body th:last-child,  .node .body td:last-child  { padding-right:0; }

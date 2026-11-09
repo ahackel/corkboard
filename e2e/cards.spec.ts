@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openBoard, makeCard, select, clickAway, reload, card, watchErrors, seedBoard, note } from './helpers';
+import { openBoard, makeCard, select, clickAway, reload, card, watchErrors, seedBoard, note, settled } from './helpers';
 
 test('a card is made, edited and kept across a reload', async ({ page }) => {
   const errors = watchErrors(page);
@@ -90,4 +90,19 @@ test('a card is never opened: only a section has an inside', async ({ page }) =>
   await page.keyboard.press('ControlOrMeta+ArrowDown');
   await expect(page.locator('body')).not.toHaveClass(/scoped/);
   await expect(c).toBeVisible();
+});
+
+test('a table in a narrow card wraps between words: a short column never breaks inside a word', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300,
+    '# Costs\n\n| # | Item | Cost |\n|---|---|---|\n| A10 | Bindings and locks: values link to presets, variables or tokens | M–H |');
+  const lines = (sel: string) => c.locator(sel).evaluate(el => {
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    return Math.round(r.getBoundingClientRect().height / lh);
+  });
+  await settled(page);   // the card has painted at its final width
+  expect(await lines('tbody td:first-child')).toBe(1);   // `A10`, not `A` / `10`
+  expect(await lines('thead th:last-child')).toBe(1);    // `Cost`, not `Co` / `st`
 });
