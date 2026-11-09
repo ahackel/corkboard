@@ -175,6 +175,7 @@ export interface AppState {
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
   readOnly: boolean;               // read-only mode: no saves, no edits; collapse/expand only
+  singleNote: boolean;             // ONE note file opened on its own (store/note.ts): see singleNoteRefuses
   idSeq: number;
   toDelete: string[];
   lastSelfWrite?: number;          // guards the external-change reload against our own writes
@@ -193,6 +194,7 @@ export const state: AppState = {
   searchMatch: null,
   searchActiveId: null,
   readOnly: false,
+  singleNote: false,
   idSeq: 1,
   toDelete: [],
 };
@@ -227,3 +229,14 @@ export const setStatus = (t: string): void => {
   // long enough to read: ~2s, plus a beat per extra word for the longer warnings
   toastTimer = window.setTimeout(() => statusEl.classList.remove('show'), 1600 + 60 * t.length);
 };
+
+// Single-note mode (store/note.ts) opens ONE .md file as a map of one card: there is no folder to write
+// a second card into, and its own file must not go. So this is the ONE gate on every path that adds a
+// node or removes one — it says why, and the caller backs out.
+export function singleNoteRefuses(): boolean {
+  if (!state.singleNote) {
+    return false;
+  }
+  setStatus('This is a single note — open a folder to add or remove cards');
+  return true;
+}

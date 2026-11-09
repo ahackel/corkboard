@@ -17,7 +17,7 @@
 // Copy does NOT put that payload on the clipboard: other apps get clean text (one card: its note;
 // more: a bullet outline, utils/outline.ts), and the payload is remembered beside it (this tab, and
 // localStorage for the others), so pasting that same text back onto a board restores the cards.
-import { state, setStatus, type MindNode } from '../core/state.js';
+import { state, setStatus, singleNoteRefuses, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, joinHeading, type ParsedNote } from '../utils/frontmatter.js';
 import { nodesOf, outermost, isLockedEffective, subtreeIds, childrenOf, nodeLabel } from '../utils/model.js';
 import { outlineText, type OutlineItem } from '../utils/outline.js';
@@ -147,7 +147,7 @@ export async function copySelection(): Promise<boolean> {
 // Cut = copy + delete. The delete only happens once the clipboard write succeeded, so a
 // denied clipboard can never destroy cards. deleteSelection records its own undo step.
 export async function cutSelection(): Promise<void> {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds();
@@ -169,6 +169,9 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
     return false;
   }
   if (state.readOnly){ setStatus('Read-only — can’t paste'); return true; }
+  if (singleNoteRefuses()) {
+    return true;
+  }
   // split on the marker lines; each chunk is one card's .md content named by its marker
   const cards: Array<{ name: string; p: ParsedNote }> = [];
   const marks = [...text.matchAll(MARK_RE)];

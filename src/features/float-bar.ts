@@ -5,7 +5,7 @@
 // FigJam: the card's full action list is the right-click menu (features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
+import { state, stage, setStatus, singleNoteRefuses, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { touch } from './history.js';
 import { mutate } from './mutate.js';
@@ -106,7 +106,7 @@ export function autoSizeSelection(): void {
 // current positions (same fit math as fitSectionToContent). Every selected card is reparented
 // under the new section, which ends up selected. Shared by the 'G' shortcut and the context menu.
 export function groupSelectionIntoSection(): void {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!));

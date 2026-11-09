@@ -2,7 +2,7 @@
 // The unified map registry — ONE localStorage list of every map the user has, on-device
 // (OPFS) and local-folder (FSA) alike, so both kinds look the same to the UI. Each entry
 // is a MapRef: `kind` says where the files live, `id` is the OPFS dir name (kind 'device')
-// or the FSA handle key in IndexedDB (kind 'folder'). Disk lifecycle of on-device maps
+// or the FSA handle key in IndexedDB (kind 'folder', and kind 'note' for one file opened on its own). Disk lifecycle of on-device maps
 // (create/delete/rename) is delegated to the store adapter's map ops; this module
 // owns only the registry + last-map bookkeeping and the one-time legacy migration.
 // ============================================================
@@ -10,9 +10,9 @@ import { readJSON, writeJSON } from '../utils/local-json.js';
 import type { DeviceStore } from './types.js';
 
 export interface MapRef {
-  id: string;                    // device: OPFS dir name ('vault' = the legacy pre-multi-map dir); folder: FSA handle key
-  kind: 'device' | 'folder';
-  name: string;                  // display name (folder kind: the real directory name)
+  id: string;                    // device: OPFS dir name ('vault' = the legacy pre-multi-map dir); folder/note: FSA handle key
+  kind: 'device' | 'folder' | 'note';
+  name: string;                  // display name (folder kind: the real directory name; note kind: the file's)
   when: number;                  // last opened / created (ms since epoch)
 }
 export type MapKind = MapRef['kind'];

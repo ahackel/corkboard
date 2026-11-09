@@ -97,6 +97,7 @@ async function markdownForImages(files: File[]): Promise<string> {
 function canAttach(): boolean {
   if (state.readOnly){ setStatus('Read-only — can’t add images'); return false; }
   if (!store.isOpen){ setStatus('Open a folder to add images'); return false; }
+  if (state.singleNote){ setStatus('A single note has no folder to keep images in'); return false; }
   return true;
 }
 // Append images to the end of a card's body (used by drops onto a card).

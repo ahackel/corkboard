@@ -31,7 +31,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list/table Enter, Tab, ⌘B/I/L, ⌥↑↓), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
-  `idb-store.ts`, `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
+  `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
   (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts`, `save-flag.ts` (`data-saving`, for e2e).
 - `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
@@ -94,7 +94,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
-- Storage — "The `store` adapter is the single swappable I/O boundary" (three adapters: OPFS, IndexedDB
-  fallback, FSA) · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
+- Storage — "The `store` adapter is the single swappable I/O boundary" (OPFS, IndexedDB
+  fallback, FSA, single note) · "A single NOTE opens as a map of ONE card" (`singleNoteRefuses`) · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
 - Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "The dock" · "A card's text colour is DERIVED from its
   fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".

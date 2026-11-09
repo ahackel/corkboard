@@ -50,8 +50,9 @@ function planPaths(): Map<string, string> {
   const inUse = filesInUse();
   for (const n of [...state.nodes.values()].sort((a, b) => ancestorDepth(a) - ancestorDepth(b))) {
     // While the title is being typed (in-card rename OR the editor sheet), keep the current
-    // filename (rename happens when the edit session commits).
-    const frozen = frozenFileNodeId() === n.id ? n.file : null;
+    // filename (rename happens when the edit session commits). A note opened ON ITS OWN (store/note.ts)
+    // keeps the name you picked it by for good: there is no folder to rename it in.
+    const frozen = frozenFileNodeId() === n.id || state.singleNote ? n.file : null;
     const p = parentOf(n);
     const pFile = p ? out.get(p.id) ?? p.file : null;
     const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs);

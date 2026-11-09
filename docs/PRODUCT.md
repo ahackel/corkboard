@@ -47,6 +47,9 @@ What it has been used for, and what it must stay good at:
   show up in the Inbox section to sort at the desk ([inbox.md](inbox.md): a map folder in iCloud Drive plus
   an iOS Shortcut). It needs a FOLDER map; one in the browser's own storage can't be reached from a phone.
   No mobile canvas work is a priority.
+- **One note on its own.** A single `.md` file (a note in an Obsidian vault, a file from Finder) opens as a
+  map of that ONE card, to edit it as a sticky. It is not a second kind of board: nothing adds a card beside
+  it, and sorting many notes still means a folder.
 
 ## Features
 

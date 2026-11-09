@@ -1252,6 +1252,8 @@ body.zoom-far .node > .top-edge { display:none; }
 }
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
 body.readonly #ghostCard { opacity:.35; pointer-events:none; }
+/* A single note is a map of ONE card (store/note.ts): there is no new-card sticky to drag off. */
+body.single-note #ghostCard { display:none; }
 
 /* Nothing to pick in read-only — setColor refuses there, so the colour row would be dead. */
 body.readonly #settingsPop .set-color { display:none; }

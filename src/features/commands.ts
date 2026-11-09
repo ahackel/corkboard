@@ -26,7 +26,7 @@ import { canEnter, canOpen, scopeActive } from '../nav/scope.js';
 import { hasStackSelected, unstackSelection, stackToSection } from './stacks.js';
 import { openSettings } from './canvas-color.js';
 import { byId, IS_MAC } from '../utils/dom.js';
-import { showStart } from '../boot.js';
+import { showStart, pickNote } from '../boot.js';
 import { flushSave } from '../data/save.js';
 import { nodesOf } from '../utils/model.js';
 import { exportZip } from '../data/zip-io.js';
@@ -277,13 +277,16 @@ window.addEventListener('keyup', (e) => {
 const MOD = IS_MAC ? '⌘' : 'Ctrl ';
 const editable = (): boolean => !state.readOnly && store.isOpen;
 const hasSel = (): boolean => state.sel.size > 0 && editable();
+// What adds or removes a card — none of it applies to a single note (core/state.ts singleNoteRefuses).
+const canGrow = (): boolean => editable() && !state.singleNote;
+const growSel = (): boolean => hasSel() && !state.singleNote;
 const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : undefined;
 // A section in the selection that is a box, not a stack — what decides Ungroup against Unstack.
 const plainSectionSelected = (): boolean => nodesOf(selectedIds()).some(n => n.type === 'section' && !isStack(n));
 
 function paletteCommands(): Command[] {
   return [
-    { label: 'New card', shortcut: 'N', keywords: 'add create note', when: editable, run: newCardAtPointer },
+    { label: 'New card', shortcut: 'N', keywords: 'add create note', when: canGrow, run: newCardAtPointer },
     { label: 'Find…', shortcut: MOD + 'F', keywords: 'search filter tags card', run: () => openSearch() },
     { label: trayOpen() ? 'Hide the tag tray' : 'Show the tag tray', shortcut: 'T', keywords: 'tags stickers emoji', run: () => toggleTray() },
     { label: 'Undo', shortcut: MOD + 'Z', when: editable, run: undo },
@@ -298,17 +301,17 @@ function paletteCommands(): Command[] {
         startBodyEdit(n);
       }
     } },
-    { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => editable() && canOpen(oneSel()), run: () => addCardInside(state.selId!) },
-    { label: 'New section', keywords: 'group box section', when: editable, run: newSectionAtPointer },
-    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || editable(), run: goToInbox },
+    { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => canGrow() && canOpen(oneSel()), run: () => addCardInside(state.selId!) },
+    { label: 'New section', keywords: 'group box section', when: canGrow, run: newSectionAtPointer },
+    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || canGrow(), run: goToInbox },
     { label: 'Leave the section', shortcut: MOD + '↑', keywords: 'exit back up out parent', when: scopeActive, run: exitScope },
-    { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => editable() && !!oneSel(), run: () => createSibling(state.selId!) },
+    { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => canGrow() && !!oneSel(), run: () => createSibling(state.selId!) },
     { label: 'Open', shortcut: MOD + '↓', keywords: 'enter section', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
-    { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: hasSel, run: groupSelectionIntoSection },
+    { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: growSel, run: groupSelectionIntoSection },
     { label: 'Resize to fit', shortcut: '⌥⇧' + MOD + 'R', keywords: 'fit contents auto size shrink grow', when: hasSel, run: autoSizeSelection },
-    { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: hasSel, run: () => duplicateSelection() },
-    { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: hasSel, run: () => duplicateSelection({ next: true }) },
+    { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: growSel, run: () => duplicateSelection() },
+    { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: growSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
     { label: 'Collapse / expand', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
@@ -321,11 +324,12 @@ function paletteCommands(): Command[] {
     // ⌘⌫ is listed once: Unstack when only stacks are selected, else Ungroup, which unstacks the stacks among them too
     { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: () => hasStackSelected() && !plainSectionSelected(), run: unstackSelection },
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
-    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => editable() && plainSectionSelected(), run: deleteSelectionKeepChildren },
-    { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: hasSel, run: deleteSelection },
+    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => canGrow() && plainSectionSelected(), run: deleteSelectionKeepChildren },
+    { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: growSel, run: deleteSelection },
     { label: state.readOnly ? 'Turn off read-only' : 'Turn on read-only', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Map settings…', keywords: 'canvas colour color background grid dots lines mesh snap', run: openSettings },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
+    { label: 'Open a note…', keywords: 'file markdown md single card', when: () => 'showOpenFilePicker' in window, run: () => { void pickNote(); } },
     { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
     ...(['png', 'pdf'] as ImageFormat[]).map(f => ({
       label: `Export ${state.sel.size ? 'the selection' : 'the map'} as ${f.toUpperCase()}`, keywords: 'picture image download save print share',

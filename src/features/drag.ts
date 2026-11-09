@@ -618,7 +618,8 @@ function applyDragClone(): void {
   if (!drag || !drag.moved) {
     return;
   }
-  if (drag.shift && !drag.cloned){
+  // A single note has nowhere to put a copy (core/state.ts singleNoteRefuses): Shift drags it like any move.
+  if (drag.shift && !drag.cloned && !state.singleNote){
     drag.cloned = true;
     for (const [id, s] of drag.start){             // pin the original subtree(s) back to start
       const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = false; }

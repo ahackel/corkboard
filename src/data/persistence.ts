@@ -4,7 +4,7 @@
 // data/save.ts (every mutation calls scheduleSave()), the .zip import/export data/zip-io.ts.
 // ============================================================
 import { state } from '../core/state.js';
-import { opfsStore, fsaStore, resolveOnDeviceStore, setLastMap, touchMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import { opfsStore, fsaStore, noteStore, resolveOnDeviceStore, setLastMap, touchMap, type Store, type MapKind, type MapRef } from '../store/index.js';
 import { flashArrived } from '../main.js';
 import { updateDocumentTitle } from '../nav/url-state.js';
 import { isTypingInField, inPlaceEditActive } from '../core/ui-state.js';
@@ -31,6 +31,9 @@ export let currentMap: { kind: MapKind; id: string } | null = null;
 export function useStore(s: Store, ref?: { kind: MapKind; id: string }): void {
   store = s; store.watch(reloadFromDisk);
   currentMap = ref ?? null;
+  // A single note (store/note.ts) is a map of one card: the dock's new-card sticky goes (styles.css).
+  state.singleNote = !!s.singleNote;
+  document.body.classList.toggle('single-note', state.singleNote);
   if (ref) { setLastMap(ref.kind, ref.id); touchMap(ref.id); }
 }
 
@@ -56,6 +59,13 @@ export async function openMapRef(ref: MapRef): Promise<boolean> {
     return true;
   }
   await settleSave();
+  if (ref.kind === 'note') {
+    if (!(await noteStore.resume(ref.id))) {
+      return false;
+    }
+    await loadNote(ref.id);
+    return true;
+  }
   if (!(await fsaStore.resume(ref.id))) {
     return false;
   }
@@ -69,6 +79,11 @@ export async function loadFolder(id: string): Promise<void> {
   await loadFromDir();
 }
 
+// Make the single note (already resumed or picked) the open map, and read it.
+export async function loadNote(id: string): Promise<void> {
+  useStore(noteStore, { kind: 'note', id });
+  await loadFromDir();
+}
 
 // Show the open map's name as the path's first folder (:empty hides it until loaded) + the tab title.
 export function updateMapTitle(): void {

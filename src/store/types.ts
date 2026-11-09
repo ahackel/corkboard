@@ -13,6 +13,8 @@ export type PickResult = 'ok' | 'cancel' | 'denied' | 'unsupported' | 'error' | 
 export interface Store {
   readonly isOpen: boolean;
   readonly name: string;
+  // ONE note file opened on its own (store/note.ts): the map is that single card and nothing else.
+  readonly singleNote?: boolean;
   pick(): Promise<PickResult>;
   // The notes under the folder `under` ('' = all), leaving unread every folder `fold` says is folded
   // (store/tree.ts) — what the load and the unfold of a section read through.

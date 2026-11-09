@@ -4,6 +4,7 @@
 //   opfsStore — local-first default (OPFS), works on every browser incl. iPad.
 //   fsaStore  — File System Access API (Chrome/Edge): a real local folder.
 //   idbStore  — IndexedDB fallback for Safari < 17.2 (no OPFS createWritable).
+//   noteStore — ONE .md file opened on its own (FSA file handle): a map that is a single card.
 // Retargeting the app (Obsidian vault, Tauri, …) means replacing only this folder. This
 // barrel re-exports the adapters + recents helpers and resolves which on-device store to use.
 // ============================================================
@@ -14,6 +15,7 @@ import type { DeviceStore } from './types.js';
 export type { Store, DeviceStore, NoteFile, PickResult } from './types.js';
 export { opfsStore } from './opfs.js';
 export { fsaStore } from './fsa.js';
+export { noteStore } from './note.js';
 export { forgetRecent, setOnRecentsChanged } from './recents.js';
 export {
   readMaps, touchMap, getLastMap, setLastMap,

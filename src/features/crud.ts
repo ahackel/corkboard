@@ -2,7 +2,7 @@
 // Every node is one .md file; ids are ephemeral (minted in mkNode). All create/duplicate paths go
 // through mkNode so the node schema stays in one place. Each mutation schedules a save. Re-parenting
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
-import { state, setStatus, isStack, type MindNode, type NodeType } from '../core/state.js';
+import { state, setStatus, singleNoteRefuses, isStack, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
 import { stripImageRef, appendMd } from '../utils/markdown.js';
@@ -69,7 +69,7 @@ function popIn(n: MindNode): void {
   if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
 }
 export function createNode(opts: CreateOpts = {}): MindNode | undefined {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   // No parent asked for means "the top level", and while a section is OPEN its interior IS the top
@@ -119,7 +119,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
 // height, then restack with an even gap. Under a parent the cards become its children, in order.
 const LIST_GAP = SPACING;   // the house spacing, the same one the smart guides pull to
 export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
-  if (state.readOnly || !texts.length) {
+  if (state.readOnly || !texts.length || singleNoteRefuses()) {
     return [];
   }
   const parentId = parent ? holderOf(parent) : detachParentId();
@@ -148,7 +148,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
 // caller drives it (e.g. the ghost-card drag rides it under the cursor, then renames on drop or
 // deletes it on cancel). Kept save-free so an abandoned drag never writes a file.
 export function createDetachedNode(x: number, y: number): MindNode | undefined {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   // …parented to the open section while there is one, so the ghost card rides the ordinary section-child
@@ -217,7 +217,7 @@ function copyNext(s: MindNode): MindNode {
 // `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor. `next` is the
 // smart duplicate (copyNext above); without it the copy is exact, just below its source.
 export function duplicateSelection({ next = false }: { next?: boolean } = {}): MindNode[] | undefined {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds();
@@ -359,7 +359,7 @@ function appendToBody(t: MindNode, md: string): void {
 // Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
 // drop it into a fresh card right beside it, in the same place the source lives.
 export function extractToCard(): void {
-  if (state.readOnly || !ui.bodyEdit) {
+  if (state.readOnly || !ui.bodyEdit || singleNoteRefuses()) {
     return;
   }
   const n = state.nodes.get(ui.bodyEdit.id);
@@ -425,6 +425,10 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
     setStatus(`Moved text into “${nodeLabel(t)}”`);
     return;
   }
+  if (singleNoteRefuses()) {
+    return;
+  }
+
   // WHERE THE NEW CARD BELONGS: the section it was dropped in (text-drag.ts resolves it with the same
   // sectionAt every drop uses), else the top level — the open section while there is one.
   const parent = dest.container ?? state.nodes.get(detachParentId() ?? '') ?? null;
@@ -525,7 +529,7 @@ export function deleteNodes(ids: Iterable<string>): void {
   settleStacks();   // a pile left with one card is no pile (features/stacks.ts)
 }
 export function deleteNode(id: string): void {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   if (!state.nodes.has(id)) {
@@ -559,7 +563,7 @@ export function discardNewCard(id: string, status?: string): void {
 }
 // Delete every selected card and their entire subtrees.
 export function deleteSelection(): void {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
   const ids = [...state.sel].filter(id => !subtreeHasLocked(id));
@@ -598,7 +602,7 @@ function canPromoteDelete(id: string): boolean {
 // (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
 // position, so nothing needs doing here. Shared by ⌘⌫/⌥⌫, the float bar's and the right-click menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
-  if (state.readOnly) {
+  if (state.readOnly || singleNoteRefuses()) {
     return;
   }
 
@@ -652,7 +656,7 @@ export function deleteSelectionKeepChildren(): void {
 // mutates and commits it (image extraction is its own gesture, not nested in a live drag).
 export function extractImage(sourceId: string, path: string, alt: string,
     target: { toCardId: string } | { x: number; y: number; w: number; h: number }): void {
-  if (state.readOnly || !path) {
+  if (state.readOnly || !path || singleNoteRefuses()) {
     return;
   }
   const source = state.nodes.get(sourceId);

@@ -521,7 +521,28 @@ Store` / `DeviceStore`):
   recent-folders list in localStorage. `HAS_FSA` gates the "Open folder" UI (`?nofsa` hides it to test the
   iPad-style layout on desktop).
 
-**Boot order (`boot()`):** if the last store was `folder` and `fsaStore.resume()` succeeds → reopen it; else
+- `noteStore` — ONE `.md` file opened on its own (FSA file handle, Chrome/Edge): see "A single NOTE opens as a
+  map of ONE card" below.
+
+**A single NOTE opens as a map of ONE card** (`store/note.ts`; the home panel's Note tab and ⌘P "Open a
+note…"). It is for editing one note as a sticky — a note in an Obsidian vault, a file from Finder — not a
+second document format: the map is that card and nothing else. Four rules make it hold:
+- **Its tree holds ONE path**, the file's own name; asking under a folder finds nothing, and a write to any
+  other path THROWS rather than vanish (nothing should ask: see the gate).
+- **Nothing adds a card or takes one away: `singleNoteRefuses()` (`core/state.ts`) is the ONE gate**, at the
+  top of every create/delete path (`createNode`, `createCards`, `createDetachedNode`, duplicate, extract,
+  paste, cut, delete, wrap in section; Shift-drag doesn't clone; images can't attach — there is no folder to
+  keep them in). A new path that adds or removes a node calls it too. ⌘P hides those commands (`canGrow`),
+  and `body.single-note` hides the dock's sticky.
+- **The filename never follows the title** (`planPaths` freezes it): you opened the file by that name, and a
+  file handle alone can't rename it.
+- **The board lives in IndexedDB, not beside the note** (`note-board:<key>`): there is no folder to write a
+  `board.json` into, and the note on disk stays exactly the note. The registry key is reused for the same
+  file (`isSameEntry`), so reopening it finds its size and canvas settings again.
+It reloads on focus like a folder (`changed` compares the file's size + modification time). Its reopen at
+boot is not e2e-tested: headless Chromium crashes reading a stored OPFS handle back out of IndexedDB.
+
+**Boot order (`boot()`):** if the last store was `folder` (or `note`) and its `resume()` succeeds → reopen it; else
 `openDevice()` (the on-device vault). On-device is per-device — there is no built-in cross-device sync.
 **Moving maps:** `.zip` import (`importFiles` → `unzip`, accepts `.zip` or loose `.md`, strips a common top
 folder) and export (`exportZip` → `zipBlob`); the inline ZIP reader/writer (store + `deflate-raw` via

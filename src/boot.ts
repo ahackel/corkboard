@@ -10,9 +10,9 @@ import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
 import { phoneMode } from './core/ui-state.js';
 import { isRoot, descendantCount, subtreeIds } from './utils/model.js';
-import { store, currentMap, loadFolder, switchToDeviceMap, updateMapTitle } from './data/persistence.js';
+import { store, currentMap, loadFolder, loadNote, switchToDeviceMap, updateMapTitle } from './data/persistence.js';
 import {
-  fsaStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
+  fsaStore, noteStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
   readMaps, getLastMap, ensureMapRegistry, createDeviceMap, deleteDeviceMap, renameDeviceMap,
   type MapRef, type MapKind,
 } from './store/index.js';
@@ -55,6 +55,44 @@ async function openFolderMap(key: string): Promise<boolean> {
   await loadFolder(fsaStore.currentKey!);   // openRecent re-remembers under a fresh key
   return true;
 }
+// Reopen a remembered single note (the row click is the gesture for the permission prompt).
+async function openNoteMap(key: string): Promise<boolean> {
+  await settleSave();
+  const r = await noteStore.openRecent(key);
+  if (r === 'gone') {
+    await noteStore.forget(key);
+    renderMapList();
+    setStatus('That note is no longer available — removed from the list.');
+    return false;
+  }
+  if (r === 'denied') {
+    setStatus('Corkboard can’t write to that note. Open it again and choose “Allow”.');
+    return false;
+  }
+  if (r !== 'ok') {
+    return false;
+  }
+  await loadNote(noteStore.currentKey!);
+  return true;
+}
+// Pick ONE .md file (Chrome/Edge only) and open it as a map of that single card.
+export async function pickNote(): Promise<void> {
+  await settleSave();   // the old map's pending writes must not land in the picked note
+  const r = await noteStore.pick();   // the picker needs this click as its user gesture
+  if (r === 'unsupported') { setStatus('This browser can’t open a note in place — use Chrome or Edge.'); return; }
+  if (r === 'denied') {
+    setStatus('Corkboard can’t write to that note. Open it again and choose “Allow”.');
+    return;
+  }
+  if (r !== 'ok') {
+    if (r === 'error') {
+      setStatus('That note couldn’t be opened. Try choosing it again.');
+    }
+    return;
+  }
+  await loadNote(noteStore.currentKey!);
+  hideStart();
+}
 // Pick a NEW local folder (Chrome/Edge only) and open it right away.
 async function pickFolder(): Promise<void> {
   await settleSave();   // the old map's pending writes must not land in the picked folder
@@ -84,13 +122,16 @@ function isCurrent(m: MapRef): boolean {
 let renaming: string | null = null;   // map id whose row shows the inline rename input
 let activeTab: MapKind = 'device';    // which backend's maps the sidebar shows
 
+const NEW_LABEL: Record<MapKind, string> = { device: 'New map', folder: 'Open folder…', note: 'Open a note…' };
+const EMPTY_LABEL: Record<MapKind, string> = { device: 'No maps yet.', folder: 'No recent folders yet.', note: 'No recent notes yet.' };
+
 function selectTab(tab: MapKind): void {
   activeTab = tab;
-  const dev = tab === 'device';
-  byId('tabDevice').classList.toggle('active', dev);
-  byId('tabFolder').classList.toggle('active', !dev);
+  byId('tabDevice').classList.toggle('active', tab === 'device');
+  byId('tabFolder').classList.toggle('active', tab === 'folder');
+  byId('tabNote').classList.toggle('active', tab === 'note');
   // the "+" action creates where the active tab points
-  byId('newBtnLabel').textContent = dev ? 'New map' : 'Open folder…';
+  byId('newBtnLabel').textContent = NEW_LABEL[tab];
   renaming = null;
   renderMapList();
 }
@@ -99,7 +140,7 @@ function renderMapList(): void {
   const list = readMaps().filter(m => m.kind === activeTab);
   const box = byId('mapList');
   if (!list.length){
-    box.innerHTML = `<p class="side-empty">${activeTab === 'device' ? 'No maps yet.' : 'No recent folders yet.'}</p>`;
+    box.innerHTML = `<p class="side-empty">${EMPTY_LABEL[activeTab]}</p>`;
     return;
   }
   box.innerHTML = list.map(m => {
@@ -168,7 +209,7 @@ function openMapMenu(m: MapRef, x: number, y: number): void {
     'sep',
     m.kind === 'device'
       ? { label: 'Delete…', run: () => { void deleteMap(m); }, danger: true }
-      : { label: 'Remove from list', run: () => { void removeFolder(m); }, danger: true },
+      : { label: 'Remove from list', run: () => { void removeRecent(m); }, danger: true },
   ], x, y);
 }
 
@@ -177,7 +218,7 @@ async function openRow(m: MapRef): Promise<void> {
   if (m.kind === 'device') {
     await openDeviceMap(m);
     hideStart();
-  } else if (await openFolderMap(m.id)) {
+  } else if (await (m.kind === 'note' ? openNoteMap(m.id) : openFolderMap(m.id))) {
     hideStart();
   }
 }
@@ -190,11 +231,12 @@ async function commitRename(m: MapRef, name: string): Promise<void> {
   renderMapList();
 }
 
-async function removeFolder(m: MapRef): Promise<void> {
-  if (!confirm(`Remove “${m.name}” from this list?\nThe folder and its files stay on disk.`)) {
+async function removeRecent(m: MapRef): Promise<void> {
+  const what = m.kind === 'note' ? 'The note stays on disk.' : 'The folder and its files stay on disk.';
+  if (!confirm(`Remove “${m.name}” from this list?\n${what}`)) {
     return;
   }
-  await forgetRecent(m.id);
+  await (m.kind === 'note' ? noteStore.forget(m.id) : forgetRecent(m.id));
   renderMapList();
 }
 async function deleteMap(m: MapRef): Promise<void> {
@@ -217,20 +259,24 @@ const startScreen = byId('startScreen');
 export function showStart(): void {
   renaming = null;
   byId<HTMLButtonElement>('tabFolder').disabled = !HAS_FSA;
+  byId<HTMLButtonElement>('tabNote').disabled = !HAS_FSA;
   // open on the tab of the map currently on the canvas
-  selectTab(HAS_FSA && currentMap?.kind === 'folder' ? 'folder' : 'device');
+  selectTab(HAS_FSA && currentMap ? currentMap.kind : 'device');
   startScreen.classList.remove('hidden');
 }
 export function hideStart(): void { startScreen.classList.add('hidden'); }
 
 byId('tabDevice').onclick = () => selectTab('device');
 byId('tabFolder').onclick = () => selectTab('folder');
-// the "+" action: a new on-device map, or the FSA folder picker — per the active tab
+byId('tabNote').onclick = () => selectTab('note');
+// the "+" action: a new on-device map, the FSA folder picker or the note picker — per the active tab
 byId('newBtn').onclick = async () => {
   if (activeTab === 'device'){
     const ref = await createDeviceMap(await resolveOnDeviceStore());
     await openDeviceMap(ref);
     hideStart();
+  } else if (activeTab === 'note') {
+    await pickNote();
   } else {
     await pickFolder();
   }
@@ -289,6 +335,8 @@ export async function boot(): Promise<void> {
   const last = getLastMap();
   if (HAS_FSA && last?.kind === 'folder' && await fsaStore.resume(last.id)) {
     await loadFolder(last.id);
+  } else if (HAS_FSA && last?.kind === 'note' && await noteStore.resume(last.id)) {
+    await loadNote(last.id);
   } else {
     await commitDevice();   // the last / most recent on-device map (fresh "My map" on first run)
   }

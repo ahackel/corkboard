@@ -132,7 +132,7 @@ export async function applyUrlFromHash(): Promise<void> {
   }
 
   let pathSegs: string[];
-  if ((mapPart === 'device' || mapPart === 'folder') && mapId) {
+  if ((mapPart === 'device' || mapPart === 'folder' || mapPart === 'note') && mapId) {
     let id: string;
     try { id = decodeURIComponent(mapId); }
     catch { setStatus('That link has an invalid map identifier.'); return; }
@@ -140,7 +140,7 @@ export async function applyUrlFromHash(): Promise<void> {
     const ref = readMaps().find(m => m.kind === kind && m.id === id);
     if (!ref) { setStatus('That map is not available on this device.'); return; }
     if (!(await openMapRef(ref))) {
-      setStatus('That local folder needs to be opened from Home before this link can restore it.');
+      setStatus(`That local ${kind === 'note' ? 'note' : 'folder'} needs to be opened from Home before this link can restore it.`);
       return;
     }
     pathSegs = rest;

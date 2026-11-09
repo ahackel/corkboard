@@ -34,7 +34,7 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   return { el: node.el, id: node.id };
 }
 export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, sx: number, sy: number): void {
-  if (state.readOnly) {
+  if (state.readOnly || state.singleNote) {
     return;
   }
   const path = img.dataset.path;
