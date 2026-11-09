@@ -18,6 +18,7 @@ import { nodeW, nodeH } from '../view/geometry.js';
 import { popScopeFor } from '../nav/sections.js';
 import { setSelectionSet } from './selection.js';
 import { scheduleSave } from '../data/save.js';
+import { firstLineLabel } from '../utils/frontmatter.js';
 
 // Everything persistent about a node EXCEPT its identity/render/dirty fields. `file` is
 // snapshotted (needed to restore a deleted node) but is NOT written back onto a node that
@@ -226,6 +227,87 @@ function frameIfOffscreen(ids: string[]): void {
     frameBox(nodes);
   }
 }
+// ---------- what a step did, in words ----------
+// "Undo: Deleted 3 cards". Read off the step's own images rather than handed in by whoever recorded it, so
+// every path that makes a step — a drag, an edit session, a mutate() — is named without having to say
+// anything, and the words can't drift from what the step actually restores.
+type Change = 'deleted' | 'added' | 'edited' | 'moved' | 'resized' | 'recoloured' | 'tagged' | 'folded' | 'unfolded' | 'changed';
+const VERB: Record<Change, string> = {
+  deleted: 'Deleted', added: 'Added', edited: 'Edited', moved: 'Moved', resized: 'Resized',
+  recoloured: 'Recoloured', tagged: 'Changed the tags of', folded: 'Folded', unfolded: 'Unfolded', changed: 'Changed',
+};
+// In this order a step is named by the FIRST kind of change it holds: deleting a card that a line touched is
+// "Deleted", not "Changed a line"; a paste that also nudged a section is "Added".
+const ORDER: Change[] = ['deleted', 'added', 'edited', 'moved', 'resized', 'recoloured', 'tagged', 'folded', 'unfolded', 'changed'];
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+function changeOf(b: NodeSnap | null, a: NodeSnap | null): Change {
+  if (!a) {
+    return 'deleted';
+  }
+  if (!b) {
+    return 'added';
+  }
+  if (a.title !== b.title || a.body !== b.body) {
+    return 'edited';
+  }
+  if (a.x !== b.x || a.y !== b.y || a.parent !== b.parent || a.stack !== b.stack) {
+    return 'moved';
+  }
+  if (a.w !== b.w || a.h !== b.h || a.clip !== b.clip) {
+    return 'resized';
+  }
+  if (a.color !== b.color) {
+    return 'recoloured';
+  }
+  if (!same(a.tags, b.tags)) {
+    return 'tagged';
+  }
+  if (a.collapsed !== b.collapsed) {
+    return a.collapsed ? 'folded' : 'unfolded';
+  }
+  return 'changed';
+}
+const kindOf = (s: NodeSnap): string => s.type === 'section' ? (s.stack ? 'stack' : 'section') : 'card';
+const LABEL_MAX = 32;
+function snapLabel(s: NodeSnap): string {
+  const l = s.title.trim() || firstLineLabel(s.body);
+  if (!l) {
+    return `a ${kindOf(s)}`;
+  }
+  return `“${l.length > LABEL_MAX ? l.slice(0, LABEL_MAX - 1).trimEnd() + '…' : l}”`;
+}
+function describeStep(step: Step, useAfter: boolean): string {
+  const groups = new Map<Change, NodeSnap[]>();
+  for (const [id, b] of step.before) {
+    const a = step.after.get(id) ?? null, c = changeOf(b, a), shown = (useAfter ? a : b) ?? a ?? b;
+    if (shown) {
+      groups.set(c, [...(groups.get(c) ?? []), shown]);
+    }
+  }
+  const c = ORDER.find(k => groups.has(k));
+  if (c) {
+    // A section deleted, added or moved takes what it holds along, so count only the OUTERMOST of them.
+    const all = groups.get(c)!, files = new Set(all.map(s => s.file));
+    const top = all.filter(s => !s.parent || !files.has(s.parent));
+    const list = top.length ? top : all;
+    if (list.length === 1) {
+      return `${VERB[c]} ${snapLabel(list[0])}`;
+    }
+    const kinds = new Set(list.map(kindOf));
+    const noun = kinds.size === 1 ? kindOf(list[0]) : 'item';
+    return `${VERB[c]} ${list.length} ${noun}s`;
+  }
+  if (step.edges) {
+    const d = step.edges.after.edges.length - step.edges.before.edges.length;
+    return d === 0 ? 'Changed a line' : d > 0 ? 'Drew a line' : 'Deleted a line';
+  }
+  return step.canvas ? 'Changed the canvas colour' : '';
+}
+function stepLabel(head: 'Undo' | 'Redo', step: Step): string {
+  const what = describeStep(step, head === 'Redo');
+  return what ? `${head}: ${what}` : head;
+}
+
 function applyStep(images: Images, canvas: string | undefined,
                    edges: EdgeGraph | undefined, label: string): void {
   applyImages(images);
@@ -275,7 +357,7 @@ export function undo(): void {
   const step = undoStack.pop();
   if (!step) { setStatus('Nothing to undo'); return; }
   redoStack.push(step);
-  applyStep(step.before, step.canvas?.before, step.edges?.before, 'Undo');
+  applyStep(step.before, step.canvas?.before, step.edges?.before, stepLabel('Undo', step));
 }
 export function redo(): void {
   if (state.readOnly) {
@@ -286,6 +368,6 @@ export function redo(): void {
   const step = redoStack.pop();
   if (!step) { setStatus('Nothing to redo'); return; }
   undoStack.push(step);
-  applyStep(step.after, step.canvas?.after, step.edges?.after, 'Redo');
+  applyStep(step.after, step.canvas?.after, step.edges?.after, stepLabel('Redo', step));
 }
 

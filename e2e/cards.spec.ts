@@ -106,3 +106,15 @@ test('a table in a narrow card wraps between words: a short column never breaks 
   expect(await lines('tbody td:first-child')).toBe(1);   // `A10`, not `A` / `10`
   expect(await lines('thead th:last-child')).toBe(1);    // `Cost`, not `Co` / `st`
 });
+
+test('undo and redo say what they took back', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Groceries\nmilk');
+  await select(page, c);
+  await page.keyboard.press('Backspace');
+  await expect(card(page, 'Groceries')).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(page.locator('#status')).toHaveText('Undo: Deleted “Groceries”');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(page.locator('#status')).toHaveText('Redo: Deleted “Groceries”');
+});
