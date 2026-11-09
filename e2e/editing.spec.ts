@@ -173,3 +173,18 @@ test('typing [[ offers the map’s cards, and # its tags; Enter or Tab writes th
   await page.keyboard.press('Escape');
   await expect(card(page, 'See Plan for May').locator('a.wikilink')).toHaveText('Plan for May');
 });
+
+test('rich text pasted from another app keeps its links and lists as markdown', async ({ page }) => {
+  await openBoard(page);
+  const ta = await freshEditor(page);
+  await ta.evaluate((el: HTMLTextAreaElement) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', 'Read the docs\none\ntwo');
+    dt.setData('text/html', '<p>Read <a href="https://x.y/docs">the <b>docs</b></a></p><ul><li>one</li><li>two</li></ul>');
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(ta).toHaveValue('Read [the **docs**](https://x.y/docs)\n\n- one\n- two');
+  await clickAway(page);
+  await expect(page.locator('#world .node .body a.lk')).toHaveAttribute('href', 'https://x.y/docs');
+  await expect(page.locator('#world .node .body li')).toHaveCount(2);
+});

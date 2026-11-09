@@ -17,6 +17,7 @@ import { ui } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { cardMarkdown, setNoteText, headingOf, caretIn, firstTextLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
+import { htmlToMarkdown } from '../utils/html-md.js';
 import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
          sourceOffset, tableEnter, tableTab, headingSection, type TextEdit } from '../utils/md-edit.js';
 import { onBodyPaste } from './attachments.js';
@@ -453,7 +454,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   });
   // a URL over a selection links it; anything else falls through to the image paste / the native insert
   ta.addEventListener('paste',   (e) => {
-    if (!pasteSheet(e, ta) && !pasteUrlLink(e, ta)) {
+    if (!pasteSheet(e, ta) && !pasteUrlLink(e, ta) && !pasteRich(e, ta)) {
       onBodyPaste(e);
     }
   });
@@ -463,6 +464,26 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   relayout();    // …then reflow siblings around it (not just after a newline)
   const [from, to] = clicked != null ? [clicked, clicked] : caretIn(text, caret === 'title' ? 'title' : 'end');
   ta.setSelectionRange(from, to);
+}
+// Rich text copied from a web page, Google Docs, Word… pastes as markdown (utils/html-md.ts), keeping its links,
+// bold, lists and tables; ⌘⇧V (the system's "paste as plain text") pastes the plain text, as it always did.
+// A picture on the clipboard is left to the image paste (features/attachments.ts), which saves the file.
+let plainUntil = 0;
+function pasteRich(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
+  const plain = Date.now() < plainUntil;
+  plainUntil = 0;
+  const dt = e.clipboardData;
+  if (plain || state.readOnly || !dt || [...dt.files].some(f => f.type.startsWith('image/'))) {
+    return false;
+  }
+  const md = htmlToMarkdown(dt.getData('text/html'));
+  if (!md) {
+    return false;
+  }
+  e.preventDefault();
+  const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
+  applyTextEdit(ta, { text: v.slice(0, a) + md + v.slice(b), start: a + md.length, end: a + md.length });
+  return true;
 }
 // Cells copied from a spreadsheet paste as a markdown table (md-edit.ts pasteTable).
 function pasteSheet(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
@@ -545,6 +566,9 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
     return;                            // ↑↓, Enter, Tab and Esc are the list's while it's up
   }
   const ta = ui.bodyEdit.ta, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
+  if (mod && e.shiftKey && k === 'v') {
+    plainUntil = Date.now() + 1000;     // the paste this starts is a plain one (pasteRich)
+  }
   const edit = (r: TextEdit | null): void => { if (r){ e.preventDefault(); applyTextEdit(ta, r); } };
   // Esc is "done", like a click away — never "throw it away": a stray Esc must not cost a long edit, and
   // ⌘Z takes the whole session back. Only a FRESH card nobody typed into is cancelled (endBodyEdit).

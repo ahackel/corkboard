@@ -874,6 +874,10 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   `completingAt`, the write `completeAt`). A light list under the caret, there only while a name is typed — not a
   toolbar. A card goes in by TITLE when that names one card, else by PATH; a link is closed with `]]` and a tag
   followed by a space. ↑↓ choose, Enter/Tab write, Esc puts the list away (not the editor); nothing in code offers.
+- **Rich text pastes as markdown** (`utils/html-md.ts htmlToMarkdown`, after the table and link pastes): a copy from
+  a web page, Google Docs or Word keeps its links, bold/italic/strike, code, headings, nested lists, tasks, quotes and
+  tables — only what the card draws. HTML that plain text would lose nothing of (a code editor's coloured spans)
+  pastes plain, as does ⌘⇧V; a picture on the clipboard is left to the image paste, which saves the file.
 - **Cells pasted from a spreadsheet become a table** (`pasteTable`): two or more tab-separated rows of the
   same 2+ columns (quoted cells read), first row the header, written tidied on lines of their own.
 - **A double-click on the card lands the caret on the word it hit** (`sourceOffset`): the text nodes of the
