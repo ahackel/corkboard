@@ -38,7 +38,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
   grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
-  resize, text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
+  resize, sel-frame (the multi-selection frame), text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
   `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`); its `main`↔feature cycles are runtime-only.
@@ -96,5 +96,5 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (OPFS, IndexedDB
   fallback, FSA, single note) · "A single NOTE opens as a map of ONE card" (`singleNoteRefuses`) · "A note dragged in from the OS is OPENED on the pill" · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
-- Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "The dock" · "A card's text colour is DERIVED from its
+- Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "A multi-selection wears ONE FRAME" · "The dock" · "A card's text colour is DERIVED from its
   fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".

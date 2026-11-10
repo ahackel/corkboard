@@ -460,6 +460,7 @@ svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
      7     the port overlay (#toggles)— the ports a new line starts from, a selected line's end handles,
                                         the drop target's outline: above every card AND line, so a
                                         handle sits ON the line it moves and is always grabbable
+     7     the SELECTION FRAME (#selFrame) — round a multi-selection, its corner handles grabbable over all
      8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
      9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
                                         and, above them in it, every line with an end in hand (#freeEdgesHeld)
@@ -909,6 +910,22 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
+/* The SELECTION FRAME round a multi-selection (features/sel-frame.ts), FigJam's: one blue box round
+   all of it with the lone selection's corner squares. Its interior takes no pointer — a press there
+   lands on the card under it — only its four corner squares do, laid out like a card's (.fh above). */
+#selFrame { position:absolute; z-index:7; pointer-events:none; box-sizing:border-box;
+  outline:2px solid var(--node-sel); }
+#selFrame > .sf-h { position:absolute; pointer-events:auto; touch-action:none; }
+#selFrame > .sf-ne { top:-8px;    right:-8px;  width:16px; height:16px; cursor:nesw-resize; }
+#selFrame > .sf-nw { top:-8px;    left:-8px;   width:16px; height:16px; cursor:nwse-resize; }
+#selFrame > .sf-se { bottom:-8px; right:-8px;  width:16px; height:16px; cursor:nwse-resize; }
+#selFrame > .sf-sw { bottom:-8px; left:-8px;   width:16px; height:16px; cursor:nesw-resize; }
+#selFrame > .sf-ne::after, #selFrame > .sf-nw::after, #selFrame > .sf-se::after, #selFrame > .sf-sw::after {
+  content:''; position:absolute; inset:2px; box-sizing:border-box;
+  background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
+/* nothing to scale in read-only, with a locked card in it, or while a fold glides */
+body.readonly #selFrame > .sf-h, #selFrame.locked > .sf-h { display:none; }
+body.layout-anim #selFrame { display:none; }
 /* Board nodes NEVER cast a shadow — at rest, selected or in hand. Selection is the ring alone. */
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
 /* While a section's label is being renamed, drop the section's ring so only the label's own outline shows.

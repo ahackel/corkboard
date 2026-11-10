@@ -6,6 +6,7 @@ import { clearEdgeSelection } from './edge-tools.js';
 import { paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { syncFloatBar } from './float-bar.js';
+import { syncSelFrame } from './sel-frame.js';
 import { syncUrl, updateDocumentTitle } from '../nav/url-state.js';
 import { outOfScope } from '../nav/scope.js';
 
@@ -43,7 +44,7 @@ export function applySelection(): void {
       paintNode(n);
     }
   }
-  paintFreeEdges(); syncFloatBar(); syncUrl(); updateDocumentTitle();
+  paintFreeEdges(); syncSelFrame(); syncFloatBar(); syncUrl(); updateDocumentTitle();
 }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
 // (see utils/model.ts hasLockedAncestor). Nor can anything outside the section you're standing in:

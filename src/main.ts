@@ -53,6 +53,7 @@ import { byId, keys } from './utils/dom.js';
 import { applyColorVars, colorClass } from './view/color.js';
 import { canFold, isSectionFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
 import { ensureResizeHandles, SECTION_DIRS, clearResizeHandles } from './features/resize.js';
+import { syncSelFrame } from './features/sel-frame.js';
 import { toggleCollapse } from './features/fold.js';
 import { openSection, syncScopeChrome } from './nav/sections.js';
 import { focusByTitle } from './nav/focus.js';
@@ -801,6 +802,7 @@ export function paintAll(): void {
   refreshTray();      // the tag tray's stickers, when it's out
   syncFan();          // the scrim under a fanned-out stack (features/stacks.ts)
   paintFreeEdges();
+  syncSelFrame();     // the frame round a multi-selection (features/sel-frame.ts)
   syncScopeChrome();   // crumbs + reading class + the recovery when the section you were inside has gone
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
@@ -1021,6 +1023,7 @@ export function animateReflow(before: Map<string, Pt>): void {
     }
     document.body.classList.remove('layout-anim');
     paintFreeEdges();
+    syncSelFrame();
   }, DUR + 60);
 }
 

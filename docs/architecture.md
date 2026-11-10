@@ -1064,6 +1064,21 @@ entry. There are no "inherit" or "none" chips: a card nobody coloured keeps foll
 picker rings the colour it SHOWS (`effectiveColor`) — the selected chip wears the selection blue, like every other selection. A line's
 default ink IS `stone`, so the line picker needs no "default" chip either.
 
+**A multi-selection wears ONE FRAME.** Two or more selected cards on the canvas get a single blue box round
+all of them (`#selFrame`, features/sel-frame.ts), on top of each card's own ring, with the lone selection's
+white corner squares — CORNERS ONLY: the frame's edges run along its members' own edges, where a card's tags,
+its resize band and a section's tab already take presses, and a grip there stole them. The interior takes no
+pointer (a press lands on the card beneath, which drags the whole selection, drag.ts). A corner SCALES the
+lot about the opposite corner, as one undo step: an open section, a card or a picture maps its rect through
+the frame (its contents with it, unselected or not; a picture keeps its aspect at the smaller scale), while
+anything sized by what it shows — a folded chip or pill, a pile, a folded picture — keeps its size and is
+carried, subtree and all, by its corner. The frame stops shrinking where its tightest member hits its
+minimum, so proportions hold; ⇧ scales both axes alike; the dragged corner lands on the grid. Cards then let
+go of what they no longer author (`settleCardSize`, shared with a single resize) and sections re-collect
+(`settleSections`). `syncSelFrame` redraws it from the selection funnel, every `paintAll`, each drag frame
+and resize step; it stands down while a fold glides (`body.layout-anim`) and loses its handles read-only or
+with a locked member.
+
 **Selection, ports and lines are FigJam's.** A lone selection shows a white rounded square on each corner
 (drawn on the corner resize zones, `.node.solo > .fh-*::after`), and four PORTS float `SOCKET_OUT` outside
 its sides — a blue dot in a white rim that becomes a ⊕ under the pointer (free-edges.ts). DRAG from a port

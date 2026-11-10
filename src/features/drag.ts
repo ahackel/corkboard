@@ -31,6 +31,7 @@ import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
 import type { FanInsert } from '../view/pile.js';
 import { beginPileGesture, pileTarget, pileInto, fanSlot, showFanInsert, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
+import { syncSelFrame } from './sel-frame.js';
 
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
@@ -132,6 +133,7 @@ function flushDragPaint(): void {
     updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
   }
   paintFreeEdges();   // n.x/y is current, so edges track the dragged nodes correctly
+  syncSelFrame();     // …and so does the frame round a multi-selection
   if (drag.moved && !ui.autoPanRAF) {
     ui.autoPanRAF = requestAnimationFrame(autoPanStep);
   }

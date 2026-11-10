@@ -10,6 +10,7 @@ import { paintNode, relayout } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { settleSections } from './drag.js';
 import { syncFloatBar } from './float-bar.js';
+import { syncSelFrame } from './sel-frame.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -20,13 +21,13 @@ export const MIN_SECTION_W = NODE_W, MIN_SECTION_H = 120;
 // A width-only kind can only ever get WIDER than the width it has by default — the whole point is
 // trading height for width on a card whose text wraps badly, so its natural size is the floor. That
 // floor is NODE_W for a plain card and a section alike, so they share the one fall-through.
-function minWOf(n: MindNode): number {
+export function minWOf(n: MindNode): number {
   return imageLook(n) ? IMAGE_FOLD : NODE_W;
 }
 // The shortest a CLIPPED card goes: about one line of text under its padding.
-const CLIP_MIN_H = 44;
+export const CLIP_MIN_H = 44;
 
-function minHOf(n: MindNode): number {
+export function minHOf(n: MindNode): number {
   return imageLook(n) ? IMAGE_FOLD : MIN_SECTION_H;
 }
 // 8 resize handles: 4 edges (one axis) + 4 corners (two axes). A `w`/`n` component moves that edge,
@@ -68,7 +69,7 @@ export function clearResizeHandles(el: HTMLElement): void {
 // An image card's aspect ratio (width/height): the actual loaded image if hydrateImages has
 // resolved it, else whatever the box currently shows (so an in-progress resize is stable even
 // before the blob URL loads).
-function imageAspect(n: MindNode): number {
+export function imageAspect(n: MindNode): number {
   const img = n.el?.querySelector('img.md-img') as HTMLImageElement | null;
   if (img && img.naturalWidth && img.naturalHeight) {
     return img.naturalWidth / img.naturalHeight;
@@ -76,6 +77,39 @@ function imageAspect(n: MindNode): number {
   const w = n.w ?? IMAGE_W, h = n.h ?? IMAGE_H;
   return w / (h || 1);
 }
+// A card's text height at its current width: where its min-height stops and its clip starts.
+// (A clipped card's body cap is lifted too, or it would measure as its own clip.)
+export function naturalH(n: MindNode): number {
+  const el = n.el!, body = el.querySelector(':scope > .body') as HTMLElement;
+  const was = el.style.minHeight, wasMax = body.style.maxHeight;
+  el.style.minHeight = ''; body.style.maxHeight = ''; const h = el.offsetHeight;
+  el.style.minHeight = was; body.style.maxHeight = wasMax;
+  return h;
+}
+
+// A PLAIN card's size after a resize lets go of whatever it no longer needs to author. Back at (or
+// under) the natural width → no mm_w, rather than a redundant one on every card the user so much as
+// nudges; no taller than its text → no authored height. Shorter than its text (at the width it ended
+// at) → it clips; else its height is a minimum again.
+export function settleCardSize(n: MindNode): void {
+  if (n.w != null && Math.round(n.w) <= minWOf(n)) {
+    n.w = undefined;
+  }
+  if (n.h == null) {
+    return;
+  }
+  paintNode(n);
+  const nat = naturalH(n);
+  if (Math.round(n.h) < nat - 1) {
+    n.clip = true;
+  } else {
+    n.clip = undefined;
+    if (Math.round(n.h) <= nat + 1) {
+      n.h = undefined;
+    }
+  }
+}
+
 function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   if (state.readOnly || isLockedEffective(n)) {
     return;
@@ -87,17 +121,8 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   const img = imageLook(n);
   const sizeH = isBoxNode(n) || img;
   const minW = minWOf(n);
-  // A card's text height at the width it starts from is where its min-height stops and its clip starts.
-  // (A clipped card's body cap is lifted too, or it would measure as its own clip.)
-  const natural = (): number => {
-    const el = n.el!, body = el.querySelector(':scope > .body') as HTMLElement;
-    const was = el.style.minHeight, wasMax = body.style.maxHeight;
-    el.style.minHeight = ''; body.style.maxHeight = ''; const h = el.offsetHeight;
-    el.style.minHeight = was; body.style.maxHeight = wasMax;
-    return h;
-  };
-  // …but it CAN be dragged shorter than that, down to a line: then it CLIPS (n.clip) instead of growing.
-  const natural0 = sizeH ? 0 : natural();
+  // A card CAN be dragged shorter than its text (naturalH), down to a line: then it CLIPS (n.clip) instead of growing.
+  const natural0 = sizeH ? 0 : naturalH(n);
   const minH = sizeH ? minHOf(n) : Math.min(natural0, CLIP_MIN_H);
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to SECTION_H for anything that
@@ -192,6 +217,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
     resize(snap);
     paintNode(n);
     paintFreeEdges();
+    syncSelFrame();
     // A width-only kind re-wraps its text at the new width, which changes its measured HEIGHT — let
     // everything that reads it (edges, the selection bar) settle as the drag goes, once per section.
     if (!sizeH && !subtreeRAF) {
@@ -227,24 +253,8 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
     if (subtreeRAF) { cancelAnimationFrame(subtreeRAF); subtreeRAF = null; }
     resize(snap);   // the final delta; the size was already on the grid throughout
     hideGuides();
-    // Back at (or under) the natural width → drop the authored width entirely rather than persisting
-    // a redundant mm_w on every card the user so much as nudges.
-    if (!sizeH && n.w != null && Math.round(n.w) <= minW) {
-      n.w = undefined;
-    }
-    // …and the same for a card's height: no taller than its text → it has no authored height.
-    // Shorter than its text (at the width it ended at) → it clips; else it's a minimum again.
-    if (!sizeH && n.h != null) {
-      paintNode(n);
-      const nat = natural();
-      if (Math.round(n.h) < nat - 1) {
-        n.clip = true;
-      } else {
-        n.clip = undefined;
-        if (Math.round(n.h) <= nat + 1) {
-          n.h = undefined;
-        }
-      }
+    if (!sizeH) {
+      settleCardSize(n);
     }
     // paint BEFORE anything reads it: a width-only node's height only matches the snapped width once
     // the DOM has it.
