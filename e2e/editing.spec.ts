@@ -119,8 +119,12 @@ test('a click on the selected card opens its editor with the caret where it land
   const caret = await ta.evaluate((el: HTMLTextAreaElement) => [el.selectionStart === el.selectionEnd, el.value.slice(el.selectionStart)]);
   expect(caret[0]).toBe(true);
   expect(caret[1]).toMatch(/^ta\*\* gamma$|^a\*\* gamma$/);     // mid-"beta", wherever the half falls
-  await clickAway(page);
+  await clickAway(page);                                                   // …which lets go of the card too
+  await expect(c).not.toHaveClass(/\bsel\b/);
   const h1 = (await c.locator('.body h1').boundingBox())!;
+  await page.mouse.click(h1.x + 3, h1.y + h1.height / 2);
+  await expect(editor(c)).toHaveCount(0);
+  await page.waitForTimeout(600);
   await page.mouse.click(h1.x + 3, h1.y + h1.height / 2);                // the title is the note's first line
   await expect(ta).toBeFocused();
   expect(await ta.evaluate((el: HTMLTextAreaElement) => el.selectionStart)).toBeLessThanOrEqual(3);
@@ -143,6 +147,7 @@ test('a double-click opens the editor with all of the note selected, selected be
 test('double-clicking a word in an open editor still selects just that word', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 400, 300, 'alpha beta gamma');
+  await select(page, c);
   await page.keyboard.press('e');
   const ta = editor(c);
   await expect(ta).toBeFocused();

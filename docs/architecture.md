@@ -836,8 +836,11 @@ why it was cut. A double-click is then select-all wherever it starts, by two rou
   or from the selection frame — those keep "a click selects", and their double-click falls through to `activateNode`.
 - **Touch** is the same with taps (`features/drag.ts`): a tap opens it, and that tap's `touchend` is cancelled,
   since the browser's emulated mousedown that follows lands on the card and would blur the new textarea shut. The
-  double-tap counter makes the select-all one. Clicking off an editor still keeps the card selected, so the next
-  click on it writes again — e2e's `select` helper skips its click when the card already is the selection.
+  double-tap counter makes the select-all one.
+- **Clicking empty canvas while editing DESELECTS too** (`features/gestures.ts`), as FigJam's does: a card left
+  selected would make the next click on it reopen the editor, where a click after leaving should just select.
+  Esc and ⌘Enter leave the editor but keep the card selected. e2e's `select` helper skips its click when the
+  card already is the selection.
 
 **Pasting a URL over selected text LINKS it** (`linkPaste` in `utils/markdown.ts`, bound by
 `pasteUrlLink` in the card's note editor). It is

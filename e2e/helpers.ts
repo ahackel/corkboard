@@ -62,6 +62,7 @@ export async function tooltip(page: Page, l: Locator): Promise<string | null> {
   return l.getAttribute('title');
 }
 
+// A click on empty canvas: it closes an open editor and lets go of the selection.
 export async function clickAway(page: Page): Promise<void> {
   await page.mouse.click(AWAY.x, AWAY.y);
   await expect(page.locator('textarea.body-edit')).toHaveCount(0);

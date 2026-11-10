@@ -35,8 +35,14 @@ stage.addEventListener('pointerdown', (e) => {
     return;         // right-click = context menu only: no marquee, keep editors/selection
   }
   cancelViewAnim();
-  // Tapping the canvas background closes any open in-place text editor (important on touch)
-  if (inPlaceEditActive()) { endInPlaceEdit(); return; }
+  // Tapping the canvas background closes any open in-place text editor (important on touch) and lets go
+  // of the card, as FigJam does: left selected, the next click on it would open the editor again
+  // (main.ts editOnClick). The press goes no further — it was spent leaving the editor, not starting a marquee.
+  if (inPlaceEditActive()) {
+    endInPlaceEdit();
+    selectNode(null);
+    return;
+  }
 
   if (e.pointerType !== 'mouse'){                   // touch / pen
     gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
