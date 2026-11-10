@@ -10,7 +10,7 @@ import { paintNode, relayout } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { settleSections } from './drag.js';
 import { syncFloatBar } from './float-bar.js';
-import { syncSelFrame } from './sel-frame.js';
+import { syncSelFrame, memberEdgeResize } from './sel-frame.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
 
@@ -112,6 +112,11 @@ export function settleCardSize(n: MindNode): void {
 
 function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   if (state.readOnly || isLockedEffective(n)) {
+    return;
+  }
+
+  // In a multi-selection, an edge that is also the selection frame's edge scales the whole group.
+  if (memberEdgeResize(e, n, dir)) {
     return;
   }
   e.stopPropagation(); e.preventDefault();

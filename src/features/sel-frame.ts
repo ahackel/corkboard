@@ -1,9 +1,12 @@
-// ---------- the SELECTION FRAME: one box round a multi-selection, and scaling the lot by its corners ----------
+// ---------- the SELECTION FRAME: one box round a multi-selection, moving it and scaling it as one ----------
 // FigJam's: select two or more and a single frame is drawn round all of them, with the same square
-// corner handles a lone selection wears. Its interior is not a target (a press there still lands on
-// the card under it, which drags the whole selection — drag.ts); only its handles take the pointer.
-import { type MindNode, state, world } from '../core/state.js';
-import { isStack } from '../core/state.js';
+// corner handles a lone selection wears. It works like ONE card's box: its empty interior drags the
+// whole selection, and its corners and edges scale it. Those grips sit in two layers (styles.css): the
+// outline and the corner squares above everything, the interior and the edge bands BELOW every card, so
+// a card, its tags and a section's tab keep their own presses. Where a member's edge IS the frame's edge,
+// that member's own resize band scales the group instead of the one card (memberEdgeResize).
+import { type MindNode, state, world, isStack } from '../core/state.js';
+import { ui } from '../core/ui-state.js';
 import { isHidden, isLockedEffective, outermost, childrenOf } from '../utils/model.js';
 import { isBoxNode, imageLook, isImageFold, isSectionFold, nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { isSection } from '../view/layout.js';
@@ -11,16 +14,13 @@ import { snapTo } from '../utils/num.js';
 import { touch, commitStep } from './history.js';
 import { paintNode, relayout } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { settleSections } from './drag.js';
+import { settleSections, startSelectionDrag } from './drag.js';
 import { syncFloatBar } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
-import { minWOf, minHOf, CLIP_MIN_H, imageAspect, naturalH, settleCardSize } from './resize.js';
+import { SECTION_DIRS, minWOf, minHOf, CLIP_MIN_H, imageAspect, naturalH, settleCardSize } from './resize.js';
 
-// Corners only: the frame's edges run along its members' own edges, where a card's tags, its resize
-// band and a section's tab already live — a grip there would steal their presses.
-const DIRS = ['ne', 'nw', 'se', 'sw'] as const;
-type Dir = typeof DIRS[number];
+type Dir = typeof SECTION_DIRS[number];
 interface Rect { x: number; y: number; w: number; h: number }
 
 let frame: HTMLElement | null = null;
@@ -31,10 +31,22 @@ function frameEl(): HTMLElement {
   }
   frame = document.createElement('div');
   frame.id = 'selFrame';
-  for (const dir of DIRS) {
+  const fill = document.createElement('div');
+  fill.className = 'sf-fill';
+
+  // A plain press only: Space/middle-button still pans and ⌘/Ctrl still starts an adding marquee (gestures.ts).
+  fill.addEventListener('pointerdown', (e) => {
+    if (e.button === 0 && !ui.spaceHeld && !e.metaKey && !e.ctrlKey && !state.readOnly) {
+      startSelectionDrag(e);
+    }
+  });
+  const box = document.createElement('div');
+  box.className = 'sf-box';
+  frame.append(fill, box);
+  for (const dir of SECTION_DIRS) {
     const h = document.createElement('div');
     h.className = 'sf-h sf-' + dir;
-    h.addEventListener('pointerdown', (e) => startGroupResize(e, dir));
+    h.addEventListener('pointerdown', (e) => { startGroupResize(e, dir); });
     frame.appendChild(h);
   }
   world.appendChild(frame);
@@ -111,14 +123,36 @@ function planFor(n: MindNode, out: Plan[], anchor: MindNode | null): void {
   }
 }
 
-// Drag a frame corner: every selected node (and everything inside a selected section) scales with the
-// frame, the opposite corner held still. The frame stops shrinking where its tightest member reaches its
-// minimum, so the arrangement keeps its proportions instead of piling up at the floor. Shift scales
-// both axes alike. The dragged corner lands on the grid, as a resized box's does.
-function startGroupResize(e: PointerEvent, dir: Dir): void {
+// A press on a selected member's own resize band, in a multi-selection: when that edge lies ON the frame
+// (the card is the outermost on that side) it is the frame's edge too, so it scales the whole group —
+// the part of the frame's edge the card covers would otherwise be the one stretch you couldn't grab.
+// An inner edge still resizes just its card. Returns whether the group took the press.
+export function memberEdgeResize(e: PointerEvent, n: MindNode, dir: Dir): boolean {
+  if (state.sel.size < 2 || !state.sel.has(n.id)) {
+    return false;
+  }
+  const ns = members();
+  if (ns.length < 2) {
+    return false;
+  }
+  const f = boundsOf(ns), on = (a: number, b: number): boolean => Math.abs(a - b) < 1;
+  const y = dir.includes('n') && on(n.y, f.y) ? 'n' : dir.includes('s') && on(n.y + nodeH(n), f.y + f.h) ? 's' : '';
+  const x = dir.includes('w') && on(n.x, f.x) ? 'w' : dir.includes('e') && on(n.x + nodeW(n), f.x + f.w) ? 'e' : '';
+  const groupDir = (y + x) as Dir | '';
+  if (!groupDir) {
+    return false;
+  }
+  return startGroupResize(e, groupDir);
+}
+
+// Drag a frame corner or edge: every selected node (and everything inside a selected section) scales
+// with the frame, the opposite side held still. The frame stops shrinking where its tightest member
+// reaches its minimum, so the arrangement keeps its proportions instead of piling up at the floor.
+// Shift on a corner scales both axes alike. The dragged side lands on the grid, as a resized box's does.
+function startGroupResize(e: PointerEvent, dir: Dir): boolean {
   const ns = members();
   if (state.readOnly || ns.length < 2 || ns.some(isLockedEffective)) {
-    return;
+    return false;
   }
   e.stopPropagation(); e.preventDefault();
   const plans: Plan[] = [];
@@ -127,7 +161,8 @@ function startGroupResize(e: PointerEvent, dir: Dir): void {
   }
   touch(...plans.map(p => p.n.id));
   const f0 = boundsOf(ns);
-  const west = dir.includes('w'), north = dir.includes('n');
+  const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
+  const hasX = east || west, hasY = north || south;
   let minSx = 0, minSy = 0;
   for (const p of plans) {
     if (p.mode !== 'move') {
@@ -143,10 +178,15 @@ function startGroupResize(e: PointerEvent, dir: Dir): void {
   const apply = (ev: PointerEvent): void => {
     const dx = (ev.clientX - sx0) / state.view.k, dy = (ev.clientY - sy0) / state.view.k;
     const l0 = f0.x, t0 = f0.y, r0 = f0.x + f0.w, b0 = f0.y + f0.h;
-    let sx = west ? (r0 - snapTo(l0 + dx, g)) / f0.w : (snapTo(r0 + dx, g) - l0) / f0.w;
-    let sy = north ? (b0 - snapTo(t0 + dy, g)) / f0.h : (snapTo(b0 + dy, g) - t0) / f0.h;
-    sx = Math.max(sx, minSx); sy = Math.max(sy, minSy);
-    if (ev.shiftKey) {
+    let sx = west ? (r0 - snapTo(l0 + dx, g)) / f0.w : east ? (snapTo(r0 + dx, g) - l0) / f0.w : 1;
+    let sy = north ? (b0 - snapTo(t0 + dy, g)) / f0.h : south ? (snapTo(b0 + dy, g) - t0) / f0.h : 1;
+    if (hasX) {
+      sx = Math.max(sx, minSx);
+    }
+    if (hasY) {
+      sy = Math.max(sy, minSy);
+    }
+    if (hasX && hasY && ev.shiftKey) {
       sx = sy = Math.max(sx, sy);
     }
 
@@ -158,17 +198,22 @@ function startGroupResize(e: PointerEvent, dir: Dir): void {
       if (p.mode === 'move') {
         n.x = p.x + mapX(p.ax) - p.ax; n.y = p.y + mapY(p.ay) - p.ay;
       } else if (p.mode === 'image') {
-        // A picture keeps its own aspect: it scales by the smaller of the two, centred on where its
-        // centre maps to.
-        const w = Math.max(minWOf(n), p.w * Math.min(sx, sy)), h = Math.max(p.minH, w / p.aspect);
+        // A picture keeps its own aspect: it scales by the axis being dragged (the smaller of the two,
+        // on a corner), centred on where its centre maps to.
+        const s = hasX && hasY ? Math.min(sx, sy) : hasX ? sx : sy;
+        const w = Math.max(minWOf(n), p.w * s), h = Math.max(p.minH, w / p.aspect);
         n.x = mapX(p.x + p.w / 2) - w / 2; n.y = mapY(p.y + p.h / 2) - h / 2;
         n.w = w; n.h = h;
       } else {
         n.x = mapX(p.x); n.y = mapY(p.y);
-        n.w = Math.max(minWOf(n), p.w * sx);
-        n.h = Math.max(p.minH, p.h * sy);
-        if (p.mode === 'card') {
-          n.clip = n.h < p.natural - 1 || undefined;
+        if (hasX) {
+          n.w = Math.max(minWOf(n), p.w * sx);
+        }
+        if (hasY) {
+          n.h = Math.max(p.minH, p.h * sy);
+          if (p.mode === 'card') {
+            n.clip = n.h < p.natural - 1 || undefined;
+          }
         }
         scaled.add(n);
       }
@@ -214,4 +259,5 @@ function startGroupResize(e: PointerEvent, dir: Dir): void {
     syncFloatBar();
   };
   const stop = trackPointer({ move, up });
+  return true;
 }

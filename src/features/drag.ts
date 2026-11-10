@@ -327,60 +327,77 @@ export function bindNodeDrag(n: MindNode): void {
     }
     e.stopPropagation();
     try { el.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
-    // Dragging a card that's part of a multi-selection moves the WHOLE selection at once;
-    // otherwise just this card's subtree. `active` is the node dragged/dropped; `targets`
-    // are the nodes that follow the cursor (or, after a Shift-clone, just the clone).
-    const multi = state.sel.has(n.id) && state.sel.size > 1;
-    // A locked member of a multi-selection stays put — only its unlocked companions get dragged
-    // (pressing directly ON a locked card is handled separately in dragPointerMove, which pins the
-    // whole gesture since `n` itself owns it).
-    const rootIds = (multi ? [...state.sel] : [n.id])
-      .filter(id => id === n.id || !isLockedEffective(state.nodes.get(id)!));
-    const selRoots = trueRoots(rootIds);
-    const ids = [...new Set(rootIds.flatMap(id => subtreeIds(id)))];
-    const start = new Map(ids.map(id => {
-      const m = state.nodes.get(id)!; return [id, { x:m.x, y:m.y }] as [string, Pt];
-    }));
-    // targets gets its OWN {x,y} objects (not new Map(start), which shares the value refs) so the
-    // edge auto-pan can shift the dragged anchors without also moving the pinned `start` positions.
-    const targets = new Map([...start].map(([id, s]) => [id, { x:s.x, y:s.y }] as [string, Pt]));
-    // Positions mutate live during the drag, so the undo pre-images must be captured NOW;
-    // dragPointerUp commits the step (a no-move click nets out and is discarded).
-    touch(...ids);
-    // origins = the left/top CSS values frozen at drag start; transforms are relative to these
-    const origins = new Map(ids.map(id => { const m2 = state.nodes.get(id)!; return [id, { x:m2.x, y:m2.y }] as [string, Pt]; }));
-    ui.drag = { n, active:n, multi, sx:e.clientX, sy:e.clientY, cx:e.clientX, cy:e.clientY, start, targets, origins, selRoots,
-             moved:false, dropTarget:n.parent, alt:e.altKey, shift:e.shiftKey, cloned:false,
-             meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
-             touch: e.pointerType === 'touch',  // higher move threshold for finger taps
-             cardMerge: null };
-    for (const id of ids) { const m2 = state.nodes.get(id); if (m2?.el){ m2.el.style.willChange = 'transform'; m2.el.classList.add('dragging'); } }
-    // Continue/commit this drag on `window`, not `el` — pointer capture (above) is still requested
-    // best-effort so the dragged card's own hover/other handlers stay quiet, but capture can be
-    // lost across a mid-drag re-render (paintAll runs while dragging). A lost capture hands pointerup to whatever's actually under the cursor instead —
-    // e.g. the section it's dropped in — whose own pointerdown-scoped listener has nothing to do with
-    // THIS gesture, so the event used to vanish, leaving the (Shift-cloned or moved) card invisible. `pointercancel` (tab switch, interrupted
-    // touch) commits in place too, for the same reliability reason. Listeners are added/removed per
-    // gesture (not left permanently on window) so they can't double-fire alongside the ghost-card
-    // flow's own window listeners in main.ts, which drives its drag through the same dragPointerMove
-    // /dragPointerUp via feedDragMove/commitDrag.
-    const stop = trackPointer({ move: onMove, up: onUp, cancel: onUp });
-    // Guard on `ui.drag.n === n` (not just truthiness): there's a single shared `ui.drag` slot, so
-    // if a second card's pointerdown ever hijacks it before this gesture's up/cancel arrives (e.g.
-    // true two-finger touch on two different cards at once), this stale pair must still remove
-    // itself without touching the OTHER drag that's now live.
-    function onMove(ev: PointerEvent): void {
-      if (ui.drag && ui.drag.n === n) {
-        dragPointerMove(ev);
-      }
-    }
-    function onUp(): void {
-      stop();
-      if (ui.drag && ui.drag.n === n) {
-        dragPointerUp();
-      }
-    }
+    beginDrag(n, e);
   });
+}
+
+// Press-and-hold the whole multi-selection from the frame's empty interior (features/sel-frame.ts): the
+// same gesture as pressing one of its cards, anchored on the primary (else any) unlocked member — that
+// card is what the grid snaps and the drop rule follows, exactly as if it had been pressed.
+export function startSelectionDrag(e: PointerEvent): void {
+  const ids = [state.selId, ...state.sel].filter((id): id is string => !!id && state.sel.has(id));
+  const n = ids.map(id => state.nodes.get(id)).find(m => m && !isLockedEffective(m));
+  if (!n || state.sel.size < 2) {
+    return;
+  }
+  e.stopPropagation();
+  beginDrag(n, e, true);
+}
+
+// Open a drag gesture on `n` from a press. Dragging a card that's part of a multi-selection moves the
+// WHOLE selection at once; otherwise just this card's subtree. `active` is the node dragged/dropped;
+// `targets` are the nodes that follow the cursor (or, after a Shift-clone, just the clone).
+function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
+  const multi = state.sel.has(n.id) && state.sel.size > 1;
+  // A locked member of a multi-selection stays put — only its unlocked companions get dragged
+  // (pressing directly ON a locked card is handled separately in dragPointerMove, which pins the
+  // whole gesture since `n` itself owns it).
+  const rootIds = (multi ? [...state.sel] : [n.id])
+    .filter(id => id === n.id || !isLockedEffective(state.nodes.get(id)!));
+  const selRoots = trueRoots(rootIds);
+  const ids = [...new Set(rootIds.flatMap(id => subtreeIds(id)))];
+  const start = new Map(ids.map(id => {
+    const m = state.nodes.get(id)!; return [id, { x:m.x, y:m.y }] as [string, Pt];
+  }));
+  // targets gets its OWN {x,y} objects (not new Map(start), which shares the value refs) so the
+  // edge auto-pan can shift the dragged anchors without also moving the pinned `start` positions.
+  const targets = new Map([...start].map(([id, s]) => [id, { x:s.x, y:s.y }] as [string, Pt]));
+  // Positions mutate live during the drag, so the undo pre-images must be captured NOW;
+  // dragPointerUp commits the step (a no-move click nets out and is discarded).
+  touch(...ids);
+  // origins = the left/top CSS values frozen at drag start; transforms are relative to these
+  const origins = new Map(ids.map(id => { const m2 = state.nodes.get(id)!; return [id, { x:m2.x, y:m2.y }] as [string, Pt]; }));
+  ui.drag = { n, active:n, multi, sx:e.clientX, sy:e.clientY, cx:e.clientX, cy:e.clientY, start, targets, origins, selRoots,
+           moved:false, dropTarget:n.parent, alt:e.altKey, shift:e.shiftKey, cloned:false,
+           meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
+           touch: e.pointerType === 'touch',  // higher move threshold for finger taps
+           cardMerge: null, fromFrame };
+  for (const id of ids) { const m2 = state.nodes.get(id); if (m2?.el){ m2.el.style.willChange = 'transform'; m2.el.classList.add('dragging'); } }
+  // Continue/commit this drag on `window`, not `el` — pointer capture (above) is still requested
+  // best-effort so the dragged card's own hover/other handlers stay quiet, but capture can be
+  // lost across a mid-drag re-render (paintAll runs while dragging). A lost capture hands pointerup to whatever's actually under the cursor instead —
+  // e.g. the section it's dropped in — whose own pointerdown-scoped listener has nothing to do with
+  // THIS gesture, so the event used to vanish, leaving the (Shift-cloned or moved) card invisible. `pointercancel` (tab switch, interrupted
+  // touch) commits in place too, for the same reliability reason. Listeners are added/removed per
+  // gesture (not left permanently on window) so they can't double-fire alongside the ghost-card
+  // flow's own window listeners in main.ts, which drives its drag through the same dragPointerMove
+  // /dragPointerUp via feedDragMove/commitDrag.
+  const stop = trackPointer({ move: onMove, up: onUp, cancel: onUp });
+  // Guard on `ui.drag.n === n` (not just truthiness): there's a single shared `ui.drag` slot, so
+  // if a second card's pointerdown ever hijacks it before this gesture's up/cancel arrives (e.g.
+  // true two-finger touch on two different cards at once), this stale pair must still remove
+  // itself without touching the OTHER drag that's now live.
+  function onMove(ev: PointerEvent): void {
+    if (ui.drag && ui.drag.n === n) {
+      dragPointerMove(ev);
+    }
+  }
+  function onUp(): void {
+    stop();
+    if (ui.drag && ui.drag.n === n) {
+      dragPointerUp();
+    }
+  }
 }
 // Body of a drag pointermove, operating on the live ui.drag (the node that owns the gesture is
 // whatever drag.n is). Shared by the per-card handler and the ghost-card "drag a new note" flow.
@@ -462,9 +479,10 @@ function dragPointerUp(): void {
         // (opacity .75) for any node still in ui.drag.targets — leaving the selected card
         // semi-transparent. Nulling here means the repaint sees no active drag.
         ui.drag = null;
+        // (A click inside the frame, between cards, leaves the selection standing.)
         if (drag.meta) {
           toggleSel(n.id);                 // ⌘/Ctrl-click: add/remove from selection
-        } else if (state.selId !== n.id || state.sel.size !== 1) {
+        } else if (!drag.fromFrame && (state.selId !== n.id || state.sel.size !== 1)) {
           selectNode(n.id);   // reduce a multi-selection to this card
         }
         // A click only ever SELECTS. Editing in place is the double-click's job (main.ts

@@ -1066,18 +1066,22 @@ default ink IS `stone`, so the line picker needs no "default" chip either.
 
 **A multi-selection wears ONE FRAME.** Two or more selected cards on the canvas get a single blue box round
 all of them (`#selFrame`, features/sel-frame.ts), on top of each card's own ring, with the lone selection's
-white corner squares — CORNERS ONLY: the frame's edges run along its members' own edges, where a card's tags,
-its resize band and a section's tab already take presses, and a grip there stole them. The interior takes no
-pointer (a press lands on the card beneath, which drags the whole selection, drag.ts). A corner SCALES the
-lot about the opposite corner, as one undo step: an open section, a card or a picture maps its rect through
-the frame (its contents with it, unselected or not; a picture keeps its aspect at the smaller scale), while
-anything sized by what it shows — a folded chip or pill, a pile, a folded picture — keeps its size and is
-carried, subtree and all, by its corner. The frame stops shrinking where its tightest member hits its
-minimum, so proportions hold; ⇧ scales both axes alike; the dragged corner lands on the grid. Cards then let
-go of what they no longer author (`settleCardSize`, shared with a single resize) and sections re-collect
-(`settleSections`). `syncSelFrame` redraws it from the selection funnel, every `paintAll`, each drag frame
-and resize step; it stands down while a fold glides (`body.layout-anim`) and loses its handles read-only or
-with a locked member.
+white corner squares, and it works like one card's box. Its parts sit on two rungs of the layer ladder
+(`#selFrame` is not a stacking context): the outline and corners at 7, above everything; the INTERIOR and
+the EDGE BANDS at -1, under every card and section, so they take only the presses nothing else wants — a
+card, its tags and a section's tab keep theirs (a frame edge band ABOVE the cards once stole a tag stamp's
+press). Pressing the interior drags the whole selection (`startSelectionDrag` → drag.ts `beginDrag`, anchored
+on the primary unlocked member; a plain click there keeps the selection, `Drag.fromFrame`). Where the frame's
+edge runs along a member's own edge, that member's resize band scales the GROUP (`memberEdgeResize`, called
+first in `startNodeResize`); an inner edge still resizes only its card. A corner or edge SCALES the lot about
+the opposite side, as one undo step: an open section, a card or a picture maps its rect through the frame
+(its contents with it, unselected or not; a picture keeps its aspect), while anything sized by what it shows
+— a folded chip or pill, a pile, a folded picture — keeps its size and is carried, subtree and all, by its
+corner. The frame stops shrinking where its tightest member hits its minimum, so proportions hold; ⇧ on a
+corner scales both axes alike; the dragged side lands on the grid. Cards then let go of what they no longer
+author (`settleCardSize`, shared with a single resize) and sections re-collect (`settleSections`).
+`syncSelFrame` redraws it from the selection funnel, every `paintAll`, each drag frame and resize step; it
+stands down while a fold glides (`body.layout-anim`), and read-only or with a locked member it loses its grips.
 
 **Selection, ports and lines are FigJam's.** A lone selection shows a white rounded square on each corner
 (drawn on the corner resize zones, `.node.solo > .fh-*::after`), and four PORTS float `SOCKET_OUT` outside

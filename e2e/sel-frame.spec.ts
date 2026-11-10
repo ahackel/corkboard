@@ -66,3 +66,63 @@ test('scaling a section with the frame scales what is inside it; a folded pill o
   expect(Math.abs(o.width - o0.width)).toBeLessThan(1);   // the pill keeps its size…
   expect(o.x).toBeGreaterThan(o0.x + 50);                  // …and moves
 });
+
+test('the frame\'s empty interior drags the whole selection, and a click there keeps it', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 300, 300, 'Left');
+  const b = await makeCard(page, 700, 300, 'Right');
+  await select(page, a);
+  await b.click({ modifiers: ['ControlOrMeta'] });
+  const ar0 = (await a.boundingBox())!, br0 = (await b.boundingBox())!;
+  const gap = { x: (ar0.x + ar0.width + br0.x) / 2, y: ar0.y + ar0.height / 2 };
+  await page.mouse.click(gap.x, gap.y);
+  await settled(page);
+  await expect(page.locator('#world .node.sel')).toHaveCount(2);
+  await page.mouse.move(gap.x, gap.y);
+  await page.mouse.down();
+  await page.mouse.move(gap.x + 120, gap.y + 80, { steps: 8 });
+  await page.mouse.up();
+  await settled(page);
+  const ar = (await a.boundingBox())!, br = (await b.boundingBox())!;
+  expect(ar.x - ar0.x).toBeGreaterThan(80);
+  expect(Math.abs((br.x - br0.x) - (ar.x - ar0.x))).toBeLessThan(1);   // moved as one piece
+  expect(Math.abs((br.y - br0.y) - (ar.y - ar0.y))).toBeLessThan(1);
+  await expect(page.locator('#world .node.sel')).toHaveCount(2);
+});
+
+test('the frame\'s edges scale the selection along one axis — in a gap, and on a member\'s own edge', async ({ page }) => {
+  await openBoard(page);
+  const a = await makeCard(page, 300, 300, 'Top');
+  const b = await makeCard(page, 700, 500, 'Bottom');
+  await select(page, a);
+  await b.click({ modifiers: ['ControlOrMeta'] });
+  const frame = page.locator('#selFrame .sf-box');
+  const ar0 = (await a.boundingBox())!, br0 = (await b.boundingBox())!;
+
+  // the frame's right edge, level with the top card — nothing but the gap is there
+  const f0 = (await frame.boundingBox())!;
+  await page.mouse.move(f0.x + f0.width, ar0.y + ar0.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(f0.x + f0.width + 200, ar0.y + ar0.height / 2, { steps: 6 });
+  await page.mouse.up();
+  await settled(page);
+  const ar1 = (await a.boundingBox())!, br1 = (await b.boundingBox())!;
+  expect(Math.abs(ar1.x - ar0.x)).toBeLessThan(1);           // the left side held
+  expect(ar1.width).toBeGreaterThan(ar0.width + 20);         // both widened…
+  expect(br1.x).toBeGreaterThan(br0.x + 50);                 // …and spread apart
+  expect(Math.abs(ar1.height - ar0.height)).toBeLessThan(1); // heights untouched
+  expect(Math.abs(br1.y - br0.y)).toBeLessThan(1);
+
+  // the bottom card's own bottom edge is the frame's: it scales both, the top one held at the top
+  const e = (await b.locator(':scope > .fh-s').boundingBox())!;
+  await page.mouse.move(e.x + e.width / 2, e.y + e.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(e.x + e.width / 2, e.y + e.height / 2 + 150, { steps: 6 });
+  await page.mouse.up();
+  await settled(page);
+  const ar2 = (await a.boundingBox())!, br2 = (await b.boundingBox())!;
+  expect(Math.abs(ar2.y - ar1.y)).toBeLessThan(1);
+  expect(ar2.height).toBeGreaterThan(ar1.height + 20);
+  expect(br2.y).toBeGreaterThan(br1.y + 30);
+  await expect(page.locator('#world .node.sel')).toHaveCount(2);
+});
