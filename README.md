@@ -17,13 +17,14 @@ store (the browser's
 and reopens automatically every visit — no sign-in, no setup, works on every browser
 including iPad. Notes never leave the machine.
 
-Cards are linked parent → child; the tree and all edges are **derived** from each note's
-`mm_parent` frontmatter — there is no stored edge list and no database. Layout, colours,
-and positions live in the same frontmatter (`mm_x`, `mm_y`, `mm_collapsed`, `mm_layout`, …),
-so a map travels with its files. Serialization only rewrites the app-owned keys and
-preserves every other frontmatter field and the note body verbatim. One `.md` file per
-node; the filename is the node's identity. The freehand sketch layer is the one exception —
-it's stored as a single `sketch.json` data file beside the notes, as world-space polylines.
+A map is a **folder**: one `.md` file per card, and a **section is a sub-folder** (its label is
+its `_index.md`), so Finder and Obsidian see the same grouping the board shows. A note's path is
+its identity, and its title is the body's leading `# ` heading, which the filename follows.
+Frontmatter describes the note (`tags`, `color`, a few `mm_*` keys); serialization rewrites only
+those app-owned keys and preserves every other field and the note body verbatim. The board's
+**arrangement** — positions, sizes, folded sections and the lines you draw — lives in one
+`board.json` beside the notes, keyed by path. There is no database. The full format is in
+[public/format.md](public/format.md), published next to the app.
 
 ## Storage
 
@@ -43,21 +44,23 @@ layout on desktop.
 ## Features
 
 - Cards rendered from a hand-rolled Markdown subset — headings, links, emphasis, task lists, tables
-- Free placement, nesting (a card with children is an outline), sections to group cards
-- Colours and emoji tags; straight lines between cards with arrows, dots and labels
-- Collapse / focus / find, an outline view, read-only mode
-- Undo / redo, image paste & drop
+- Free placement; sections to group cards, which nest and can be folded or opened to work inside
+- Stacks: hold a card over another to pile them up, click to fan the pile out
+- A pasted list becomes one card per item; number keys 1–9 colour the selection
+- Colours and Obsidian tags; lines between cards with arrows, dots and labels
+- Smart guides while dragging, tidy-up on request, search, read-only mode
+- Undo / redo, image paste & drop, PNG/PDF export, and ⌘P to find every action
 - Autosave back to the source files, with a visible warning if a save fails
 
 ## Architecture
 
 `src/` is split into domain folders, all fully strict-typed TypeScript: `core/` (shared
 mutable `state` + interaction `ui`), `utils/` (pure helpers — Markdown, frontmatter, model
-queries), `store/` (the swappable I/O boundary), `data/persistence.ts` (autosave / load /
-zip orchestration), `view/` (camera, layout, edges, theme, icons), `features/` (the
-interactive subsystems — drag, gestures, inline-edit, crud, attachments, search, sketch,
-history), and `main.ts` (the render + selection core). Replacing only the `store` object
-would retarget the app to an Obsidian vault or a Tauri/native build.
+queries), `store/` (the swappable I/O boundary), `data/` (load, autosave, `board.json`, zip
+import/export), `view/` (camera, layout, geometry, colour, lines), `nav/` (open sections and
+the URL), `features/` (the interactive subsystems — drag, gestures, inline-edit, crud, stacks,
+attachments, search, history, the ⌘P palette), and `main.ts` (the render core). Replacing only
+the `store` object would retarget the app to an Obsidian vault or a Tauri/native build.
 
 ## Hosting
 
