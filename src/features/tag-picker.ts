@@ -100,7 +100,7 @@ function tagGroups(): Section[] {
     const starts = board.filter(b => free(b.tag) && tagKey(b.tag).startsWith(qk));
     const inside = board.filter(b => free(b.tag) && !tagKey(b.tag).startsWith(qk) && tagKey(b.tag).includes(qk));
     const emoji = emojiByName(qk).filter(e => free(e.emoji));
-    const named = emoji.filter(e => e.name.startsWith(qk)), worded = emoji.filter(e => !e.name.startsWith(qk));
+    const named = emoji.filter(e => e.byName), worded = emoji.filter(e => !e.byName);
     const byBoard = new Map(board.map(b => [b.tag, b.count]));
     const em = (e: { emoji: string; name: string }): Row =>
       row('add', e.emoji, byBoard.has(e.emoji) ? plural(byBoard.get(e.emoji)!) : 'emoji', false, `${e.emoji}  ${e.name}`);

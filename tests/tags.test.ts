@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { cleanTag, textTags, hasTag, isEmojiTag, noteTags } from '../src/utils/tags.js';
 import { emojiByName } from '../src/utils/emoji-names.js';
+import { ALL_EMOJI } from '../src/utils/emoji-all.js';
 import { renderBodyHTML } from '../src/utils/markdown.js';
 import { parseMd } from '../src/utils/frontmatter.js';
 
@@ -76,9 +77,27 @@ describe('a tag on disk and on screen', () => {
 
 describe('emojiByName', () => {
   it('finds an emoji by the start of its name first, then of its other words', () => {
-    expect(emojiByName('fi')[0]).toEqual({ emoji: '🔥', name: 'fire' });
+    expect(emojiByName('fi')[0]).toEqual({ emoji: '🔥', name: 'fire', byName: true });
     expect(emojiByName('urgent').map(e => e.emoji)).toContain('🔥');
     expect(emojiByName('thumbs')[0].name).toBe('thumbs up');
     expect(emojiByName('')).toEqual([]);
+  });
+  it('finds ANY emoji by its official name, after the hand-picked ones', () => {
+    expect(emojiByName('cat')[0]).toEqual({ emoji: '🐈', name: 'cat', byName: true });       // the exact name first
+    expect(emojiByName('germany').map(e => e.emoji)).toContain('🇩🇪');                        // `flag: germany`
+    expect(emojiByName('pinata').map(e => e.emoji)).toContain('🪅');                          // accents off
+    expect(emojiByName('thumbs-up')[0]).toEqual({ emoji: '👍', name: 'thumbs up', byName: true });
+    expect(emojiByName('do').map(e => e.emoji)).toContain('✅');       // a hand-picked word still beats 🐕 dog
+    expect(emojiByName('done')[0]).toMatchObject({ emoji: '✅', byName: false });
+  });
+  it('bundles every emoji once, and only emoji that can be a tag', () => {
+    const all = ALL_EMOJI.split('\n').map(l => l.split('\t')[0]);
+    expect(all.length).toBeGreaterThan(1800);
+    expect(new Set(all.map(e => e.replace(/\uFE0F/g, ''))).size).toBe(all.length);
+    for (const emoji of all) {
+      expect(cleanTag(emoji)).toBe(emoji);
+      expect(isEmojiTag(emoji)).toBe(true);
+    }
+    expect(emojiByName('keycap', 50).map(e => e.emoji)).toEqual(['🔟']);     // `#️⃣` and `1️⃣` can't be Obsidian tags
   });
 });

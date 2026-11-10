@@ -1,7 +1,11 @@
-// Emoji BY NAME, for the `#` field (features/tag-picker.ts): typing `fi` offers 🔥 fire. A short,
-// hand-picked list of the emoji people tag with — status, priority, kind of thing, mood — not the whole
-// Unicode set; anything else still goes in through the OS emoji picker or a paste. Pure, pinned by
-// tests/tags.test.ts. Each entry is the emoji, its name, then a few words it is also found by.
+// Emoji BY NAME, for the `#` field (features/tag-picker.ts), the tag tray and ⌘F: typing `fi` offers 🔥 fire.
+// Two lists. FIRST a short hand-picked one of the emoji people tag with — status, priority, kind of thing,
+// mood — each with a few more words it is found by (`urgent` → 🔥), so those come up before anything else.
+// THEN every other emoji by its official Unicode name (utils/emoji-all.ts, generated: scripts/emoji-names.ts),
+// so `pickle`-style lookups of anything at all still work. Pure, pinned by tests/tags.test.ts. Each hand entry
+// is the emoji, its name, then the words it is also found by; a `|` ends a name of more than one word.
+import { ALL_EMOJI } from './emoji-all.js';
+
 const EMOJI: Array<[string, string]> = [
   ['🔥', 'fire hot urgent'], ['⭐', 'star favourite favorite'], ['🌟', 'glowing star|shine'],
   ['📌', 'pin pinned keep'], ['✅', 'check done complete yes'], ['☑️', 'ballot box|checked tick'],
@@ -36,22 +40,53 @@ const EMOJI: Array<[string, string]> = [
   ['💻', 'laptop computer code'], ['📱', 'phone mobile'], ['🤖', 'robot ai bot'], ['🐞', 'lady beetle|bug'],
 ];
 
-// The emoji whose name or words START with what was typed, best first: the name itself before its
-// other words. At most `max` of them.
-export function emojiByName(q: string, max = 6): Array<{ emoji: string; name: string }> {
-  const s = q.trim().toLowerCase();
+// What is compared: lower case, accents off (`pinata` finds 🪅 piñata), and `-`/`_` read as spaces, since a
+// tag can't hold one (`thumbs-up` finds 👍).
+const fold = (s: string): string => s.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/[-_]+/g, ' ').trim();
+const wordsOf = (s: string): string => ' ' + fold(s).split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ');
+// An emoji written without its variation selector is the same emoji (`❤` and `❤️`).
+const same = (e: string): string => e.replace(/\uFE0F/g, '');
+
+interface Entry { emoji: string; name: string; words: string }
+let hand: Entry[] | null = null, all: Entry[] | null = null;
+function lists(): { hand: Entry[]; all: Entry[] } {
+  hand ??= EMOJI.map(([emoji, spec]) => {
+    const [head, rest = ''] = spec.split('|');
+    return { emoji, name: spec.includes('|') ? head : head.split(' ')[0], words: wordsOf(head + ' ' + rest) };
+  });
+  if (!all) {
+    const picked = new Set(hand.map(e => same(e.emoji)));
+    all = ALL_EMOJI.split('\n').map(l => l.split('\t')).filter(([emoji]) => !picked.has(same(emoji)))
+      .map(([emoji, name]) => ({ emoji, name, words: wordsOf(name) }));
+  }
+  return { hand, all };
+}
+
+// The emoji whose name, or a word in it, STARTS with what was typed, best first: the hand-picked ones (by
+// their name, then by another of their words: `do` still offers ✅ done before 🐕 dog); then any emoji named
+// exactly that, any whose name starts with it, any with a later word starting with it — each in Unicode's
+// order, which puts the faces and the everyday things first. At most `max` of them. `byName` says the NAME
+// starts with it (not only a later word), which the `#` field and the tray rank above a new word tag.
+export interface EmojiHit { emoji: string; name: string; byName: boolean }
+export function emojiByName(q: string, max = 6): EmojiHit[] {
+  const s = fold(q);
   if (!s) {
     return [];
   }
-  const hits: Array<{ emoji: string; name: string; rank: number }> = [];
-  for (const [emoji, spec] of EMOJI) {
-    const [head, rest = ''] = spec.split('|');
-    const name = spec.includes('|') ? head : head.split(' ')[0];
-    const words = (head + ' ' + rest).split(/\s+/).filter(Boolean);
-    const at = words.findIndex(w => w.startsWith(s));
+  const { hand, all } = lists();
+  const ranked: Array<{ e: Entry; rank: number }> = [];
+  for (const e of hand) {
+    const at = e.words.indexOf(' ' + s);
     if (at >= 0) {
-      hits.push({ emoji, name, rank: at === 0 ? 0 : 1 });
+      ranked.push({ e, rank: at === 0 ? 0 : 1 });
     }
   }
-  return hits.sort((a, b) => a.rank - b.rank).slice(0, max).map(({ emoji, name }) => ({ emoji, name }));
+  for (const e of all) {
+    const at = e.words.indexOf(' ' + s);
+    if (at >= 0) {
+      ranked.push({ e, rank: at > 0 ? 4 : e.words === ' ' + s ? 2 : 3 });
+    }
+  }
+  return ranked.sort((a, b) => a.rank - b.rank).slice(0, max)
+    .map(({ e, rank }) => ({ emoji: e.emoji, name: e.name, byName: rank !== 1 && rank !== 4 }));
 }

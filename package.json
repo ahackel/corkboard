@@ -19,11 +19,13 @@
     "e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "emoji": "node --experimental-strip-types --no-warnings scripts/emoji-names.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.63.0",
+    "emojibase-data": "18.0.0",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import-x": "^4.17.1",

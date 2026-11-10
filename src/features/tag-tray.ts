@@ -77,7 +77,7 @@ function makeOptions(): void {
   const typed = cleanTag(q);
   if (!typed) { options = []; renderSuggest(); return; }
   const found = emojiByName(k, 8);
-  const named = found.filter(e => e.name.startsWith(k)).map(e => e.emoji), worded = found.filter(e => !e.name.startsWith(k)).map(e => e.emoji);
+  const named = found.filter(e => e.byName).map(e => e.emoji), worded = found.filter(e => !e.byName).map(e => e.emoji);
   // an emoji whose NAME starts with what's typed comes first (`fi` → 🔥); then the word itself
   options = [...new Set([...named, typed, ...worded])];
   active = 0;

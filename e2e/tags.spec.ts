@@ -55,6 +55,23 @@ test('# tags the selection — by an emoji’s name or a new word — and untick
   expect(errors).toEqual([]);
 });
 
+test('# finds ANY emoji by its official name, not only the hand-picked ones', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const logo = card(page, 'Logo ideas');
+  await select(page, logo);
+  await page.keyboard.press('#');
+  const pop = page.locator('#tagPop');
+  await page.keyboard.type('octopus');
+  await expect(pop.locator('.tp-row.active')).toContainText('🐙  octopus');
+  await page.keyboard.press('Enter');
+  await expect(logo.locator('.tag')).toHaveText(['🐙']);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('t');
+  await page.locator('#tagTray .tray-new').fill('thumbs-up');
+  await expect(page.locator('#tagTray .tray-suggest .tp-row.active')).toContainText('👍');
+});
+
 test('a click on a tag searches by it; more narrow it; Esc ends the search', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
