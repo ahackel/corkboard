@@ -5,7 +5,8 @@ import { cleanTag, textTags, hasTag, isEmojiTag, noteTags } from '../src/utils/t
 import { emojiByName } from '../src/utils/emoji-names.js';
 import { ALL_EMOJI } from '../src/utils/emoji-all.js';
 import { renderBodyHTML } from '../src/utils/markdown.js';
-import { parseMd } from '../src/utils/frontmatter.js';
+import { parseMd, serializeMd } from '../src/utils/frontmatter.js';
+import { nodeFrom } from './helpers.js';
 
 describe('textTags', () => {
   it('reads #tags from running text, the way Obsidian does', () => {
@@ -50,6 +51,17 @@ describe('matching', () => {
     expect(isEmojiTag('🇩🇪')).toBe(true);
     expect(isEmojiTag('idea')).toBe(false);
     expect(isEmojiTag('v2🔥')).toBe(false);
+    expect(isEmojiTag('ℹ️')).toBe(true);           // ℹ is a LETTER to Unicode, but drawn as an emoji
+    expect(isEmojiTag('1️⃣')).toBe(true);           // and so is a keycap's digit
+    expect(isEmojiTag('ℹ')).toBe(false);            // …only with the emoji selector
+    expect(isEmojiTag('aℹ️')).toBe(false);
+  });
+  it('writes ℹ️ and a keycap to the file and reads them back as the same tags', () => {
+    const n = nodeFrom('---\ntags: [x]\n---\n\n# Note\n');
+    n.tags = ['ℹ️', '1️⃣'];
+    const text = serializeMd(n);
+    expect(parseMd(text).tags).toEqual(['ℹ️', '1️⃣']);
+    expect(textTags('see #ℹ️ and #2️⃣')).toEqual(['ℹ️', '2️⃣']);
   });
 });
 
@@ -106,6 +118,9 @@ describe('emojiByName', () => {
       expect(cleanTag(emoji)).toBe(emoji);
       expect(isEmojiTag(emoji)).toBe(true);
     }
-    expect(emojiByName('keycap', 50).map(e => e.emoji)).toEqual(['🔟']);     // `#️⃣` and `1️⃣` can't be Obsidian tags
+    expect(emojiByName('information')[0]).toMatchObject({ emoji: 'ℹ️', name: 'information' });
+    const keycaps = emojiByName('keycap', 50).map(e => e.emoji);
+    expect(keycaps).toContain('1️⃣');
+    expect(keycaps).not.toContain('#️⃣');      // `#` and `*` can't be in an Obsidian tag
   });
 });

@@ -64,9 +64,13 @@ export function hasTag(tags: readonly string[], want: string): boolean {
   return tags.some(t => { const k = tagKey(t); return k === w || k.startsWith(w + '/'); });
 }
 
-// An EMOJI tag is drawn as a stamp, a word tag as a label: no letter or number in it, and a pictograph.
+// An EMOJI tag is drawn as a stamp, a word tag as a label: no letter or number in it, and a pictograph. A
+// letter or digit DRAWN as an emoji — followed by the emoji selector, like ℹ️ (Unicode calls ℹ a letter) and
+// the keycaps 1️⃣ — counts as a pictograph, not as a letter.
+const DRAWN_AS_EMOJI = /[\p{L}\p{N}]\uFE0F\u20E3?/gu;
 export function isEmojiTag(t: string): boolean {
-  return !/[\p{L}\p{N}]/u.test(t) && /\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}]/u.test(t);
+  const rest = t.replace(DRAWN_AS_EMOJI, '');
+  return !/[\p{L}\p{N}]/u.test(rest) && (rest !== t || /\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}]/u.test(t));
 }
 
 // The small tilt a tag is stuck on at — derived from the tag, so the same tag always sits the same way

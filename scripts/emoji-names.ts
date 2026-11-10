@@ -1,9 +1,9 @@
 // Writes src/utils/emoji-all.ts: every emoji with its official Unicode (CLDR) name and keywords, from the
-// emojibase-data dev dependency, so the `#` field and the tag tray find ANY emoji by name without a runtime dependency or a
-// network call. Run `npm run emoji` after updating emojibase-data; the output is committed.
+// emojibase-data dev dependency, so the `#` field and the tag tray find ANY emoji by name without a runtime
+// dependency or a network call. Run `npm run emoji` after updating emojibase-data; the output is committed.
 //
 // Left out: the PARTS that aren't emoji on their own (skin tones, hair, the flag letters), any emoji that
-// can't be an Obsidian tag (keycaps, ℹ️, the subdivision flags: utils/tags.ts decides), and emoji newer than
+// can't be an Obsidian tag (#️⃣, *️⃣, the subdivision flags: utils/tags.ts decides), and emoji newer than
 // NEWEST — no system font draws a brand-new emoji for months, and an offered emoji must not be an empty box.
 // Raise NEWEST once a year's emoji have reached macOS, iOS and Windows.
 import { readFileSync, writeFileSync } from 'node:fs';
