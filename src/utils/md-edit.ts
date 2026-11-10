@@ -686,3 +686,46 @@ export function completeAt(text: string, c: Completing, caret: number, choice: s
   const at = c.from + ins.length;
   return { text: text.slice(0, c.from) + ins + rest, start: at, end: at };
 }
+
+// Put a completion trigger (`[[` for a link, `#` for a tag) in front of the selection, the caret at its end,
+// so the editor's list of names opens on what was selected — or on nothing, at a bare caret. A tag needs a
+// space before its `#`, so one is added after a word.
+export function startCompletion(text: string, start: number, end: number, mark: '[[' | '#'): TextEdit {
+  const lead = mark === '#' && start > 0 && !/[\s([{,;]/.test(text[start - 1]) ? ' ' + mark : mark;
+  const at = end + lead.length;
+  return { text: splice(text, start, start, lead), start: at, end: at };
+}
+
+// ---------- the editor's commands, ONE list for its keys and its right-click menu ----------
+// Each is a pure edit plus the key that runs it, so the keyboard and the menu can't drift apart: the card
+// editor (features/inline-edit.ts) matches a keydown with editCommandFor and lists them all on a right-click.
+// Enter, Backspace and the clipboard aren't here — they are the textarea's own keys, made smarter.
+export interface EditKey { key: string; mod?: boolean; shift?: boolean; alt?: boolean }
+export interface EditCommand {
+  id: string;
+  label: string;
+  shortcut: string;                    // as shown, in the ⌘ spelling (utils/dom.ts keys() makes it Ctrl+)
+  key: EditKey;
+  edit: (text: string, start: number, end: number) => TextEdit | null;
+}
+export const EDIT_COMMANDS: EditCommand[] = [
+  { id: 'bold', label: 'Bold', shortcut: '⌘B', key: { key: 'b', mod: true }, edit: (v, a, b) => toggleWrap(v, a, b, '**') },
+  { id: 'italic', label: 'Italic', shortcut: '⌘I', key: { key: 'i', mod: true }, edit: (v, a, b) => toggleWrap(v, a, b, '*') },
+  { id: 'strike', label: 'Strikethrough', shortcut: '⌘⇧X', key: { key: 'x', mod: true, shift: true },
+    edit: (v, a, b) => toggleWrap(v, a, b, '~~') },
+  { id: 'task', label: 'Task / tick it', shortcut: '⌘L', key: { key: 'l', mod: true }, edit: taskLines },
+  { id: 'indent', label: 'Indent', shortcut: 'Tab', key: { key: 'tab' },
+    edit: (v, a, b) => tableTab(v, a, b, false) ?? renumbered(indentLines(v, a, b, false)) },
+  { id: 'outdent', label: 'Outdent', shortcut: '⇧Tab', key: { key: 'tab', shift: true },
+    edit: (v, a, b) => tableTab(v, a, b, true) ?? renumbered(indentLines(v, a, b, true)) },
+  { id: 'up', label: 'Move line up', shortcut: '⌥↑', key: { key: 'arrowup', alt: true },
+    edit: (v, a, b) => renumbered(moveLines(v, a, b, true)) },
+  { id: 'down', label: 'Move line down', shortcut: '⌥↓', key: { key: 'arrowdown', alt: true },
+    edit: (v, a, b) => renumbered(moveLines(v, a, b, false)) },
+];
+
+// The command a key press runs, if any: the key, and exactly the modifiers it names (⌘ or Ctrl both count as mod).
+export function editCommandFor(e: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): EditCommand | null {
+  const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
+  return EDIT_COMMANDS.find(c => c.key.key === k && !!c.key.mod === mod && !!c.key.shift === e.shiftKey && !!c.key.alt === e.altKey) ?? null;
+}

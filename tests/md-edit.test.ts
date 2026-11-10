@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { completingAt, completeAt, listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
-         tableTab, tableEnter, headingSection, type TextEdit } from '../src/utils/md-edit.js';
+         tableTab, tableEnter, headingSection, startCompletion, editCommandFor, EDIT_COMMANDS, type TextEdit } from '../src/utils/md-edit.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
 function at(s: string): [string, number, number] {
@@ -319,5 +319,50 @@ describe('completingAt / completeAt', () => {
     expect(show(completeAt('see [[Pl]] x', { kind: 'link', from: 6, query: 'Pl' }, 8, 'Plan'))).toBe('see [[Plan]]| x');
     expect(show(completeAt('a #pr', { kind: 'tag', from: 3, query: 'pr' }, 5, 'project'))).toBe('a #project |');
     expect(show(completeAt('a #pr\nb', { kind: 'tag', from: 3, query: 'pr' }, 5, 'project'))).toBe('a #project|\nb');
+  });
+});
+
+describe('the editor commands (one list for keys and the right-click menu)', () => {
+  const press = (key: string, m: { meta?: boolean; ctrl?: boolean; shift?: boolean; alt?: boolean } = {}) =>
+    editCommandFor({ key, metaKey: !!m.meta, ctrlKey: !!m.ctrl, shiftKey: !!m.shift, altKey: !!m.alt })?.id ?? null;
+  it('maps each key, with exactly its modifiers, to its command', () => {
+    expect(press('b', { meta: true })).toBe('bold');
+    expect(press('B', { ctrl: true })).toBe('bold');
+    expect(press('i', { meta: true })).toBe('italic');
+    expect(press('x', { meta: true, shift: true })).toBe('strike');
+    expect(press('l', { meta: true })).toBe('task');
+    expect(press('Tab')).toBe('indent');
+    expect(press('Tab', { shift: true })).toBe('outdent');
+    expect(press('ArrowUp', { alt: true })).toBe('up');
+    expect(press('ArrowDown', { alt: true })).toBe('down');
+  });
+  it('leaves other keys and modifier mixes alone', () => {
+    expect(press('b')).toBeNull();
+    expect(press('b', { meta: true, shift: true })).toBeNull();
+    expect(press('x', { meta: true })).toBeNull();
+    expect(press('Tab', { meta: true })).toBeNull();
+    expect(press('ArrowUp')).toBeNull();
+  });
+  it('every command has a label and a shortcut to show', () => {
+    for (const c of EDIT_COMMANDS) {
+      expect(c.label && c.shortcut).toBeTruthy();
+    }
+  });
+  it('runs the same edit as the helper it names', () => {
+    const bold = EDIT_COMMANDS.find(c => c.id === 'bold')!;
+    expect(show(bold.edit(...at('a [word] b')))).toBe('a **[word]** b');
+  });
+});
+
+describe('startCompletion', () => {
+  it('puts `[[` before the selection, caret at its end, so the list opens on it', () => {
+    const r = startCompletion(...at('see [Plan] now'), '[[');
+    expect(show(r)).toBe('see [[Plan| now');
+    expect(completingAt(r.text, r.start)).toEqual({ kind: 'link', from: 6, query: 'Plan' });
+  });
+  it('gives a tag its space after a word, and none after a space', () => {
+    expect(show(startCompletion(...at('word|'), '#'))).toBe('word #|');
+    expect(show(startCompletion(...at('word |'), '#'))).toBe('word #|');
+    expect(show(startCompletion(...at('|'), '#'))).toBe('#|');
   });
 });

@@ -855,6 +855,14 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   space round each cell, instead of every row padded to hundreds of characters. Only on those keys and
   only that table, so no note is rewritten behind your back. What counts as a table is the renderer's own
   `tableAt`/`tableRow`, so the editor never tidies something the card doesn't draw as one.
+- **The editor's commands are ONE list, `EDIT_COMMANDS`** (md-edit.ts): each a pure edit plus its key, matched on
+  keydown by `editCommandFor` AND listed by the RIGHT-CLICK menu inside the text (`editorMenuEntries`,
+  inline-edit.ts) — so the keys and the menu can't drift apart; add a command there, never as a bare keydown
+  branch. The menu also holds the clipboard (its Paste hands the clipboard to the editor's own paste handlers as a
+  synthetic paste event, so a URL still links and a sheet still becomes a table), `[[` / `#` to start a link or
+  tag on the selection, ⌘⇧E and Done. `#ctxMenu` holds its pointerdown, so the textarea keeps focus, caret and
+  selection while you pick. It replaced the browser's menu there; ⇧-right-click still gets that one, for
+  spelling suggestions (the menu's last, greyed row says so).
 - **More list keys**: Backspace just past a marker takes the MARKER (a nested item steps out first);
   ⌥↑/⌥↓ move the touched lines past their neighbour, an item carrying its nested children and hopping a
   whole neighbouring item — in a table only a BODY row moves, and only among the body rows (a row moved over

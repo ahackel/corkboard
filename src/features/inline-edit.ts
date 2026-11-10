@@ -19,8 +19,8 @@ import { cardMarkdown, setNoteText, headingOf, caretIn, firstTextLine } from '..
 import { linkPaste } from '../utils/markdown.js';
 import { highlightMarkdown } from '../utils/md-highlight.js';
 import { htmlToMarkdown } from '../utils/html-md.js';
-import { listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumber, renumbered, pasteTable,
-         sourceOffset, tableEnter, tableTab, headingSection, type TextEdit } from '../utils/md-edit.js';
+import { listEnter, listBackspace, renumber, renumbered, pasteTable, sourceOffset, tableEnter, tableTab, headingSection,
+         startCompletion, EDIT_COMMANDS, editCommandFor, type TextEdit } from '../utils/md-edit.js';
 import { onBodyPaste } from './attachments.js';
 import { relayout, remeasure, paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
@@ -33,6 +33,7 @@ import { selectNode } from './selection.js';
 import { scheduleSave, flushSave } from '../data/save.js';
 import { updateCompletion, completionKey, closeCompletion } from './complete.js';
 import { jumpViewTo, stageSize, bottomInset } from '../view/camera.js';
+import type { MenuEntry } from './context-menu.js';
 
 // The text the editor holds is the note with its title back on the front as a heading — exactly the
 // file's own body (utils/frontmatter.ts cardMarkdown), which makes the editor a view of the note rather
@@ -632,23 +633,95 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   else if (e.key === 'Backspace' && !mod && !e.altKey && !e.shiftKey) {
     edit(renumbered(listBackspace(ta.value, ta.selectionStart, ta.selectionEnd)));
   }
-  // ⌥↑/⌥↓ move the line(s) — an item with its nested children — past the neighbour.
-  else if (e.altKey && !mod && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-    edit(renumbered(moveLines(ta.value, ta.selectionStart, ta.selectionEnd, e.key === 'ArrowUp')));
+  // ⌘B / ⌘I / ⌘⇧X wrap, ⌘L makes tasks, Tab / ⇧Tab nest (in a table: walk the cells — and never move focus,
+  // which would blur the card shut), ⌥↑ / ⌥↓ move lines: md-edit.ts EDIT_COMMANDS, the list the
+  // right-click menu shows too.
+  else {
+    const cmd = editCommandFor(e);
+    if (cmd) {
+      edit(cmd.edit(ta.value, ta.selectionStart, ta.selectionEnd));
+    }
   }
-  // Tab walks a table's cells; elsewhere it nests, ⇧Tab un-nests — and never moves focus, which would
-  // blur the card shut mid-note.
-  else if (e.key === 'Tab' && !mod && !e.altKey) {
-    const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
-    edit(tableTab(v, a, b, e.shiftKey) ?? renumbered(indentLines(v, a, b, e.shiftKey)));
-  } else if (mod && !e.altKey && !e.shiftKey && k === 'b') {
-    edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '**'));
-  } else if (mod && !e.altKey && !e.shiftKey && k === 'i') {
-    edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '*'));
-  } else if (mod && !e.altKey && !e.shiftKey && k === 'l') {
-    edit(taskLines(ta.value, ta.selectionStart, ta.selectionEnd));
-  } else if (mod && !e.altKey && e.shiftKey && k === 'x') {
-    edit(toggleWrap(ta.value, ta.selectionStart, ta.selectionEnd, '~~'));
+}
+// ---------- the editor's right-click menu ----------
+// Every command the editor knows, with its key, where the caret is (features/context-menu.ts opens it on a
+// right-click inside the card's text). The menu takes no focus (its pointerdown is held), so the textarea
+// keeps its caret and selection and each entry acts on them, exactly as its key would. ⇧-right-click
+// still gets the browser's own menu, for spelling suggestions.
+export function editorMenuEntries(): MenuEntry[] {
+  const be = ui.bodyEdit;
+  if (!be) {
+    return [];
+  }
+  const ta = be.ta, n = state.nodes.get(be.id);
+  const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd], picked = a !== b;
+  const run = (r: TextEdit | null): void => {
+    if (r) {
+      applyTextEdit(ta, r);
+    }
+  };
+  const inTable = !!tableTab(v, a, b, false);
+  const label = (id: string, l: string): string =>
+    inTable && id === 'indent' ? 'Next cell' : inTable && id === 'outdent' ? 'Previous cell' : l;
+  const command = (id: string): MenuEntry => {
+    const c = EDIT_COMMANDS.find(x => x.id === id)!;
+    return { label: label(id, c.label), shortcut: c.shortcut, run: () => run(c.edit(ta.value, ta.selectionStart, ta.selectionEnd)) };
+  };
+  const complete = (mark: '[[' | '#'): void => {
+    run(startCompletion(ta.value, ta.selectionStart, ta.selectionEnd, mark));
+    if (n) {
+      offerNames(ta, n);
+    }
+  };
+  return [
+    { label: 'Cut', shortcut: '⌘X', run: () => { document.execCommand('cut'); }, disabled: !picked },
+    { label: 'Copy', shortcut: '⌘C', run: () => { document.execCommand('copy'); }, disabled: !picked },
+    { label: 'Paste', shortcut: '⌘V', run: () => { void pasteClipboard(ta, false); } },
+    { label: 'Paste as plain text', shortcut: '⌘⇧V', run: () => { void pasteClipboard(ta, true); } },
+    'sep',
+    command('bold'), command('italic'), command('strike'),
+    { label: 'Link to a card…', shortcut: '[[', run: () => complete('[[') },
+    { label: 'Tag…', shortcut: '#', run: () => complete('#') },
+    'sep',
+    command('task'), command('indent'), command('outdent'), command('up'), command('down'),
+    'sep',
+    { label: 'Selection to a new card', shortcut: '⌘⇧E', run: () => extractToCard(), disabled: !picked },
+    { label: 'Done', shortcut: '⌘↩', run: () => endBodyEdit() },
+    'sep',
+    { label: 'Spelling suggestions', shortcut: '⇧ right-click', run: () => {}, disabled: true },
+  ];
+}
+// The menu's Paste: what a ⌘V would paste, read off the clipboard and handed to the editor's own paste path
+// as a paste event, so a URL over a selection still links, a sheet still becomes a table and rich text still
+// becomes markdown (each handler reads only `clipboardData`). Nobody taking it inserts the plain text. Plain
+// skips all that. The browser may ask for permission to read the clipboard the first time.
+async function pasteClipboard(ta: HTMLTextAreaElement, plain: boolean): Promise<void> {
+  const still = (): boolean => ui.bodyEdit?.ta === ta;
+  try {
+    const dt = new DataTransfer();
+    if (!plain && navigator.clipboard.read) {
+      for (const item of await navigator.clipboard.read()) {
+        for (const type of item.types) {
+          const blob = await item.getType(type);
+          if (type.startsWith('image/')) {
+            dt.items.add(new File([blob], 'pasted.' + type.slice(6), { type }));
+          } else if (type.startsWith('text/')) {
+            dt.setData(type, await blob.text());
+          }
+        }
+      }
+    } else {
+      dt.setData('text/plain', await navigator.clipboard.readText());
+    }
+    if (!still()) {
+      return;
+    }
+    if (plain || ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))) {
+      const text = dt.getData('text/plain'), [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
+      applyTextEdit(ta, { text: v.slice(0, a) + text + v.slice(b), start: a + text.length, end: a + text.length });
+    }
+  } catch {
+    setStatus('Couldn’t read the clipboard — use ⌘V');
   }
 }
 // Commit (or cancel) the edit. Commit SPLITS the textarea back into the card's title and note

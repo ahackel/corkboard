@@ -68,3 +68,51 @@ test('the browser theme colour follows the canvas colour', async ({ page }) => {
   await page.locator('#canvasColors .swatch[data-color=""]').click();
   await expect.poll(theme).toBe('rgb(245, 245, 245)');
 });
+
+test('a right-click in a card’s text lists the editor’s commands with their keys, and they act on the selection', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await page.mouse.move(400, 300);
+  await page.keyboard.press('n');
+  const ta = page.locator('textarea.body-edit');
+  await expect(ta).toBeFocused();
+  await page.keyboard.type('one two');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  const b = (await ta.boundingBox())!;
+  await page.mouse.click(b.x + b.width - 4, b.y + 4, { button: 'right' });
+  expect(await menuItems(page)).toEqual([
+    'Cut', 'Copy', 'Paste', 'Paste as plain text', '---', 'Bold', 'Italic', 'Strikethrough', 'Link to a card…', 'Tag…', '---',
+    'Task / tick it', 'Indent', 'Outdent', 'Move line up', 'Move line down', '---', 'Selection to a new card', 'Done', '---',
+    'Spelling suggestions',
+  ]);
+  const keysShown = await page.$$eval('#ctxMenu .cm-item', els => els.map(e => e.querySelector('kbd')?.textContent ?? ''));
+  expect(keysShown).toContain('⇧Tab');
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Bold/ }).click();
+  await expect(page.locator('#ctxMenu')).not.toHaveClass(/open/);
+  await expect(ta).toBeFocused();                      // the menu took no focus: the editor is still open…
+  await expect(ta).toHaveValue('one **two**');        // …and Bold wrapped what was selected
+  await page.mouse.click(b.x + 10, b.y + 4, { button: 'right' });
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Task/ }).click();
+  await expect(ta).toHaveValue('- [ ] one **two**');
+  expect(errors).toEqual([]);
+});
+
+test('the editor menu’s Paste runs the editor’s own paste: a URL over a selection links it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await openBoard(page);
+  await page.mouse.move(400, 300);
+  await page.keyboard.press('n');
+  const ta = page.locator('textarea.body-edit');
+  await page.keyboard.type('see docs');
+  await page.evaluate(() => navigator.clipboard.writeText('https://example.com'));
+  for (let i = 0; i < 4; i++) {
+    await page.keyboard.press('Shift+ArrowLeft');
+  }
+  const b = (await ta.boundingBox())!;
+  await page.mouse.click(b.x + b.width - 4, b.y + 4, { button: 'right' });
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Paste(?! as)/ }).click();
+  await expect(ta).toHaveValue('see [docs](https://example.com)');
+  await expect(ta).toBeFocused();
+});

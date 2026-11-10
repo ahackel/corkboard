@@ -2,7 +2,7 @@
 // Replaces the browser menu on the canvas with node / canvas actions (desktop right-click;
 // on touch browsers that synthesize `contextmenu` from a long-press it works for free —
 // there is deliberately NO custom long-press handling). The native menu is intentionally
-// let through inside an active title/body editor so spellcheck & copy/paste keep working.
+// let through inside a section's label editor; inside a card's text it lists the editor's commands instead.
 // Menu items only call the existing crud / camera / main kernels — no logic of its own.
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
@@ -11,7 +11,7 @@ import { createNode, centredAt } from './crud.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
 import { mutate } from './mutate.js';
 import { typedImageBlob, bodyImageAt } from './images.js';
-import { syncOpenEditor } from './inline-edit.js';
+import { syncOpenEditor, editorMenuEntries } from './inline-edit.js';
 import { esc, stripImageRef } from '../utils/markdown.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
@@ -28,6 +28,9 @@ import { selectAll } from './selection.js';
 const menu = document.createElement('div');
 menu.id = 'ctxMenu';
 document.body.appendChild(menu);
+
+// A press on the menu takes no focus, so an open card editor keeps its caret and selection for the entry to act on.
+menu.addEventListener('pointerdown', (e) => e.preventDefault());
 
 function closeMenu(): void { menu.classList.remove('open'); }
 
@@ -205,8 +208,13 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
   if (!t || !t.closest('#stage')) {
     return;                 // toolbar / sidebar / dialogs: native menu
   }
-  // an active in-place editor keeps the native menu (spellcheck, copy/paste)
+  // Inside the card's text: the editor's own commands (inline-edit.ts editorMenuEntries). ⇧-right-click
+  // keeps the browser's menu there, for spelling suggestions.
   if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) {
+    if (!e.shiftKey) {
+      e.preventDefault();
+      openMenu(editorMenuEntries(), e.clientX, e.clientY);
+    }
     return;
   }
   if (ui.titleEdit && t.closest('.title.editing')) {
