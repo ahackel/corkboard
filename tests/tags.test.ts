@@ -90,6 +90,14 @@ describe('emojiByName', () => {
     expect(emojiByName('do').map(e => e.emoji)).toContain('✅');       // a hand-picked word still beats 🐕 dog
     expect(emojiByName('done')[0]).toMatchObject({ emoji: '✅', byName: false });
   });
+  it('finds an emoji by its official KEYWORDS last, and each emoji only once', () => {
+    expect(emojiByName('hungry').map(e => e.emoji)).toContain('🍕');                         // pizza
+    expect(emojiByName('burn')).toContainEqual({ emoji: '🔥', name: 'fire', byName: false });   // a hand-picked one too
+    const cat = emojiByName('cat', 50).map(e => e.emoji);
+    expect(cat.indexOf('🐈')).toBe(0);                                         // the name beats every keyword
+    const sm = emojiByName('smil', 200).map(e => e.emoji.replace(/\uFE0F/g, ''));
+    expect(new Set(sm).size).toBe(sm.length);
+  });
   it('bundles every emoji once, and only emoji that can be a tag', () => {
     const all = ALL_EMOJI.split('\n').map(l => l.split('\t')[0]);
     expect(all.length).toBeGreaterThan(1800);
