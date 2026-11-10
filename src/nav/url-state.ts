@@ -188,7 +188,7 @@ export async function applyUrlFromHash(): Promise<void> {
     // read-only is only ever forced ON from a link, never OFF — disabling it has real
     // side effects (reloads from disk, discards in-memory-only collapses) that shouldn't
     // happen silently just because a URL lacks `ro=1`.
-    if (params.get('ro') === '1' && !state.readOnly) { state.readOnly = true; applyReadOnly(); }
+    if (params.get('ro') === '1' && !state.readOnly) { state.readOnly = true; applyReadOnly({ announce: true }); }
   } catch {
     setStatus('That link contains an invalid card path.');
   } finally {
