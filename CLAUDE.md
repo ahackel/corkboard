@@ -91,7 +91,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   LABEL is its NAME"; files — "A body-less note is MIGRATED on load" · "A note that is blank ON PURPOSE
   says so" · "A card whose whole note is one image IS that image" · "A table wraps between WORDS".
 - Interaction — "Collapse folds a card to a CHIP and a section to its PILL" (arrow, peek, fold all) · "A plain double-click
-  MAKES OR EDITS; ⌥-double-click OPENS" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are
+  MAKES OR EDITS; ⌥-double-click OPENS" · "A click on the SELECTED node writes on it" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are
   two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (OPFS, IndexedDB

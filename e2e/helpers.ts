@@ -110,7 +110,12 @@ export async function dragOnto(page: Page, what: Locator, onto: Locator): Promis
   await dragTo(page, await centre(what), await centre(onto));
 }
 
+// Make `c` the one selection. A click on the card that ALREADY is opens its editor (main.ts editOnClick),
+// so then there is nothing to click.
 export async function select(page: Page, c: Locator): Promise<void> {
+  if (await c.evaluate(el => el.classList.contains('solo'))) {
+    return;
+  }
   const b = (await c.boundingBox())!;
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
   await settled(page);

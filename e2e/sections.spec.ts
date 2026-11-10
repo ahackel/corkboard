@@ -137,6 +137,29 @@ test('a section folds to its label pill: its cards hide, its lines meet the pill
   expect(errors).toEqual([]);
 });
 
+test('a click on a selected section\'s tab renames it at the caret; a double-click selects the whole name', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const tab = section(page, 'Todo').locator(':scope > .title-row');
+  const title = section(page, 'Todo').locator(':scope > .title-row > .title');
+  const picked = () => page.evaluate(() => getSelection()!.toString());
+  const tb = (await title.boundingBox())!;
+  await page.mouse.click(tb.x + tb.width - 2, tb.y + tb.height / 2);       // selects…
+  await expect(title).not.toHaveClass(/editing/);
+  await page.waitForTimeout(600);
+  await page.mouse.click(tb.x + tb.width - 2, tb.y + tb.height / 2);       // …and renames, caret at the end
+  await expect(title).toHaveClass(/editing/);
+  expect(await picked()).toBe('');
+  await page.keyboard.type('s');
+  await page.keyboard.press('Enter');
+  await expect(section(page, 'Todos')).toBeVisible();
+  await clickAway(page);
+  await tab.dblclick();
+  await expect(title).toHaveClass(/editing/);
+  expect(await picked()).toBe('Todos');
+  await page.keyboard.press('Escape');
+});
+
 test('an untitled section gets its name back from the T button', async ({ page }) => {
   await openBoard(page);
   await seedBoard(page, BOARD);

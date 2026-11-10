@@ -27,6 +27,9 @@ export interface Drag {
   // Pressed on the selection FRAME's empty interior (features/sel-frame.ts), not on a card: a plain
   // click there leaves the selection as it is instead of narrowing it to the card that anchors the drag.
   fromFrame?: boolean;
+  // A plain press on the card that was already the ONLY selection: released without moving, it opens the
+  // card's text (main.ts editOnClick) instead of just selecting it again.
+  reclick?: boolean;
   clones?: MindNode[] | null;
   // Alt-dragging CARD(s) over another card: the target card's id to fold their notes
   // into on drop (crud.ts mergeCardsInto) instead of reparenting. Set by updateDropTarget, consumed

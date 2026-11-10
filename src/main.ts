@@ -15,7 +15,7 @@ import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js'
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
 import { MOTION } from './utils/motion.js';
 import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary } from './utils/model.js';
-import { state, world, dragLayer, isStack } from './core/state.js';
+import { state, world, dragLayer, isStack, isImageCard } from './core/state.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
 import { screenToWorld, labelScale } from './view/camera.js';
@@ -28,7 +28,7 @@ import './features/text-drag.js';   // registers the drag-body-text-out-of-a-car
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-ghost gesture
 import './features/commands.js';   // the keyboard shortcuts and the ⌘P palette's list of every action
-import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
+import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor, selectAllInEditor } from './features/inline-edit.js';
 import { addCardInside } from './features/crud.js';
 import { bindNodeDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
@@ -142,7 +142,7 @@ function nodeEl(n: MindNode): HTMLElement {
       endTitleEdit();
     }
   });
-  // Double-click OPENS the node — rename / edit its note / add a card inside it, dispatched by what
+  // Double-click OPENS the node — edit its note / rename / add a card inside it, dispatched by what
   // was hit (activateNode). Folding lives on the corner chip above.
   el.addEventListener('dblclick', (e)=>{
     // The INNERMOST card owns the gesture, whether or not it acts on it — child cards are DOM-nested,
@@ -153,8 +153,13 @@ function nodeEl(n: MindNode): HTMLElement {
     // typing into the parent's note. A section's children are NOT nested (they live in its sibling
     // .section-content wrapper), so this is about the card's own controls.
     e.stopPropagation();
-    // while editing this node, a double-click selects a word — don't take it over
+    // While editing this node, a double-click selects a word — don't take it over. Unless its first
+    // click is what OPENED the editor (editOnClick): then it is a double-click on the card, and selects ALL.
     if (inPlaceEditOn(n.id)) {
+      if (openedSince(n.id, firstDownAt)) {
+        e.preventDefault();
+        selectAllInEditor();
+      }
       return;
     }
     // the card's own buttons keep their click — except a SECTION's resize zones, which lie over the rim
@@ -210,15 +215,53 @@ function onSectionRim(n: MindNode, cx: number, cy: number): boolean {
   }
   return cx <= r.left + inB || cx >= r.right - inB || cy <= r.top + inB || cy >= r.bottom - inB;
 }
+// ---------- a click on the SELECTED node writes on it ----------
+// FigJam's two steps: the first click selects, and a click on what is ALREADY the only selection opens
+// its text with the caret where you clicked — a card's note, a section's (or stack's) name on its tab.
+// Decided at the release from the selection as it stood at the PRESS (Drag.reclick, features/drag.ts),
+// so there is no timer and nothing for a double-click to race. A double-click is a double-click either way,
+// all of the text selected: on an unselected card its SECOND click is this one (`mousedown.detail` 2 —
+// the browser fires no dblclick, since the editor replaced what the press landed on); on a selected one
+// its first click opened the editor, and the dblclick that follows selects all of it (openedSince).
+// A folded node is its chip, an image card its picture and a locked one refuses: none has text to click into.
+// `touch`: a tap's double is its own gesture (features/drag.ts), and its mouse events come after the fact.
+let opened: { id: string; at: number } | null = null;
+export function editOnClick(n: MindNode, cx: number, cy: number, touch: boolean): void {
+  if (state.readOnly || n.collapsed || isImageCard(n) || isLockedEffective(n) || isNodeControlAt(cx, cy)) {
+    return;
+  }
+  const all = !touch && downDetail >= 2;
+  if (n.type !== 'section') {
+    startBodyEdit(n, all ? 'all' : { x: cx, y: cy });
+  } else if (hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el) {
+    startInlineEdit(n, all ? {} : { at: { x: cx, y: cy } });
+  }
+  if (inPlaceEditOn(n.id)) {
+    opened = { id: n.id, at: performance.now() };
+  }
+}
+
+// Was `id`'s editor opened by a click after time `t`? With `t` the first press of a double-click (or
+// tap), that click was part of the gesture.
+export const openedSince = (id: string, t: number): boolean => opened?.id === id && opened.at >= t;
+
+// The latest press's click count, and when the latest double-click began: its first press, `detail` 1.
+let downDetail = 0, firstDownAt = 0;
+window.addEventListener('mousedown', (e) => {
+  downDetail = e.detail;
+  if (e.detail === 1) {
+    firstDownAt = performance.now();
+  }
+}, true);
+
 // ---------- double-click / double-tap = OPEN this node ----------
 // Folding lives on the float bar and X, which leaves the gesture free for
-// what a double-click means nearly everywhere else: open the thing for editing. What it opens is
-// decided by WHAT WAS HIT:
-//   · the title (a card's title row, a section's tab), or a section's rim  → rename in place
-//   · anywhere else on a card                                          → edit its note
-//   · a SECTION's interior                                               → a new card THERE
-// A FOLDED node is nothing but its title (its body is display:none), so every hit on it renames —
-// otherwise a double-click would open an editor inside a hidden .body.
+// what a double-click means nearly everywhere else: open the thing for editing. On a card the click
+// before it has usually opened the editor already (editOnClick), and the dblclick handler only
+// selects all of it; this is the rest, decided by WHAT WAS HIT:
+//   · a card                                       → edit its note, all of it selected
+//   · a section's tab or its rim                   → rename in place
+//   · a SECTION's interior                         → a new card THERE
 // Shared by nodeEl's dblclick and the touch double-tap in features/drag.ts.
 export function activateNode(n: MindNode, cx: number, cy: number, { open = false }: { open?: boolean } = {}): void {
   // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch, on a SECTION: go IN. The one navigating gesture
@@ -240,20 +283,21 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
   // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
   // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
   if (state.readOnly) { toggleCollapse(n.id); return; }
-  // `parentElement === n.el` keeps it to this node's OWN row: .title-row is always a direct child, so
-  // a hit inside a DOM-nested child card can't be read as a hit on its host's title.
-  const onTitle = hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el;
-  // startInlineEdit is the single rename funnel: it refuses a locked node.
   // A FOLDED card unfolds: the chip is a summary, and the double-click asks to see what's in it.
   if (n.collapsed) { toggleCollapse(n.id); return; }
-  if (onTitle) { startInlineEdit(n); return; }
-  // A section's own RIM edits its text — the chrome a section has that isn't its interior or its tab
-  // (which an unnamed section doesn't draw), so there's one way to write on a section whether it's named.
-  if (isSection(n) && onSectionRim(n, cx, cy)) { startInlineEdit(n); return; }
+  // A card has ONE text, its note — the title is its first line — so wherever it was hit, that is what opens.
+  if (!isSection(n)) { startBodyEdit(n, 'all'); return; }
+  // startInlineEdit is the single rename funnel: it refuses a locked node. `parentElement === n.el` keeps
+  // it to this section's OWN tab: .title-row is always a direct child. Its RIM edits its text too — the
+  // chrome a section has that isn't its interior or its tab (which an unnamed section doesn't draw), so
+  // there's one way to write on a section whether it's named.
+  if (hitAt(cx, cy)?.closest('.title-row')?.parentElement === n.el || onSectionRim(n, cx, cy)) {
+    startInlineEdit(n);
+    return;
+  }
   // A SECTION's interior gets a new card WHERE YOU POINTED. Going in is ⌥-double-click (above), ↑, the
-  // float bar's Open (→]) or ⋯ → Open. isSection: a folded section has no interior on screen, so it falls through.
-  if (isSection(n)) { addCardInside(n.id, screenToWorld(cx, cy)); return; }
-  startBodyEdit(n, { x: cx, y: cy });
+  // float bar's Open (→]) or ⋯ → Open.
+  addCardInside(n.id, screenToWorld(cx, cy));
 }
 // A card's colour is its own, or — if unset — inherited from the nearest coloured ancestor (a section).
 // While dragging, preview what that inherited colour is ABOUT TO become, so it doesn't wait for the

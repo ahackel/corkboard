@@ -1,7 +1,7 @@
 // A section is a FOLDER on disk (`<Name>/_index.md` plus its cards), and a folded section's notes are not
 // read until it is unfolded (data/lazy.ts).
 import { test, expect } from '@playwright/test';
-import { openBoard, seedBoard, note, section, card, reload, watchErrors, diskFiles, palette, tooltip, settled, saved } from './helpers';
+import { openBoard, seedBoard, note, section, card, reload, watchErrors, diskFiles, palette, tooltip, settled, saved, select } from './helpers';
 
 // The flat, pre-folder format: the parent named in mm_parent.
 const LEGACY = {
@@ -53,7 +53,7 @@ test('a folded section is not read until it unfolds, and lets go of its notes wh
   await expect(card(page, 'First inside')).toBeVisible();
   await expect(card(page, 'Second inside')).toBeVisible();
   // fold it again: once saved, its notes leave memory (and the DOM) again
-  await section(page, 'Box').locator(':scope > .title-row').click();
+  await select(page, section(page, 'Box'));   // still the selection from the unfold: a click on its tab would rename it
   await page.locator('#fbFold').click();
   await saved(page);
   await settled(page);

@@ -15,8 +15,8 @@ import { ui, inPlaceEditOn, type Pt, type Drag, type Chute } from '../core/ui-st
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { paintAll, paintNode, activateNode, isNodeControlAt, relayout, remeasure, flashArrived } from '../main.js';
-import { endBodyEdit, endTitleEdit } from './inline-edit.js';
+import { paintAll, paintNode, activateNode, editOnClick, openedSince, isNodeControlAt, relayout, remeasure, flashArrived } from '../main.js';
+import { endBodyEdit, endTitleEdit, selectAllInEditor } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
 import { touch, commitStep } from './history.js';
@@ -214,26 +214,42 @@ export function bindNodeDrag(n: MindNode): void {
   // one-finger double-tap gets to keep meaning "edit". `twoDown` is what makes it a TAP rather than a
   // pinch: a two-finger touchstart is also how a zoom begins, so the gesture only registers once
   // touchend confirms it was short, and two confirmed taps in quick succession open the node.
-  let lastTouchTap = 0, twoDown = 0, lastTwoTap = 0;
-  el.addEventListener('touchend', () => {
+  let lastTouchTap = 0, twoDown = 0, lastTwoTap = 0, tapAt = 0;
+  el.addEventListener('touchend', (e) => {
     if (twoDown && performance.now() - twoDown < TWO_TAP_MS) {
       lastTwoTap = performance.now();
     }
     twoDown = 0;
-  }, { passive: true });
+    // A tap that just OPENED this card's editor (main.ts editOnClick, at the pointerup before this) keeps
+    // the browser's emulated mouse events that follow a tap from landing: their mousedown, on the card
+    // rather than in the new textarea, would take the focus straight back out and close it.
+    if (openedSince(n.id, tapAt)) {
+      e.preventDefault();
+    }
+  });
   el.addEventListener('touchstart', (e) => {
     // The innermost card owns the tap, exactly as it owns the dblclick (main.ts nodeEl): child cards
     // are DOM-nested, so without this every ancestor's own counter sees the same two taps and a
     // double-tap on a child fired activateNode all the way up the chain — renaming the child, then
     // opening its parent's note editor on top of it.
     e.stopPropagation();
-    // While editing this node, let the browser handle double-tap normally (word selection)
-    if (inPlaceEditOn(n.id)) { lastTouchTap = 0; return; }
+    // While editing this node, let the browser handle double-tap normally (word selection) — unless the
+    // first tap is what opened the editor (main.ts editOnClick): that's a double-tap on the card, which
+    // selects ALL of its text, as the dblclick does.
+    const now = performance.now();
+    tapAt = now;
+    if (inPlaceEditOn(n.id)) {
+      if (e.touches.length === 1 && now - lastTouchTap < 300 && openedSince(n.id, lastTouchTap)) {
+        e.preventDefault();
+        selectAllInEditor();
+      }
+      lastTouchTap = 0;
+      return;
+    }
     // The card's own controls act on a single tap (main.ts isNodeControlAt): a tap there must not also
     // count toward a double-tap, or the second one would fire the button AND open the card.
     const t0 = e.touches[0];
     if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = 0; return; }
-    const now = performance.now();
     // Two fingers never count toward the one-finger counter either way — otherwise letting go of a
     // pinch would leave a half-finished double-tap behind that the next single tap completed.
     if (e.touches.length === 2) {
@@ -262,7 +278,7 @@ export function bindNodeDrag(n: MindNode): void {
     const tgt = e.target as HTMLElement;
     // A section's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
     // A press there is a press on the section ITSELF: it must take the ordinary card path below —
-    // click selects, a double-click renames, a drag moves the section — so both section-specific
+    // click selects (and renames once it is selected), a drag moves the section — so both section-specific
     // intercepts further down exempt it. `.node` scoping keeps it to this section's OWN tab.
     const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
     if (tgt.closest('input.taskbox') && isLockedEffective(n)) { e.stopPropagation(); e.preventDefault(); return; }  // locked: no task toggling
@@ -371,7 +387,9 @@ function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
            moved:false, dropTarget:n.parent, alt:e.altKey, shift:e.shiftKey, cloned:false,
            meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
            touch: e.pointerType === 'touch',  // higher move threshold for finger taps
-           cardMerge: null, fromFrame };
+           cardMerge: null, fromFrame,
+           reclick: !fromFrame && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+             && state.selId === n.id && state.sel.size === 1 };
   for (const id of ids) { const m2 = state.nodes.get(id); if (m2?.el){ m2.el.style.willChange = 'transform'; m2.el.classList.add('dragging'); } }
   // Continue/commit this drag on `window`, not `el` — pointer capture (above) is still requested
   // best-effort so the dragged card's own hover/other handlers stay quiet, but capture can be
@@ -485,9 +503,6 @@ function dragPointerUp(): void {
         } else if (!drag.fromFrame && (state.selId !== n.id || state.sel.size !== 1)) {
           selectNode(n.id);   // reduce a multi-selection to this card
         }
-        // A click only ever SELECTS. Editing in place is the double-click's job (main.ts
-        // activateNode) — the slow-second-click rename this used to schedule was a 260ms timer racing
-        // that double-click, and every fresh interaction had to remember to cancel it.
       } else {
         // ⌥ over a card merges into it; otherwise the drop rule (dropSection — the same test the preview ran).
         const { cloned, targets, clones, selRoots, cardMerge, chute, pile, fanSlot: slot } = drag;
@@ -570,6 +585,11 @@ function dragPointerUp(): void {
     ui.drag = null;
     document.body.classList.remove('grabbing');
     commitStep();   // plain click / unmoved drag: nothing changed → step is discarded
+    // A plain click on the card that was ALREADY the selection writes on it (main.ts editOnClick) —
+    // after the commit, since the editor opens a step of its own that the click's would swallow.
+    if (drag && !drag.moved && drag.reclick) {
+      editOnClick(drag.n, drag.cx, drag.cy, drag.touch);
+    }
 }
 // Begin a programmatic drag of an already-created node from a screen point, as if the user had
 // pressed down on it there. Used by the ghost-card "drag a new note" flow so a freshly-made card

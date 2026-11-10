@@ -13,9 +13,9 @@
 // in features/text-drag.ts), and `titleProblem`, which had nothing left to refuse once a title may be
 // empty (untitled cards) AND duplicated.
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
-import { ui } from '../core/ui-state.js';
+import { ui, type Pt } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
-import { cardMarkdown, setNoteText, headingOf, caretIn, firstTextLine } from '../utils/frontmatter.js';
+import { cardMarkdown, setNoteText, caretIn, firstTextLine } from '../utils/frontmatter.js';
 import { linkPaste } from '../utils/markdown.js';
 import { highlightMarkdown } from '../utils/md-highlight.js';
 import { htmlToMarkdown } from '../utils/html-md.js';
@@ -197,7 +197,8 @@ function renderedBlockFor(bodyEl: HTMLElement, text: string, pos: number): HTMLE
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
 // single rename FUNNEL, so the outline-mode
 // hand-off and the lock refusal all still happen in exactly one place.
-export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { isNew?: boolean } = {}): void {
+// `at`, a click's point on a section's tab, puts the caret there instead of selecting the name.
+export function startInlineEdit(n: MindNode | undefined, { isNew = false, at }: { isNew?: boolean; at?: Pt } = {}): void {
   if (state.readOnly || !n) {
     return;
   }
@@ -205,7 +206,7 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false }: { is
   // A SECTION's label can't live in the card editor — it's a folder TAB of fixed height, and the section's own
   // `.body` is display:none, so a textarea in there couldn't be focused (see ui-state.ts TitleEdit). Its
   // tab is renamed on itself instead.
-  if (n.type === 'section') { startTitleEdit(n, { isNew }); return; }
+  if (n.type === 'section') { startTitleEdit(n, { isNew, at }); return; }
   startCardEdit(n, { caret: 'title', isNew });
 }
 
@@ -220,7 +221,7 @@ export function editSectionTitle(n: MindNode): void {
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   startTitleEdit(n, { seed: nextSectionTitle() });
 }
-function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boolean; seed?: string } = {}): void {
+function startTitleEdit(n: MindNode, { isNew = false, seed = '', at }: { isNew?: boolean; seed?: string; at?: Pt } = {}): void {
   if (!n.el) {
     return;
   }
@@ -241,6 +242,8 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   // The label is the section's NAME and nothing else (view/layout.ts sectionName), so that is all the
   // editor holds: plain text, one line, no `# ` — endTitleEdit writes it back as the heading.
   const raw = sectionName(n) || seed;
+  // A click's point is read off the RENDERED tab, so before the raw text replaces it.
+  const clicked = at ? offsetAt([titleEl], raw, 0, at) : null;
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
   // The raw text REPLACES the rendered tab, so paintNode's render cache no longer describes what's in
@@ -256,8 +259,30 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '' }: { isNew?: boo
   titleEl.setAttribute('contenteditable', 'plaintext-only');
   titleEl.classList.add('editing');
   titleEl.focus();
-  const r = document.createRange(); r.selectNodeContents(titleEl);     // select-all so typing replaces
+  selectTitle(titleEl, clicked);
+}
+
+// The caret at `at` in a label being renamed, or (null) the whole name selected, so typing replaces it.
+function selectTitle(titleEl: HTMLElement, at: number | null): void {
+  const r = document.createRange();
+  if (at != null && titleEl.firstChild) {
+    r.setStart(titleEl.firstChild, Math.min(at, titleEl.textContent?.length ?? 0));
+  } else {
+    r.selectNodeContents(titleEl);
+  }
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
+}
+
+// ALL of the open editor's text selected: the double-click (or double-tap) whose first click opened it
+// (main.ts editOnClick), as FigJam's double-click on a sticky does.
+export function selectAllInEditor(): void {
+  if (ui.bodyEdit) {
+    const ta = ui.bodyEdit.ta;
+    ta.setSelectionRange(0, ta.value.length);
+    paintHighlight(ta);
+  } else if (ui.titleEdit) {
+    selectTitle(ui.titleEdit.el, null);
+  }
 }
 // A card element is `draggable` (the ⌥ card-file export, features/clipboard.ts), and a draggable
 // ANCESTOR is decisive: the browser resolves any drag begun inside it as that ELEMENT's drag, so a
@@ -398,7 +423,7 @@ function applyTextEdit(ta: HTMLTextAreaElement, r: TextEdit): void {
 // Where the caret lands: on the card's NAME (selected, so typing replaces it — the old rename's
 // select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
 // which is the one nudge that keeps F2 meaningful there.
-type Caret = 'title' | 'end' | { x: number; y: number };
+type Caret = 'title' | 'end' | 'all' | Pt;
 function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
   if (state.readOnly || !n) {
     return;
@@ -428,8 +453,9 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   // didn't want it. F2 on an untitled card puts the caret at the very start instead (caretIn), which is
   // where a `# ` would go if that's what they meant.
   const text = cardMarkdown(n);
-  // A double-click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
-  const clicked = typeof caret === 'object' ? clickedOffset(bodyEl, text, caret) : null;
+  // A click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
+  // From the very start, title included: a card's heading is drawn in its `.body` like the rest.
+  const clicked = typeof caret === 'object' ? offsetAt([bodyEl], text, 0, caret) : null;
   ta.className = 'body-edit'; ta.spellcheck = true; ta.value = text;
   // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
   // than just reverting the edit the way it does for an existing card.
@@ -500,7 +526,9 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   ta.focus({ preventScroll: true });   // the camera, not a scroll of #stage, brings the caret into view
   autosizeBody(ta);              // size to content first so the card's real height is known…
   relayout();    // …then reflow siblings around it (not just after a newline)
-  const [from, to] = clicked != null ? [clicked, clicked] : caretIn(text, caret === 'title' ? 'title' : 'end');
+  const [from, to] = clicked != null ? [clicked, clicked]
+    : caret === 'all' ? [0, text.length]
+    : caretIn(text, caret === 'title' ? 'title' : 'end');
   ta.setSelectionRange(from, to);
   scrollCaretIntoCard(ta);
   paintHighlight(ta);            // the focus starts where the caret landed
@@ -535,40 +563,37 @@ function pasteSheet(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   applyTextEdit(ta, r);
   return true;
 }
-// Where in the SOURCE a point on the rendered note is: the text node under the point and the offset
-// into it (the browser's own hit test), mapped through md-edit.ts sourceOffset. Past the title heading,
-// which isn't in `.body`. Null for a miss (an image, a gap), leaving the caret at the end as before.
-function clickedOffset(bodyEl: HTMLElement, text: string, at: { x: number; y: number }): number | null {
+// Where in the SOURCE a point on rendered text is: the text node under the point and the offset into
+// it (the browser's own hit test), mapped through md-edit.ts sourceOffset, reading the source from
+// `from`. `roots` are the rendered elements, in source order. Null for a miss (an image, a gap), leaving
+// the caret where the caller puts it by default.
+function offsetAt(roots: HTMLElement[], source: string, from: number, at: Pt): number | null {
   const d = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
   let node: Node | null = null, off = 0;
   const p = typeof d.caretPositionFromPoint === 'function' ? d.caretPositionFromPoint(at.x, at.y) : null;
   if (p) { node = p.offsetNode; off = p.offset; }
   else { const r = d.caretRangeFromPoint?.(at.x, at.y); if (r) { node = r.startContainer; off = r.startOffset; } }
-  if (!node || node.nodeType !== Node.TEXT_NODE || !bodyEl.contains(node)) {
+  if (!node || node.nodeType !== Node.TEXT_NODE || !roots.some(r => r.contains(node))) {
     return null;
   }
   const texts: string[] = [];
   let hit = -1;
-  const w = document.createTreeWalker(bodyEl, NodeFilter.SHOW_TEXT);
-  for (let t = w.nextNode(); t; t = w.nextNode()) {
-    if (t === node) {
-      hit = texts.length;
-    }
-    texts.push(t.textContent ?? '');
-    if (hit >= 0) {
-      break;
+  for (const root of roots) {
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let t = w.nextNode(); t && hit < 0; t = w.nextNode()) {
+      if (t === node) {
+        hit = texts.length;
+      }
+      texts.push(t.textContent ?? '');
     }
   }
-  if (hit < 0) {
-    return null;
-  }
-  const h = headingOf(text);
-  return sourceOffset(text, h ? h.at + h.title.length : 0, texts, hit, off);
+  return hit < 0 ? null : sourceOffset(source, from, texts, hit, off);
 }
+
 // "Edit the note" — the same one editor, caret past the name rather than on it. Kept as its own name
-// because that's what its callers mean (double-click the body, `E`, the pen). A double-click passes
-// its point, and the caret lands on the word it hit.
-export function startBodyEdit(n: MindNode, at?: { x: number; y: number }): void {
+// because that's what its callers mean (a click on the selected card, a double-click, `E`, the pen). A
+// click passes its point, and the caret lands on the letter it hit; a double-click passes 'all'.
+export function startBodyEdit(n: MindNode, at?: Pt | 'all'): void {
   startCardEdit(n, { caret: at ?? 'end' });
 }
 // Drop the editor WITHOUT reading the textarea back, because the caller (crud.ts cutBodyRange) has

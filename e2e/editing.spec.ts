@@ -105,15 +105,51 @@ test('cells pasted from a spreadsheet become a table', async ({ page }) => {
   await expect(page.locator('#world .node .body tbody tr')).toHaveCount(1);
 });
 
-test('double-clicking a word in a card opens the editor with the caret on it', async ({ page }) => {
+test('a click on the selected card opens its editor with the caret where it landed', async ({ page }) => {
   await openBoard(page);
   const c = await makeCard(page, 400, 300, '# Title\n\nalpha **beta** gamma');
-  const box = await c.locator('.body strong').boundingBox();
-  await page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await clickAway(page);
+  const box = (await c.locator('.body strong').boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);   // selects…
+  await expect(editor(c)).toHaveCount(0);
+  await page.waitForTimeout(600);                                           // (not a double-click)
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);   // …and writes
   const ta = editor(c);
   await expect(ta).toBeFocused();
-  const caret = await ta.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart));
-  expect(caret).toMatch(/^ta\*\* gamma$|^a\*\* gamma$/);     // mid-"beta", wherever the half falls
+  const caret = await ta.evaluate((el: HTMLTextAreaElement) => [el.selectionStart === el.selectionEnd, el.value.slice(el.selectionStart)]);
+  expect(caret[0]).toBe(true);
+  expect(caret[1]).toMatch(/^ta\*\* gamma$|^a\*\* gamma$/);     // mid-"beta", wherever the half falls
+  await clickAway(page);
+  const h1 = (await c.locator('.body h1').boundingBox())!;
+  await page.mouse.click(h1.x + 3, h1.y + h1.height / 2);                // the title is the note's first line
+  await expect(ta).toBeFocused();
+  expect(await ta.evaluate((el: HTMLTextAreaElement) => el.selectionStart)).toBeLessThanOrEqual(3);
+});
+
+test('a double-click opens the editor with all of the note selected, selected beforehand or not', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, '# Title\n\nalpha beta');
+  const all = () => editor(c).evaluate((el: HTMLTextAreaElement) => el.selectionStart === 0 && el.selectionEnd === el.value.length);
+  await c.locator('.body p').dblclick();      // still the selection makeCard left
+  await expect(editor(c)).toBeFocused();
+  expect(await all()).toBe(true);
+  await page.keyboard.press('Escape');
+  await clickAway(page);                      // nothing selected now
+  await c.locator('.body p').dblclick();
+  await expect(editor(c)).toBeFocused();
+  expect(await all()).toBe(true);
+});
+
+test('double-clicking a word in an open editor still selects just that word', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, 'alpha beta gamma');
+  await page.keyboard.press('e');
+  const ta = editor(c);
+  await expect(ta).toBeFocused();
+  await page.waitForTimeout(600);
+  const b = (await ta.boundingBox())!;
+  await page.mouse.dblclick(b.x + 8, b.y + b.height / 2);
+  expect(await ta.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('alpha');
 });
 
 test('an image dropped beside the open editor keeps the card\'s title', async ({ page }) => {
@@ -187,4 +223,31 @@ test('rich text pasted from another app keeps its links and lists as markdown', 
   await clickAway(page);
   await expect(page.locator('#world .node .body a.lk')).toHaveAttribute('href', 'https://x.y/docs');
   await expect(page.locator('#world .node .body li')).toHaveCount(2);
+});
+
+test.describe('on a touch screen', () => {
+  test.use({ viewport: { width: 768, height: 1024 }, hasTouch: true, isMobile: true });   // a tablet, in Chromium
+  test('a tap on the selected card writes in it, and a double-tap selects all of it', async ({ page }) => {
+    await openBoard(page);
+    const g = await makeCard(page, 300, 300, '# Groceries');
+    // one tap at a time, apart: two quick ones on the canvas are a double-tap, which makes a card
+    const tapAway = async () => { await page.waitForTimeout(400); await page.touchscreen.tap(600, 800); await page.waitForTimeout(400); };
+    await tapAway();
+    await expect(g).not.toHaveClass(/\bsel\b/);
+    await g.tap();
+    await expect(g).toHaveClass(/\bsel\b/);
+    await expect(editor(g)).toHaveCount(0);                // a tap selects…
+    await page.waitForTimeout(400);
+    await g.tap();
+    await expect(editor(g)).toBeFocused();                 // …and a tap on the selection writes
+    await tapAway();
+    await tapAway();
+    await expect(g).not.toHaveClass(/\bsel\b/);
+    const b = (await g.boundingBox())!;
+    await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+    await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+    await expect(editor(g)).toBeFocused();
+    expect(await editor(g).evaluate((el: HTMLTextAreaElement) => el.selectionStart === 0 && el.selectionEnd === el.value.length)).toBe(true);
+    await expect(page.locator('#world .node')).toHaveCount(1);
+  });
 });

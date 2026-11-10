@@ -793,11 +793,10 @@ and only a section opens: on a card ⌥-double-click is a plain double-click. It
 double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `⌘↓`, the float bar's
 Open and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
 the exemption `openSection` itself takes: looking inside something isn't changing it.
-Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: a
-`.title-row` (a card's title row, a section's folder tab) renames via
-`startInlineEdit` — the single rename funnel, so the SECTION
-hand-off and the lock refusal come for free; anything else
-on a card edits its note (on a card those two are the same editor with the caret in a different place). A
+Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: on a
+CARD it edits the note with ALL of it selected, wherever it landed — the title is just the note's first line, so
+there is no title-row case; a section's folder tab or its rim renames via `startInlineEdit` — the single rename
+funnel, so the SECTION hand-off and the lock refusal come for free (and the name is selected, the same "all"). A
 SECTION's interior gets a new card WHERE YOU POINTED (`addCardInside`, which refuses a locked section and
 reveals a folded one) — a 2D box is exactly the container where "here" means something.
 The same gesture on empty canvas creates a root card (`stage`'s
@@ -815,14 +814,30 @@ that section (`detachParentId`). Four things hold it together:
 - **`NODE_CONTROLS`** (`main.ts`) is the one list of things that act on a SINGLE click — chip, checkboxes,
   links and `#tags`, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
   counter bail on it, or the second click would fire the button AND open the card.
-- **A folded node is nothing but its title** (`.node.collapsed .body { display:none }`), so EVERY hit on it
-  renames — otherwise a double-click would open an editor inside a hidden `.body`.
+- **A folded node is nothing but its chip or pill** (`.node.collapsed .body { display:none }`), so a double-click
+  on it never edits — it would open an editor inside a hidden `.body`: a folded card UNFOLDS, a folded section opens.
 - **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows). The short-circuit sits
   ahead of everything, so a read-only double-click on an expanded section FOLDS it rather than opening it — `⌘↓` and the ⋯
   menu are the routes in.
 
-**A click now only ever SELECTS.** Don't reintroduce a slow-second-click rename timer: it can only race the
-double-click it was invented to lose to.
+**A click on the SELECTED node writes on it** (`editOnClick` in `main.ts`) — FigJam's two steps: the first click
+selects, a click on what is ALREADY the only selection opens its text with the caret where it landed (a card's
+note, title line included; a section's or stack's name, on its tab only — its interior and rim stay the drag and
+the double-click's). It is decided at the RELEASE from the selection as it stood at the PRESS (`Drag.reclick`),
+never by a timer: the slow-second-click rename this replaces was a 260ms timer racing the double-click, which is
+why it was cut. A double-click is then select-all wherever it starts, by two routes:
+- **Unselected:** its second click IS the reclick, and opens the editor with everything selected (`mousedown.detail`
+  2). It has to: opening the editor replaces the element the press landed on, so Chrome sends no `click` and no
+  `dblclick` after it.
+- **Selected:** the first click opened the editor at the caret, and the `dblclick` that follows selects ALL
+  (`openedSince` — opened after the double-click's first press). Any other double-click inside an open editor is
+  the browser's word select, as before.
+- **Not for** a folded node, an image card, a locked one, read-only, `NODE_CONTROLS`, or a press with a modifier
+  or from the selection frame — those keep "a click selects", and their double-click falls through to `activateNode`.
+- **Touch** is the same with taps (`features/drag.ts`): a tap opens it, and that tap's `touchend` is cancelled,
+  since the browser's emulated mousedown that follows lands on the card and would blur the new textarea shut. The
+  double-tap counter makes the select-all one. Clicking off an editor still keeps the card selected, so the next
+  click on it writes again — e2e's `select` helper skips its click when the card already is the selection.
 
 **Pasting a URL over selected text LINKS it** (`linkPaste` in `utils/markdown.ts`, bound by
 `pasteUrlLink` in the card's note editor). It is
