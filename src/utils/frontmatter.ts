@@ -115,7 +115,6 @@ export interface ParsedNote {
   title: string;
   fmEntries: FmEntry[];
   color: string;
-  keepStatus: string;
   tags: string[];
   body: string;
   titleGap: boolean;
@@ -270,7 +269,6 @@ export function parseMd(text: string): ParsedNote {
     // a palette key (`blue`) or a custom hex — which is written QUOTED, since a bare #rrggbb is a
     // comment to every other YAML reader (Obsidian included), so strip the quotes back off here
     color: fmValue(entries, 'color').replace(/^["']|["']$/g, ''),
-    keepStatus: fmValue(entries, 'status'),
     tags: fmTags(entries),
     body,                                  // already trimmed, and shorn of the title heading
     titleGap: gap,                         // was there a blank line under the heading (see splitHeading)

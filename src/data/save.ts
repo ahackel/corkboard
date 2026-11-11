@@ -111,7 +111,7 @@ function planPaths(): Map<string, string> {
   // Kept in step below, so a name this loop has already handed out is seen as taken by the nodes after it.
   const inUse = filesInUse();
   for (const n of [...state.nodes.values()].sort((a, b) => ancestorDepth(a) - ancestorDepth(b))) {
-    // While the title is being typed (in-card rename OR the editor sheet), keep the current
+    // While the text that names it is being typed (a card's editor, a section's label), keep the current
     // filename (rename happens when the edit session commits). A note opened ON ITS OWN (store/note.ts)
     // keeps the name you picked it by for good: there is no folder to rename it in.
     const frozen = frozenFileNodeId() === n.id || state.singleNote ? n.file : null;
@@ -157,7 +157,7 @@ async function saveAll(): Promise<void> {
   while (state.toDelete.length) { const gone = state.toDelete[0]; await store.remove(gone); emptied.add(dirOf(gone)); state.toDelete.shift(); }
 
   // CONTENT changes rewrite the note; GEOMETRY changes don't — position, size, collapse and child
-  // order live in board.json now, so `dirtyLayout` alone is not a reason to touch a .md. Moving a
+  // order live in board.json now, so a move alone is not a reason to touch a .md. Moving a
   // card therefore writes one small JSON file instead of one .md per moved card.
   const needWrite = new Set<string>();
   for (const n of state.nodes.values()) {
@@ -249,9 +249,6 @@ async function saveAll(): Promise<void> {
   // else does — a reload in between would find the notes in their new folders and no layout for them.
   if (pathsMoved) {
     await flushBoard();
-  }
-  for (const n of state.nodes.values()) {
-    n.dirtyLayout = false;   // the board write carries these
   }
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
   if (firstError !== undefined) {

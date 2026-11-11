@@ -73,9 +73,7 @@ export function bindCardTags(rowEl: HTMLElement, cardId: string): void {
     });
     chip.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (!chip.dataset.dragged) {
-        toggleSearchTag(chip.dataset.tag!);
-      }
+      toggleSearchTag(chip.dataset.tag!);
     });
   });
 }

@@ -183,7 +183,7 @@ export function beginPileGesture(n: MindNode, e: PointerEvent): void {
 
     // off the pile, onto whatever the pile lies on — a card on the board again, where the pile is
     touch(top.id, n.id);
-    top.parent = n.parent; top.dirty = true; top.dirtyLayout = true;
+    top.parent = n.parent; top.dirty = true;
     paintAll();
     startNodeDrag(top, sx, sy);
     paintNode(top);   // into the drag layer, out of any section's clip
@@ -397,7 +397,6 @@ export function reorderPile(id: string, slot: number): boolean {
   order.splice(Math.min(slot, order.length), 0, id);
   touch(s!.id);
   s!.kidOrder = order;
-  s!.dirtyLayout = true;
   return true;
 }
 
@@ -428,7 +427,7 @@ export function pileInto(targetId: string, make: boolean, roots: string[]): Mind
     const cards = isStack(r) ? pileKids(r) : [r];
     for (const c of cards) {
       touch(c.id);
-      c.parent = s.id; c.dirty = true; c.dirtyLayout = true;
+      c.parent = s.id; c.dirty = true;
       order = order.filter(x => x !== c.id).concat(c.id);
     }
     if (isStack(r)) {
@@ -436,7 +435,6 @@ export function pileInto(targetId: string, make: boolean, roots: string[]): Mind
     }
   }
   s.kidOrder = order;
-  s.dirtyLayout = true;
   return s;
 }
 
@@ -455,7 +453,7 @@ export function settleStacks(): void {
     }
     for (const k of kids) {
       touch(k.id);
-      k.parent = s.parent; k.x = s.x; k.y = s.y; k.dirty = true; k.dirtyLayout = true;
+      k.parent = s.parent; k.x = s.x; k.y = s.y; k.dirty = true;
     }
     deleteNodes([s.id]);   // (an open fan on it closes with it: view/pile.ts layStacks)
   }
@@ -524,7 +522,7 @@ export function stackToSection(): void {
     for (const s of stacks) {
       touch(s.id);
       const cards = pileKids(s).reverse();
-      s.stack = false; s.dirtyLayout = true;
+      s.stack = false;
       paintAll();
       layGrid(cards, { x: s.x + SECTION_FIT_PAD, y: s.y + SECTION_FIT_PAD });
       fitSectionToContent(s);

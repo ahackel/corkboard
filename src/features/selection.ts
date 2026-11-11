@@ -51,7 +51,7 @@ export function applySelection(): void {
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
 // (see utils/model.ts hasLockedAncestor). Nor can anything outside the section you're standing in:
 // it isn't on the canvas, so a selection ring would be invisible and every action on it would look
-// dead. The deliberately unscoped jumps (wikilinks, query results, undo) come out of their scope
+// dead. The deliberately unscoped jumps (wikilinks, search hits, undo) come out of their scope
 // first — see popScopeFor. Shared by every selection entry point below.
 function isSelectable(id: string): boolean {
   const n = state.nodes.get(id); return !n || (!hasLockedAncestor(n) && !outOfScope(n));

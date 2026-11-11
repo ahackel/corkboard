@@ -53,7 +53,7 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
     return;
   }
   record(cards.map(n => n.id),
-    () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
+    () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; } }));
   dropHiddenFromSelection();
   syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();

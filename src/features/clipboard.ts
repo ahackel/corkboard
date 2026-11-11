@@ -277,7 +277,7 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
       const n = mkNode({
         x: (c.p.mm.x ?? target.x) + dx, y: (c.p.mm.y ?? target.y) + dy,
         title: c.p.title,   // verbatim: a pasted card keeps its name, and duplicates are allowed now
-        color: c.p.color, keepStatus: c.p.keepStatus,
+        color: c.p.color,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
         collapsed: c.p.mm.collapsed, type: c.p.mm.type,
       });

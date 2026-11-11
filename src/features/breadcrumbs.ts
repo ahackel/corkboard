@@ -4,9 +4,8 @@
 // #homeBar and its one delegated listener, the way features/search.ts owns #searchWrap; the actions
 // themselves live in main.ts.
 //
-// ONE PILL, not a pill per level. That's #toolbar's pattern — a single --panel capsule holding
-// borderless items that highlight only on hover — and it's what Finder, VS Code, Explorer and Notion
-// all do with a path. #homeBar IS that pill (styles.css); the home button and every segment sit
+// ONE PILL, not a pill per level: a single --panel capsule holding borderless items that highlight
+// only on hover, which is what Finder, VS Code, Explorer and Notion all do with a path. #homeBar IS that pill (styles.css); the home button and every segment sit
 // inside it, so the map name reads as the first segment of the path rather than as loose text beside
 // it, and going into a section just adds segments instead of swapping one kind of chrome for another.
 // The pill matters rather than being decoration: the canvas can now be any colour (syncCanvasBackground),
@@ -14,7 +13,7 @@
 //
 // A DEEP path folds its middle into one `…` that opens a menu of the levels it swallowed. That bounds
 // the segment COUNT, which is the only thing that actually stops a long path running under the centred
-// #toolbar — capping the pill's width can't, because the folder icons and separators are flex:none and
+// search bar — capping the pill's width can't, because the folder icons and separators are flex:none and
 // simply overflow it. Same behaviour as Explorer's and Notion's paths.
 import { state } from '../core/state.js';
 import { nodeLabel } from '../utils/model.js';

@@ -195,8 +195,7 @@ function renderedBlockFor(bodyEl: HTMLElement, text: string, pos: number): HTMLE
 
 // ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
 // Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
-// single rename FUNNEL, so the outline-mode
-// hand-off and the lock refusal all still happen in exactly one place.
+// single rename FUNNEL, so the lock refusal happens in exactly one place.
 // `at`, a click's point on a section's tab, puts the caret there instead of selecting the name.
 export function startInlineEdit(n: MindNode | undefined, { isNew = false, at }: { isNew?: boolean; at?: Pt } = {}): void {
   if (!n) {
@@ -374,10 +373,9 @@ function paintHighlight(ta: HTMLTextAreaElement): void {
   }
 }
 // Paste a URL over selected text and the text becomes a LINK — or, if it already is one, keeps its
-// label and takes the new URL (utils/markdown.ts linkPaste owns that rule). Bound by every editor
-// that holds a note's text: the card's own textarea, the outline's and the mobile sheet's. It writes
-// nothing but the textarea and then dispatches `input`, so each editor's own live path runs — the
-// card's reflow, the outline's write-through — and none of them needs to know this happened.
+// label and takes the new URL (utils/markdown.ts linkPaste owns that rule). Bound by the card's editor.
+// It writes nothing but the textarea and then dispatches `input`, so the editor's own live path runs
+// (the card's reflow) without needing to know this happened.
 // Returns whether it handled the event, so an image paste still gets its turn.
 function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');

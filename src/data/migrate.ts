@@ -26,7 +26,7 @@ export function foldCardsIntoSections(): number {
   const was = new Set(cards.map(n => n.id));
   const arrange = [...state.nodes.values()].filter(n => childrenOf(n.id).length
     && (was.has(n.id) || [...ancestors(n)].some(a => was.has(a.id))));
-  for (const n of cards) { n.type = 'section'; n.dirty = true; n.dirtyLayout = true; }
+  for (const n of cards) { n.type = 'section'; n.dirty = true; }
   arrangeSections(arrange);
   return cards.length;
 }
@@ -103,7 +103,7 @@ export function flattenLegacyBranches(wasStack: Set<string>): number {
     // card writes back exactly where it renders.
     n.rx = n.x - (host ? host.x : 0);
     n.ry = n.y - (host ? host.y : 0);
-    n.dirty = true; n.dirtyLayout = true;
+    n.dirty = true;
     state.edges.push(makeEdge(p.id, n.id));
     made++;
   }

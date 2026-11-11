@@ -23,8 +23,8 @@ export function nodeFrom(text: string, file: string | null = 'Note.md', id = 'n'
   const n: MindNode = {
     id, file, x: 0, y: 0, rx: 0, ry: 0, parent: null,
     collapsed: p.mm.collapsed, locked: p.mm.locked, type: p.mm.type,
-    title: p.title, color: p.color, keepStatus: p.keepStatus, tags: p.tags, body: p.body,
-    titleGap: p.titleGap, titleLevel: p.titleLevel, fmEntries: p.fmEntries, dirty: false, dirtyLayout: false,
+    title: p.title, color: p.color, tags: p.tags, body: p.body,
+    titleGap: p.titleGap, titleLevel: p.titleLevel, fmEntries: p.fmEntries, dirty: false,
   };
   state.nodes.set(id, n);
   return n;

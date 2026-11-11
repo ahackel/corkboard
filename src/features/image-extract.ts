@@ -6,6 +6,7 @@
 // image-only card on empty canvas. Escape / released-nowhere-valid still creates the card at the
 // drop point (a canvas drop); pointercancel or a no-move press leaves the card untouched.
 import { state, isImageCard, type MindNode } from '../core/state.js';
+import { ui } from '../core/ui-state.js';
 import { isSection } from '../view/layout.js';
 import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
@@ -16,8 +17,7 @@ import { IMAGE_W, IMAGE_H, snapPt } from '../view/geometry.js';
 // True while an image-extract gesture is live. A card is natively `draggable` (⌥-drag exports it
 // as a .md file, see clipboard.ts bindCardFileDrag) — that native dragstart would otherwise hijack
 // this pointer gesture, so the export handler bails while this is set.
-let extracting = false;
-export function imageExtractInProgress(): boolean { return extracting; }
+export function imageExtractInProgress(): boolean { return ui.extracting; }
 
 const setHover = classMarker('drop-merge');
 // The card under a screen point that this image can MOVE into: a plain body card, never the source,
@@ -41,7 +41,7 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
   if (!path) {
     return;
   }
-  extracting = true;
+  ui.extracting = true;
   const alt = img.alt || '';
   const nw = img.naturalWidth || IMAGE_W, nh = img.naturalHeight || IMAGE_H;
   const cardW = Math.round(Math.min(IMAGE_W, nw));
@@ -61,7 +61,7 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
     stop();
     setHover(null); preview.remove();
     document.body.classList.remove('grabbing', 'grab-all');
-    extracting = false;
+    ui.extracting = false;
   };
   const onMove = (ev: PointerEvent): void => {
     if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) {

@@ -6,7 +6,7 @@
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
 import { state, stage, world, setStatus, singleNoteRefuses, isImageCard, isStack, type MindNode } from '../core/state.js';
-import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
+import { NARROW_MQ, ui, canvasMoving } from '../core/ui-state.js';
 import { touch } from './history.js';
 import { mutate } from './mutate.js';
 import { subtreesBox, isSection } from '../view/layout.js';
@@ -123,7 +123,7 @@ export function autoSizeSelection(): void {
         n.h = undefined;
         n.clip = undefined;
       }
-      n.dirty = true; n.dirtyLayout = true;
+      n.dirty = true;
     }
   }), { reflow: 'none' });
 }
@@ -469,25 +469,21 @@ function positionBar(): boolean {
 // ---------- hide during drag / pan / zoom ----------
 // The bar gets in the way while the card underneath (or the whole canvas) is moving, so it hides
 // for the duration of any interaction and reappears once the pointer lifts. Node drag / canvas
-// pan / pinch / marquee all flow through the shared `ui` holder (core/ui-state.ts) and clear on
-// pointerup, so polling them from the follow loop below covers all of those with no extra hooks
-// into drag.ts/gestures.ts. Wheel-driven pan/zoom has no pointer at all — those set `wheelBusy`
-// directly and clear it after a short idle debounce instead.
-let wheelBusy = false;
+// pan / pinch / marquee all flow through the shared `ui` holder (core/ui-state.ts canvasMoving) and
+// clear on pointerup, so polling it from the follow loop below covers all of those with no extra hooks
+// into drag.ts/gestures.ts. Wheel-driven pan/zoom has no pointer at all — those set `ui.wheeling`
+// here and clear it after a short idle debounce instead.
 let wheelIdleTimer: number | null = null;
 function markWheelBusy(): void {
-  wheelBusy = true;
+  ui.wheeling = true;
   if (wheelIdleTimer != null) {
     clearTimeout(wheelIdleTimer);
   }
-  wheelIdleTimer = window.setTimeout(() => { wheelBusy = false; wheelIdleTimer = null; }, 150);
+  wheelIdleTimer = window.setTimeout(() => { ui.wheeling = false; wheelIdleTimer = null; }, 150);
 }
 stage.addEventListener('wheel', markWheelBusy, { passive: true });
-stage.addEventListener('gesturestart', () => { wheelBusy = true; });
-stage.addEventListener('gestureend', () => { wheelBusy = false; });
-export function isInteracting(): boolean {
-  return !!(ui.drag || ui.pan || ui.pinch || ui.marquee) || inPlaceEditActive() || wheelBusy;
-}
+stage.addEventListener('gesturestart', () => { ui.wheeling = true; });
+stage.addEventListener('gestureend', () => { ui.wheeling = false; });
 // ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
 // here, so it can never paint a section sitting in the screen corner with nothing behind it. Reports
 // whether it's anchored, for the popovers that hang off it (they'd float alone otherwise).
@@ -508,7 +504,7 @@ function placeBar(): boolean {
 let raf: number | null = null;
 let placedFor = '', placedOk = false;
 function followLoop(): void {
-  const interacting = isInteracting();
+  const interacting = canvasMoving();
   if (interacting) {
     placedFor = '';
   } else {
@@ -525,9 +521,6 @@ function followLoop(): void {
   if (activePopover){
     activePopover.pop.classList.toggle('hide-interact', interacting || !placed);
   }
-  // …and tell the rest of the page, via one body-level class: a hover peek (features/peek.ts) holds
-  // off while the canvas moves under it.
-  document.body.classList.toggle('canvas-interacting', interacting);
   raf = bar.classList.contains('open') ? requestAnimationFrame(followLoop) : null;
 }
 window.addEventListener('resize', () => { closePopovers(); placeBar(); });
@@ -550,7 +543,6 @@ export function syncFloatBar(): void {
   if (!visible) {
     bar.classList.remove('open');
     if (raf != null) { cancelAnimationFrame(raf); raf = null; }
-    document.body.classList.remove('canvas-interacting');
     return;
   }
   if (bar.classList.contains('open')) {   // already showing — update in place, no delay needed

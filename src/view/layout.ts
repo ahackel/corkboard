@@ -22,20 +22,13 @@ import { firstLineLabel } from '../utils/frontmatter.js';
 // A node's persisted position is an OFFSET from its parent, so moving the PARENT restales every
 // child's stored position even though nothing about the child moved on screen — dragging a section's
 // west edge (which shifts the section's own x), or undoing such a resize, leaves each child's saved
-// offset describing the OLD one. Catching it here, in the one bridge every save goes through, covers
-// every mover (resize, undo/redo, drag) instead of asking each of them to remember. Compared ROUNDED,
-// since that's the precision the board file stores — raw float noise would otherwise flag every node
-// on every save.
-// It flags `dirtyLayout`, NOT `dirty`: a position is board.json's business (data/board.ts), and
-// marking the NOTE dirty here would rewrite a .md on every drag to change nothing in it.
+// offset describing the OLD one. Refreshing it here, in the one bridge every save goes through, covers
+// every mover (resize, undo/redo, drag) instead of asking each of them to remember. It marks nothing
+// dirty: a position is board.json's business (data/board.ts), which is rewritten whole.
 export function commitRel(): void {
   for (const n of state.nodes.values()) {
     const p = parentOf(n);
-    const rx = n.x - (p ? p.x : 0), ry = n.y - (p ? p.y : 0);
-    if (Math.round(rx) !== Math.round(n.rx) || Math.round(ry) !== Math.round(n.ry)) {
-      n.dirtyLayout = true;
-    }
-    n.rx = rx; n.ry = ry;
+    n.rx = n.x - (p ? p.x : 0); n.ry = n.y - (p ? p.y : 0);
   }
 }
 
@@ -225,7 +218,7 @@ export function moveSubtreeTo(node: MindNode, x: number, y: number): void {
     if (isHidden(n) && !insideSection(n)) {
       continue;
     }
-    n.x += dx; n.y += dy; n.dirtyLayout = true;
+    n.x += dx; n.y += dy;
   }
 }
 // A parent's child ORDER: STORED (board.json), seeded from reading order (top to bottom, then left to

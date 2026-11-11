@@ -217,7 +217,7 @@ function startGroupResize(e: PointerEvent, dir: Dir): boolean {
         }
         scaled.add(n);
       }
-      n.dirty = true; n.dirtyLayout = true;
+      n.dirty = true;
     }
     for (const p of plans) {
       paintNode(p.n);

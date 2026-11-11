@@ -2,7 +2,7 @@
 // Its colour row means "the colour of the canvas I'm standing on". What that IS depends on where you
 // are, and features/canvas-color.ts's canvasOwner is the single place that decides:
 //   · at the TOP level there's no section, so it edits the MAP's own colour — state.canvasColor,
-//     per-map in settings.json beside the grid, so it travels with the vault rather than the browser.
+//     per-map in board.json beside the grid, so it travels with the map rather than the browser.
 //   · inside an OPEN section the canvas already IS that section's interior and wears its fill, so the
 //     button edits that SECTION's colour — the same `n.color` the float bar would write if the section
 //     were selected. Nothing new is introduced for the case; the existing paint just follows.
@@ -259,7 +259,7 @@ export function setupCanvasColor(): void {
 // While a section is OPEN the canvas IS its interior, so the canvas takes the section's own fill — the
 // very colour its box was wearing a moment before, through the same resolver its box used
 // (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no section and the
-// canvas wears the MAP's own colour instead (state.canvasColor, per-map in settings.json). Written on
+// canvas wears the MAP's own colour instead (state.canvasColor, per-map in board.json). Written on
 // #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
 // the grid still draws over it.
 // A SECTION's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so

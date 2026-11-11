@@ -2,7 +2,7 @@
 // Central mutable app state + the shared DOM handles every module renders into.
 // `state` is a single object whose PROPERTIES are mutated in place (never reassign the
 // binding) so the live view is shared across modules. DOM nodes live under #world /
-// #stage; edges in the #edges SVG, collapse toggles in #toggles.
+// #stage; the lines in the #freeEdges SVG, ports and handles in #toggles.
 // ============================================================
 import { byId } from '../utils/dom.js';
 import { soleImage } from '../utils/markdown.js';
@@ -34,7 +34,8 @@ export interface FmEntry {
 }
 
 // A board node. One .md file per node; the filename is its identity on disk. In-memory
-// `id`s are ephemeral (minted per load). Edges are DERIVED from `parent` — no edge list.
+// `id`s are ephemeral (minted per load). `parent` is CONTAINMENT (the section it sits in); the lines
+// drawn between cards are `state.edges`.
 export interface MindNode {
   id: string;
   file: string | null;             // relative path on disk; null until first save
@@ -74,7 +75,6 @@ export interface MindNode {
   stack?: boolean;
   title: string;
   color: string;                   // palette key, e.g. 'blue', or '' for none
-  keepStatus: string;              // preserved `status:` frontmatter value
   tags: string[];
   body: string;
   titleGap?: boolean;              // false = the note's first line sits directly under the `# ` line,
@@ -86,7 +86,6 @@ export interface MindNode {
                                     // a note that opens on `## Notes` is saved as it was
   fmEntries?: FmEntry[];           // original frontmatter, preserved verbatim on save
   dirty: boolean;                  // needs a disk write
-  dirtyLayout: boolean;            // needs (re)positioning by applyLayouts
   kidOrder?: string[];             // this parent's child ORDER — seeded from position the first time
                                     // it's needed, spliced by a drag, and persisted to board.json as
                                     // paths (data/board.ts). Reconciled by orderedKids, which drops
@@ -167,8 +166,8 @@ export interface AppState {
   // bar, so selecting either clears the other (features/edge-tools.ts).
   selEdges: Set<string>;
   sel: Set<string>;                // full selection set (⌘-click / marquee)
-  gridStyle: GridStyle;            // restored per-map from settings.json — see data/persistence.ts
-  gridSize: GridSize;               // pattern cell size in world px — restored per-map from settings.json
+  gridStyle: GridStyle;            // restored per-map from board.json — see data/board.ts
+  gridSize: GridSize;               // pattern cell size in world px — restored per-map from board.json
   // The MAP's own canvas colour — a colour VALUE like a node's (a palette key or an authored hex,
   // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
   // open section the canvas wears that section's fill instead. See features/canvas-color.ts's canvasFill, the one resolver.

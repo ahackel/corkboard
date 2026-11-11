@@ -2,9 +2,9 @@
 // board.json — the ONE sidecar beside the notes.
 //
 // A node is a file and carries its own frontmatter; everything that is about the BOARD rather than
-// about a note lives here instead: the free edges the user drew, the freehand ink layer, and the
-// per-map view preferences. It replaces the two sidecars this app used to keep (sketch.json and
-// settings.json), which are still READ so an older vault opens unchanged — but never written again.
+// about a note lives here instead: where each card sits, the lines the user drew, and the per-map view
+// preferences. It replaced the settings.json this app used to keep, which is still READ once when a
+// map has no board.json yet — and never written again.
 //
 // The split rule, in one line: frontmatter describes the NOTE, board.json describes the BOARD's
 // arrangement of it. Membership is neither: a section is a FOLDER (docs/architecture.md), so which section

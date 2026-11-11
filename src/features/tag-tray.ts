@@ -62,11 +62,7 @@ export function refreshTray(): void {
   }).join('') : `<span class="tray-none">No tags yet — make one here, then drag it onto a card</span>`;
   list.querySelectorAll<HTMLElement>('.tag').forEach(el => {
     el.addEventListener('pointerdown', (e) => { e.preventDefault(); beginTagDrag(e, el, el.dataset.tag!, null, (x, y) => deleteTag(el.dataset.tag!, x, y)); });
-    el.addEventListener('click', () => {
-      if (!el.dataset.dragged) {
-        toggleSearchTag(el.dataset.tag!);
-      }
-    });
+    el.addEventListener('click', () => toggleSearchTag(el.dataset.tag!));
   });
 }
 
@@ -154,9 +150,12 @@ function deleteTag(tag: string, x: number, y: number): void {
 tray.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a canvas pan or marquee
 btn.addEventListener('click', () => toggleTray());
 
-// after every module has loaded: the tray reads the search and the board
-setTimeout(() => { try {
-  if (localStorage.getItem(KEY)) {
-    toggleTray(true);
-  }
-} catch { /* closed, then */ } });
+// Back out if it was out last time. Called from main.ts once every module has loaded: the tray reads
+// the search and the board.
+export function restoreTray(): void {
+  try {
+    if (localStorage.getItem(KEY)) {
+      toggleTray(true);
+    }
+  } catch { /* closed, then */ }
+}

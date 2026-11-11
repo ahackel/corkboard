@@ -75,7 +75,7 @@ function sameWidth(): void {
   const cards = targets().filter(n => n.type !== 'section' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }
   const w = Math.max(...cards.map(nodeW));
-  mutate(cards.map(n => n.id), () => { for (const n of cards) { n.w = w; n.dirtyLayout = true; } },
+  mutate(cards.map(n => n.id), () => { for (const n of cards) { n.w = w; } },
     { reflow: 'remeasure', status: 'Same width' });
 }
 

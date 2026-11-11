@@ -94,7 +94,7 @@ function applyDragTransform(drag: Drag, dx: number, dy: number): void {
     if (!m) {
       continue;
     }
-    m.x = s.x + dx; m.y = s.y + dy; m.dirtyLayout = true;
+    m.x = s.x + dx; m.y = s.y + dy;
     if (m.el) {
       const orig = drag.origins.get(id);
       if (orig) {
@@ -145,11 +145,8 @@ function autoPanStep(): void {
   if (!drag || !drag.moved) {
     return;
   }
-  // Available canvas = the stage minus the toolbar (above it) and, on wide screens, the outline
-  // drawer when it's open (the floating edit bar overlays the card itself rather than docking to
-  // a screen edge, so it's not an obstruction here). Panning kicks in as the cursor reaches that
-  // obstruction, so you can drag onto / past it — and so it doesn't start abruptly only once
-  // the cursor slips BEHIND the outline drawer to the true window edge.
+  // Available canvas = the stage. Panning kicks in as the cursor nears its edge, so you can drag a card
+  // to somewhere that isn't on screen yet.
   const r = stage.getBoundingClientRect();
   const right = r.right;
   const M = 56, MAX = 16;   // edge band (px) and max pan speed (px/section)
@@ -638,7 +635,7 @@ export function cancelDragRestore(): void {
     state.nodes.delete(clone.id); clone.el?.remove();
   }
   for (const [id, s] of drag.start){
-    const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = true; }
+    const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; }
   }
   abortDrag();
   relayout();   // no new cards to measure — one layout + paint suffices
@@ -656,7 +653,7 @@ function applyDragClone(): void {
   if (drag.shift && !drag.cloned && !state.singleNote){
     drag.cloned = true;
     for (const [id, s] of drag.start){             // pin the original subtree(s) back to start
-      const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; m.dirtyLayout = false; }
+      const m = state.nodes.get(id); if (m){ m.x = s.x; m.y = s.y; }
       // revert their compositor transforms — `drag.active` is about to switch to the clone
       if (m?.el) { m.el.style.transform = ''; }
       if (m?.sectionContentEl) { m.sectionContentEl.style.transform = ''; }
@@ -977,6 +974,6 @@ function reparentOnly(childId: string, newParentId: string | null): boolean {
   touch(childId, child.parent, newParentId);
   child.parent = newParentId;
   // The parent is the note's FOLDER, so a reparent moves the file (the save works out where); the offset is the board's.
-  child.dirty = true; child.dirtyLayout = true;
+  child.dirty = true;
   return true;
 }

@@ -7,7 +7,7 @@
 // The panel is a `.node` with a `.body` so it picks up the card text styles (headings, lists, code) from
 // the same rules a card uses; it lives outside #world, so nothing that walks the canvas ever sees it.
 import { state, world } from '../core/state.js';
-import { ui } from '../core/ui-state.js';
+import { isBusy } from '../core/ui-state.js';
 import { renderBodyHTML } from '../utils/markdown.js';
 import { cardMarkdown } from '../utils/frontmatter.js';
 import { placeInViewport } from '../utils/dom.js';
@@ -33,10 +33,7 @@ function hidePeek(): void {
   panel.classList.remove('open');
 }
 
-function busy(): boolean {
-  return !!ui.drag || !!ui.bodyEdit || !!ui.titleEdit || !!ui.edgeDraw || document.body.classList.contains('grabbing')
-      || document.body.classList.contains('canvas-interacting');
-}
+const busy = isBusy;
 
 // Tap/click on a folded card's "N more lines": the panel at once, or away again if it's already up.
 export function peekCard(cardEl: HTMLElement): void {

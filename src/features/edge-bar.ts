@@ -10,13 +10,13 @@
 // follow loop the card bar uses.
 // ============================================================
 import { state, type EdgeCap, type BoardEdge } from '../core/state.js';
+import { canvasMoving } from '../core/ui-state.js';
 import { selectedEdges, leadEdge } from './edge-tools.js';
 import { edgeGeometry, edgeVisible } from '../view/free-edges.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { touchEdges, commitStep } from './history.js';
 import { mutate } from './mutate.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { isInteracting } from './float-bar.js';
 import { paletteChipsHTML } from './properties.js';
 import { byId, safeInsets, placeInViewport, placePopover, closeOnOutside } from '../utils/dom.js';
 import { chevron } from '../view/icons.js';
@@ -250,7 +250,7 @@ function followLoop(): void {
   if (editingId) {
     placeLabelEdit();
   }
-  const busy = isInteracting();
+  const busy = canvasMoving();
   bar.classList.toggle('hide-interact', busy);
   colorPop.classList.toggle('hide-interact', busy);
   arrowPop.classList.toggle('hide-interact', busy);

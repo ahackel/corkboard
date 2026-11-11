@@ -34,9 +34,9 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
   return {
     id, file:null,
     x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false,
-    title:'', color:'', keepStatus:'', tags:[], body:'',
+    title:'', color:'', tags:[], body:'',
     type:'card',
-    dirty:true, dirtyLayout:true,
+    dirty:true,
     ...fields,
   };
 }

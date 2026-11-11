@@ -30,7 +30,7 @@
 //
 // Cost per pan/zoom section is one transform write plus one opacity write, both compositor-only;
 // the gradients are rebuilt only when the level actually changes.
-// Persisted per-map in settings.json (data/persistence.ts) — not localStorage, since it's a
+// Persisted per-map in board.json (data/board.ts) — not localStorage, since it's a
 // property of the map/vault, and should travel with it.
 import { chevron } from './icons.js';
 import gridOffIcon from '../assets/icons/grid-off.svg?raw';

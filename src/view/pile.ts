@@ -88,7 +88,7 @@ export function layStacks(): boolean {
     for (const k of kids) {
       const at = spots?.get(k.id) ?? { x: pileX(s, k), y: s.y, tilt: 0 };
       if (Math.abs(k.x - at.x) >= 0.5 || Math.abs(k.y - at.y) >= 0.5) {
-        k.x = at.x; k.y = at.y; k.dirtyLayout = true;
+        k.x = at.x; k.y = at.y;
       }
       if (spots) {
         fanTilts.set(k.id, at.tilt);

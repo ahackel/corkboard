@@ -88,6 +88,10 @@ export const ui = {
   // Counts every repaint and placement of a node (main.ts paintNode/placeSelf): what a follower of the
   // canvas compares to know whether anything can have moved since it last looked (the float bar).
   paintTick: 0,
+  // A wheel or trackpad pan/zoom is under way (no pointer is down for those; float-bar.ts times it out),
+  // and a picture is being pulled out of a card (features/image-extract.ts).
+  wheeling: false,
+  extracting: false,
   // ---- node drag (features/drag.ts) ----
   drag: null as Drag | null,
   dragRAF: null as number | null,   // pending rAF for drag paint; coalesces moves per frame
@@ -136,6 +140,17 @@ export const gPointers = new Map<number, Pt>();
 // truth for the save loop, the disk-reload guard, the render core, the float bar and a canvas tap,
 // rather than `ui.bodyEdit || ui.titleEdit` spelled out at each.
 export function inPlaceEditActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
+
+// The ONE spelling of "the canvas is busy", for the chrome that stands down meanwhile.
+//   canvasMoving — what is under the pointer is moving or being typed into: a drag, a pan, a pinch, a
+//                  rubber band, a wheel, an open editor. The selection bars hide for these.
+//   isBusy       — that, or anything else in hand: a line being drawn, a picture pulled out of a card.
+//                  A hover peek waits for all of it.
+export function canvasMoving(): boolean {
+  return !!(ui.drag || ui.pan || ui.pinch || ui.marquee) || inPlaceEditActive() || ui.wheeling;
+}
+
+export function isBusy(): boolean { return canvasMoving() || !!ui.edgeDraw || ui.extracting; }
 // …and the same question about ONE node: is this the card/label currently being typed into.
 export function inPlaceEditOn(id: string): boolean {
   return ui.bodyEdit?.id === id || ui.titleEdit?.id === id;
@@ -148,13 +163,12 @@ export function inPlaceEditOn(id: string): boolean {
 export function frozenFileNodeId(): string | null { return ui.bodyEdit?.id ?? ui.titleEdit?.id ?? null; }
 
 // ---- responsive mode predicates ----
-// 700px MUST match the `@media (max-width:700px)` breakpoint in styles.css (bottom-sheet panel).
+// 700px MUST match the `@media (max-width:700px)` breakpoint in styles.css (the docked bars).
 export const NARROW_MQ = matchMedia('(max-width: 700px)');
 const COARSE_MQ = matchMedia('(pointer: coarse)');
 // "Phone" = coarse pointer AND narrow screen. Deliberately AND, not OR: an iPad is coarse but
-// wide (inline editing works there), and a narrow desktop window keeps its fine pointer. On a
-// phone all title/body editing routes to the full-screen editor sheet instead of the in-card
-// editors (see features/inline-edit.ts).
+// wide, and a narrow desktop window keeps its fine pointer. Only boot asks: a phone opens framed on
+// the map's biggest branch rather than fitted to all of it (boot.ts orientForPhone).
 export function phoneMode(): boolean { return COARSE_MQ.matches && NARROW_MQ.matches; }
 
 // True when focus is in a text field (sidebar input/textarea) or a contenteditable (the in-card

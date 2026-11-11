@@ -40,20 +40,18 @@ type SectionDir = typeof SECTION_DIRS[number];
 // `:scope >` throughout, NOT a descendant query: child cards are DOM-nested inside their parent
 // (see place/settledHost), so a plain card containing a nested image card would otherwise see the
 // CHILD's handles, conclude it already had its own, and never get any.
-export function ensureResizeHandles(n: MindNode, dirs: readonly SectionDir[]): void {
+export function ensureResizeHandles(n: MindNode): void {
   const el = n.el!;
-  const key = dirs.join('');
-  if (el.dataset.fhDirs === key) {
-    return;   // keyed by the direction SET, so a type flip rebuilds
+  if (el.dataset.fhDirs) {
+    return;   // it has them: every kind takes the same eight
   }
-  clearResizeHandles(el);
-  for (const dir of dirs) {
+  for (const dir of SECTION_DIRS) {
     const h = document.createElement('div');
     h.className = 'fh fh-' + dir;
     h.addEventListener('pointerdown', (e) => startNodeResize(e as PointerEvent, n, dir));
     el.appendChild(h);
   }
-  el.dataset.fhDirs = key;
+  el.dataset.fhDirs = '1';
 }
 export function clearResizeHandles(el: HTMLElement): void {
   if (!el.dataset.fhDirs) {

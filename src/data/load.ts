@@ -86,7 +86,6 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
   const hasBoard = (g?.x != null && g?.y != null);
   const hasRel = hasBoard || (mm.px != null && mm.py != null);
   const hasLegacy = (mm.x != null && mm.y != null);
-  const hasPos = hasRel || hasLegacy;
   const placed = seeds.placed;
   const node: MindNode = {
     id: 'n' + (state.idSeq++), file:rel, x: 0, y: 0,   // x/y derived from rx/ry in settle()
@@ -105,7 +104,7 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
     h: g?.h ?? (isBoxType(type) || imageOnly ? mm.h : undefined) ?? undefined,
     clip: !!g?.clip,
     stack: type === 'section' && !!g?.stack,
-    ...rest, dirty: unmigrated || !!mm.parent, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
+    ...rest, dirty: unmigrated || !!mm.parent,   // notes lacking a position get one persisted
   };
   // The name the file has now stands for the text it has now (data/save.ts keepsName)
   noteNamed(rel, slugStem(node));
@@ -273,9 +272,9 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   if (folded) {
     setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into section${folded === 1 ? '' : 's'}`);
   }
-  // Persist the resolved layout so the saved mm_x/mm_y match what's on screen. Only write when
-  // the load actually moved something, so a stable reopen touches no files.
-  if ([...state.nodes.values()].some(n => n.dirty || n.dirtyLayout)) {
+  // Persist what the load itself settled — a note placed for the first time, a migration, a body-less
+  // note given its heading — so the disk matches what's on screen. Only then: a stable reopen touches no files.
+  if (seeds.unplaced.size || flattened || folded || [...state.nodes.values()].some(n => n.dirty)) {
     scheduleSave();
   }
   const notice = takeBoardNotice();
@@ -367,7 +366,6 @@ export function arrangeSections(sections: MindNode[], fresh?: Set<string>): void
       const end = snapPt({ x: x + w + SPACING + SECTION_BORDER, y: y + SECTION_BORDER });
       f.w = Math.max(MIN_SECTION_W, end.x - f.x);
       f.h = end.y - f.y;
-      f.dirtyLayout = true;
       paintNode(f);
     }
   }

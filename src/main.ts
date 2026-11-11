@@ -37,7 +37,7 @@ import { syncFloatBar } from './features/float-bar.js';   // also registers the 
 import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTags, tagChipHTML } from './features/tags.js';
-import { refreshTray } from './features/tag-tray.js';
+import { refreshTray, restoreTray } from './features/tag-tray.js';
 import { noteTags, wearsTags } from './utils/tags.js';
 import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
@@ -53,7 +53,7 @@ import { ui, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.j
 import { byId, keys } from './utils/dom.js';
 import { applyColorVars, colorClass } from './view/color.js';
 import { canFold, isSectionFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
-import { ensureResizeHandles, SECTION_DIRS, clearResizeHandles } from './features/resize.js';
+import { ensureResizeHandles, clearResizeHandles } from './features/resize.js';
 import { syncSelFrame } from './features/sel-frame.js';
 import { toggleCollapse } from './features/fold.js';
 import { openSection, syncScopeChrome } from './nav/sections.js';
@@ -446,29 +446,12 @@ export function paintNode(n: MindNode): void {
     if (el.style.transform) {
       el.style.transform = '';
     }
-    // A child card is nested INSIDE its parent card's element, positioned by its offset from the
-    // parent (n.x - parent.x — the live, staleness-proof form of rx/ry). So the parent carries its
-    // whole subtree via the compositor: moving the parent's element moves every descendant with it,
-    // no per-descendant left/top rewrite. Roots stay under #world; a direct section child stays in the
-    // section's overflow:hidden wrapper (place()). isSection covers sections (image cards are leaves).
-    const p = parentOf(n);
+    // root → #world; a section's child → its content wrapper (place()). A SECTION's own box goes the same
+    // way: its content wrapper is placed by the very same place()/settledHost call (sectionContentEl),
+    // and the two only stack correctly — wrapper above the box's own fill — while they're SIBLINGS in
+    // one DOM parent. (Cards never hold cards, so nothing is ever nested inside a card's own element.)
     const np = paintPos(n);   // live, or the frozen drag origin — see paintPos
-    // (The OPEN section is the canvas even while folded: its children are top-level, never nested in its pill.)
-    if (p && !isSection(p) && !isScopeRoot(p) && !isStack(p) && !isSection(n)) {
-      const pEl = nodeEl(p);
-      const pp = paintPos(p);
-      el.style.left = (np.x - pp.x) + 'px';
-      el.style.top  = (np.y - pp.y) + 'px';
-      if (el.parentElement !== pEl) {
-        pEl.appendChild(el);
-      }
-    } else {
-      // root → #world; direct section child → its content wrapper. A SECTION's own box always takes
-      // this branch: its content wrapper is placed by the very same place()/settledHost call
-      // (sectionContentEl), and the two only stack correctly — wrapper above the box's own fill —
-      // while they're SIBLINGS in one DOM parent.
-      placeSelf(n, np.x, np.y);
-    }
+    placeSelf(n, np.x, np.y);
   }
   // Apply the node's size, and give it the resize hit-zones its kind supports. Every kind gets all 8.
   // A section / image card is its own 2D box. A card's height is a MINIMUM (min-height): drag it taller
@@ -492,7 +475,7 @@ export function paintNode(n: MindNode): void {
   } else if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     el.style.height = nodeH(n) + 'px';
-    ensureResizeHandles(n, SECTION_DIRS);
+    ensureResizeHandles(n);
     if (isSection(n)) {
       sectionContentEl(n);   // create/reposition/resize this section's overflow:hidden content wrapper
     }
@@ -507,7 +490,7 @@ export function paintNode(n: MindNode): void {
     // back up is how you unfold it (startNodeResize), the mirror of scaling a card down to fold it.
     // The authored w/h stay on the node untouched meanwhile, for the chip's own unfold.
     el.style.width = ''; el.style.height = '';
-    ensureResizeHandles(n, SECTION_DIRS);
+    ensureResizeHandles(n);
   } else {
     // A plain card: an authored width if it has one (else back to the CSS-fixed card width), never an
     // inline height — its authored height is the min-height set above.
@@ -526,7 +509,7 @@ export function paintNode(n: MindNode): void {
     if (collapsed) {
       clearResizeHandles(el);
     } else {
-      ensureResizeHandles(n, SECTION_DIRS);
+      ensureResizeHandles(n);
     }
   }
   // Don't clobber a SECTION's label while it's being renamed on itself (ui.titleEdit — the user is
@@ -1102,6 +1085,7 @@ byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
 
 installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan
 installPeek();        // hover a folded card to read it (features/peek.ts)
+restoreTray();        // the tag tray, if it was out last time (features/tag-tray.ts)
 
 boot();   // local-first: open straight into the last map
 

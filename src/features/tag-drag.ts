@@ -12,7 +12,7 @@ import { state } from '../core/state.js';
 import { wearsTags } from '../utils/tags.js';
 import { retag, tagFaceHTML, type TagChange } from './tags.js';
 import { pushMru } from './tag-picker.js';
-import { classMarker, trackPointer } from '../utils/dom.js';
+import { classMarker, trackPointer, swallowNextClick } from '../utils/dom.js';
 import { taggableSelection } from './selection.js';
 
 const SLOP = 4;
@@ -63,9 +63,7 @@ export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fr
     ghost.remove();
     document.body.classList.remove('tag-dragging');
     chip.classList.remove('lifted');
-    // the click that follows a drag is not a click
-    chip.dataset.dragged = '1';
-    setTimeout(() => { delete chip.dataset.dragged; }, 0);
+    swallowNextClick();   // the click that follows a drag is not a click
     if (ev) {
       drop(ev);
     }

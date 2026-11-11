@@ -1,10 +1,9 @@
 // The SEMANTIC half of the Google TypeScript style guide (ts.dev/style) — rules about what the code
-// means, not how it's laid out. Layout is Prettier's job (.prettierrc.json), so eslint-config-prettier
-// comes last and switches off every rule that would fight it.
+// means, not how it's laid out. Layout is the house style in CLAUDE.md ("Code style"), kept by hand: no
+// formatter runs over this code.
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import importX from 'eslint-plugin-import-x';
-import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/'] },
@@ -42,8 +41,6 @@ export default tseslint.config(
   },
   // Tool configs are consumed as default exports.
   { files: ['vite.config.js', 'playwright.config.ts', 'eslint.config.js'], rules: { 'import-x/no-default-export': 'off' } },
-  prettier,
-
-  // House style: every if/else/loop body is a braced block. After `prettier`, which switches `curly` off.
+  // House style: every if/else/loop body is a braced block.
   { files: ['**/*.{ts,js}'], rules: { curly: ['error', 'all'] } },
 );

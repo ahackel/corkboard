@@ -35,7 +35,7 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
   }
   let revealed = false;
   if (toReveal.length) {
-    record(toReveal.map(m => m.id), () => { for (const m of toReveal){ m.collapsed = false; m.dirtyLayout = true; } revealed = true; });
+    record(toReveal.map(m => m.id), () => { for (const m of toReveal){ m.collapsed = false; } revealed = true; });
   }
   selectNode(target.id);                       // select → the card shows its full body (grows)
   relayout();                  // reflow siblings around the now-taller selection

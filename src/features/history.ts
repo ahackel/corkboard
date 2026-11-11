@@ -27,7 +27,7 @@ import { firstLineLabel } from '../utils/frontmatter.js';
 // snapshotted — without them a resize that only moves the east/south edge left x/y unchanged, so
 // sameSnap() saw no difference and commitStep() discarded the whole step (⌘Z then undid the
 // PREVIOUS action instead).
-type NodeSnap = Omit<MindNode, 'id' | 'el' | 'sectionContentEl' | 'dirty' | 'dirtyLayout' | '_parentPath' | 'rx' | 'ry'>;
+type NodeSnap = Omit<MindNode, 'id' | 'el' | 'sectionContentEl' | 'dirty' | '_parentPath' | 'rx' | 'ry'>;
 type Images = Map<string, NodeSnap | null>;      // null = the node does not exist
 // A step captures node before/after images and, where an op changed something that isn't a node:
 // the map's canvas colour (see touchCanvas) and the whole EDGE list (see touchEdges). One unified
@@ -45,7 +45,7 @@ interface Step {
   canvas?: { before: string; after: string };
   edges?: { before: EdgeGraph; after: EdgeGraph };
 }
-interface EdgeGraph { edges: BoardEdge[] }
+type EdgeGraph = BoardEdge[];
 
 const MAX_STEPS = 100;
 const undoStack: Step[] = [];
@@ -56,7 +56,7 @@ let pendingEdges: EdgeGraph | null = null;       // edge-graph before-image for 
 
 const cloneGraph = (g: EdgeGraph): EdgeGraph => structuredClone(g);
 const sameGraph = (a: EdgeGraph, b: EdgeGraph): boolean => JSON.stringify(a) === JSON.stringify(b);
-const liveGraph = (): EdgeGraph => ({ edges: state.edges });
+const liveGraph = (): EdgeGraph => state.edges;
 
 // Fixed key order (so JSON-compare in commitStep is reliable) + deep copies of the arrays.
 function snap(n: MindNode): NodeSnap {
@@ -64,7 +64,7 @@ function snap(n: MindNode): NodeSnap {
     file: n.file, x: n.x, y: n.y, parent: n.parent,
     collapsed: n.collapsed, locked: n.locked,
     type: n.type, w: n.w, h: n.h, clip: n.clip, stack: n.stack,
-    title: n.title, color: n.color, keepStatus: n.keepStatus,
+    title: n.title, color: n.color,
     tags: [...n.tags], body: n.body, titleGap: n.titleGap, titleLevel: n.titleLevel,
     fmEntries: n.fmEntries?.map(e => ({ key: e.key, lines: [...e.lines] })),
     kidOrder: n.kidOrder ? [...n.kidOrder] : undefined,
@@ -78,7 +78,7 @@ const sameSnap = (a: NodeSnap | null, b: NodeSnap | null): boolean =>
 // none of them may be let go of while it can (data/lazy.ts releaseFolded).
 export function historyRefs(): Set<string> {
   const out = new Set<string>();
-  const graph = (g?: EdgeGraph): void => { for (const e of g?.edges ?? []) { out.add(e.from); out.add(e.to); } };
+  const graph = (g?: EdgeGraph): void => { for (const e of g ?? []) { out.add(e.from); out.add(e.to); } };
   // …and the PARENT each image names: restoring a card into a section that had been let go of would
   // otherwise hand it a parent id that no longer exists, and drop it at the top level.
   const images = (m: Images): void => { for (const [id, im] of m) {
@@ -193,10 +193,10 @@ function applyImages(images: Images): void {
       // the on-disk name so it can rename back — restoring the old path would orphan the new
       // file. The restored title re-derives the right name via desiredFileFor.
       Object.assign(live, cloneSnap(s), { file: live.file });
-      live.dirty = true; live.dirtyLayout = true;
+      live.dirty = true;
     } else {                                        // resurrect a deleted node
       // rx/ry are re-derived from the restored x/y by commitRel() before the next save.
-      state.nodes.set(id, { id, ...cloneSnap(s), rx: 0, ry: 0, dirty: true, dirtyLayout: true, el: null });
+      state.nodes.set(id, { id, ...cloneSnap(s), rx: 0, ry: 0, dirty: true, el: null });
     }
   }
 }
@@ -288,7 +288,7 @@ function describeStep(step: Step, useAfter: boolean): string {
     return `${VERB[c]} ${list.length} ${noun}s`;
   }
   if (step.edges) {
-    const d = step.edges.after.edges.length - step.edges.before.edges.length;
+    const d = step.edges.after.length - step.edges.before.length;
     return d === 0 ? 'Changed a line' : d > 0 ? 'Drew a line' : 'Deleted a line';
   }
   return step.canvas ? 'Changed the canvas colour' : '';
@@ -305,8 +305,7 @@ function applyStep(images: Images, canvas: string | undefined,
   // layer, so restoring them here means one pass rather than two. A selected edge the step removed
   // stops resolving, which is what closes its bar (features/edge-bar.ts syncEdgeBar).
   if (edges) {
-    const g = cloneGraph(edges);
-    state.edges = g.edges;
+    state.edges = cloneGraph(edges);
     for (const id of [...state.selEdges]) {
       if (!state.edges.some(e => e.id === id)) {
         state.selEdges.delete(id);

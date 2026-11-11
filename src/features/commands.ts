@@ -96,7 +96,7 @@ function navArrow(key: string): void {
 //  · ⌘F or /        → find, by text and #tags (features/search.ts); Esc ends a standing search first
 //  · T              → the tag tray (features/tag-tray.ts)
 //  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
-// A focused title editor (the sidebar field OR an in-card inline rename) counts as "typing",
+// A focused field (a card's editor, a section's label, the search box) counts as "typing",
 // so these card shortcuts stay out of the way while you're naming something.
 window.addEventListener('keydown', (e) => {
   // The letter shortcuts below are case-INSENSITIVE (Caps Lock, or a held ⇧ that means something of
@@ -200,7 +200,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
   // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
   // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
-  // shortcut in practice and sits in the same family as the app's other bare letters (A/E/X/D/F/O/S).
+  // shortcut in practice and sits in the same family as the app's other bare letters (E/X/D/F/L/T).
   // Both are bound: whichever the browser lets through does the same thing.
   if (key === 'n' && !e.shiftKey && !e.altKey){ e.preventDefault(); newCardAtPointer(); return; }
   // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).

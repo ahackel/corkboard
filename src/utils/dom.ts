@@ -25,6 +25,14 @@ export function trackPointer(on: PointerHandlers): () => void {
   };
 }
 
+// The click that ends a DRAG is not a click. Called from the drag's pointerup: the click the browser
+// sends next (if it sends one) stops here, before any handler sees it; with none, the wait ends with the task.
+export function swallowNextClick(): void {
+  const eat = (e: Event): void => { e.stopPropagation(); e.preventDefault(); };
+  window.addEventListener('click', eat, { capture: true, once: true });
+  setTimeout(() => window.removeEventListener('click', eat, true), 0);
+}
+
 // One element at a time wearing `cls`, like a drop hint: mark(el) moves the class there, mark(null) clears it.
 export function classMarker(cls: string): (el: Element | null) => void {
   let marked: Element | null = null;
