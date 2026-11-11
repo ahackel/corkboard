@@ -219,7 +219,7 @@ test('a fan lines its cards up by their TOP edges, a taller one hanging lower', 
   expect(Math.abs(await top('Short card') - await top('Tall card'))).toBeLessThan(12);   // the tilt moves a corner a little
 });
 
-test('fanning spreads the cards over the pile without lifting them or moving the camera; the pin swells and fades', async ({ page }) => {
+test('fanning spreads the cards over the pile, a little up, without moving the camera; the pin swells and fades, above the cards', async ({ page }) => {
   await openBoard(page, { motion: true });
   await seedBoard(page, BOARD);
   const world = page.locator('#world');
@@ -232,8 +232,15 @@ test('fanning spreads the cards over the pile without lifting them or moving the
     return { opacity: Number(cs.opacity), scale: new DOMMatrix(cs.transform).a };
   });
   const rest = await look();
+  const pinIsOnTop = (): Promise<boolean> => page.evaluate(() => {
+    const z = (e: Element): number => Number(getComputedStyle(e).zIndex);
+    const pile = document.querySelector('#world .node.stack')!;
+    return [...document.querySelectorAll('#world .node.fanned')].every(c => z(pile) > z(c))
+      && z(pile) > z(document.getElementById('fanScrim')!);
+  });
   await stack(page).click();
   await page.waitForTimeout(200);
+  expect(await pinIsOnTop()).toBe(true);        // above the cards while they glide out
   const mid = await look();
   expect(mid.opacity).toBeGreaterThan(0);
   expect(mid.opacity).toBeLessThan(1);          // fading out as the cards spread…
@@ -242,10 +249,13 @@ test('fanning spreads the cards over the pile without lifting them or moving the
   expect((await look()).opacity).toBe(0);
   const tops = await Promise.all(['Top card', 'Middle card', 'Bottom card'].map(async t =>
     (await page.locator('#world .node.fanned:visible', { hasText: t }).boundingBox())!.y));
-  expect(Math.min(...tops)).toBeGreaterThan(pileTop - 12);   // nothing rose above the pile's top edge
+  expect(Math.min(...tops)).toBeGreaterThan(pileTop - 32);   // they rise a little…
+  const middle = (await page.locator('#world .node.fanned:visible', { hasText: 'Middle card' }).boundingBox())!.y;
+  expect(middle).toBeCloseTo(pileTop - 20, 0);               // …20px, the middle one (the ends tilt and dip)
   expect(await worldBox()).toBe(before);                      // and the camera stayed where the user had it
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
+  expect(await pinIsOnTop()).toBe(true);        // …and while they glide home
   const back = await look();
   expect(back.opacity).toBeGreaterThan(0);
   expect(back.opacity).toBeLessThan(1);          // the way back: reversed

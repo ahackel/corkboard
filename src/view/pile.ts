@@ -16,6 +16,9 @@ const FAN_GAP = 16;
 // How far the arc's ends dip below its middle, and how far they tilt (degrees).
 const ARC_DIP = 18, ARC_TILT = 6;
 
+// How far the whole fan sits above the pile's top edge — a little lift, so the cards read as raised, no more.
+const FAN_LIFT = 20;
+
 // A stack's cards, BOTTOM first: the pile's order is its child order (board.json `order`), the last on top.
 export function pileKids(s: MindNode): MindNode[] {
   return orderedKids(s, childrenOf(s.id));
@@ -99,8 +102,8 @@ export function layStacks(): boolean {
 }
 
 // Where each card of a FANNED stack shows, the top card first: an arc for a handful — a hand of cards held up
-// over the pile, side by side so each reads whole, the middle where the pile's top is and the ends a little
-// lower — and a grid centred on the pile for
+// over the pile, side by side so each reads whole, the middle FAN_LIFT above the pile's top and the ends a
+// little lower — and a grid centred on the pile for
 // more.
 interface Spot extends Pt { tilt: number }
 
@@ -115,7 +118,7 @@ function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
       const t = last ? (i / last) * 2 - 1 : 0;   // -1 at the left end, +1 at the right
       out.set(k.id, {
         x: cx + (i - last / 2) * step - nodeW(k) / 2,
-        y: s.y + t * t * ARC_DIP,   // the middle stays at the pile's top edge — the cards SPREAD, they don't rise
+        y: s.y - FAN_LIFT + t * t * ARC_DIP,   // the cards SPREAD, and rise only a little
         tilt: t * ARC_TILT,
       });
     });

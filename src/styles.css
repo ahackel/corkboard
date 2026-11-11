@@ -783,7 +783,7 @@ body.grabbing .stack-pin { cursor:grabbing; }
 /* FANNED OUT: the stack itself — pile, name — is gone from the board while its cards are held up over a
    dimmed board, above every line and card, and the cards in hand above them. The PIN is pulled up with them:
    it swells and fades out as the cards spread, and the other way round as they go home (body.fan-closing). */
-.node.stack.fan-open { visibility:hidden; }
+.node.stack.fan-open { visibility:hidden; z-index:8998; }   /* the pin rides above the fanned cards (1000+) and the scrim, all through the glide */
 .node.stack.fan-open > .stack-face > .stack-pin { visibility:visible; pointer-events:none; opacity:0;
   transform:scale(calc(var(--ls, 1) * 1.5));
   transition:transform .5s cubic-bezier(.45,0,.25,1), opacity .5s cubic-bezier(.45,0,.25,1); }
