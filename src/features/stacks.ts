@@ -16,7 +16,7 @@ import { trackPointer } from '../utils/dom.js';
 import { pileKids, pileX, topOfPile, fanSlotAt, fanTilt, gridOf, FAN_ARC_MAX, type FanInsert } from '../view/pile.js';
 import { nodeW, nodeH, imageLook } from '../view/geometry.js';
 import { moveSubtreeTo } from '../view/layout.js';
-import { screenToWorld, frameBox, stageSize } from '../view/camera.js';
+import { screenToWorld } from '../view/camera.js';
 import { applyColorVars, colorClass, colorFill } from '../view/color.js';
 import { SPACING } from '../utils/guides.js';
 import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout, placeSelf, LAYOUT_ANIM_MS } from '../main.js';
@@ -238,15 +238,6 @@ export function openFan(id: string): void {
   animateLayout(() => { ui.fan = id; });
   syncFan();
 
-  // …and if it opened past the edge of the screen, the view goes to it.
-  // (From where the cards are GOING: on screen they're still gliding out of the pile.)
-  const shown = [state.nodes.get(id)!, ...childrenOf(id)];
-  const r = stageSize(), v = state.view;
-  const out = shown.some(n => n.x * v.k + v.x < 0 || n.y * v.k + v.y < 0
-    || (n.x + nodeW(n)) * v.k + v.x > r.width || (n.y + nodeH(n)) * v.k + v.y > r.height);
-  if (out) {
-    frameBox(shown);
-  }
 }
 
 // The cards glide back onto the pile, straightening as they go, and only then become the pile again: the fan

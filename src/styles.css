@@ -780,9 +780,14 @@ body.grabbing .stack-pin { cursor:grabbing; }
 .node.drop-pile { scale:1.06; filter:drop-shadow(0 8px 12px rgba(0,0,0,.16)); }
 .node.drop-pile.sel { box-shadow:none; }
 .node.drop-pile > .stack-face > .stack-ring { display:none; }
-/* FANNED OUT: the stack itself — pile, pin, name — is gone from the board while its cards are held up over a
-   dimmed board, above every line and card, and the cards in hand above them. */
+/* FANNED OUT: the stack itself — pile, name — is gone from the board while its cards are held up over a
+   dimmed board, above every line and card, and the cards in hand above them. The PIN is pulled up with them:
+   it swells and fades out as the cards spread, and the other way round as they go home (body.fan-closing). */
 .node.stack.fan-open { visibility:hidden; }
+.node.stack.fan-open > .stack-face > .stack-pin { visibility:visible; pointer-events:none; opacity:0;
+  transform:scale(calc(var(--ls, 1) * 1.5));
+  transition:transform .5s cubic-bezier(.45,0,.25,1), opacity .5s cubic-bezier(.45,0,.25,1); }
+body.fan-closing .node.stack.fan-open > .stack-face > .stack-pin { opacity:1; transform:scale(var(--ls, 1)); }
 /* The dimming and the cards' shadows come and go WITH the glide (LAYOUT_ANIM_MS, main.ts): in by a keyframe as
    the fan opens, out by a transition while it closes (body.fan-closing, features/stacks.ts closeFan). */
 #fanScrim { position:absolute; left:-100000px; top:-100000px; width:200000px; height:200000px; z-index:60;

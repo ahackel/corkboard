@@ -219,6 +219,60 @@ test('a fan lines its cards up by their TOP edges, a taller one hanging lower', 
   expect(Math.abs(await top('Short card') - await top('Tall card'))).toBeLessThan(12);   // the tilt moves a corner a little
 });
 
+test('fanning spreads the cards over the pile without lifting them or moving the camera; the pin swells and fades', async ({ page }) => {
+  await openBoard(page, { motion: true });
+  await seedBoard(page, BOARD);
+  const world = page.locator('#world');
+  const worldBox = async (): Promise<string> => JSON.stringify(await world.boundingBox());
+  const before = await worldBox();
+  const pileTop = (await stack(page).boundingBox())!.y;
+  const pin = stack(page).locator('.stack-pin');
+  const look = (): Promise<{ opacity: number; scale: number }> => pin.evaluate(e => {
+    const cs = getComputedStyle(e);
+    return { opacity: Number(cs.opacity), scale: new DOMMatrix(cs.transform).a };
+  });
+  const rest = await look();
+  await stack(page).click();
+  await page.waitForTimeout(200);
+  const mid = await look();
+  expect(mid.opacity).toBeGreaterThan(0);
+  expect(mid.opacity).toBeLessThan(1);          // fading out as the cards spread…
+  expect(mid.scale).toBeGreaterThan(rest.scale); // …and swelling
+  await settled(page);
+  expect((await look()).opacity).toBe(0);
+  const tops = await Promise.all(['Top card', 'Middle card', 'Bottom card'].map(async t =>
+    (await page.locator('#world .node.fanned:visible', { hasText: t }).boundingBox())!.y));
+  expect(Math.min(...tops)).toBeGreaterThan(pileTop - 12);   // nothing rose above the pile's top edge
+  expect(await worldBox()).toBe(before);                      // and the camera stayed where the user had it
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const back = await look();
+  expect(back.opacity).toBeGreaterThan(0);
+  expect(back.opacity).toBeLessThan(1);          // the way back: reversed
+  await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
+  expect((await look()).opacity).toBe(1);
+  expect((await look()).scale).toBeCloseTo(rest.scale);
+});
+
+test('a fan that runs off the screen leaves the camera alone', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  const view = page.viewportSize()!;
+  const pile = (await stack(page).boundingBox())!;
+  await page.mouse.move(view.width / 2, view.height / 2);
+  await page.mouse.wheel(0, pile.y - (view.height - 30));   // the pile just inside the bottom edge
+  await page.waitForTimeout(200);
+  const at = (await stack(page).boundingBox())!;
+  expect(at.y).toBeGreaterThan(view.height - 110);
+  await stack(page).click({ position: { x: 20, y: 10 } });
+  await settled(page);
+  await expect(page.locator('#world .node.fanned:visible')).toHaveCount(3);
+  const cards = await Promise.all(['Top card', 'Middle card', 'Bottom card'].map(t =>
+    page.locator('#world .node.fanned:visible', { hasText: t }).boundingBox()));
+  expect(Math.max(...cards.map(b => b!.y + b!.height))).toBeGreaterThan(view.height);   // it does run off…
+  expect(Math.abs((await stack(page).boundingBox())!.y - at.y)).toBeLessThan(1);          // …and the board didn't move
+});
+
 test('Unstack spreads the cards out; Turn into section keeps them in a box', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

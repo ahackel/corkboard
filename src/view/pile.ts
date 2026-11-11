@@ -9,12 +9,12 @@ import { childrenOf } from '../utils/model.js';
 import { orderedKids } from './layout.js';
 import { nodeW, nodeH, NODE_W } from './geometry.js';
 
-// Up to this many cards fan out in an ARC above the pile, the Dock's fan; more open as a GRID over it.
+// Up to this many cards fan out in an ARC over the pile, the Dock's fan; more open as a GRID over it.
 export const FAN_ARC_MAX = 8;
 const FAN_GAP = 16;
 
 // How far the arc's ends dip below its middle, and how far they tilt (degrees).
-const ARC_DIP = 30, ARC_TILT = 6;
+const ARC_DIP = 18, ARC_TILT = 6;
 
 // A stack's cards, BOTTOM first: the pile's order is its child order (board.json `order`), the last on top.
 export function pileKids(s: MindNode): MindNode[] {
@@ -99,7 +99,8 @@ export function layStacks(): boolean {
 }
 
 // Where each card of a FANNED stack shows, the top card first: an arc for a handful — a hand of cards held up
-// over the pile, side by side so each reads whole, top edges level, the middle highest — and a grid centred on the pile for
+// over the pile, side by side so each reads whole, the middle where the pile's top is and the ends a little
+// lower — and a grid centred on the pile for
 // more.
 interface Spot extends Pt { tilt: number }
 
@@ -110,12 +111,11 @@ function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
   if (shown.length <= FAN_ARC_MAX) {
     const step = Math.max(...shown.map(nodeW)) + FAN_GAP;
     const last = shown.length - 1;
-    const tallest = Math.max(...shown.map(nodeH));
     shown.forEach((k, i) => {
       const t = last ? (i / last) * 2 - 1 : 0;   // -1 at the left end, +1 at the right
       out.set(k.id, {
         x: cx + (i - last / 2) * step - nodeW(k) / 2,
-        y: s.y - FAN_GAP * 2 - tallest - (1 - t * t) * ARC_DIP,   // TOP edges level, as on the pile: a taller card hangs lower
+        y: s.y + t * t * ARC_DIP,   // the middle stays at the pile's top edge — the cards SPREAD, they don't rise
         tilt: t * ARC_TILT,
       });
     });
