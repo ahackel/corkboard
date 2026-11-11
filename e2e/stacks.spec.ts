@@ -103,6 +103,27 @@ test('dragging a lower card that shows round the top one lifts THAT card off, no
   expect(errors).toEqual([]);
 });
 
+test('dragging cards out of a fan until one is left dissolves the stack and its fan', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, BOARD);
+  await stack(page).click();
+  await settled(page);
+  const fanned = (t: string): Locator => page.locator('#world .node.fanned:visible', { hasText: t });
+  await dragTo(page, await centre(fanned('Top card')), { x: 150, y: 520 });
+  await expect(page.locator('body')).toHaveClass(/fan-open/);   // two left: still a fan
+  await dragTo(page, await centre(fanned('Middle card')), { x: 150, y: 640 });
+  await expect(stack(page)).toHaveCount(0);                      // one left: the stack lets go…
+  await expect(page.locator('body')).not.toHaveClass(/fan-open/);
+  await expect(page.locator('#fanScrim')).toHaveCount(0);        // …and takes its fan with it
+  await expect(page.locator('#world .node.fanned')).toHaveCount(0);
+  for (const t of ['Top card', 'Middle card', 'Bottom card']) {
+    await expect(page.locator('#world .node', { hasText: t })).toBeVisible();
+  }
+  await page.locator('#world .node', { hasText: 'Bottom card' }).click();   // and the board answers again
+  expect(errors).toEqual([]);
+});
+
 test('a stack down to one card lets it go', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

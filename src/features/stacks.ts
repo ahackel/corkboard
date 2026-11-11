@@ -477,7 +477,10 @@ export function settleStacks(): void {
       touch(k.id);
       k.parent = s.parent; k.x = s.x; k.y = s.y; k.dirty = true;
     }
-    deleteNodes([s.id]);   // (an open fan on it closes with it: view/pile.ts layStacks)
+    if (ui.fan === s.id) {
+      ui.fan = null;   // its fan goes with it — no scrim left over a board with nothing to fan
+    }
+    deleteNodes([s.id]);
   }
 }
 
