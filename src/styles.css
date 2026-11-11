@@ -743,7 +743,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   padding:var(--pad-y) var(--pad-x); }
 .pile-card:first-child { position:relative; }
 .pile-card.under { filter:brightness(.93); }
-.pile-card.image-card { padding:0; }   /* the picture itself: the image-card .body rules further down */
+.pile-card.image-card { padding:0; background:transparent; }   /* the picture itself: the image-card .body rules further down */
 .pile-card .img-zoom { display:none !important; }
 /* THE PIN: a plain disc in the STACK's colour — bold red until one is picked (paintPile sets it inline) — the size
    of a tag label (.tag.label, 18px), just reaching over the pile's top edge at its centre. It is the stack's handle — grab it to move the whole stack (features/drag.ts: a press on
@@ -854,12 +854,14 @@ body.fan-open #dragLayer { z-index:63; }
    so an image card with alpha shows whatever's behind the canvas, not a solid bg-coloured patch. */
 /* z-index:2 (same as any card) — NOT the section's 1: an image card inside a section must sit ABOVE
    the section's own element so clicks land on the image, not the section beneath (which would tie at 1
-   and win the hit-test, making the image unselectable — regular cards avoid this by being 2). */
+   and win the hit-test, making the image unselectable — regular cards avoid this by being 2).
+   background:transparent — the picture IS the card, so a PNG's transparent pixels show the board, never
+   the card's colour (the same for its pile-card twin). */
 /* overflow:hidden lives on .body (below), NOT on the node itself — the tag row and the add-note
    float outside the card's own border (see .node .tag-row) and
    would otherwise get clipped along with the image. The image is rounded by its own .body wrapper
    instead (border-radius:inherit + overflow:hidden, below), so nothing relies on the node clipping. */
-.node.image-card { z-index:2; background:var(--card, var(--bg)); min-height:0; border-radius:var(--r-card);
+.node.image-card { z-index:2; background:transparent; min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
 /* The row is EMPTY on an image card (untitled by definition): zero height, so the picture starts at the
    card's top edge. */

@@ -486,7 +486,8 @@ width changed, in one batch per paint (all reads, then all writes), before anyth
 in `core/state.ts`): untitled, body exactly one `![alt](src)`, nothing else. There is no image KIND — the
 old `mm_type: image` folds to `card` on load (`foldType`) and stops being written on the next save,
 so an old vault upgrades itself note by note and keeps its `mm_w`/`mm_h`. What being one buys is a render
-and a geometry, both derived: no padding with the picture flush to the card's corners (`.image-card`), an
+and a geometry, both derived: no padding with the picture flush to the card's corners and NO FILL of its own
+(`.image-card`: a PNG's transparent pixels show the board, never the card's colour), an
 authored HEIGHT as well as a width (the one card `serializeMd` writes `mm_h` for), 8 hit-zones, and an
 **aspect-locked** resize — `imageAspect` reads the loaded image's own ratio, so whichever axis you drag the
 other follows and the picture never distorts or crops. Four things follow:
