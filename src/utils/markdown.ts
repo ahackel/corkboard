@@ -316,7 +316,7 @@ const hideEscapes = (s: string): string => s.replace(ESCAPED, (_m, c: string) =>
 const showEscapes = (s: string): string => s.replace(STAND_IN, c => esc(String.fromCharCode(c.charCodeAt(0) - 0xE000)));
 
 // Full inline pass: protect `code` spans first (no formatting inside), then links + emphasis.
-function mdInline(text: string): string {
+export function mdInline(text: string): string {
   let out = '', last = 0;
   const re = /`([^`]+)`/g;
   let m: RegExpExecArray | null;

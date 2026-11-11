@@ -17,10 +17,14 @@
 // Copy does NOT put that payload on the clipboard: other apps get clean text (one card: its note;
 // more: a bullet outline, utils/outline.ts), and the payload is remembered beside it (this tab, and
 // localStorage for the others), so pasting that same text back onto a board restores the cards.
+// "Copy as formatted text" (copyFormatted) adds the same note or outline RENDERED, as HTML, beside it.
 import { state, setStatus, singleNoteRefuses, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, joinHeading, type ParsedNote } from '../utils/frontmatter.js';
 import { nodesOf, outermost, isLockedEffective, subtreeIds, childrenOf, nodeLabel } from '../utils/model.js';
 import { outlineText, type OutlineItem } from '../utils/outline.js';
+import { esc, mdInline, renderBodyHTML } from '../utils/markdown.js';
+import { portableHtml } from '../utils/rich-html.js';
+import { portableImageUrl } from './images.js';
 import { readJSON, writeJSON } from '../utils/local-json.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf, isSection } from '../view/layout.js';
@@ -122,21 +126,81 @@ function payloadBehind(text: string): string {
   return text;
 }
 
+// What a copy of `ids` puts on the clipboard: the text other apps read, and the card payload behind it.
+function clipFor(ids: string[]): { count: number; text: string; payload: string } {
+  const files = filesFor(ids);
+  const payload = cardsToPayload(files);
+  return { count: files.length, text: plainText(ids).trim() || payload, payload };
+}
+
+// Remember the payload behind the text just copied (payloadBehind), and say what was copied.
+function copiedNow(clip: { count: number; text: string; payload: string }, how = ''): void {
+  copied = { text: clip.text, payload: clip.payload };
+  writeJSON(COPIED_KEY, copied);
+  setStatus(`Copied ${clip.count} card${clip.count === 1 ? '' : 's'}${how}`);
+}
+
 // Copy the selected cards INCLUDING their subtrees to the system clipboard. Allowed in
 // read-only mode (copying mutates nothing). Resolves true iff the clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
-  await readAll(selectedIds());   // a folded section's notes are part of what's copied
-  const files = selectionFiles();
-  if (!files.length) {
+  const ids = selectedIds();
+  await readAll(ids);   // a folded section's notes are part of what's copied
+  const clip = clipFor(ids);
+  if (!clip.count) {
     return false;
   }
-  const payload = cardsToPayload(files);
-  const text = plainText(selectedIds()).trim() || payload;
   try {
-    await navigator.clipboard.writeText(text);
-    copied = { text, payload };
-    writeJSON(COPIED_KEY, copied);
-    setStatus(`Copied ${files.length} card${files.length === 1 ? '' : 's'}`);
+    await navigator.clipboard.writeText(clip.text);
+    copiedNow(clip);
+    return true;
+  } catch {
+    setStatus('Couldn’t copy');
+    return false;
+  }
+}
+
+// The selection as FORMATTED text: the same shape as plainText — one card is its note, more a bulleted
+// outline — rendered, and stripped of what only this app reads (utils/rich-html.ts). Each card's
+// pictures are read beside its own note.
+const cardHtml = (n: MindNode, html: string): Promise<string> => portableHtml(html, src => portableImageUrl(src, n.file));
+
+async function outlineHtml(n: MindNode): Promise<string> {
+  const kids = await Promise.all(childrenOf(n.id).sort(readingOrder).map(outlineHtml));
+  const nested = kids.filter(Boolean).join('');
+  const head = isSection(n)
+    ? (nodeLabel(n).trim() ? `<strong>${esc(nodeLabel(n))}</strong>` : '')
+    : await cardHtml(n, (n.title.trim() ? `<p><strong>${mdInline(n.title.trim())}</strong></p>` : '') + renderBodyHTML(n.body));
+  return head || nested ? `<li>${head}${nested ? `<ul>${nested}</ul>` : ''}</li>` : '';
+}
+
+async function formattedHtml(ids: string[]): Promise<string> {
+  const roots = outermost(nodesOf(ids)).sort(readingOrder);
+  if (roots.length === 1 && !isSection(roots[0])) {
+    return cardHtml(roots[0], renderBodyHTML(joinHeading(roots[0].title, roots[0].body)));
+  }
+  return `<ul>${(await Promise.all(roots.map(outlineHtml))).join('')}</ul>`;
+}
+
+// Copy the selection as FORMATTED text (headings, bold, lists, tables, pictures) for a doc, a mail or a
+// chat, beside the same plain text a plain copy writes — so pasted into a plain field it is still the
+// markdown, and pasted back onto a board it is still the cards. The ClipboardItem is made AT ONCE, its
+// parts promised: Safari only lets a page write the clipboard straight from the click or key.
+export async function copyFormatted(): Promise<boolean> {
+  const ids = selectedIds();
+  if (!ids.length) {
+    return false;
+  }
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) {
+    return copySelection();
+  }
+  const ready = readAll(ids).then(() => clipFor(ids));
+  const item = new ClipboardItem({
+    'text/plain': ready.then(clip => new Blob([clip.text], { type: 'text/plain' })),
+    'text/html': ready.then(() => formattedHtml(ids)).then(html => new Blob([html], { type: 'text/html' })),
+  });
+  try {
+    await navigator.clipboard.write([item]);
+    copiedNow(await ready, ' as formatted text');
     return true;
   } catch {
     setStatus('Couldn’t copy');

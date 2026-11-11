@@ -611,6 +611,14 @@ builds a column. Every new card pops in (`popIn`, `data-pop`). Esc KEEPS what wa
 and an old one alike (only Esc on an empty fresh card cancels it): Esc means "done typing", like a click
 away, and ⌘Z takes back the whole edit session in one step — a stray Esc must not cost a long edit.
 
+**A copy is TEXT to other apps and CARDS to a board** (`features/clipboard.ts`). ⌘C writes clean text — one
+card is its note, more a bullet outline (`utils/outline.ts`) — and remembers the card payload behind it, so
+pasting that same text onto a board makes the same cards again. "Copy as formatted text" (card menu, ⌘P) writes
+the same note or outline RENDERED as `text/html` beside that very text: `renderBodyHTML`, stripped by
+`utils/rich-html.ts` of what only this app reads (classes, data attributes, wikilinks, tags; tasks become ☐/☑,
+tables get inline borders, pictures become data URLs). It has no shortcut: ⌘⇧C and ⌥⌘C are the browser's
+inspector. Its `ClipboardItem` is built at once with promised parts, as Safari requires.
+
 **A status message is a TOAST, and most messages are not shown.** `setStatus` (`core/state.ts`) pops
 `#status` at the bottom for about two seconds — for what the canvas can't show by itself: a refusal
 ("Locked — can't delete"), an action with nothing to see (Copied, Exported, Nothing to undo), a warning.

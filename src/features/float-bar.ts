@@ -14,7 +14,7 @@ import { createProperties } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
 import { settleSections } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode, nextSectionTitle } from './crud.js';
-import { exportSelection, shareSelection, canShareFiles, copySelection, cutSelection } from './clipboard.js';
+import { exportSelection, shareSelection, canShareFiles, copySelection, copyFormatted, cutSelection } from './clipboard.js';
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries, canTidySection, tidySection } from './tidy.js';
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
@@ -327,6 +327,7 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   const ro = state.readOnly;
   const entries: MenuEntry[] = [];
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
+  entries.push({ label:'Copy as formatted text', run: () => { selectTargetFirst(); void copyFormatted(); } });
   if (!ro){
     entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
     // on a section, what's pasted lands INSIDE it; on a card, beside it at the pointer

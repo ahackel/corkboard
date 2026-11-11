@@ -17,7 +17,7 @@ import { setReadOnly } from './read-only.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
 import { autoSizeSelection, groupSelectionIntoSection, colorSelection, KEY_COLORS } from './float-bar.js';
-import { copySelection, cutSelection } from './clipboard.js';
+import { copySelection, copyFormatted, cutSelection } from './clipboard.js';
 import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { openImageAt } from '../main.js';
@@ -310,6 +310,8 @@ function paletteCommands(): Command[] {
     { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
     { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: growSel, run: groupSelectionIntoSection },
     { label: 'Resize to fit', shortcut: '⌥⇧' + MOD + 'R', keywords: 'fit contents auto size shrink grow', when: hasSel, run: autoSizeSelection },
+    { label: 'Copy', shortcut: MOD + 'C', keywords: 'clipboard markdown outline', when: () => state.sel.size > 0, run: () => { void copySelection(); } },
+    { label: 'Copy as formatted text', keywords: 'clipboard rich text html styled docs mail word', when: () => state.sel.size > 0, run: () => { void copyFormatted(); } },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: growSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: growSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },

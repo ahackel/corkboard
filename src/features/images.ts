@@ -95,6 +95,26 @@ export function typedImageBlob(blob: Blob, path: string): Blob {
   const mime = imageMimeFor(path);
   return mime ? new Blob([blob], { type: mime }) : blob;
 }
+
+// A picture a note names as a URL that works OUTSIDE this tab (a formatted copy, features/clipboard.ts): a
+// remote/data URL as written, a file in the map as a data URL of its bytes. Null when it can't be read.
+export async function portableImageUrl(src: string, noteFile?: string | null): Promise<string | null> {
+  if (/^(https?:|data:)/i.test(src)) {
+    return src;
+  }
+  const found = await readImage(src, noteFile);
+  if (!found) {
+    return null;
+  }
+  const blob = typedImageBlob(found.blob, found.path);
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+}
+
 // A picture a note names -> its resolved URL, through the shared cache: vault paths become blob URLs read
 // from the store (once), remote/data URLs map to themselves. Exported for the full-screen viewer,
 // which pages through images that may not be on screen — and so may not have been hydrated yet.
