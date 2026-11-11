@@ -46,7 +46,8 @@ function mapColors(): string[] {
 // swatch row is rebuilt each time it's shown), so there's nothing to keep in sync with a map load.
 export function recentColors(): string[] {
   const out: string[] = [];
-  for (const c of [...loadMru(), ...mapColors()]) {
+  // (what localStorage holds is checked like any other colour: another page of this origin can write there)
+  for (const c of [...loadMru().map(normalizeColor), ...mapColors()]) {
     if (c && !out.includes(c)) {
       out.push(c);
     }

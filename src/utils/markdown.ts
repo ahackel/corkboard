@@ -329,7 +329,11 @@ function imgTag(src: string, alt: string, width?: number): string {
 // A backtick isn't escapable here: code spans are found first, and inside one a backslash is literal.
 const ESCAPED = /\\([\\*_[\]()#!=~<>{}+\-.|])/g;
 const STAND_IN = /[\uE000-\uE07F]/g;
-const hideEscapes = (s: string): string => s.replace(ESCAPED, (_m, c: string) => String.fromCharCode(0xE000 + c.charCodeAt(0)));
+// A stand-in already IN the text is dropped first: only this function may mint one. Left in, a note
+// could spell a character the passes in between were meant never to see — the `:` of `javascript:`,
+// past the link test, for one.
+const hideEscapes = (s: string): string => s.replace(STAND_IN, '')
+  .replace(ESCAPED, (_m, c: string) => String.fromCharCode(0xE000 + c.charCodeAt(0)));
 const showEscapes = (s: string): string => s.replace(STAND_IN, c => esc(String.fromCharCode(c.charCodeAt(0) - 0xE000)));
 
 // Full inline pass: protect `code` spans first (no formatting inside), then links + emphasis.

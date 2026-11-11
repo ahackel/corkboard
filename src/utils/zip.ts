@@ -106,9 +106,32 @@ export async function unzip(buf: ArrayBuffer): Promise<ZipEntry[]> {
   }
   return out;
 }
+// Unpacked with a ceiling: a few kilobytes of zip can claim to hold gigabytes, and the tab would try.
+const MAX_ENTRY = 256 * 1024 * 1024;
+
 async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
+  const reader = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.length;
+    if (size > MAX_ENTRY) {
+      await reader.cancel();
+      throw new Error('zip entry too large');
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
 }
 
 // An archive entry's name as a path INSIDE a map: forward slashes, no leading slash, and null for one

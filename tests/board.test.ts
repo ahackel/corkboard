@@ -4,8 +4,10 @@ import './page-shell.js';
 
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
-const { loadBoard } = await import('../src/data/board.js');
-const { fakeStore } = await import('./helpers.js');
+const { loadBoard, boardJSON, resolveEdges, flushBoard } = await import('../src/data/board.js');
+const { writesHeld } = await import('../src/data/save-alert.js');
+const { flushSave } = await import('../src/data/save.js');
+const { fakeStore, nodeFrom } = await import('./helpers.js');
 
 function storeWithBoard(board: unknown): Store {
   return fakeStore({ async readBlob(path) { return path === 'board.json' ? new Blob([JSON.stringify(board)]) : null; } });
@@ -60,4 +62,39 @@ describe('loadBoard', () => {
     expect(name).toMatch(/^board\.unreadable-\d{8}-\d{6}\.json$/);
     expect(written.get(name)).toBe('{"model":2,"nodes":{"A.md":{"x":1');
   });
+
+  it('writes back what a newer build put there and this one has no name for', async () => {
+    useStore(storeWithBoard({ version: 1, model: 2, pinned: ['A.md'], settings: { grid: 'dot', theme: 'paper' },
+      edges: [{ id: 'e1', from: 'A.md', to: 'B.md', weight: 3 }], nodes: { 'A.md': { x: 1, y: 2, z: 9 } } }));
+    await loadBoard();
+    nodeFrom('# A', 'A.md', 'a'); nodeFrom('# B', 'B.md', 'b');
+    resolveEdges(new Map([['A.md', 'a'], ['B.md', 'b']]));
+    const out = JSON.parse(boardJSON());
+    expect(out.pinned).toEqual(['A.md']);
+    expect(out.settings.theme).toBe('paper');
+    expect(out.edges[0].weight).toBe(3);
+    expect(out.nodes['A.md'].z).toBe(9);
+    state.nodes.clear();
+  });
+
+  it('holds every write on a map saved by a newer build, and says so', async () => {
+    const written: string[] = [];
+    useStore(fakeStore({
+      async readBlob(path) { return path === 'board.json' ? new Blob([JSON.stringify({ version: 2, model: 2 })]) : null; },
+      async write(path) { written.push(path); },
+    }));
+    await loadBoard();
+    expect(writesHeld()).toBe(true);
+    expect(document.getElementById('saveAlert')!.hidden).toBe(false);
+    const n = nodeFrom('# New', null, 'n');
+    n.dirty = true;
+    await flushSave();
+    await flushBoard();
+    expect(written).toEqual([]);
+    state.nodes.clear();
+    useStore(storeWithBoard({ version: 1, model: 2 }));
+    await loadBoard();
+    expect(writesHeld()).toBe(false);
+  });
 });
+

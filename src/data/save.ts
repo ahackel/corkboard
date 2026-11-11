@@ -6,9 +6,9 @@ import { ui, frozenFileNodeId } from '../core/ui-state.js';
 import { parentOf, childrenOf } from '../utils/model.js';
 import { store } from './persistence.js';
 import { serializeMd } from '../utils/frontmatter.js';
-import { flushBoard, scheduleSaveBoard, boardSavePending } from './board.js';
+import { flushBoard, scheduleSaveBoard, boardSavePending, boardPathMoved } from './board.js';
 import { releaseFolded } from './lazy.js';
-import { saveSucceeded, saveFailed } from './save-alert.js';
+import { saveSucceeded, saveFailed, writesHeld } from './save-alert.js';
 import { setSaving } from './save-flag.js';
 import { foreignDirs, readFolder } from './load.js';
 
@@ -128,6 +128,9 @@ function planPaths(): Map<string, string> {
 }
 async function saveAll(): Promise<void> {
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
+  if (writesHeld()) {
+    return;   // a map from a newer build is shown, never written (data/board.ts loadBoard)
+  }
   // Phase 0 — a FOLDED section whose notes were never read can't move them without reading them: one
   // that is about to move (renamed, retyped, dropped into another section, or inside one that is) reads
   // its whole folder first, and one that somehow holds a note in memory reads its own level, so the
@@ -180,6 +183,7 @@ async function saveAll(): Promise<void> {
       pendingRemovals.set(n.file, target);         // old file to delete once the rename is written
       renames.set(n.file, target);
       namedFor.delete(n.file);
+      boardPathMoved(n.file, target);
     }
     if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }   // brand-new node, or a rename
     n.file = target;                               // adopt the final name
@@ -275,8 +279,8 @@ export function resetSaveState(): void {
 let saveTimer: number | undefined, saveAgain = false;
 let savePromise: Promise<void> | null = null;   // non-null while a save chain is in flight
 export function scheduleSave(): void {
-  if (!store.isOpen) {
-    return;          // demo mode: nothing to write
+  if (!store.isOpen || writesHeld()) {
+    return;          // demo mode, or a map from a newer build: nothing is written
   }
   // Geometry lives in board.json, so the two files settle together: every mutation path in the app
   // ends in scheduleSave(), and a great many of them move something.
@@ -321,7 +325,7 @@ export async function settleSave(): Promise<void> {
 // Is there anything in memory the disk doesn't have yet — queued, in flight, or left over by a write
 // that failed? Demo mode never writes, so it never has anything unsaved.
 function notesUnsaved(): boolean {
-  if (!store.isOpen) {
+  if (!store.isOpen || writesHeld()) {
     return false;
   }
   if (state.toDelete.length || pendingRemovals.size) {
@@ -339,7 +343,7 @@ function notesUnsaved(): boolean {
   return false;
 }
 export function hasUnsavedChanges(): boolean {
-  if (!store.isOpen) {
+  if (!store.isOpen || writesHeld()) {
     return false;
   }
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();

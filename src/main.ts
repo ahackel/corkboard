@@ -1104,3 +1104,9 @@ installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card
 installPeek();        // hover a folded card to read it (features/peek.ts)
 
 boot();   // local-first: open straight into the last map
+
+// Keep the last copy of the page for when there is no network (public/sw.js). The built app only: the
+// dev server's modules are not something to keep.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => { /* file://, or a browser that refuses: the app works without */ });
+}

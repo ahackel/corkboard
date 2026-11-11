@@ -15,7 +15,7 @@ import { dirOf } from '../utils/filenames.js';
 import { store } from './persistence.js';
 import { commitRel } from '../view/layout.js';
 import { flattenJunctions } from '../utils/edge-graph.js';
-import { saveFailed, saveSucceeded } from './save-alert.js';
+import { saveFailed, saveSucceeded, holdWrites, releaseWrites, writesHeld } from './save-alert.js';
 import { setSaving } from './save-flag.js';
 import { colorFill } from '../view/color.js';
 
@@ -26,7 +26,39 @@ export const BOARD_FILE = 'board.json';
 // data/migrate.ts flattenLegacyBranches converts the first into the second, once, and the write
 // that follows stamps this. Bump it only for another migration of the same kind.
 const BOARD_MODEL = 2;
+// The file's own generation. A board with a HIGHER version or model than this build knows was written by
+// a newer one, and holds something this one would get wrong: it is shown, and not written to (loadBoard).
+const BOARD_VERSION = 1;
 let loadedModel = BOARD_MODEL;
+
+// What a NEWER build wrote that this one has no name for — a key at the top level, in `settings`, on a
+// node or on a line — goes back out as it came in, the way a note's unknown frontmatter does. So an
+// older build opening a newer map of the SAME version loses nothing by saving it.
+type Extra = Record<string, unknown>;
+const KNOWN_TOP = new Set(['version', 'model', 'settings', 'edges', 'nodes', 'strokes', 'junctions']);
+const KNOWN_SETTING = new Set(['grid', 'gridSize', 'canvasColor']);
+const KNOWN_NODE = new Set(['x', 'y', 'w', 'h', 'clip', 'collapsed', 'stack', 'order']);
+const KNOWN_EDGE = new Set(['id', 'from', 'to', 'fromJ', 'toJ', 'color', 'dashed', 'fromCap', 'toCap', 'fromPort', 'toPort',
+  'fromAt', 'toAt', 'arrows', 'label']);
+let extraTop: Extra = {}, extraSettings: Extra = {};
+let extraNode = new Map<string, Extra>(), extraEdge = new Map<string, Extra>();
+
+function unknownKeys(v: unknown, known: Set<string>): Extra | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) {
+    return null;
+  }
+  const rest = Object.entries(v).filter(([k]) => !known.has(k));
+  return rest.length ? Object.fromEntries(rest) : null;
+}
+
+// A note moved or was renamed (data/save.ts): what is kept for its old path follows it.
+export function boardPathMoved(from: string, to: string): void {
+  const extra = extraNode.get(from);
+  if (extra) {
+    extraNode.delete(from);
+    extraNode.set(to, extra);
+  }
+}
 // Did the map we just loaded predate containment? Only meaningful between loadBoard and the
 // migration that reads it.
 export function boardIsLegacy(): boolean { return loadedModel < BOARD_MODEL; }
@@ -42,10 +74,11 @@ export function boardJSON(): string {
   // own debounce, so it cannot rely on that one having run.
   commitRel();
   return JSON.stringify({
-    version: 1,
+    ...extraTop,
+    version: BOARD_VERSION,
     model: BOARD_MODEL,
-    settings: { grid: state.gridStyle, gridSize: state.gridSize, canvasColor: state.canvasColor },
-    edges: state.edges.map(serializeEdge).filter(Boolean),
+    settings: { ...extraSettings, grid: state.gridStyle, gridSize: state.gridSize, canvasColor: state.canvasColor },
+    edges: state.edges.map(e => { const out = serializeEdge(e); return out ? { ...extraEdge.get(e.id), ...out } : null; }).filter(Boolean),
     nodes: collectGeom(),
     ...(keptStrokes !== undefined ? { strokes: keptStrokes } : {}),
   });
@@ -161,7 +194,7 @@ function collectGeom(): Record<string, StoredGeom> {
     if (n.lazy != null && geom.get(n.file)?.order) {
       g.order = geom.get(n.file)!.order;   // its kids are unread
     }
-    out[n.file] = g;
+    out[n.file] = { ...extraNode.get(n.file), ...g };
   }
   return out;
 }
@@ -264,6 +297,10 @@ function applyGeom(v: unknown): void {
     if (!raw || typeof raw !== 'object') {
       continue;
     }
+    const extra = unknownKeys(raw, KNOWN_NODE);
+    if (extra) {
+      extraNode.set(path, extra);
+    }
     geom.set(path, {
       x: num(raw.x), y: num(raw.y), w: num(raw.w), h: num(raw.h),
       clip: raw.clip === true,
@@ -316,10 +353,15 @@ function applyEdges(v: unknown): void {
     if ((fromJ && !legacyJunctions.has(fromJ)) || (toJ && !legacyJunctions.has(toJ))) {
       continue;   // point is gone: so is the edge
     }
+    const id = typeof raw.id === 'string' && /^[\w-]+$/.test(raw.id) ? raw.id : newEdgeId();
+    const extra = unknownKeys(raw, KNOWN_EDGE);
+    if (extra) {
+      extraEdge.set(id, extra);
+    }
     state.edges.push({
       // The id goes into SVG markup (view/free-edges.ts), and a board.json can come from anywhere — a
       // zip, a synced vault — so only the shape this app mints is kept.
-      id: typeof raw.id === 'string' && /^[\w-]+$/.test(raw.id) ? raw.id : newEdgeId(),
+      id,
       from: fromJ, to: toJ,
       ...(fromJ ? {} : { fromPath: raw.from }), ...(toJ ? {} : { toPath: raw.to }),
       color: (typeof raw.color === 'string' && colorFill(raw.color)) ? raw.color : '',
@@ -337,12 +379,20 @@ function applyEdges(v: unknown): void {
 
 export async function loadBoard(): Promise<void> {
   keptStrokes = undefined; state.edges = []; legacyJunctions = new Set(); geom = new Map();
+  extraTop = {}; extraSettings = {}; extraNode = new Map(); extraEdge = new Map();
+  releaseWrites();
   state.gridStyle = 'none'; state.gridSize = 20; state.canvasColor = '';
   const board = await readJSON(BOARD_FILE);
+  const newer = (v: unknown, mine: number): boolean => typeof v === 'number' && v > mine;
+  if (board && (newer(board.version, BOARD_VERSION) || newer(board.model, BOARD_MODEL))) {
+    holdWrites('This map was saved by a newer Corkboard. Nothing you change here is saved: reload to get the new version.');
+  }
   // No board file at all is the strongest legacy signal there is: every map written since this
   // landed has one. An older board file (sketches/settings only) says the same thing.
   loadedModel = typeof board?.model === 'number' ? board.model : 1;
   if (board) {
+    extraTop = unknownKeys(board, KNOWN_TOP) ?? {};
+    extraSettings = unknownKeys(board.settings, KNOWN_SETTING) ?? {};
     applySettings(board.settings as Record<string, unknown>);
     applyJunctions(board.junctions);
     applyEdges(board.edges);
@@ -423,8 +473,8 @@ export function parkEdges(gone: Map<string, string>, standIn: string): void {
 // edge restyle must not touch a note at all.
 let boardTimer: number | undefined;
 export function scheduleSaveBoard(): void {
-  if (!store.isOpen) {
-    return;   // demo mode: never write
+  if (!store.isOpen || writesHeld()) {
+    return;   // demo mode, or a map from a newer build: never write
   }
   setSaving('board', true);
   clearTimeout(boardTimer);
@@ -436,7 +486,7 @@ let boardFailed = false;
 export function boardSavePending(): boolean { return boardTimer != null || boardFailed; }
 export async function flushBoard(): Promise<void> {
   clearTimeout(boardTimer); boardTimer = undefined;
-  if (!store.isOpen) {
+  if (!store.isOpen || writesHeld()) {
     setSaving('board', false);
     return;
   }

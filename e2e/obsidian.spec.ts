@@ -17,7 +17,7 @@ test('an Obsidian embed finds its picture by name, and a short link goes to the 
   await seedBoard(page, BOARD);
   const start = card(page, 'See Plan#Goals');
   const img = start.locator('img.md-img');
-  await expect(img).toHaveAttribute('src', /^blob:/);
+  await expect(img).toHaveAttribute('src', /^data:image\/svg\+xml/);   // an SVG is never handed out as a blob: URL (features/images.ts)
   await expect(img).not.toHaveClass(/md-img-missing/);
   // the folder isn't read yet (the section is folded): following the link reads it, and goes there
   await start.locator('a.wikilink').click();

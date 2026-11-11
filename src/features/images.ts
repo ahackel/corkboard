@@ -106,7 +106,10 @@ export async function portableImageUrl(src: string, noteFile?: string | null): P
   if (!found) {
     return null;
   }
-  const blob = typedImageBlob(found.blob, found.path);
+  return blobDataUrl(typedImageBlob(found.blob, found.path));
+}
+
+function blobDataUrl(blob: Blob): Promise<string | null> {
   return new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
@@ -129,7 +132,11 @@ export function imageUrl(path: string, noteFile?: string | null): Promise<string
   }
   const p = (async () => {
     const found = await readImage(path, noteFile);
-    const url = found ? URL.createObjectURL(typedImageBlob(found.blob, found.path)) : null;
+    const blob = found ? typedImageBlob(found.blob, found.path) : null;
+    // An SVG is a document that can carry script. In an <img> it never runs — but a blob: URL belongs to
+    // this page's origin, so the same file OPENED (the image's own "open in new tab") would run it with
+    // the app's storage in reach. A data: URL has no origin to borrow.
+    const url = !blob ? null : blob.type === 'image/svg+xml' ? await blobDataUrl(blob) : URL.createObjectURL(blob);
     if (url) {
       imgUrlCache.set(key, url);
     }
