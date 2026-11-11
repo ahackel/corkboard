@@ -148,14 +148,31 @@ function matches(n: MindNode, text: string): boolean {
   return !text || nodeLabel(n).toLowerCase().includes(text) || (!!n.body && n.body.toLowerCase().includes(text));
 }
 
+// What was TYPED runs a beat after the last key, so a word typed quickly is searched once — each run
+// repaints the board. Everything that acts on the results (Enter, the arrows) runs it first.
+const TYPE_PAUSE = 90;
+let typed = 0;
+
+function runSoon(): void {
+  window.clearTimeout(typed);
+  typed = window.setTimeout(() => { typed = 0; runSearch(); }, TYPE_PAUSE);
+}
+
+function runPending(): void {
+  if (typed) {
+    runSearch();
+  }
+}
+
 // The query changed: recompute, and rebuild the dropdown (when the field has the focus).
 function runSearch(showList = true): void {
+  window.clearTimeout(typed);
+  typed = 0;
   const { text, typing } = parts();
   if (!searchActive()) { clearResults(); paintAll(); scheduleUrlSync(); return; }
   if (!reading && afterReading(state.nodes.keys(), () => { reading = false; if (searchActive()) { runSearch(showList); } })) {
     reading = true;
   }
-  paintAll();   // → refreshSearch
   tagRows = typing != null ? tagSuggestions(typing) : [];
   if (typing == null) {
     const found: Array<{ n: MindNode; label: string; onLabel: boolean }> = [];
@@ -182,6 +199,10 @@ function runSearch(showList = true): void {
       : '<div class="sr-none">No tag like that on the map</div>';
   }
   searchResults.classList.toggle('open', showList && document.activeElement === searchBox);
+  // ONE paint for the run: the active hit is settled first, so markActive finds nothing left to repaint.
+  const hit = cardHits[active];
+  state.searchActiveId = hit && parts().typing == null ? firstVisible(hit).id : null;
+  paintAll();   // → refreshSearch
   markActive();
   scheduleUrlSync();
 }
@@ -287,7 +308,7 @@ searchBox.addEventListener('input', () => {
       return;
     }
   }
-  runSearch();
+  runSoon();
 });
 // Searching starts from a clean board: whatever was selected lets go, so its ring, its ports and the float
 // bar don't sit over the hits being looked for. On focus, so every way in — ⌘F, the palette, a click in the
@@ -302,6 +323,9 @@ searchBox.addEventListener('focus', () => {
   }
 });
 searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+    runPending();
+  }
   const rows = tagRows.length || parts().typing != null ? tagRows.length : cardHits.length;
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
     e.preventDefault();

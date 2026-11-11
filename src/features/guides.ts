@@ -21,6 +21,7 @@ function guideLayer(): HTMLElement {
   return layer;
 }
 export function hideGuides(): void {
+  seen = null;
   if (layer) {
     layer.replaceChildren();
   }
@@ -29,8 +30,16 @@ export function hideGuides(): void {
 export const boxOf = (n: MindNode, x = n.x, y = n.y): Box => ({ x, y, w: nodeW(n), h: nodeH(n) });
 
 // The cards a dragged one lines up against: its siblings in the same space (the top level, or the
-// same section), on screen, and not part of the drag.
+// same section), on screen, and not part of the drag. Nothing else moves while a card is dragged, so
+// they are found ONCE per gesture and view (an auto-pan brings new ones on screen) rather than on every
+// pointer move; hideGuides, which ends every gesture, forgets them.
+let seen: { key: string; boxes: Box[] } | null = null;
+
 function neighbours(act: MindNode, moving: Set<string>): Box[] {
+  const key = `${act.id}|${moving.size}|${state.view.x},${state.view.y},${state.view.k}`;
+  if (seen?.key === key) {
+    return seen.boxes;
+  }
   const space = parentOf(act);
   const a = screenToWorld(0, 0), z = screenToWorld(window.innerWidth, window.innerHeight);
   const view = { x: a.x, y: a.y, w: z.x - a.x, h: z.y - a.y };
@@ -45,6 +54,7 @@ function neighbours(act: MindNode, moving: Set<string>): Box[] {
     }
     out.push(b);
   }
+  seen = { key, boxes: out };
   return out;
 }
 

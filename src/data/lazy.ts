@@ -15,7 +15,7 @@ import { store } from './persistence.js';
 import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
 import { remeasure } from '../main.js';
-import { isHidden, nodeByFile, subtreeIds } from '../utils/model.js';
+import { isHidden, nodeByFile, subtreeIds, ancestors } from '../utils/model.js';
 import { bodyImages } from '../utils/markdown.js';
 import { historyRefs } from '../features/history.js';
 import { searchHolds } from '../features/search.js';
@@ -26,13 +26,13 @@ import { readFolder } from './load.js';
 
 // The folded sections still holding unread notes among `ids` and everything inside them.
 function unreadIn(ids: Iterable<string>): MindNode[] {
+  // Walked UP from each unread section rather than down from each id: there are few unread sections
+  // (usually none) and the search asks about every node on the board, on every keystroke.
+  const asked = new Set(ids);
   const out: MindNode[] = [];
-  for (const id of ids) {
-    for (const s of subtreeIds(id)) {
-      const n = state.nodes.get(s);
-      if (n?.lazy != null) {
-        out.push(n);
-      }
+  for (const n of state.nodes.values()) {
+    if (n.lazy != null && (asked.has(n.id) || [...ancestors(n)].some(a => asked.has(a.id)))) {
+      out.push(n);
     }
   }
   return out;

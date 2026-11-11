@@ -254,10 +254,13 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
 // What used to re-flow the forest after every change. Nothing is flowed now, so all that's left is
 // the open-section bookkeeping, and it stays here because every structural change already ends in this
 // call (main.ts relayout/remeasure) — one call covers every path instead of each remembering.
-export function applyLayouts(): void {
+// Returns whether it can have changed what is drawn — the scope was pruned, or there are stacks to lay —
+// so remeasure (main.ts) knows whether its second paint has anything to show.
+export function applyLayouts(): boolean {
   // The open section may have just been deleted / undone away / vanished on disk. (An open section keeps
   // its fold: its interior is the canvas either way.)
-  pruneScope();
-  layStacks();   // a stack's cards lie in its pile, or in the fan (view/pile.ts)
+  const pruned = pruneScope();
+  const stacks = layStacks();   // a stack's cards lie in its pile, or in the fan (view/pile.ts)
+  return pruned || stacks;
 }
 

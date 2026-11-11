@@ -211,15 +211,32 @@ function* taskLines(lines: string[]): Generator<{ i: number; mark: string; markA
   }
 }
 
+// Asked for every open card on every paint, so the answer is kept per TEXT (a note's text is the only
+// thing it depends on) — and a note with no `[` in it has no task to count.
+const NO_TASKS = { done: 0, total: 0 };
+const progressOf = new Map<string, { done: number; total: number }>();
+
 export function taskProgress(md: string | null | undefined): { done: number; total: number } {
+  if (!md || !md.includes('[')) {
+    return NO_TASKS;
+  }
+  const known = progressOf.get(md);
+  if (known) {
+    return known;
+  }
   let done = 0, total = 0;
-  for (const t of taskLines((md ?? '').split('\n'))) {
+  for (const t of taskLines(md.split('\n'))) {
     total++;
     if (t.mark !== ' ') {
       done++;
     }
   }
-  return { done, total };
+  if (progressOf.size > 4000) {
+    progressOf.clear();
+  }
+  const out = { done, total };
+  progressOf.set(md, out);
+  return out;
 }
 
 // The note with its idx-th task ticked or unticked — idx as the card numbers its checkboxes (`data-ti`).

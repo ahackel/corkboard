@@ -15,15 +15,18 @@ export function pathKey(path: string): string { return path.normalize('NFC').toL
 
 // A filename may be 255 BYTES on every common disk; this leaves room for `.md` and a ` 12` suffix.
 const MAX_STEM_BYTES = 200, MAX_STEM_CHARS = 120;
-const utf8 = new TextEncoder();
 
 // Whole characters from the start of `s`, up to both limits. Counted per CODE POINT: cutting between the
 // two halves of an emoji leaves half a character, which a disk stores as something else — and the name
 // the note is then loaded under no longer matches the one its text asks for.
 function clip(s: string): string {
+  if (s.length * 3 <= MAX_STEM_BYTES) {
+    return s;   // no UTF-16 unit takes more than three bytes: short enough either way
+  }
   let out = '', bytes = 0, chars = 0;
   for (const ch of s) {
-    bytes += utf8.encode(ch).length;
+    const cp = ch.codePointAt(0)!;
+    bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
     if (++chars > MAX_STEM_CHARS || bytes > MAX_STEM_BYTES) {
       break;
     }

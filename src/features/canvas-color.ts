@@ -321,10 +321,15 @@ export function syncCanvasBackground(): void {
 // — not off #stage, whose background is mid-transition right after a change.
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 let themeProbe: HTMLElement | null = null;
+let themeFill: string | null | undefined = '\0';   // what the meta tag was last resolved from
+
 function syncThemeColor(fill: string | null | undefined): void {
-  if (!themeMeta) {
+  // Every paintAll asks, and the answer only changes with the canvas colour: resolving it reads a
+  // computed style, which right after a paint's writes means restyling the board to answer.
+  if (!themeMeta || fill === themeFill) {
     return;
   }
+  themeFill = fill;
   if (!themeProbe) { themeProbe = document.createElement('i'); themeProbe.hidden = true; document.body.append(themeProbe); }
   themeProbe.style.color = fill || 'var(--bg)';
   const rgb = getComputedStyle(themeProbe).color;

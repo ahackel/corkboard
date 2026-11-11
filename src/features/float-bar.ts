@@ -5,7 +5,7 @@
 // FigJam: the card's full action list is the right-click menu (features/context-menu.ts).
 // On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
 // this module skips the floating position math there and lets CSS own it.
-import { state, stage, setStatus, singleNoteRefuses, isImageCard, isStack, type MindNode } from '../core/state.js';
+import { state, stage, world, setStatus, singleNoteRefuses, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, inPlaceEditActive } from '../core/ui-state.js';
 import { touch } from './history.js';
 import { mutate } from './mutate.js';
@@ -494,16 +494,31 @@ export function isInteracting(): boolean {
 function placeBar(): boolean {
   const placed = positionBar();
   bar.classList.toggle('unanchored', !placed);
+  placedOk = placed;
   return placed;
 }
 // Tracks the anchor card across camera pan/zoom and node drag without threading a hook through
-// drag.ts/camera.ts — cheap (one rect read + one style write per frame) and only runs while open.
-// It's also what un-hides an `unanchored` bar again: the check re-runs every frame while the bar is
-// open, so unfolding the branch that swallowed its card brings it straight back.
+// drag.ts/camera.ts, and only runs while open. It LOOKS every frame but MEASURES only when something
+// can have moved the anchor: the camera (the world's transform), a repaint (ui.paintTick), the
+// selection, the window, or a glide in progress. Measuring is two rect reads per selected card — after
+// ⌘A on a big board that was thousands of reads a frame with nothing moving. While the canvas is being
+// interacted with the bar is hidden, so it isn't measured at all, and is placed afresh when that ends.
+// It's also what un-hides an `unanchored` bar again: unfolding the branch that swallowed its card
+// repaints, and the next frame puts it straight back.
 let raf: number | null = null;
+let placedFor = '', placedOk = false;
 function followLoop(): void {
-  const placed = placeBar();
   const interacting = isInteracting();
+  if (interacting) {
+    placedFor = '';
+  } else {
+    const now = `${world.style.transform}|${ui.paintTick}|${state.selId}|${state.sel.size}|${window.innerWidth}x${window.innerHeight}`;
+    if (now !== placedFor || document.body.classList.contains('layout-anim')) {
+      placedOk = placeBar();
+      placedFor = now;
+    }
+  }
+  const placed = placedOk;
   bar.classList.toggle('hide-interact', interacting);
   // an open colour/layout popover would otherwise sit at a stale position mid-pan/drag/zoom —
   // hide it right along with the bar it hangs off, same rule, same class.

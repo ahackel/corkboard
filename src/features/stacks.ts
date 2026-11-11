@@ -308,8 +308,30 @@ function canPile(n: MindNode | undefined): boolean {
   return !!n && (n.type === 'card' || isStack(n)) && !isLockedEffective(n);
 }
 
-// The board node under the POINTER — the top one, as drawn, skipping the cards in hand.
+// Could ANYTHING be piled on at this point — is it inside (or a tilt's width from) the box of a card or
+// stack that takes one? Plain arithmetic over the model, so the pointer crossing empty board or a
+// section's floor, which is most of any drag, never asks the browser what is drawn there.
+const PILE_REACH = 24;
+
+function pileNear(cx: number, cy: number, skip: Set<string>): boolean {
+  const p = screenToWorld(cx, cy);
+  for (const n of state.nodes.values()) {
+    if (skip.has(n.id) || !canPile(n) || isHidden(n)) {
+      continue;
+    }
+    if (p.x >= n.x - PILE_REACH && p.x <= n.x + nodeW(n) + PILE_REACH && p.y >= n.y - PILE_REACH && p.y <= n.y + nodeH(n) + PILE_REACH) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// The board node under the POINTER — the top one, as drawn, skipping the cards in hand. Asking the
+// browser for everything drawn at a point is the costliest call of a drag on a big board, hence pileNear.
 function nodeUnder(cx: number, cy: number, skip: Set<string>): MindNode | null {
+  if (!pileNear(cx, cy, skip)) {
+    return null;
+  }
   for (const hit of document.elementsFromPoint(cx, cy)) {
     const n = nodeAtTarget(hit);
     if (n && !skip.has(n.id)) {

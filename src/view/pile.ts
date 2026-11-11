@@ -71,8 +71,9 @@ export function fanTilt(id: string): number | undefined {
 }
 
 // Every stack's cards to their places. Run by every layout (view/layout.ts applyLayouts). A position only
-// changes when it has to, so a settled board flags nothing for the save.
-export function layStacks(): void {
+// changes when it has to, so a settled board flags nothing for the save. Says whether the board HAS a stack.
+export function layStacks(): boolean {
+  let stacks = false;
   fanTilts.clear();
   if (ui.fan && !isStack(state.nodes.get(ui.fan))) {
     ui.fan = null;   // the fanned stack is gone (dissolved, deleted, undone away)
@@ -81,6 +82,7 @@ export function layStacks(): void {
     if (!isStack(s)) {
       continue;
     }
+    stacks = true;
     const kids = pileKids(s);
     const spots = ui.fan === s.id ? fanSpots(s, kids) : null;
     for (const k of kids) {
@@ -93,6 +95,7 @@ export function layStacks(): void {
       }
     }
   }
+  return stacks;
 }
 
 // Where each card of a FANNED stack shows, the top card first: an arc for a handful — a hand of cards held up

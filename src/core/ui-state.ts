@@ -75,12 +75,19 @@ export interface PanState { sx: number; sy: number; ox: number; oy: number; }
 export interface Marquee { sx: number; sy: number; add: boolean; base: Set<string>; moved: boolean;
   // When a marquee is started from an unselected SECTION (drag inside it rubber-band-selects its
   // contents), a no-move click should SELECT that section instead of deselecting — this holds its id.
-  clickNode?: string | null; }
+  clickNode?: string | null;
+  // Every visible card's box in world coords, taken when the band first moves, and the ids it holds now
+  // (features/gestures.ts selectWithinMarquee).
+  boxes?: Array<{ id: string; x0: number; y0: number; x1: number; y1: number }>;
+  hits?: string; }
 export interface Pinch { dist: number; cx: number; cy: number; }
 // Safari-only pinch events (not in lib.dom): clientX/Y + a scale factor.
 export interface GestureEvt extends Event { clientX: number; clientY: number; scale: number; }
 
 export const ui = {
+  // Counts every repaint and placement of a node (main.ts paintNode/placeSelf): what a follower of the
+  // canvas compares to know whether anything can have moved since it last looked (the float bar).
+  paintTick: 0,
   // ---- node drag (features/drag.ts) ----
   drag: null as Drag | null,
   dragRAF: null as number | null,   // pending rAF for drag paint; coalesces moves per frame

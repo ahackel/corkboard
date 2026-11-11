@@ -196,20 +196,30 @@ function selectWithinMarquee(cx: number, cy: number): void {
   }
   const a = screenToWorld(Math.min(marquee.sx, cx), Math.min(marquee.sy, cy));
   const b = screenToWorld(Math.max(marquee.sx, cx), Math.max(marquee.sy, cy));
-  const hits: string[] = [];
-  for (const n of state.nodes.values()){
-    if (isHidden(n)) {
-      continue;
-    }
-    // A marquee started from inside a section (clickNode) never selects that section itself — dragging
-    // within its box would otherwise always enclose it. Only its CONTENTS get rubber-banded.
-    if (n.id === marquee.clickNode) {
-      continue;
-    }
-    if (n.x < b.x && n.x + nodeW(n) > a.x && n.y < b.y && n.y + nodeH(n) > a.y) {
-      hits.push(n.id);
+  // Every card's box, taken ONCE when the band first moves: nothing on the board moves under a rubber
+  // band, and measuring each card's height again on every pointer move was most of what a band cost.
+  if (!marquee.boxes) {
+    marquee.boxes = [];
+    for (const n of state.nodes.values()){
+      // A marquee started from inside a section (clickNode) never selects that section itself — dragging
+      // within its box would otherwise always enclose it. Only its CONTENTS get rubber-banded.
+      if (!isHidden(n) && n.id !== marquee.clickNode) {
+        marquee.boxes.push({ id: n.id, x0: n.x, y0: n.y, x1: n.x + nodeW(n), y1: n.y + nodeH(n) });
+      }
     }
   }
+  const hits: string[] = [];
+  for (const m of marquee.boxes) {
+    if (m.x0 < b.x && m.x1 > a.x && m.y0 < b.y && m.y1 > a.y) {
+      hits.push(m.id);
+    }
+  }
+  // …and the selection is touched only when the band takes a card in or lets one go.
+  const key = hits.join(' ');
+  if (key === marquee.hits) {
+    return;
+  }
+  marquee.hits = key;
   setSelectionSet(marquee.add ? new Set([...marquee.base, ...hits]) : hits);
 }
 

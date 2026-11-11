@@ -14,7 +14,7 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
 import { MOTION } from './utils/motion.js';
-import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary } from './utils/model.js';
+import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary, withKids } from './utils/model.js';
 import { state, world, dragLayer, isStack, isImageCard } from './core/state.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
@@ -371,6 +371,7 @@ export function flashArrived(ids: Iterable<string>): void {
   }
 }
 export function paintNode(n: MindNode): void {
+  ui.paintTick++;
   const el = nodeEl(n);
   // Drop the content wrapper the moment it isn't holding anything — `hostsContent` is exactly the set
   // of cases the sizing chain below creates one for, so the two can't drift. ONE drop, and it sits
@@ -752,6 +753,7 @@ function contentOrigin(host: MindNode): Pt {
 // Put a node's OWN element where it belongs: its host container's content wrapper, or straight under
 // #world. The single decision point, shared by paintNode and sectionContentEl's ordering guard.
 export function placeSelf(n: MindNode, absX: number, absY: number): void {
+  ui.paintTick++;
   place(nodeEl(n), absX, absY, settledHost(n));
   orderContentAfterBox(n);
 }
@@ -836,9 +838,11 @@ function squeezeTables(): void {
 export function paintAll(): void {
   readOpenUnread();   // an open section whose notes are still on disk reads them (data/lazy.ts)
   refreshSearch();    // what the search lights, off the tags and text as they are now
-  for (const n of state.nodes.values()) {
-    paintNode(n);
-  }
+  withKids(() => {
+    for (const n of state.nodes.values()) {
+      paintNode(n);
+    }
+  });
   squeezeTables();    // before anything measures a card's height
   refreshTray();      // the tag tray's stickers, when it's out
   syncFan();          // the scrim under a fanned-out stack (features/stacks.ts)
@@ -856,7 +860,12 @@ export function paintAll(): void {
 //                 the two paints reads a current DOM. Nothing flows cards any more, so the two differ
 //                 only in that first paint — kept apart so callers still say which they mean.
 export function relayout(): void { applyLayouts(); paintAll(); }
-export function remeasure(): void { paintAll(); applyLayouts(); paintAll(); }
+export function remeasure(): void {
+  paintAll();
+  if (applyLayouts()) {
+    paintAll();
+  }
+}
 
 // ---------- animated relayout (expand / collapse) ----------
 // Every glide plays whatever the system's "Reduce motion" says: the motion IS how a fold or a fan reads.

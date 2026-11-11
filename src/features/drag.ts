@@ -7,7 +7,7 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds, withKids } from '../utils/model.js';
 import { detachParentId, scope } from '../nav/scope.js';
 import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection, moveSubtreeTo } from '../view/layout.js';
 import { cancelViewAnim, applyView, screenToWorld } from '../view/camera.js';
@@ -371,7 +371,7 @@ function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
   const rootIds = (multi ? [...state.sel] : [n.id])
     .filter(id => id === n.id || !isLockedEffective(state.nodes.get(id)!));
   const selRoots = trueRoots(rootIds);
-  const ids = [...new Set(rootIds.flatMap(id => subtreeIds(id)))];
+  const ids = withKids(() => [...new Set(rootIds.flatMap(id => subtreeIds(id)))]);
   const start = new Map(ids.map(id => {
     const m = state.nodes.get(id)!; return [id, { x:m.x, y:m.y }] as [string, Pt];
   }));
@@ -805,20 +805,31 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
     }
   }
   if (fuse) {
-    state.nodes.get(fuse)!.el?.classList.add('drop-merge');
+    markDrop(state.nodes.get(fuse)!.el, 'drop-merge');
   } else if (insert) {
     showFanInsert(insert);
   } else if (pile) {
-    state.nodes.get(pile.id)!.el?.classList.add('drop-pile');
+    markDrop(state.nodes.get(pile.id)!.el, 'drop-pile');
   } else if (chute) {
-    chute.el.classList.add('drop-target');
+    markDrop(chute.el, 'drop-target');
   } else if (f && f.id !== dragged.parent) {
-    f.el?.classList.add('drop-target');
+    markDrop(f.el, 'drop-target');
+  }
+}
+
+// The ONE element wearing a drop hint, remembered so that clearing it — which every frame of a drag
+// does first — is not a search of the whole document.
+let dropMark: Element | null = null;
+
+function markDrop(el: Element | null | undefined, cls: string): void {
+  if (el) {
+    el.classList.add(cls);
+    dropMark = el;
   }
 }
 function clearDropTarget(): void {
-  document.querySelectorAll('.drop-target, .drop-merge, .drop-pile')
-    .forEach(el => el.classList.remove('drop-target', 'drop-merge', 'drop-pile'));
+  dropMark?.classList.remove('drop-target', 'drop-merge', 'drop-pile');
+  dropMark = null;
   showFanInsert(null);
 }
 

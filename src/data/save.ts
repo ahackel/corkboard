@@ -55,7 +55,7 @@ function keepsName(n: MindNode): boolean {
 // Names that turned out to be on disk although no node holds them: a note another app (or another tab)
 // wrote since the map was read. Writing a new card there would replace it, so the name counts as taken.
 const diskTaken = new Set<string>();
-const CHECKS_AT_ONCE = 16;
+const CHECKS_AT_ONCE = 16, WRITES_AT_ONCE = 8;
 
 // planPaths, checked against the DISK for every path a note is about to take for the first time.
 async function planFreePaths(): Promise<Map<string, string>> {
@@ -132,7 +132,8 @@ async function saveAll(): Promise<void> {
   // that is about to move (renamed, retyped, dropped into another section, or inside one that is) reads
   // its whole folder first, and one that somehow holds a note in memory reads its own level, so the
   // rest of the save sees a complete tree under every path it changes (data/lazy.ts).
-  for (let guard = 0; guard < 16; guard++) {
+  // (Only a board that HAS an unread section pays for the extra plan.)
+  for (let guard = 0; guard < 16 && [...state.nodes.values()].some(n => n.lazy != null); guard++) {
     const plan = planPaths();
     const moving = [...state.nodes.values()].filter(n => n.lazy != null && n.file && plan.get(n.id) !== n.file);
     const holding = [...state.nodes.values()].filter(n => n.lazy != null && childrenOf(n.id).length);
@@ -201,22 +202,24 @@ async function saveAll(): Promise<void> {
   // Phase 2 — write everything that changed, now that all paths are final. One note that can't be
   // written (a name the disk refuses, a file another app holds) must not keep the others from being
   // saved: it stays dirty, the rest go on, and the failure is reported once they have.
-  let written = 0;
+  // A few at a time: renaming a section rewrites every note in it, and on a synced folder each write is
+  // a round trip.
   const failed = new Set<string>();
   let firstError: unknown;
-  for (const n of state.nodes.values()) {
-    if (!needWrite.has(n.id)) {
-      continue;
-    }
-    try {
-      await store.write(n.file!, serializeMd(n));
-    } catch (err) {
-      failed.add(n.file!);
-      firstError ??= err;
-      continue;
-    }
-    n.dirty = false;
-    written++;
+  const todo = [...state.nodes.values()].filter(n => needWrite.has(n.id));
+  for (let i = 0; i < todo.length; i += WRITES_AT_ONCE) {
+    await Promise.all(todo.slice(i, i + WRITES_AT_ONCE).map(async n => {
+      // what is written is the note as it is NOW: an edit made while the write is in flight dirties it again
+      const path = n.file!, text = serializeMd(n);
+      n.dirty = false;
+      try {
+        await store.write(path, text);
+      } catch (err) {
+        n.dirty = true;
+        failed.add(path);
+        firstError ??= err;
+      }
+    }));
   }
   // Phase 3 — drop files left behind by renames, unless some node now legitimately holds the path — on
   // ANY disk: where case or accents fold, a different spelling is the same file. A rename whose new

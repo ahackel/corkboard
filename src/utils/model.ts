@@ -27,7 +27,36 @@ export function nodeByFile(file: string): MindNode | undefined {
   return undefined;
 }
 export function childrenOf(id: string | null): MindNode[] {
+  if (kidIndex) {
+    return kidIndex.get(id) ?? [];
+  }
   return [...state.nodes.values()].filter(n => n.parent === id);
+}
+
+// childrenOf scans the whole map, so anything that asks it per node — the size of each folded section
+// in a repaint, the subtree of each selected card when a drag begins — is quadratic. `withKids` answers
+// from ONE parent → children index for the length of `fn`. Only around code that READS the tree: a
+// parent changed inside `fn` would not show.
+let kidIndex: Map<string | null, MindNode[]> | null = null;
+
+export function withKids<T>(fn: () => T): T {
+  if (kidIndex) {
+    return fn();
+  }
+  kidIndex = new Map();
+  for (const n of state.nodes.values()) {
+    const kids = kidIndex.get(n.parent);
+    if (kids) {
+      kids.push(n);
+    } else {
+      kidIndex.set(n.parent, [n]);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    kidIndex = null;
+  }
 }
 // A node's parent NODE (`parent` is a file path, and a dangling one means "root"). Every ancestor
 // walk in the app is written `for (let p = parentOf(n); p; p = parentOf(p))` off this, rather than
