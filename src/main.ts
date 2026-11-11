@@ -411,7 +411,9 @@ export function paintNode(n: MindNode): void {
     + (editingBody ? ' card-editing' : '')
     + (hasBody ? '' : ' no-body')
     + (tags.length ? '' : ' no-tags')
-    + (ui.drag?.targets?.has(n.id) ? ' dragging' : '')   // float the dragged subtree above all cards
+    + (ui.titleEdit?.id === n.id ? ' title-editing' : '')   // a section's label is being typed into
+    // float the dragged subtree above all cards — and, once it has actually moved, give it the hand
+    + (ui.drag?.targets?.has(n.id) ? (ui.drag.moved ? ' dragging grabbed' : ' dragging') : '')
     + (state.searchMatch && !state.searchMatch.has(n.id) ? ' search-dim' : '')
     + (state.searchActiveId === n.id ? ' search-active' : '');   // active dropdown option → white outline
   // Which section (if any) hosts this card's element — settled outside gestures (see settledHost).

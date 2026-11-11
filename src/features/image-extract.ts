@@ -55,12 +55,12 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
   document.body.appendChild(preview);
   const place = (x: number, y: number): void => { preview.style.left = (x - pw / 2) + 'px'; preview.style.top = (y - ph / 2) + 'px'; };
   place(sx, sy);
-  document.body.classList.add('grabbing');
+  document.body.classList.add('grabbing', 'grab-all');
   let moved = false;
   const cleanup = (): void => {
     stop();
     setHover(null); preview.remove();
-    document.body.classList.remove('grabbing');
+    document.body.classList.remove('grabbing', 'grab-all');
     extracting = false;
   };
   const onMove = (ev: PointerEvent): void => {

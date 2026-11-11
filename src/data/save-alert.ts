@@ -12,6 +12,7 @@ const DELAYS = [2000, 5000, 15000, 30000];   // then every 30s until a write lan
 
 function paint(): void {
   const el = byId('saveAlert');
+  document.body.classList.toggle('save-failing', failing.size > 0);   // the toast stands down (styles.css)
   if (!failing.size) { el.hidden = true; return; }
   const msg = [...new Set([...failing.values()].map(f => f.msg))].join(' · ');   // one disk, one error
   byId('saveAlertMsg').textContent = `Changes not saved. ${msg} Retrying…`;

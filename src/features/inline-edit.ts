@@ -255,6 +255,7 @@ function startTitleEdit(n: MindNode, { isNew = false, seed = '', at }: { isNew?:
   titleEl.textContent = raw;
   titleEl.setAttribute('contenteditable', 'plaintext-only');
   titleEl.classList.add('editing');
+  n.el.classList.add('title-editing');   // what the handles and the ring key on (paintNode keeps it)
   titleEl.focus();
   selectTitle(titleEl, clicked);
 }
@@ -326,6 +327,7 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   setCardDraggable(n, true);
   te.el.removeAttribute('contenteditable');
   te.el.classList.remove('editing');
+  n?.el?.classList.remove('title-editing');
   te.el.blur();                                       // ensure the keyboard closes on iOS
   if (!n) { commitStep(); return; }
   if (cancel && te.isNew){                            // Esc on a freshly-created section = cancel creation
@@ -462,6 +464,7 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   delete bodyEl.dataset.md;
   const hl = document.createElement('pre');
   hl.className = 'body-hl'; hl.setAttribute('aria-hidden', 'true');
+  ta.classList.add('with-hl');   // its own text goes transparent over the highlight (styles.css)
   bodyEl.innerHTML = ''; bodyEl.append(ta, hl);   // the textarea stays first: .body's first-child spacing is its
   bodyEl.classList.add('editing');
   // typing: keep the textarea sized to its content and reflow siblings as the card grows/shrinks

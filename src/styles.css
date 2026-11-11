@@ -183,7 +183,7 @@ body.empty-map #emptyHint { display:block; }
   #emptyHint .eh-fine, #emptyHint .eh-more { display:none; }
   #emptyHint .eh-coarse { display:inline; }
 }
-body:has(#saveAlert:not([hidden])) #status { display:none; }
+body.save-failing #status { display:none; }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
 /* Open-in-place drop target (features/open-drop.ts): a dark pill at the top centre while a note is dragged in,
    which lights up in the accent when the drag is over it (.hot) — a drop anywhere else adds a card. */
@@ -429,8 +429,13 @@ input::placeholder { color:var(--muted); opacity:1; }
    simply BE there (withoutScopeFade in main.ts). See its comment for why. */
 body.scope-instant #stage { transition: none; }
 #stage.panning { cursor:grabbing; }
-/* the hand only appears while actually dragging a card; default everywhere else */
-body.grabbing, body.grabbing *, body.tag-dragging, body.tag-dragging * { cursor:grabbing !important; }
+/* The hand only appears while actually dragging a card; default everywhere else. It is worn by the cards
+   IN HAND (`.grabbed`, main.ts paintNode) — they are what the pointer is over — and not by a rule on
+   every element under <body>: that one restyled the whole board at each pick-up and each drop. A tag or
+   a picture pulled out of a card rides a ghost that takes no pointer events, so those two still ask
+   everything under the pointer for the hand (rare gestures, and short ones). */
+.node.grabbed, .node.grabbed * { cursor:grabbing !important; }
+body.tag-dragging, body.tag-dragging *, body.grab-all, body.grab-all * { cursor:grabbing !important; }
 /* will-change:transform keeps a pan/pinch compositor-only. It also pins the layer's raster scale,
    which would leave the cards blurry after a zoom — view/camera.ts's refreshRaster releases the
    hint for two sections once the zoom settles, so this declaration is the RESTING value it comes
@@ -504,7 +509,10 @@ svg.fe-lines path.fe { fill:none; stroke-width:3; stroke-linecap:round; stroke-l
    be continuous or the "outline" reads as just more dashes. */
 svg.fe-lines path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:7;
   stroke-linecap:round; stroke-linejoin:round; }
-svg#freeEdgeHits path.fe-hit { fill:none; stroke:transparent; pointer-events:stroke; cursor:pointer; }
+/* `visibility:hidden`, NOT a transparent stroke: `pointer-events:stroke` takes the press either way, and a
+   hidden path is never painted — a transparent one is, and its wide band under every card made the
+   compositor re-sort the whole board's layers on each frame of a pan. */
+svg#freeEdgeHits path.fe-hit { fill:none; stroke:transparent; visibility:hidden; pointer-events:stroke; cursor:pointer; }
 /* Open head: stroked, never filled, at the line's own weight so the two read as one drawing. */
 svg.fe-lines path.fe-arrow { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
 /* A draft edge (mid-draw) is painted onto the LINE layer with the finished ones — it IS an edge, and
@@ -829,7 +837,7 @@ body.fan-open #dragLayer { z-index:63; }
 .node:not(.section):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
 /* Nothing to grab while a section's name is typed into or while it's locked. A card being edited
    keeps its edges: typing never grows it, so dragging one is how it gets room. */
-.node:has(.title.editing) > .fh,
+.node.title-editing > .fh,
 .node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
 /* no title/body chrome at all — just the image filling the box (see isImageBox in main.ts).
@@ -949,7 +957,7 @@ body.layout-anim #selFrame { display:none; }
 /* While a section's label is being renamed, drop the section's ring so only the label's own outline shows.
    While a CARD is being edited, the card itself is the field (FigJam): no box inside it, the ring goes
    to a DIMMED blue round the card's border, and the corner handles stand down. */
-.node.sel:has(.title.editing) { box-shadow:none; }
+.node.sel.title-editing { box-shadow:none; }
 .node.sel.card-editing:not(.section):not(.image-card) {
   box-shadow:0 0 0 3px var(--edit-ring); }
 .node.card-editing > .fh::after { display:none; }
@@ -1008,7 +1016,7 @@ body.layout-anim #selFrame { display:none; }
   -webkit-user-select:text; user-select:text; }
 /* …and, as for a card, it's the PILL that shows the edit, not a box inside it: the same dimmed 3px blue
    ring (--edit-ring) round the label — or round the whole element when folded, since that IS the pill. */
-.node.section > .title-row:has(> .title.editing) { box-shadow:0 0 0 3px var(--edit-ring); }
+.node.section.title-editing > .title-row { box-shadow:0 0 0 3px var(--edit-ring); }
 /* A card's TAGS (features/tags.ts tagChipHTML), stuck on its top edge like things pinned to a corkboard:
    an EMOJI is a round white STAMP, a WORD a small paper LABEL, each at its own slight tilt (--tilt, from
    the tag itself). The first tag sits rightmost (row-reverse), so adding one never moves the others. A
@@ -1128,7 +1136,7 @@ body.layout-anim #selFrame { display:none; }
    Weight and italic are safe in a monospace face (every weight has the same advance); a SIZE is not, so
    a heading is bold here rather than bigger. Markers fade; everything else is a shade of the card's ink. */
 .node .body .body-hl { position:absolute; left:0; right:0; pointer-events:none; }   /* top: paintHighlight */
-.node .body-edit:has(+ .body-hl) { position:relative; z-index:1; color:transparent; }
+.node .body-edit.with-hl { position:relative; z-index:1; color:transparent; }
 .node .body-edit::selection { color:transparent; background:color-mix(in srgb, var(--accent) 35%, transparent); }
 .body-hl .hl-mk   { opacity:.4; font-weight:400; font-style:normal; }
 .body-hl .hl-h    { font-weight:750; }

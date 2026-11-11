@@ -474,7 +474,7 @@ function dragPointerUp(): void {
       // Clear compositor transforms so paintAll()/paintNode() can commit final left/top cleanly.
       for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
         const m2 = state.nodes.get(id);
-        if (m2?.el){ m2.el.style.transform = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging'); }
+        if (m2?.el){ m2.el.style.transform = ''; m2.el.style.willChange = ''; m2.el.classList.remove('dragging', 'grabbed'); }
         if (m2?.sectionContentEl) {
           m2.sectionContentEl.style.transform = '';
         }
@@ -596,7 +596,7 @@ export function startNodeDrag(n: MindNode, clientX: number, clientY: number): vo
   ui.drag = { n, active:n, multi:false, sx:clientX, sy:clientY, cx:clientX, cy:clientY,
     start, targets, origins, selRoots:[n.id], moved:true, dropTarget:n.parent,
     alt:false, shift:false, cloned:false, meta:false, touch:false, cardMerge:null };
-  if (n.el){ n.el.style.willChange = 'transform'; n.el.classList.add('dragging'); }
+  if (n.el){ n.el.style.willChange = 'transform'; n.el.classList.add('dragging', 'grabbed'); }
   document.body.classList.add('grabbing');
 }
 // Forward a move/up from an external (ghost-card) drag into the shared drag machinery.
@@ -617,7 +617,7 @@ export function abortDrag(): void {
   hideGuides();
   for (const id of new Set([...drag.targets.keys(), ...drag.start.keys()])){
     const m = state.nodes.get(id);
-    if (m?.el){ m.el.style.transform = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging'); }
+    if (m?.el){ m.el.style.transform = ''; m.el.style.willChange = ''; m.el.classList.remove('dragging', 'grabbed'); }
     if (m?.sectionContentEl) {
       m.sectionContentEl.style.transform = '';
     }
