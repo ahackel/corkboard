@@ -114,7 +114,7 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
   }
 }
 
-// Open a section. Allowed in read-only and on a LOCKED section: looking inside the box isn't changing it.
+// Open a section. Allowed on a LOCKED section: looking inside the box isn't changing it.
 export function openSection(target: MindNode | undefined): void {
   const t = target;
   if (!t || !canOpen(t)) { setStatus('Only a section can be opened'); return; }

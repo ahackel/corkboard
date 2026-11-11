@@ -57,7 +57,6 @@ import { syncSelFrame } from './features/sel-frame.js';
 import { toggleCollapse } from './features/fold.js';
 import { openSection, syncScopeChrome } from './nav/sections.js';
 import { focusByTitle } from './nav/focus.js';
-import { applyReadOnly } from './features/read-only.js';
 
 document.querySelectorAll<HTMLElement>('[title]').forEach(el => { el.title = keys(el.title); });
 mountIcons();                         // fill [data-icon] placeholders with their SVG assets
@@ -227,7 +226,7 @@ function onSectionRim(n: MindNode, cx: number, cy: number): boolean {
 // `touch`: a tap's double is its own gesture (features/drag.ts), and its mouse events come after the fact.
 let opened: { id: string; at: number } | null = null;
 export function editOnClick(n: MindNode, cx: number, cy: number, touch: boolean): void {
-  if (state.readOnly || n.collapsed || isImageCard(n) || isLockedEffective(n) || isNodeControlAt(cx, cy)) {
+  if (n.collapsed || isImageCard(n) || isLockedEffective(n) || isNodeControlAt(cx, cy)) {
     return;
   }
   const all = !touch && downDetail >= 2;
@@ -266,9 +265,8 @@ window.addEventListener('mousedown', (e) => {
 export function activateNode(n: MindNode, cx: number, cy: number, { open = false }: { open?: boolean } = {}): void {
   // ⌥-DOUBLE-CLICK, or a two-finger double-tap on touch, on a SECTION: go IN. The one navigating gesture
   // on a node, held apart from the editing ones by the modifier rather than by which PART of the section
-  // was hit. A FOLDED section is a folder icon, so a plain double-click goes in too, as in Finder. Ahead of
-  // the read-only bail on purpose, the same exemption openSection itself takes: looking inside something
-  // isn't changing it. A card has no inside, so on one it's a plain double-click.
+  // was hit. A FOLDED section is a folder icon, so a plain double-click goes in too, as in Finder. A card
+  // has no inside, so on one it's a plain double-click.
   if ((open || n.collapsed) && canOpen(n)) { openSection(n); return; }
 
   // A STACK has nothing to type into but its name, on the tab it wears once it has one. A click already
@@ -279,10 +277,6 @@ export function activateNode(n: MindNode, cx: number, cy: number, { open = false
     }
     return;
   }
-  // Read-only (a map the user has locked down): there is nothing to edit, so the
-  // gesture keeps its old meaning — fold/unfold, the one thing this mode still allows. Browsing a
-  // read-only map is all expanding, so leaving the double-click inert there would just cost a gesture.
-  if (state.readOnly) { toggleCollapse(n.id); return; }
   // A FOLDED card unfolds: the chip is a summary, and the double-click asks to see what's in it.
   if (n.collapsed) { toggleCollapse(n.id); return; }
   // A card has ONE text, its note — the title is its first line — so wherever it was hit, that is what opens.
@@ -1087,7 +1081,6 @@ function toggleTask(n: MindNode, idx: number): void {
 
 syncFloatBar();
 
-applyReadOnly();
 
 
 byId('homeBtn').onclick = showStart;   // icon + folder name → home screen

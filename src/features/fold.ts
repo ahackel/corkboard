@@ -53,7 +53,6 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
     return;
   }
   const what = cards.length > 1 ? `${cards.length} notes` : `“${nodeLabel(cards[0]!)}”`;
-  // Folding mutates nothing on disk that read-only protects, so it stays allowed there (CLAUDE.md).
   record(cards.map(n => n.id),
     () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();

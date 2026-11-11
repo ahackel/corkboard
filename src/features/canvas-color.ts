@@ -73,7 +73,6 @@ function repaint(): void {
   }
 }
 function setColor(color: string): void {
-  if (state.readOnly) { setStatus('Read-only — can’t recolour the canvas'); return; }
   const owner = canvasOwner();
   if (owner && isLockedEffective(owner)) { setStatus(`“${nodeLabel(owner)}” is locked`); return; }
   // Inside an open section the colour is that section's node; at the top level it's the map's own.
@@ -155,7 +154,7 @@ function bindCustom(): void {
   };
   row.addEventListener('input', (e) => {
     const input = picker(e);
-    if (!input || state.readOnly || locked()) {
+    if (!input || locked()) {
       return;
     }
     if (before === null) {

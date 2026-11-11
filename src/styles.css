@@ -199,10 +199,6 @@ button {
 button:hover { border-color: var(--accent); }
 button.active { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity:.45; cursor:default; }
-/* the read-only pill, top centre: the one mode that must be visible at a glance (and the way out of it) */
-#roBadge { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
-  border:none; background:var(--panel); color:#e0564f; font-weight:600; touch-action:pan-x pan-y; }
-#roBadge[hidden] { display:none; }
 /* The ⌘P palette, FigJam's quick actions: a popover rising from the dock's Actions button, bottom centre.
    #palette itself is a clear full-page layer only so a press outside the box closes it (no scrim: the
    board stays in view). The box is pinned by its BOTTOM with the input last, so the input sits still next
@@ -291,7 +287,7 @@ body.scoped #scopeBar { display:flex; }
 .sc-pill > .fold-icon { flex:none; width:14px; height:14px; color:inherit; }
 .sc-pill > .fold-icon svg path { fill:none; }
 .sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
-/* The pill stops short of the CENTRED search / read-only bar (~260px wide, hence half of it plus a gap). */
+/* The pill stops short of the CENTRED search bar (~260px wide, hence half of it plus a gap). */
 @media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }
 /* NARROW: the pill becomes a full-width strip one line of text tall with a rule under it — a document
    header, which is what a path is. The centred bars drop by exactly its height (--crumb-bar-h). */
@@ -307,7 +303,7 @@ body.scoped #scopeBar { display:flex; }
   body.scoped #homeBar #homeBtn svg { width:15px; height:15px; }
   /* …and the segments give up the vertical padding that made them capsules. */
   body.scoped #homeBar .sc-crumb { padding:2px 7px; }
-  body.scoped #searchWrap, body.scoped #roBadge { top:calc(8px + var(--sa-t) + var(--crumb-bar-h)); }
+  body.scoped #searchWrap { top:calc(8px + var(--sa-t) + var(--crumb-bar-h)); }
 }
 /* Narrower still: drop the map name (the expendable segment) and let the rest ellipsise. Nothing
    collapses to an icon-only segment — the segments carry no icon, so that would leave empty buttons;
@@ -327,7 +323,6 @@ body.scoped #scopeBar { display:flex; }
   display:none; align-items:center; width:300px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
   background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
-body:has(#searchWrap.open) #roBadge { display:none; }
 #searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
   display:block; color:var(--muted); pointer-events:none; flex:none; }
 /* The field FILLS the bar — transparent, no fill of its own and no focus ring, so the whole pill
@@ -819,10 +814,10 @@ body.fan-open #dragLayer { z-index:63; }
      a one-line card a 12px inset either side would leave an 8px strip nobody can hit. */
 .node:not(.section):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
 .node:not(.section):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
-/* Nothing to grab while a section's name is typed into or while it's read-only/locked. A card being edited
+/* Nothing to grab while a section's name is typed into or while it's locked. A card being edited
    keeps its edges: typing never grows it, so dragging one is how it gets room. */
 .node:has(.title.editing) > .fh,
-body.readonly .node > .fh, .node.locked > .fh { display:none; }
+.node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
 /* no title/body chrome at all — just the image filling the box (see isImageBox in main.ts).
    Background is the same --card variable every card's own colour swatch sets (.c-blue etc. at
@@ -933,8 +928,8 @@ body.readonly .node > .fh, .node.locked > .fh { display:none; }
 #selFrame > .sf-ne::after, #selFrame > .sf-nw::after, #selFrame > .sf-se::after, #selFrame > .sf-sw::after {
   content:''; position:absolute; inset:2px; box-sizing:border-box;
   background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
-/* nothing to move or scale in read-only, nor scale with a locked card in it; nothing at all while a fold glides */
-body.readonly #selFrame > :is(.sf-h, .sf-fill), #selFrame.locked > .sf-h { display:none; }
+/* nothing to scale with a locked card in it; nothing at all while a fold glides */
+#selFrame.locked > .sf-h { display:none; }
 body.layout-anim #selFrame { display:none; }
 /* Board nodes NEVER cast a shadow — at rest, selected or in hand. Selection is the ring alone. */
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
@@ -1336,12 +1331,9 @@ body.zoom-far .node > .top-edge { display:none; }
   transition:box-shadow .15s, opacity .15s;
 }
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
-body.readonly #ghostCard { opacity:.35; pointer-events:none; }
 /* A single note is a map of ONE card (store/note.ts): there is no new-card sticky to drag off. */
 body.single-note #ghostCard { display:none; }
 
-/* Nothing to pick in read-only — setColor refuses there, so the colour row would be dead. */
-body.readonly #settingsPop .set-color { display:none; }
 
 /* the `#` field (features/tag-picker.ts): a field, then one list — matches, then the selection's own
    tags, ticked. Over everything but the palette. */

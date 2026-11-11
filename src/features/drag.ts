@@ -142,7 +142,7 @@ function stopAutoPan(): void { if (ui.autoPanRAF){ cancelAnimationFrame(ui.autoP
 function autoPanStep(): void {
   ui.autoPanRAF = null;
   const drag = ui.drag;
-  if (!drag || !drag.moved || state.readOnly) {
+  if (!drag || !drag.moved) {
     return;
   }
   // Available canvas = the stage minus the toolbar (above it) and, on wide screens, the outline
@@ -285,7 +285,7 @@ export function bindNodeDrag(n: MindNode): void {
     if (tgt.closest('a.lk, input.taskbox, .img-zoom')) { e.stopPropagation(); return; }  // let links/checkboxes/zoom click, not drag
     // Alt-press over an inline body image (on a plain card) rips THAT image out — extraction rides
     // its own preview (features/image-extract.ts), not the card drag. Image-only cards drag whole.
-    if (e.altKey && e.button === 0 && !state.readOnly && !isImageCard(n) && !isSection(n) && !isLockedEffective(n)) {
+    if (e.altKey && e.button === 0 && !isImageCard(n) && !isSection(n) && !isLockedEffective(n)) {
       const img = bodyImageAt(el, e.clientX, e.clientY);
       if (img && img.dataset.path) {
         e.stopPropagation();
@@ -423,9 +423,6 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
   const drag = ui.drag;
   if (!drag) {
     return;
-  }
-  if (state.readOnly) {
-    return;        // no moving/reparenting in read-only (click & dbl-click still work)
   }
   // Pressing directly on a locked card: never treat it as a drag (click/double-click select/rename
   // still resolve normally on release since drag.moved stays false) — no move, no reparent.
@@ -958,9 +955,6 @@ export function settleSections(sectionIds: Iterable<string>): string[] {
 // status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or
 // section, and a section into its own contents. Returns whether it moved.
 function reparentOnly(childId: string, newParentId: string | null): boolean {
-  if (state.readOnly) {
-    return false;
-  }
   const child = state.nodes.get(childId);
   const newParent = newParentId ? state.nodes.get(newParentId) : null;
   if (!child || childId === newParentId || (newParentId && !newParent)) {

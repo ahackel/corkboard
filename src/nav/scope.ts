@@ -98,7 +98,7 @@ export function openPathTo(t: MindNode): MindNode[] {
   return out.reverse();
 }
 
-// A reload, a map switch or leaving read-only all re-mint every id (data/persistence.ts's
+// A reload or a map switch re-mints every id (data/persistence.ts's
 // loadFromDir), so the stack's rootIds go stale. Re-resolve each level by its FILE — the real,
 // stable identity — and truncate at the first one that can't be found. On a DIFFERENT map that's
 // level 0, so the stack empties with no "did the map change?" test to get wrong; a level whose section

@@ -1,21 +1,21 @@
 // ============================================================
-// URL hash reflects navigable state: current map + selected node, view mode, camera, the
-// search query, and read-only — so browser back/forward, reload, and bookmarks restore the
+// URL hash reflects navigable state: current map + selected node, the open section, camera and the
+// search query — so browser back/forward, reload, and bookmarks restore the
 // same view. Node identity in the hash is the note's FILE PATH (the real, stable identity
 // per CLAUDE.md), never the in-memory id, which is re-minted on every load. Registry-backed
 // maps use their stable kind/id pair, so a bookmark can switch away from the currently open map.
 //
-// Shape: #/<map-kind>/<map-id>/<node-file-path>?mode=outline&open=&x=&y=&k=&q=&ro=1
+// Shape: #/<map-kind>/<map-id>/<node-file-path>?open=&x=&y=&k=&q=
 //
 // `open` is the section you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
-// navigable VIEW state like mode=outline rather than identity. Only the INNERMOST level is carried;
+// navigable VIEW state rather than identity. Only the INNERMOST level is carried;
 // the crumb path above it is rebuilt from the tree (openPathTo), so there's nothing to keep in sync.
 // The path carries IDENTITY (which map, which node); the query string carries VIEW STATE
-// (mode/camera/search/read-only) — all of it ephemeral: none of these fields are ever
+// (open section/camera/search) — all of it ephemeral: none of these fields are ever
 // written back to a note's frontmatter, they only ever flow FROM state INTO the URL.
 //
 // Selecting a different node pushes a new history entry (it's the primary unit of
-// back/forward navigation); mode/camera/search/read-only changes replace the current entry
+// back/forward navigation); camera/search changes replace the current entry
 // instead (scheduleUrlSync, debounced) — they tag along with wherever you last navigated
 // rather than creating their own back-stops.
 // ============================================================
@@ -29,7 +29,6 @@ import { searchQuery, setSearchQuery } from '../features/search.js';
 import { nodeLabel, nodeByFile } from '../utils/model.js';
 import { restoreScopeFromFile } from './sections.js';
 import { selectNode } from '../features/selection.js';
-import { applyReadOnly } from '../features/read-only.js';
 
 function slugify(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'map';
@@ -73,13 +72,10 @@ function buildHash(): string {
   if (q) {
     params.set('q', q);
   }
-  if (state.readOnly) {
-    params.set('ro', '1');
-  }
   return '#/' + parts.join('/') + '?' + params.toString();
 }
 
-// Guards the re-entrant writes (selectNode/setOutline/applyView/runSearch/applyReadOnly)
+// Guards the re-entrant writes (selectNode/applyView/runSearch)
 // triggered from WITHIN applyUrlFromHash — without this every hash read would immediately
 // write an identical hash straight back out.
 let applying = false;
@@ -106,7 +102,7 @@ function writeHash(kind: 'push' | 'replace'): void {
 export function syncUrl(): void {
   writeHash('push');
 }
-// Everything else (mode/camera/search/read-only) — debounced, replaces the current entry
+// Everything else (camera/search) — debounced, replaces the current entry
 // rather than creating a new back-stop for every drag section or keystroke.
 export function scheduleUrlSync(): void {
   if (applying) {
@@ -117,7 +113,7 @@ export function scheduleUrlSync(): void {
 }
 
 // Read the current hash and apply everything it encodes: select the node, and restore
-// mode/camera/search/read-only. Safe to call on boot and on popstate; registry-backed hashes
+// camera/search. Safe to call on boot and on popstate; registry-backed hashes
 // switch to their map first, while legacy name-based hashes work only for the map already open.
 export async function applyUrlFromHash(): Promise<void> {
   const hash = location.hash;
@@ -185,10 +181,6 @@ export async function applyUrlFromHash(): Promise<void> {
     if (q) {
       setSearchQuery(q);
     }
-    // read-only is only ever forced ON from a link, never OFF — disabling it has real
-    // side effects (reloads from disk, discards in-memory-only collapses) that shouldn't
-    // happen silently just because a URL lacks `ro=1`.
-    if (params.get('ro') === '1' && !state.readOnly) { state.readOnly = true; applyReadOnly({ announce: true }); }
   } catch {
     setStatus('That link contains an invalid card path.');
   } finally {

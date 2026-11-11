@@ -423,8 +423,8 @@ export function parkEdges(gone: Map<string, string>, standIn: string): void {
 // edge restyle must not touch a note at all.
 let boardTimer: number | undefined;
 export function scheduleSaveBoard(): void {
-  if (state.readOnly || !store.isOpen) {
-    return;   // read-only / demo mode: never write
+  if (!store.isOpen) {
+    return;   // demo mode: never write
   }
   setSaving('board', true);
   clearTimeout(boardTimer);
@@ -436,7 +436,7 @@ let boardFailed = false;
 export function boardSavePending(): boolean { return boardTimer != null || boardFailed; }
 export async function flushBoard(): Promise<void> {
   clearTimeout(boardTimer); boardTimer = undefined;
-  if (state.readOnly || !store.isOpen) {
+  if (!store.isOpen) {
     setSaving('board', false);
     return;
   }

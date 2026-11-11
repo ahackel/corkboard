@@ -267,7 +267,7 @@ function hide(): void {
 export function syncEdgeBar(): void {
   wire();
   const e = leadEdge();
-  if (!e || state.readOnly || !edgeVisible(e)) { hide(); return; }
+  if (!e || !edgeVisible(e)) { hide(); return; }
   syncControls();
   bar.classList.add('open');
   if (!place()) { hide(); return; }
@@ -284,9 +284,6 @@ let editingId: string | null = null;
 let labelBefore = '';
 
 export function startLabelEdit(edgeId: string): void {
-  if (state.readOnly) {
-    return;
-  }
   const e = state.edges.find(x => x.id === edgeId);
   if (!e || !edgeVisible(e)) {
     return;

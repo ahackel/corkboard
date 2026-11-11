@@ -134,7 +134,7 @@ export function autoSizeSelection(): void {
 // current positions (same fit math as fitSectionToContent). Every selected card is reparented
 // under the new section, which ends up selected. Shared by the 'G' shortcut and the context menu.
 export function groupSelectionIntoSection(): void {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!));
@@ -187,8 +187,8 @@ function markOpen(): void {
   fbTidySection.style.display = state.sel.size === 1 && canTidySection(n) ? '' : 'none';
   const oneSection = state.sel.size === 1 && n?.type === 'section';
   fbTitle.style.display = oneSection ? '' : 'none';
-  fbWrap.style.display = !state.readOnly && state.sel.size > 1 ? '' : 'none';
-  fbUngroup.style.display = !state.readOnly && nodesOf(selectedIds()).some(k => k.type === 'section') ? '' : 'none';
+  fbWrap.style.display = state.sel.size > 1 ? '' : 'none';
+  fbUngroup.style.display = nodesOf(selectedIds()).some(k => k.type === 'section') ? '' : 'none';
 
   // On a stack, Ungroup is UNSTACK (crud.ts deleteSelectionKeepChildren), and a stack can become a section.
   const stacks = hasStackSelected();
@@ -324,26 +324,23 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
   const someLocked = targetIds.some(id => isLockedEffective(state.nodes.get(id)!));
   const anySubtreeLocked = targetIds.some(id => subtreeHasLocked(id));
-  const ro = state.readOnly;
   const entries: MenuEntry[] = [];
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
   entries.push({ label:'Copy as formatted text', run: () => { selectTargetFirst(); void copyFormatted(); } });
-  if (!ro){
-    entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
-    // on a section, what's pasted lands INSIDE it; on a card, beside it at the pointer
-    entries.push({ label: isSection && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
-      run: () => { void pasteFromClipboard(sx, sy, isSection && !multi ? n.id : null); }, disabled: isSection && locked });
-    entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
-    entries.push({ label:'Duplicate as the next one', shortcut:'⇧D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
-    entries.push('sep');
-    entries.push({ label:'Delete', shortcut:'⌫', run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
-    if (anySection) {
-      entries.push({ label:'Ungroup', shortcut:'⌘⌫',
-        run: () => { selectTargetFirst(); deleteSelectionKeepChildren(); }, disabled: someLocked });
-    }
+  entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
+  // on a section, what's pasted lands INSIDE it; on a card, beside it at the pointer
+  entries.push({ label: isSection && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
+    run: () => { void pasteFromClipboard(sx, sy, isSection && !multi ? n.id : null); }, disabled: isSection && locked });
+  entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
+  entries.push({ label:'Duplicate as the next one', shortcut:'⇧D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
+  entries.push('sep');
+  entries.push({ label:'Delete', shortcut:'⌫', run: () => multi ? deleteSelection() : deleteNode(n.id), disabled: anySubtreeLocked });
+  if (anySection) {
+    entries.push({ label:'Ungroup', shortcut:'⌘⌫',
+      run: () => { selectTargetFirst(); deleteSelectionKeepChildren(); }, disabled: someLocked });
   }
   entries.push('sep');
-  if (!ro && !multi) {
+  if (!multi) {
     entries.push(isSection ? { label:'Rename', shortcut:'F2', run: () => startInlineEdit(n), disabled: locked }
                          : { label:'Edit', shortcut:'E', run: () => startBodyEdit(n), disabled: locked });
   }
@@ -353,12 +350,10 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   if (!multi && canFold(n)) {
     entries.push({ label: n.collapsed ? 'Expand' : 'Collapse', shortcut:'X', run: () => toggleCollapse(n.id), disabled: locked });
   }
-  if (!ro){
-    entries.push({ label:'Wrap in new section', shortcut:'⌘S', run: () => { selectTargetFirst(); groupSelectionIntoSection(); }, disabled: someLocked });
-    if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); })) {
-      entries.push({ label: 'Resize to fit', shortcut:'⌥⇧⌘R',
-        run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
-    }
+  entries.push({ label:'Wrap in new section', shortcut:'⌘S', run: () => { selectTargetFirst(); groupSelectionIntoSection(); }, disabled: someLocked });
+  if (targetIds.some(id => { const k = state.nodes.get(id); return !!k && canFit(k); })) {
+    entries.push({ label: 'Resize to fit', shortcut:'⌥⇧⌘R',
+      run: () => { selectTargetFirst(); autoSizeSelection(); }, disabled: someLocked });
   }
   entries.push('sep');
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: multi || !n.file });
@@ -366,11 +361,9 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   if (canShareFiles) {
     entries.push({ label:'Share…', run: () => { selectTargetFirst(); void shareSelection(); } });
   }
-  if (!ro){
-    entries.push('sep');
-    const lockedNow = anyLocked(targetIds);
-    entries.push({ label: lockedNow ? 'Unlock' : 'Lock', shortcut:'L', run: () => setLockedSelection(targetIds, !lockedNow) });
-  }
+  entries.push('sep');
+  const lockedNow = anyLocked(targetIds);
+  entries.push({ label: lockedNow ? 'Unlock' : 'Lock', shortcut:'L', run: () => setLockedSelection(targetIds, !lockedNow) });
   return entries;
 }
 // ▦ — several selected: Tidy up, align, distribute, same width (features/tidy.ts)
@@ -535,7 +528,7 @@ let showTimer: number | null = null;
 const SHOW_DELAY = 180;
 export function syncFloatBar(): void {
   closePopovers();
-  const visible = state.sel.size > 0 && !state.readOnly;
+  const visible = state.sel.size > 0;
   if (showTimer != null) { clearTimeout(showTimer); showTimer = null; }
   if (!visible) {
     bar.classList.remove('open');
@@ -554,7 +547,7 @@ export function syncFloatBar(): void {
   showTimer = window.setTimeout(() => {
     showTimer = null;
     // the selection this was scheduled for may already be gone by the time the delay elapses
-    if (!(state.sel.size > 0 && !state.readOnly)) {
+    if (!(state.sel.size > 0)) {
       return;
     }
     bar.classList.add('open');

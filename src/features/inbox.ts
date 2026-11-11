@@ -28,7 +28,7 @@ export function goToInbox(): void {
     focusNode(f, true);
     return;
   }
-  if (state.readOnly || !store.isOpen) { setStatus('This map has no Inbox section'); return; }
+  if (!store.isOpen) { setStatus('This map has no Inbox section'); return; }
   while (scopeActive()) {
     exitScope();
   }

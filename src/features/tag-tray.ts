@@ -139,7 +139,7 @@ function deleteTag(tag: string, x: number, y: number): void {
     const msg = `Remove ${tagText(tag)} from ${own.length} card${own.length === 1 ? '' : 's'}?` +
       (inText.length ? `\n${inText.length} more ha${inText.length === 1 ? 's' : 've'} it written in the text — those stay.` : '') +
       `\n⌘Z puts it back.`;
-    if (state.readOnly || !confirm(msg)) {
+    if (!confirm(msg)) {
       return;
     }
     retag(own.map(n => ({ id: n.id, tag, on: false })));

@@ -95,7 +95,6 @@ async function markdownForImages(files: File[]): Promise<string> {
   return out.join('\n');
 }
 function canAttach(): boolean {
-  if (state.readOnly){ setStatus('Read-only — can’t add images'); return false; }
   if (!store.isOpen){ setStatus('Open a folder to add images'); return false; }
   if (state.singleNote){ setStatus('A single note has no folder to keep images in'); return false; }
   return true;
@@ -284,7 +283,6 @@ document.addEventListener('paste', (e) => {
   if (isTypingInField()) {
     return;                 // field/editor pastes keep their native behaviour
   }
-  if (state.readOnly){ setStatus('Read-only — can’t paste'); return; }
   const cd = e.clipboardData;
   if (!cd) {
     return;
@@ -308,7 +306,6 @@ document.addEventListener('paste', (e) => {
 // Context-menu Paste: no ClipboardEvent to read from, so ask the async clipboard API (may prompt
 // for permission; Safari requires it be called directly in the user gesture — a menu click is one).
 export async function pasteFromClipboard(sx: number, sy: number, parent: string | null): Promise<void> {
-  if (state.readOnly){ setStatus('Read-only — can’t paste'); return; }
   const imgs: File[] = []; let text = '';
   try {
     const items = await navigator.clipboard.read();
@@ -341,7 +338,7 @@ document.addEventListener('dragover', (e) => {
   }
   e.preventDefault();
   // a single note takes nothing dropped into it (core/state.ts singleNoteRefuses)
-  if (state.readOnly || state.singleNote){ setImgDropTarget(null); return; }
+  if (state.singleNote){ setImgDropTarget(null); return; }
   const t = e.target as HTMLElement;
   const cardNode = nodeAtTarget(t);
   if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint
@@ -414,14 +411,13 @@ document.addEventListener('dragover', (e) => {
     return;
   }
   e.preventDefault();
-  e.dataTransfer!.dropEffect = state.readOnly ? 'none' : 'copy';
+  e.dataTransfer!.dropEffect = 'copy';
 });
 document.addEventListener('drop', (e) => {
   if (!isTextDrop(e)) {
     return;
   }
   e.preventDefault();
-  if (state.readOnly){ setStatus('Read-only — can’t drop'); return; }
   const dt = e.dataTransfer!;
   const uri = dt.getData('text/uri-list').split('\n').find(l => l.trim() && !l.startsWith('#'));
   const text = (dt.getData('text/plain') || uri || '').trim();

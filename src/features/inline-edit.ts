@@ -52,7 +52,7 @@ export function syncOpenEditor(n: MindNode): void {
 // undo step (its before-image was taken when it opened). True when there was something new to write.
 export function flushOpenEdit(): boolean {
   const be = ui.bodyEdit;
-  if (!be || state.readOnly || be.ta.value === be.saved) {
+  if (!be || be.ta.value === be.saved) {
     return false;
   }
   const n = state.nodes.get(be.id);
@@ -199,7 +199,7 @@ function renderedBlockFor(bodyEl: HTMLElement, text: string, pos: number): HTMLE
 // hand-off and the lock refusal all still happen in exactly one place.
 // `at`, a click's point on a section's tab, puts the caret there instead of selecting the name.
 export function startInlineEdit(n: MindNode | undefined, { isNew = false, at }: { isNew?: boolean; at?: Pt } = {}): void {
-  if (state.readOnly || !n) {
+  if (!n) {
     return;
   }
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
@@ -215,9 +215,6 @@ export function startInlineEdit(n: MindNode | undefined, { isNew = false, at }: 
 // which shows no label at all, seed one first, so the label comes back with a name ready to type over.
 // Esc on a seeded name leaves the section untitled, as it was.
 export function editSectionTitle(n: MindNode): void {
-  if (state.readOnly) {
-    return;
-  }
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   startTitleEdit(n, { seed: nextSectionTitle() });
 }
@@ -381,9 +378,6 @@ function paintHighlight(ta: HTMLTextAreaElement): void {
 // card's reflow, the outline's write-through — and none of them needs to know this happened.
 // Returns whether it handled the event, so an image paste still gets its turn.
 function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
-  if (state.readOnly) {
-    return false;
-  }
   const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
   if (!r) {
     return false;
@@ -425,7 +419,7 @@ function applyTextEdit(ta: HTMLTextAreaElement, r: TextEdit): void {
 // which is the one nudge that keeps F2 meaningful there.
 type Caret = 'title' | 'end' | 'all' | Pt;
 function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
-  if (state.readOnly || !n) {
+  if (!n) {
     return;
   }
   if (isLockedEffective(n)) { setStatus('Locked — can’t edit'); return; }
@@ -541,7 +535,7 @@ function pasteRich(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   const plain = Date.now() < plainUntil;
   plainUntil = 0;
   const dt = e.clipboardData;
-  if (plain || state.readOnly || !dt || [...dt.files].some(f => f.type.startsWith('image/'))) {
+  if (plain || !dt || [...dt.files].some(f => f.type.startsWith('image/'))) {
     return false;
   }
   const md = htmlToMarkdown(dt.getData('text/html'));

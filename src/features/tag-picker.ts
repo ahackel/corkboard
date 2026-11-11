@@ -195,9 +195,6 @@ function open(place: () => void): void {
 
 // `#`: tag the selected cards. Beside the selection's anchor card, else the first selected one.
 export function openTagPicker(): void {
-  if (state.readOnly) {
-    return;
-  }
   const ids = taggableSelection();
   if (!ids.length) { setStatus(state.sel.size ? 'Tags go on cards, not sections' : 'Select a card to tag'); return; }
   const editable = ids.filter(id => !isLockedEffective(state.nodes.get(id)!));

@@ -1,6 +1,6 @@
 // ---------- the ghost card: drag a new card off the corner of the canvas ----------
 import { byId, trackPointer } from '../utils/dom.js';
-import { type MindNode, state } from '../core/state.js';
+import { type MindNode } from '../core/state.js';
 import { feedDragMove, abortDrag, commitDrag, startNodeDrag } from './drag.js';
 import { deleteNode, createDetachedNode } from './crud.js';
 import { commitStep } from './history.js';
@@ -50,9 +50,6 @@ function onCancel(): void {
 }
 
 ghost.addEventListener('pointerdown', (e: PointerEvent) => {
-  if (state.readOnly) {
-    return;
-  }
   e.preventDefault();
   endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
   // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in

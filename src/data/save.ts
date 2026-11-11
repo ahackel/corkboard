@@ -127,9 +127,6 @@ function planPaths(): Map<string, string> {
   return out;
 }
 async function saveAll(): Promise<void> {
-  if (state.readOnly) {
-    return;        // read-only mode never writes to disk
-  }
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
   // Phase 0 — a FOLDED section whose notes were never read can't move them without reading them: one
   // that is about to move (renamed, retyped, dropped into another section, or inside one that is) reads
@@ -276,9 +273,6 @@ export function resetSaveState(): void {
 let saveTimer: number | undefined, saveAgain = false;
 let savePromise: Promise<void> | null = null;   // non-null while a save chain is in flight
 export function scheduleSave(): void {
-  if (state.readOnly) {
-    return;         // read-only mode never writes to disk
-  }
   if (!store.isOpen) {
     return;          // demo mode: nothing to write
   }
@@ -324,9 +318,9 @@ export async function settleSave(): Promise<void> {
   }
 }
 // Is there anything in memory the disk doesn't have yet — queued, in flight, or left over by a write
-// that failed? Read-only and demo mode never write, so they never have anything unsaved.
+// that failed? Demo mode never writes, so it never has anything unsaved.
 function notesUnsaved(): boolean {
-  if (state.readOnly || !store.isOpen) {
+  if (!store.isOpen) {
     return false;
   }
   if (state.toDelete.length || pendingRemovals.size) {
@@ -344,7 +338,7 @@ function notesUnsaved(): boolean {
   return false;
 }
 export function hasUnsavedChanges(): boolean {
-  if (state.readOnly || !store.isOpen) {
+  if (!store.isOpen) {
     return false;
   }
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();

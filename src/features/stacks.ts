@@ -172,7 +172,7 @@ export function beginPileGesture(n: MindNode, e: PointerEvent): void {
       feedDragMove(ev.clientX, ev.clientY);
       return;
     }
-    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) <= slop || state.readOnly || isLockedEffective(n)) {
+    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) <= slop || isLockedEffective(n)) {
       return;
     }
     const top = topOfPile(n);
@@ -385,7 +385,7 @@ export function reorderPile(id: string, slot: number): boolean {
 // Returns the stack.
 export function pileInto(targetId: string, make: boolean, roots: string[]): MindNode | null {
   const t = state.nodes.get(targetId);
-  if (!t || state.readOnly) {
+  if (!t) {
     return null;
   }
   let s = t;
@@ -454,7 +454,7 @@ function layGrid(cards: MindNode[], at: Pt): void {
 export function selectedStacks(): MindNode[] {
   return nodesOf(selectedIds()).filter(n => isStack(n) && !isLockedEffective(n));
 }
-export const hasStackSelected = (): boolean => !state.readOnly && selectedStacks().length > 0;
+export const hasStackSelected = (): boolean => selectedStacks().length > 0;
 
 // Let stacks go: each one's cards back on the board as loose cards, in a grid where the pile was, and the stack
 // gone. Inside the caller's undo step; returns the cards it let go of. Unstack's, and Ungroup's for the stacks

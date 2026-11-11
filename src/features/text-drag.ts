@@ -88,7 +88,7 @@ function showHint(dest: Dest | null): void {
 // the Range measurement and the whole draggable dance went with it. Dragging a card's NAME out still
 // works — the name is the `# ` line inside this very selection.
 export function cardTextDrag(target: EventTarget | null): TextSource | null {
-  if (state.readOnly || !(target instanceof Element)) {
+  if (!(target instanceof Element)) {
     return null;
   }
   const be = ui.bodyEdit;

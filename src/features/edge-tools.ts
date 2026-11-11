@@ -99,9 +99,6 @@ function addEdge(fromId: string, toId: string, fromPin?: Pin, toPin?: Pin): Boar
 // which is what a flow usually wants), as ONE undo step. This is also the TOUCH path — iOS never
 // fires contextmenu on long-press, so a ring drag can't be the only way in.
 export function connectSelection(): void {
-  if (state.readOnly) {
-    return;
-  }
   const ids = [...state.sel];
   if (ids.length < 2) { setStatus('Select two cards to connect — or drag from a ring on the selected card.'); return; }
   let made = 0;
@@ -162,13 +159,13 @@ export function installEdgeTools(): void {
     const socket = t.closest('[data-socket]') as SVGElement | null;
     const handle = t.closest('[data-handle]') as SVGElement | null;
     const hit    = t.closest('[data-edge]') as SVGElement | null;
-    if (socket && !state.readOnly) {
+    if (socket) {
       beginDraw(ev, { sourceId: socket.getAttribute('data-node')!, to: screenToWorld(ev.clientX, ev.clientY),
                       grabbedAt: screenToWorld(ev.clientX, ev.clientY),
                       side: socket.getAttribute('data-socket') as EdgeSide });
       return;
     }
-    if (handle && !state.readOnly) {
+    if (handle) {
       const edge = state.edges.find(e => e.id === handle.getAttribute('data-edge'));
       if (!edge) {
         return;
@@ -188,7 +185,7 @@ export function installEdgeTools(): void {
       selectEdge(id, ev.metaKey || ev.ctrlKey);
       // preventDefault ONLY here: the field is focused next, and the press's default action would move
       // focus straight back out of it, closing the editor in the same tick.
-      if (dbl && !state.readOnly) { ev.preventDefault(); startLabelEdit(id); }
+      if (dbl) { ev.preventDefault(); startLabelEdit(id); }
       return;
     }
     // Anything else on the canvas — a card, the background — takes the selection back, so an edge
@@ -280,7 +277,7 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
 const CONNECT_GAP = 60;
 function spawnConnected(srcId: string, side: EdgeSide): void {
   const src = state.nodes.get(srcId);
-  if (!src || state.readOnly) {
+  if (!src) {
     return;
   }
   const isCard = src.type !== 'section';
@@ -317,10 +314,10 @@ export function deleteSelectedEdge(): boolean {
   if (!ids.length) {
     return false;
   }
-  const done = mutate([], () => {
+  mutate([], () => {
     state.edges = state.edges.filter(e => !state.selEdges.has(e.id));
     state.selEdges.clear();
   }, { edges: true, reflow: 'paint', status: ids.length > 1 ? `${ids.length} edges deleted` : 'Edge deleted' });
   syncEdgeBar();
-  return done;
+  return true;
 }

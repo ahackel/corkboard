@@ -85,11 +85,7 @@ stage.addEventListener('dblclick', (e) => {
   if ((e.target as HTMLElement).closest('.node')) {
     return;   // nodes handle their own double-click
   }
-  // Leaving isn't a mutation, so it works in read-only too — unlike the create below.
   if (scopeActive()) { exitScope(); return; }
-  if (state.readOnly) {
-    return;
-  }
   createNode(centredAt(screenToWorld(e.clientX, e.clientY)));   // like the canvas menu's "New card here"
 });
 window.addEventListener('pointermove', (e) => {

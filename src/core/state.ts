@@ -176,7 +176,6 @@ export interface AppState {
   edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
   searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
   searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
-  readOnly: boolean;               // read-only mode: no saves, no edits; collapse/expand only
   singleNote: boolean;             // ONE note file opened on its own (store/note.ts): see singleNoteRefuses
   idSeq: number;
   toDelete: string[];
@@ -195,7 +194,6 @@ export const state: AppState = {
   edges: [],
   searchMatch: null,
   searchActiveId: null,
-  readOnly: false,
   singleNote: false,
   idSeq: 1,
   toDelete: [],

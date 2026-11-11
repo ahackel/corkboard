@@ -5,7 +5,7 @@
 //
 // The palette only DISPLAYS commands; features/commands.ts builds the list (paletteCommands), beside
 // the keyboard shortcuts for the same actions. A command's `when` hides it while it can't apply
-// (nothing selected, read-only), rather than listing it disabled: a list of things you can't do is
+// (nothing selected), rather than listing it disabled: a list of things you can't do is
 // noise in a box you type into.
 // ============================================================
 import { byId } from '../utils/dom.js';

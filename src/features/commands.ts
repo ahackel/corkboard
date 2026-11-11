@@ -13,7 +13,6 @@ import { openPalette, type Command, setPaletteSource, paletteOpen, closePalette 
 import { undo, redo } from './history.js';
 import { clearEdgeSelection, deleteSelectedEdge, connectSelection } from './edge-tools.js';
 import { tidyShortcut, TIDY_ACTIONS, canTidySection, tidySection } from './tidy.js';
-import { setReadOnly } from './read-only.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
 import { autoSizeSelection, groupSelectionIntoSection, colorSelection, KEY_COLORS } from './float-bar.js';
@@ -123,7 +122,7 @@ window.addEventListener('keydown', (e) => {
     // ⌥⇧⌘R is Figma's Resize to fit — by KEY CODE, since ⌥ rewrites the letter on a Mac.
     if (e.code === 'KeyR' && e.altKey && e.shiftKey) {
       e.preventDefault();
-      if (state.sel.size && !isTypingInField() && !state.readOnly) {
+      if (state.sel.size && !isTypingInField()) {
         autoSizeSelection();
       }
       return;
@@ -180,7 +179,6 @@ window.addEventListener('keydown', (e) => {
   if (key.startsWith('Arrow') && !e.shiftKey && !e.altKey && mod === vertical){
     e.preventDefault(); navArrow(key); return;
   }
-  if (key === 'r'){ e.preventDefault(); setReadOnly(!state.readOnly); return; }
   if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
   // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
   if (key === '#' && !mod){
@@ -210,7 +208,7 @@ window.addEventListener('keydown', (e) => {
   if (key === 'x' && !mod && state.sel.size){   // don't shadow cut
     e.preventDefault(); toggleCollapseSelection(state.sel); return;
   }
-  if (key === 'l' && !mod && state.sel.size && !state.readOnly){
+  if (key === 'l' && !mod && state.sel.size){
     e.preventDefault();
     toggleLockSelection();
     return;
@@ -275,7 +273,7 @@ window.addEventListener('keyup', (e) => {
 // Every action the app has, with the shortcut that does the same — built here because every action
 // function is in scope here. `when` hides what can't apply right now (features/palette.ts).
 const MOD = IS_MAC ? '⌘' : 'Ctrl ';
-const editable = (): boolean => !state.readOnly && store.isOpen;
+const editable = (): boolean => store.isOpen;
 const hasSel = (): boolean => state.sel.size > 0 && editable();
 // What adds or removes a card — none of it applies to a single note (core/state.ts singleNoteRefuses).
 const canGrow = (): boolean => editable() && !state.singleNote;
@@ -317,7 +315,7 @@ function paletteCommands(): Command[] {
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
     { label: 'Collapse / expand', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
-      when: () => !state.readOnly && state.sel.size >= (a.min ?? 2), run: a.run })),
+      when: () => state.sel.size >= (a.min ?? 2), run: a.run })),
     { label: 'Tidy up the section', keywords: 'tidy arrange layout grid clean', when: () => state.sel.size === 1 && canTidySection(oneSel()), run: () => tidySection(oneSel()!) },
     { label: 'Collapse all', keywords: 'fold every card section', when: () => foldScope().some(n => !n.collapsed), run: () => setCollapsedSelection(foldScope().map(n => n.id), true) },
     { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
@@ -328,7 +326,6 @@ function paletteCommands(): Command[] {
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
     { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => canGrow() && plainSectionSelected(), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: growSel, run: deleteSelection },
-    { label: state.readOnly ? 'Turn off read-only' : 'Turn on read-only', shortcut: 'R', keywords: 'lock view', run: () => setReadOnly(!state.readOnly) },
     { label: 'Map settings…', keywords: 'canvas colour color background grid dots lines mesh snap', run: openSettings },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
     { label: 'Open a note…', keywords: 'file markdown md single card', when: () => 'showOpenFilePicker' in window, run: () => { void pickNote(); } },

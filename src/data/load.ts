@@ -265,7 +265,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // on disk before any note moves into its section's folder, or a failed write between the two would drop the
   // hierarchy AND the edges that replaced it. If the board write throws, the notes are left alone and
   // the map simply migrates again next time — the conversion is a pure function of what's on disk.
-  if (flattened && !state.readOnly && store.isOpen) {
+  if (flattened && store.isOpen) {
     try { await flushBoard(); }
     catch { setStatus('⚠ Could not write board.json — leaving this map as it was.'); return; }
     setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to edges — nothing moved.`);
@@ -275,7 +275,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   }
   // Persist the resolved layout so the saved mm_x/mm_y match what's on screen. Only write when
   // the load actually moved something, so a stable reopen touches no files.
-  if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout)) {
+  if ([...state.nodes.values()].some(n => n.dirty || n.dirtyLayout)) {
     scheduleSave();
   }
   const notice = takeBoardNotice();

@@ -69,7 +69,7 @@ function popIn(n: MindNode): void {
   if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
 }
 export function createNode(opts: CreateOpts = {}): MindNode | undefined {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   // No parent asked for means "the top level", and while a section is OPEN its interior IS the top
@@ -119,7 +119,7 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
 // height, then restack with an even gap. Under a parent the cards become its children, in order.
 const LIST_GAP = SPACING;   // the house spacing, the same one the smart guides pull to
 export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
-  if (state.readOnly || !texts.length || singleNoteRefuses()) {
+  if (!texts.length || singleNoteRefuses()) {
     return [];
   }
   const parentId = parent ? holderOf(parent) : detachParentId();
@@ -148,7 +148,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
 // caller drives it (e.g. the ghost-card drag rides it under the cursor, then renames on drop or
 // deletes it on cancel). Kept save-free so an abandoned drag never writes a file.
 export function createDetachedNode(x: number, y: number): MindNode | undefined {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   // …parented to the open section while there is one, so the ghost card rides the ordinary section-child
@@ -217,7 +217,7 @@ function copyNext(s: MindNode): MindNode {
 // `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor. `next` is the
 // smart duplicate (copyNext above); without it the copy is exact, just below its source.
 export function duplicateSelection({ next = false }: { next?: boolean } = {}): MindNode[] | undefined {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds();
@@ -257,9 +257,6 @@ export function leaveClone(s: MindNode, pos: Pt): MindNode {
 // which passes where the user pointed as `at`). Without a point it goes under whatever the section
 // already holds, at the interior's left edge, so Tab-Tab-Tab fills a section top to bottom.
 export function addCardInside(sectionId: string, at?: Pt): void {
-  if (state.readOnly) {
-    return;
-  }
   const f = state.nodes.get(sectionId);
   if (!f || f.type !== 'section') {
     return;
@@ -294,9 +291,6 @@ export function nextSectionTitle(): string {
 }
 
 export function newSectionAt(p: Pt): void {
-  if (state.readOnly) {
-    return;
-  }
   const at = snapPt({ x: p.x - SECTION_W / 2, y: p.y - SECTION_H / 2 });
   // in the section under the pointer, if any — the same drop rule a card gets
   createNode({ ...at, type: 'section', w: SECTION_W, h: SECTION_H, title: nextSectionTitle(), parent: sectionAt(p.x, p.y, new Set())?.id });
@@ -305,9 +299,6 @@ export function newSectionAt(p: Pt): void {
 // below it, or below whatever already sits under it — Enter, Enter, Enter down a column of cards
 // appends to it rather than stacking on the card underneath.
 export function createSibling(refId: string){
-  if (state.readOnly) {
-    return;
-  }
   const ref = state.nodes.get(refId);
   if (!ref) {
     return;
@@ -359,7 +350,7 @@ function appendToBody(t: MindNode, md: string): void {
 // Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
 // drop it into a fresh card right beside it, in the same place the source lives.
 export function extractToCard(): void {
-  if (state.readOnly || !ui.bodyEdit || singleNoteRefuses()) {
+  if (!ui.bodyEdit || singleNoteRefuses()) {
     return;
   }
   const n = state.nodes.get(ui.bodyEdit.id);
@@ -397,9 +388,6 @@ export function cardText(src: TextSource): string | null {
 // below). features/text-drag.ts resolves which; canMerge says what counts as a note here.
 export type TextDrop = { into: MindNode } | { container: MindNode | null; at: Pt };
 export function dropCardText(src: TextSource, dest: TextDrop): void {
-  if (state.readOnly) {
-    return;
-  }
   const n = state.nodes.get(src.id);
   if (!n) {
     return;
@@ -459,9 +447,6 @@ export const canMerge = (n: MindNode): boolean =>
 // Runs INSIDE the live drag undo step — it touches + mutates only, and the caller (dragPointerUp)
 // commits. Returns how many cards were folded in.
 export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): number {
-  if (state.readOnly) {
-    return 0;
-  }
   const target = state.nodes.get(targetId);
   if (!target || !canMerge(target)) {
     return 0;
@@ -529,7 +514,7 @@ export function deleteNodes(ids: Iterable<string>): void {
   settleStacks();   // a pile left with one card is no pile (features/stacks.ts)
 }
 export function deleteNode(id: string): void {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   if (!state.nodes.has(id)) {
@@ -563,7 +548,7 @@ export function discardNewCard(id: string, status?: string): void {
 }
 // Delete every selected card and their entire subtrees.
 export function deleteSelection(): void {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   const ids = [...state.sel].filter(id => !subtreeHasLocked(id));
@@ -602,7 +587,7 @@ function canPromoteDelete(id: string): boolean {
 // (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
 // position, so nothing needs doing here. Shared by ⌘⌫/⌥⌫, the float bar's and the right-click menu's Ungroup.
 export function deleteSelectionKeepChildren(): void {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
 
@@ -656,7 +641,7 @@ export function deleteSelectionKeepChildren(): void {
 // mutates and commits it (image extraction is its own gesture, not nested in a live drag).
 export function extractImage(sourceId: string, path: string, alt: string,
     target: { toCardId: string } | { x: number; y: number; w: number; h: number }): void {
-  if (state.readOnly || !path || singleNoteRefuses()) {
+  if (!path || singleNoteRefuses()) {
     return;
   }
   const source = state.nodes.get(sourceId);

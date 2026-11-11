@@ -111,7 +111,7 @@ export function settleCardSize(n: MindNode): void {
 }
 
 function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
-  if (state.readOnly || isLockedEffective(n)) {
+  if (isLockedEffective(n)) {
     return;
   }
 

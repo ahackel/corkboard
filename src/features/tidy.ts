@@ -24,12 +24,9 @@ function boxOf(n: MindNode): Box {
   return { id: n.id, x: n.x, y: n.y - lh, w: nodeW(n), h: nodeH(n) + lh };
 }
 
-export function canTidy(): boolean { return !state.readOnly && targets().length >= 2; }
+export function canTidy(): boolean { return targets().length >= 2; }
 
 function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2, nodes = targets()): void {
-  if (state.readOnly) {
-    return;
-  }
   if (nodes.length < min) { setStatus(min > 2 ? 'Select three or more to distribute' : 'Select two or more to tidy'); return; }
   const boxes = nodes.map(boxOf);
   const pos = place(boxes);
@@ -59,7 +56,7 @@ function sectionKids(s: MindNode): MindNode[] {
 }
 
 export function canTidySection(s: MindNode | undefined): s is MindNode {
-  return !!s && !state.readOnly && isSection(s) && !isLockedEffective(s) && sectionKids(s).length >= 2;
+  return !!s && isSection(s) && !isLockedEffective(s) && sectionKids(s).length >= 2;
 }
 
 export function tidySection(s: MindNode): void {
@@ -75,9 +72,6 @@ function distributeSelection(axis: 'x' | 'y'): void {
 // Same width: every selected plain CARD takes the widest one's width (sections and pictures size
 // themselves; a card's text re-wraps, so its height is re-measured).
 function sameWidth(): void {
-  if (state.readOnly) {
-    return;
-  }
   const cards = targets().filter(n => n.type !== 'section' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }
   const w = Math.max(...cards.map(nodeW));

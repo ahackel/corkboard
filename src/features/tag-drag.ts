@@ -30,7 +30,7 @@ function onCanvas(x: number, y: number): boolean {
 
 export function beginTagDrag(e: PointerEvent, chip: HTMLElement, tag: string, fromCard: string | null,
   offBoard?: (x: number, y: number) => void): void {
-  if (e.button !== 0 || state.readOnly) {
+  if (e.button !== 0) {
     return;
   }
   const x0 = e.clientX, y0 = e.clientY;

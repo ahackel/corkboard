@@ -123,10 +123,9 @@ export function readOpenUnread(): void {
 }
 
 // ---------- letting go ----------
-// Called after every successful save. Read-only and demo mode never let go: demo notes live ONLY in
-// memory, and read-only has nothing it could have saved them with.
+// Called after every successful save. Demo mode never lets go: its notes live ONLY in memory.
 export function releaseFolded(): void {
-  if (!store.isOpen || state.readOnly || searchHolds()) {
+  if (!store.isOpen || searchHolds()) {
     return;
   }
   let held: Set<string> | null = null;   // built lazily: most saves have nothing folded to let go of

@@ -83,7 +83,7 @@ export function copyFilePath(n: MindNode): void {
 }
 
 // The right-click itself never changes the selection or opens an editor — the clicked card is
-// only the menu's TARGET; buildCardMenu (float-bar.ts) handles single-vs-multi/read-only itself
+// only the menu's TARGET; buildCardMenu (float-bar.ts) handles single-vs-multi itself
 // and is shared verbatim with the kebab menu so the two never drift apart.
 
 // ---------- image entries (right-click on an <img> inside a card body) ----------
@@ -151,9 +151,7 @@ function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
   const path = img.dataset.path ?? '';
   const loaded = !!img.src && !img.classList.contains('md-img-missing');
   const entries: MenuEntry[] = [];
-  if (!state.readOnly) {
-    entries.push({ label:'Remove image', run: () => removeImage(n, path), disabled: !path });
-  }
+  entries.push({ label:'Remove image', run: () => removeImage(n, path), disabled: !path });
   entries.push({ label:'Copy image', run: () => { void copyImage(img); }, disabled: !loaded });
   entries.push({ label:'Show image in new tab', run: () => showImageInTab(img), disabled: !loaded });
   entries.push('sep');
@@ -163,7 +161,7 @@ function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
 function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   const entries: MenuEntry[] = [];
   // While a section is OPEN the whole visible canvas is its interior, so this menu — and the top-right
-  // kebab that shares it — is where a touch user finds the way out. Ahead of the read-only gate:
+  // kebab that shares it — is where a touch user finds the way out.
   // leaving isn't a mutation.
   const open = scopeRootNode();
   if (open){
@@ -173,15 +171,13 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
     }
     entries.push('sep');
   }
-  if (!state.readOnly){
-    const p = screenToWorld(sx, sy);
-    entries.push({ label:'Paste here', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, null); } });
-    entries.push('sep');
-    entries.push({ label:'New card', shortcut:'N', run: () => createNode(centredAt(p)) });
-    entries.push({ label:'Insert image…', run: () => pickImagesAt(sx, sy, null) });
-    entries.push('sep');
-  }
-  // Selecting mutates nothing, so it sits with zooming in the read-only-safe group. Here as well as
+  const p = screenToWorld(sx, sy);
+  entries.push({ label:'Paste here', shortcut:'⌘V', run: () => { void pasteFromClipboard(sx, sy, null); } });
+  entries.push('sep');
+  entries.push({ label:'New card', shortcut:'N', run: () => createNode(centredAt(p)) });
+  entries.push({ label:'Insert image…', run: () => pickImagesAt(sx, sy, null) });
+  entries.push('sep');
+  // Here as well as
   // on ⌘A because a touch user has no ⌘ — and this menu is the only place they'd find it.
   entries.push({ label:'Select all', shortcut:'⌘A', run: () => selectAll(), disabled: !state.nodes.size });
   entries.push({ label:'Fit the map to the screen', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
@@ -228,7 +224,7 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
   if (t.closest('[data-edge]') && state.selEdges.size) {
 
     // a LINE: the press before this already selected it (edge-tools.ts), so Delete acts on the selection
-    entries = state.readOnly ? [] : [{ label: 'Delete', shortcut: '⌫', run: () => { deleteSelectedEdge(); } }];
+    entries = [{ label: 'Delete', shortcut: '⌫', run: () => { deleteSelectedEdge(); } }];
   } else if (n){
     const img = bodyImageAt(nodeEl!, e.clientX, e.clientY);
     // image entries above the card's own; same list the kebab menu shows for this card

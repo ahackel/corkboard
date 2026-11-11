@@ -140,8 +140,8 @@ function copiedNow(clip: { count: number; text: string; payload: string }, how =
   setStatus(`Copied ${clip.count} card${clip.count === 1 ? '' : 's'}${how}`);
 }
 
-// Copy the selected cards INCLUDING their subtrees to the system clipboard. Allowed in
-// read-only mode (copying mutates nothing). Resolves true iff the clipboard write succeeded.
+// Copy the selected cards INCLUDING their subtrees to the system clipboard. Resolves true iff the
+// clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
   const ids = selectedIds();
   await readAll(ids);   // a folded section's notes are part of what's copied
@@ -211,7 +211,7 @@ export async function copyFormatted(): Promise<boolean> {
 // Cut = copy + delete. The delete only happens once the clipboard write succeeded, so a
 // denied clipboard can never destroy cards. deleteSelection records its own undo step.
 export async function cutSelection(): Promise<void> {
-  if (state.readOnly || singleNoteRefuses()) {
+  if (singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds();
@@ -232,7 +232,6 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
   if (!STARTS_MARK.test(text)) {
     return false;
   }
-  if (state.readOnly){ setStatus('Read-only — can’t paste'); return true; }
   if (singleNoteRefuses()) {
     return true;
   }

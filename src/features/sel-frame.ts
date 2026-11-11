@@ -36,7 +36,7 @@ function frameEl(): HTMLElement {
 
   // A plain press only: Space/middle-button still pans and ⌘/Ctrl still starts an adding marquee (gestures.ts).
   fill.addEventListener('pointerdown', (e) => {
-    if (e.button === 0 && !ui.spaceHeld && !e.metaKey && !e.ctrlKey && !state.readOnly) {
+    if (e.button === 0 && !ui.spaceHeld && !e.metaKey && !e.ctrlKey) {
       startSelectionDrag(e);
     }
   });
@@ -151,7 +151,7 @@ export function memberEdgeResize(e: PointerEvent, n: MindNode, dir: Dir): boolea
 // Shift on a corner scales both axes alike. The dragged side lands on the grid, as a resized box's does.
 function startGroupResize(e: PointerEvent, dir: Dir): boolean {
   const ns = members();
-  if (state.readOnly || ns.length < 2 || ns.some(isLockedEffective)) {
+  if (ns.length < 2 || ns.some(isLockedEffective)) {
     return false;
   }
   e.stopPropagation(); e.preventDefault();

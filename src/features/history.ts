@@ -99,11 +99,8 @@ export function historyRefs(): Set<string> {
 }
 // Remember a node's pre-mutation image in the pending step (opening one if needed). Call
 // BEFORE mutating — and for creations, before state.nodes.set(), so the image is null.
-// Idempotent per id; a no-op in read-only mode (nothing records there).
+// Idempotent per id.
 export function touch(...ids: Array<string | null | undefined>): void {
-  if (state.readOnly) {
-    return;
-  }
   for (const id of ids) {
     if (!id) {
       continue;
@@ -121,20 +118,13 @@ export function touch(...ids: Array<string | null | undefined>): void {
 // Remember the map's canvas colour before changing it. Idempotent per step, and `=== null` rather
 // than a falsy test: '' (the theme default) is a real value and the commonest before-image there is.
 export function touchCanvas(): void {
-  if (state.readOnly) {
-    return;
-  }
   if (pendingCanvas === null) {
     pendingCanvas = state.canvasColor;
   }
 }
 // Remember the edge list before changing it — drawing, deleting, re-routing, restyling, and the
-// pruning that follows a card delete. Call BEFORE the change. Idempotent per step, and a
-// no-op in read-only mode, like the rest.
+// pruning that follows a card delete. Call BEFORE the change. Idempotent per step.
 export function touchEdges(): void {
-  if (state.readOnly) {
-    return;
-  }
   if (!pendingEdges) {
     pendingEdges = cloneGraph(liveGraph());
   }
@@ -349,9 +339,6 @@ function applyStep(images: Images, canvas: string | undefined,
   setStatus(label);
 }
 export function undo(): void {
-  if (state.readOnly) {
-    return;
-  }
   endInPlaceEdit();      // an open edit session becomes the step being undone
   commitStep();                        // flush any dangling pending step
   const step = undoStack.pop();
@@ -360,9 +347,6 @@ export function undo(): void {
   applyStep(step.before, step.canvas?.before, step.edges?.before, stepLabel('Undo', step));
 }
 export function redo(): void {
-  if (state.readOnly) {
-    return;
-  }
   endInPlaceEdit();
   commitStep();                        // a fresh step clears redo, so this usually empties it
   const step = redoStack.pop();

@@ -67,7 +67,7 @@ export function focusByTitle(link: string, from?: MindNode, readFolded = false):
   // the one you clicked from, free-standing — a wikilink is a relation, never containment. Only the
   // TITLE form can be created: the PATH form names a folder nothing here chooses.
   if (!target){
-    if (!from || state.readOnly || title.includes('/')){
+    if (!from || title.includes('/')){
       setStatus(`No node titled “${title}” in this map`); return;
     }
     const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
