@@ -22,51 +22,116 @@ import { buildCardMenu } from './float-bar.js';
 import { deleteSelectedEdge } from './edge-tools.js';
 import { nodeLabel } from '../utils/model.js';
 import { byId, placeInViewport, keys } from '../utils/dom.js';
+import { subChevron } from '../view/icons.js';
 import { exitScope, goToScopeDepth } from '../nav/sections.js';
 import { selectAll } from './selection.js';
 
-const menu = document.createElement('div');
+// The menu and its submenus are PANELS, each a fixed island of its own: a submenu can't live inside its
+// parent, whose overflow (it scrolls when it's taller than the window) would clip it.
+function newPanel(): HTMLDivElement {
+  const p = document.createElement('div');
+  p.className = 'cm-panel';
+
+  // A press on the menu takes no focus, so an open card editor keeps its caret and selection for the entry to act on.
+  p.addEventListener('pointerdown', (e) => e.preventDefault());
+  document.body.appendChild(p);
+  return p;
+}
+const menu = newPanel();
 menu.id = 'ctxMenu';
-document.body.appendChild(menu);
 
-// A press on the menu takes no focus, so an open card editor keeps its caret and selection for the entry to act on.
-menu.addEventListener('pointerdown', (e) => e.preventDefault());
+// panels[0] is the menu, panels[d] the submenu opened from an entry of panels[d - 1].
+const panels: HTMLDivElement[] = [menu];
+const inMenu = (t: Node): boolean => panels.some(p => p.contains(t));
 
-function closeMenu(): void { menu.classList.remove('open'); }
+// Close the submenus from depth `d` down, and unmark the entry that had opened the first of them.
+function closeFrom(d: number): void {
+  for (let k = Math.max(1, d); k < panels.length; k++) {
+    panels[k].classList.remove('open');
+  }
+  panels[d - 1]?.querySelector('.cm-open')?.classList.remove('cm-open');
+}
+
+function closeMenu(): void {
+  closeFrom(1);
+  menu.classList.remove('open');
+}
+
+// A submenu opens beside its entry — to the right, or to the left where the window has no room.
+function openSub(d: number, item: HTMLElement, entries: MenuEntry[]): void {
+  closeFrom(d);
+  const p = panels[d] ??= newPanel();
+  fill(p, entries, d);
+  p.classList.add('open');
+  item.classList.add('cm-open');
+  const r = item.getBoundingClientRect();
+  const right = r.right + 4 + p.offsetWidth <= window.innerWidth;
+  placeInViewport(p, right ? r.right + 4 : r.left - 4 - p.offsetWidth, r.top - 8);
+}
+
+// Hovering an entry opens its submenu, or closes the one an entry beside it had open — after a beat when
+// one IS open, so a diagonal move from an entry into its submenu can cross its neighbours on the way.
+let hoverTimer = 0;
+function hover(d: number, act: () => void): void {
+  clearTimeout(hoverTimer);
+  if (panels[d + 1]?.classList.contains('open')) {
+    hoverTimer = window.setTimeout(act, 200);
+  } else {
+    act();
+  }
+}
 
 interface ItemOpts { disabled?: boolean; danger?: boolean }
-function addItem(label: string, shortcut: string, run: () => void, opts: ItemOpts = {}): void {
+function addItem(p: HTMLElement, d: number, label: string, shortcut: string, run: () => void, opts: ItemOpts = {}, sub?: MenuEntry[]): void {
   const b = document.createElement('button');
   b.className = 'cm-item' + (opts.danger ? ' cm-danger' : ''); b.type = 'button';
   const l = document.createElement('span'); l.textContent = label; b.appendChild(l);
-  if (shortcut){ const k = document.createElement('kbd'); k.textContent = keys(shortcut); b.appendChild(k); }
+  if (sub) {
+    b.insertAdjacentHTML('beforeend', subChevron());
+  } else if (shortcut) {
+    const k = document.createElement('kbd'); k.textContent = keys(shortcut); b.appendChild(k);
+  }
   if (opts.disabled) {
     b.disabled = true;
   }
-  b.addEventListener('click', () => { closeMenu(); run(); });
-  menu.appendChild(b);
+  if (sub) {
+    b.addEventListener('pointerenter', () => hover(d, () => openSub(d + 1, b, sub)));
+    b.addEventListener('click', () => { clearTimeout(hoverTimer); openSub(d + 1, b, sub); });
+  } else {
+    b.addEventListener('pointerenter', () => hover(d, () => closeFrom(d + 1)));
+    b.addEventListener('click', () => { closeMenu(); run(); });
+  }
+  p.appendChild(b);
 }
 
 // ---- generic API: other UI (the home sidebar's ⋮ / right-click) reuses this menu ----
-export type MenuEntry = 'sep' | { label: string; shortcut?: string; run: () => void; disabled?: boolean; danger?: boolean };
+// An entry with `sub` opens a submenu of its own entries instead of running anything.
+export type MenuEntry = 'sep' | { label: string; shortcut?: string; run?: () => void; disabled?: boolean; danger?: boolean; sub?: MenuEntry[] };
 export function openMenu(entries: MenuEntry[], x: number, y: number): void {
-  menu.innerHTML = '';
-  for (const e of entries){
-    if (e === 'sep') {
-      addSep();
-    } else {
-      addItem(e.label, e.shortcut ?? '', e.run, e);
-    }
-  }
+  closeMenu();
+  fill(menu, entries, 0);
   if (menu.childElementCount) {
     openMenuAt(x, y);
   }
 }
-function addSep(): void {
-  if (!menu.lastElementChild || menu.lastElementChild.className === 'cm-sep') {
+function fill(p: HTMLElement, entries: MenuEntry[], d: number): void {
+  p.innerHTML = '';
+  for (const e of entries){
+    if (e === 'sep') {
+      addSep(p);
+    } else {
+      addItem(p, d, e.label, e.shortcut ?? '', e.run ?? (() => {}), e, e.sub);
+    }
+  }
+  if (p.lastElementChild?.className === 'cm-sep') {
+    p.lastElementChild.remove();
+  }
+}
+function addSep(p: HTMLElement): void {
+  if (!p.lastElementChild || p.lastElementChild.className === 'cm-sep') {
     return;
   }
-  const s = document.createElement('div'); s.className = 'cm-sep'; menu.appendChild(s);
+  const s = document.createElement('div'); s.className = 'cm-sep'; p.appendChild(s);
 }
 
 // Copy the card's on-disk relative path (its .md file). The closest a browser app can get to
@@ -237,7 +302,7 @@ document.addEventListener('contextmenu', (e: MouseEvent) => {
 
 // dismiss: click/tap anywhere outside, Escape (before the global deselect handler), scroll/zoom, blur
 document.addEventListener('pointerdown', (e) => {
-  if (menu.classList.contains('open') && !menu.contains(e.target as Node)) {
+  if (menu.classList.contains('open') && !inMenu(e.target as Node)) {
     closeMenu();
   }
 }, true);

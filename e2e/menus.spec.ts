@@ -83,19 +83,60 @@ test('a right-click in a card’s text lists the editor’s commands with their 
   const b = (await ta.boundingBox())!;
   await page.mouse.click(b.x + b.width - 4, b.y + 4, { button: 'right' });
   expect(await menuItems(page)).toEqual([
-    'Cut', 'Copy', 'Paste', 'Paste as plain text', '---', 'Bold', 'Italic', 'Strikethrough', 'Link to a card…', 'Tag…', '---',
-    'Task / tick it', 'Indent', 'Outdent', 'Move line up', 'Move line down', '---', 'Selection to a new card', 'Done', '---',
+    'Cut', 'Copy', 'Paste', 'Paste as plain text', '---', 'Format', '---',
+    'Indent', 'Outdent', 'Move line up', 'Move line down', '---', 'Selection to a new card', 'Done', '---',
     'Spelling suggestions',
   ]);
   const keysShown = await page.$$eval('#ctxMenu .cm-item', els => els.map(e => e.querySelector('kbd')?.textContent ?? ''));
   expect(keysShown).toContain('Shift+Tab');
-  await page.locator('#ctxMenu .cm-item', { hasText: /^Bold/ }).click();
-  await expect(page.locator('#ctxMenu')).not.toHaveClass(/open/);
+
+  // The formats sit in a Format submenu, opened by hovering it; the bar lists stay in sync with the keys.
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Format/ }).hover();
+  const format = page.locator('.cm-panel.open').nth(1);
+  await expect(format).toBeVisible();
+  await expect(format.locator('.cm-item', { hasText: /^Bold/ }).locator('kbd')).toHaveText(/B/);
+  await format.locator('.cm-item', { hasText: /^Bold/ }).click();
+  await expect(page.locator('.cm-panel.open')).toHaveCount(0);
   await expect(ta).toBeFocused();                      // the menu took no focus: the editor is still open…
   await expect(ta).toHaveValue('one **two**');        // …and Bold wrapped what was selected
+
+  // …and a submenu of a submenu: Format ▸ List ▸ Task.
   await page.mouse.click(b.x + 10, b.y + 4, { button: 'right' });
-  await page.locator('#ctxMenu .cm-item', { hasText: /^Task/ }).click();
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Format/ }).hover();
+  await page.locator('.cm-panel.open .cm-item', { hasText: /^List/ }).hover();
+  await page.locator('.cm-panel.open').nth(2).locator('.cm-item', { hasText: /^Task/ }).click();
   await expect(ta).toHaveValue('- [ ] one **two**');
+
+  // Format ▸ Heading ▸ Heading 2 replaces the line's lead.
+  await page.mouse.click(b.x + 10, b.y + 4, { button: 'right' });
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Format/ }).click();   // a click opens it too (touch)
+  await page.locator('.cm-panel.open .cm-item', { hasText: /^Heading/ }).click();
+  await page.locator('.cm-panel.open .cm-item', { hasText: /^Heading 2/ }).click();
+  await expect(ta).toHaveValue('## one **two**');
+  expect(errors).toEqual([]);
+});
+
+test('inside a table the editor menu has an Edit table submenu that greys out what can’t apply', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await page.mouse.move(400, 300);
+  await page.keyboard.press('n');
+  const ta = page.locator('textarea.body-edit');
+  await expect(ta).toBeFocused();
+  await ta.fill('| a | b |\n| --- | --- |\n| 2 | x |\n| 1 | y |');
+  const box = (await ta.boundingBox())!;
+  await page.mouse.click(box.x + 10, box.y + 4, { button: 'right' });   // the right-click puts the caret in the header's first cell
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Edit table/ }).hover();
+  const table = page.locator('.cm-panel.open').nth(1);
+  await expect(table.locator('.cm-item', { hasText: /^Move row up/ })).toBeDisabled();
+  await expect(table.locator('.cm-item', { hasText: /^Move column left/ })).toBeDisabled();
+  await table.locator('.cm-item', { hasText: /^Sort column ascending/ }).click();
+  await expect(ta).toHaveValue('| a   | b   |\n| --- | --- |\n| 1   | y   |\n| 2   | x   |');
+
+  await page.mouse.click(box.x + 10, box.y + 4, { button: 'right' });
+  await page.locator('#ctxMenu .cm-item', { hasText: /^Edit table/ }).hover();
+  await page.locator('.cm-panel.open').nth(1).locator('.cm-item', { hasText: /^Add column after/ }).click();
+  await expect(ta).toHaveValue('| a   |     | b   |\n| --- | --- | --- |\n| 1   |     | y   |\n| 2   |     | x   |');
   expect(errors).toEqual([]);
 });
 

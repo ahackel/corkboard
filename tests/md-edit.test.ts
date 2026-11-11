@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { completingAt, completeAt, listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
-         tableTab, tableEnter, headingSection, startCompletion, editCommandFor, EDIT_COMMANDS, type TextEdit } from '../src/utils/md-edit.js';
+         tableTab, tableEnter, headingSection, startCompletion, editCommandFor, EDIT_COMMANDS, setBlock, codeBlock,
+         insertTable, insertLink, insertRule, clearStyles, tableEdit, type TextEdit, type TableOp } from '../src/utils/md-edit.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
 function at(s: string): [string, number, number] {
@@ -343,9 +344,10 @@ describe('the editor commands (one list for keys and the right-click menu)', () 
     expect(press('Tab', { meta: true })).toBeNull();
     expect(press('ArrowUp')).toBeNull();
   });
-  it('every command has a label and a shortcut to show', () => {
+  it('every command has a label, and every keyed one a shortcut to show', () => {
     for (const c of EDIT_COMMANDS) {
-      expect(c.label && c.shortcut).toBeTruthy();
+      expect(c.label).toBeTruthy();
+      expect(!c.key || !!c.shortcut).toBe(true);
     }
   });
   it('runs the same edit as the helper it names', () => {
@@ -364,5 +366,110 @@ describe('startCompletion', () => {
     expect(show(startCompletion(...at('word|'), '#'))).toBe('word #|');
     expect(show(startCompletion(...at('word |'), '#'))).toBe('word #|');
     expect(show(startCompletion(...at('|'), '#'))).toBe('#|');
+  });
+});
+
+describe('setBlock (Format ▸ Heading / List / Blockquote / Body)', () => {
+  const blk = (s: string, k: Parameters<typeof setBlock>[3]) => show(setBlock(...at(s), k));
+  it('turns the caret’s line into a heading, replacing any lead it had', () => {
+    expect(blk('one|', 'h2')).toBe('## one|');
+    expect(blk('- [ ] one|', 'h1')).toBe('# one|');
+    expect(blk('### one|', 'h1')).toBe('# one|');
+  });
+  it('picking the format a line already has makes it body text again', () => {
+    expect(blk('## one|', 'h2')).toBe('one|');
+    expect(blk('> one|', 'quote')).toBe('one|');
+    expect(blk('- one|', 'bullet')).toBe('one|');
+  });
+  it('makes selected lines a list, numbered in order, keeping their nesting and skipping blank lines', () => {
+    expect(blk('[a\n  b\n\nc]', 'number')).toBe('[1. a\n  1. b\n\n1. c]');
+    expect(blk('[a\nb]', 'number')).toBe('[1. a\n2. b]');
+    expect(blk('[1. a\n2. b]', 'bullet')).toBe('[- a\n- b]');
+    expect(blk('[a\n- b]', 'quote')).toBe('[> a\n> b]');
+  });
+  it('Body takes every lead off', () => {
+    expect(blk('[> - a\n# b\n1. c]', 'body')).toBe('[a\nb\nc]');
+    expect(blk('> - [x] a|', 'body')).toBe('a|');
+  });
+});
+
+describe('codeBlock', () => {
+  it('fences the touched lines, and unfences them again', () => {
+    expect(show(codeBlock(...at('[a\nb]')))).toBe('```\n[a\nb]\n```');
+    expect(show(codeBlock(...at('```\n[a\nb]\n```')))).toBe('[a\nb]');
+    expect(show(codeBlock(...at('[```\na\n```]')))).toBe('[a]');
+  });
+  it('gives an empty line an empty block with the caret inside', () => {
+    expect(show(codeBlock(...at('x\n|')))).toBe('x\n```\n|\n```');
+  });
+});
+
+describe('inserts: table, link, rule', () => {
+  it('a table goes below the caret’s line, set apart by blank lines, its first header selected', () => {
+    expect(show(insertTable(...at('one|\ntwo')))).toBe(
+      'one\n\n| [Column 1] | Column 2 |\n| -------- | -------- |\n|          |          |\n\ntwo');
+    expect(show(insertTable(...at('|')))).toBe('| [Column 1] | Column 2 |\n| -------- | -------- |\n|          |          |');
+  });
+  it('a link wraps the selection with the caret where the address goes', () => {
+    expect(show(insertLink(...at('see [docs] here')))).toBe('see [docs](|) here');
+    expect(show(insertLink(...at('see |')))).toBe('see [|]()');
+  });
+  it('a rule never sits right under text (that would be a heading)', () => {
+    expect(show(insertRule(...at('one|\ntwo')))).toBe('one\n\n---\n|two');
+    expect(show(insertRule(...at('one\n|')))).toBe('one\n\n---\n|');
+    expect(show(insertRule(...at('|')))).toBe('---\n|');
+  });
+});
+
+describe('clearStyles', () => {
+  it('takes the inline marks off the selection, or the caret’s line', () => {
+    expect(show(clearStyles(...at('[**a** *b* ~~c~~ ==d== `e` ***f***]')))).toBe('[a b c d e f]');
+    expect(show(clearStyles(...at('- **a**| b')))).toBe('[- a b]');
+  });
+  it('includes marks just outside the selection', () => {
+    expect(show(clearStyles(...at('x **[bold]** y')))).toBe('x [bold] y');
+  });
+  it('leaves a list marker and snake_case alone', () => {
+    expect(show(clearStyles(...at('[* item snake_case_name]')))).toBe('[* item snake_case_name]');
+  });
+});
+
+describe('tableEdit (the Edit table menu)', () => {
+  const T = '| A | B |\n| - | - |\n| 2 | x |\n| 10 | y |\n| 1 | z |';
+  const cellsOf = (r: TextEdit | null) => r!.text.split('\n').filter((_, i) => i !== 1)
+    .map(l => l.split('|').slice(1, -1).map(c => c.trim()).join(','));
+  const op = (o: TableOp, pos = T.indexOf('2')) => tableEdit(T, pos, o);
+  it('sorts the body by the caret’s column, numbers as numbers', () => {
+    expect(cellsOf(op('sortAsc'))).toEqual(['A,B', '1,z', '2,x', '10,y']);
+    expect(cellsOf(op('sortDesc', T.indexOf('x')))).toEqual(['A,B', '1,z', '10,y', '2,x']);
+  });
+  it('adds and deletes rows and columns', () => {
+    expect(cellsOf(op('rowAbove'))).toEqual(['A,B', ',', '2,x', '10,y', '1,z']);
+    expect(cellsOf(op('rowBelow'))).toEqual(['A,B', '2,x', ',', '10,y', '1,z']);
+    expect(cellsOf(op('colBefore', T.indexOf('B')))).toEqual(['A,,B', '2,,x', '10,,y', '1,,z']);
+    expect(cellsOf(op('colAfter', T.indexOf('B')))).toEqual(['A,B,', '2,x,', '10,y,', '1,z,']);
+    expect(cellsOf(op('deleteCol'))).toEqual(['B', 'x', 'y', 'z']);
+    expect(cellsOf(op('deleteRow'))).toEqual(['A,B', '10,y', '1,z']);
+  });
+  it('moves rows among the body rows only, and columns within the table', () => {
+    expect(cellsOf(op('rowDown'))).toEqual(['A,B', '10,y', '2,x', '1,z']);
+    expect(op('rowUp')).toBeNull();
+    expect(cellsOf(op('colRight'))).toEqual(['B,A', 'x,2', 'y,10', 'z,1']);
+    expect(op('colLeft')).toBeNull();
+  });
+  it('refuses on the header what only a body row can do', () => {
+    expect(op('rowAbove', 1)).toBeNull();
+    expect(op('deleteRow', 1)).toBeNull();
+    expect(op('rowDown', 1)).toBeNull();
+  });
+  it('aligns a column in the delimiter row', () => {
+    expect(op('alignCenter', T.indexOf('B'))!.text.split('\n')[1]).toBe('| --- | :-: |');
+    expect(op('alignRight')!.text.split('\n')[1]).toBe('| --: | --- |');
+  });
+  it('transposes rows and columns', () => {
+    expect(cellsOf(op('transpose'))).toEqual(['A,2,10,1', 'B,x,y,z']);
+  });
+  it('is null off a table', () => {
+    expect(tableEdit('just text', 2, 'reformat')).toBeNull();
   });
 });

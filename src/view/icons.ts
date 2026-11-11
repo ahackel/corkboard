@@ -15,6 +15,9 @@ for (const [path, svg] of Object.entries(modules)) {
 // .fb-dd), for the buttons whose face is rebuilt in JS and so can't take a data-icon placeholder.
 export function chevron(): string { return `<span class="ic fb-chev">${ICONS.chevron ?? ''}</span>`; }
 
+// …and the one a menu entry that opens a SUBMENU carries where a shortcut would go, pointing at it.
+export function subChevron(): string { return `<span class="ic cm-chev">${ICONS.chevron ?? ''}</span>`; }
+
 export function mountIcons(root: ParentNode = document): void {
   root.querySelectorAll<HTMLElement>('[data-icon]').forEach(el => {
     const name = el.dataset.icon;

@@ -943,8 +943,18 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   keydown by `editCommandFor` AND listed by the RIGHT-CLICK menu inside the text (`editorMenuEntries`,
   inline-edit.ts) — so the keys and the menu can't drift apart; add a command there, never as a bare keydown
   branch. The menu also holds the clipboard (its Paste hands the clipboard to the editor's own paste handlers as a
-  synthetic paste event, so a URL still links and a sheet still becomes a table), `[[` / `#` to start a link or
-  tag on the selection, ⌘⇧E and Done. `#ctxMenu` holds its pointerdown, so the textarea keeps focus, caret and
+  synthetic paste event, so a URL still links and a sheet still becomes a table), ⌘⇧E and Done. A command may
+  have NO key: it is then only in the menu, and an entry whose edit returns null where the caret is shows greyed.
+- **The formats live in a FORMAT submenu, and a table's moves in an EDIT TABLE one** (iA Writer's menus, cut to
+  what a card draws: no math, footnotes, comments or page breaks). Format holds Heading ▸ 1–6, List ▸ bulleted /
+  numbered / task, Blockquote and Body (`setBlock`: a line's leads are REPLACED, never stacked, and picking the
+  format it already has makes it body text), the inline marks (`toggleWrap`, `==` highlight and `` ` `` code
+  included), Code block, Add table / link / horizontal rule (a rule gets a blank line above it — `---` under text
+  is a heading to Obsidian), `[[` / `#` to start a link or tag on the selection, and Clear styles (inline marks
+  only; Body is for the leads). Edit table, shown only with the caret in a table, is `tableEdit`: sort by the
+  caret's column (numbers as numbers), add / delete / move rows and columns, align, reformat, transpose — only
+  BODY rows move or go, never the header. Submenus are panels of their own (`context-menu.ts openSub`), opened
+  by hover — after a beat when one is open, so a diagonal move into it can cross a neighbour — or by a click on touch. `#ctxMenu` holds its pointerdown, so the textarea keeps focus, caret and
   selection while you pick. It replaced the browser's menu there; ⇧-right-click still gets that one, for
   spelling suggestions (the menu's last, greyed row says so).
 - **More list keys**: Backspace just past a marker takes the MARKER (a nested item steps out first);

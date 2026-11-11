@@ -28,7 +28,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `core/state.ts` — the mutable `state` (the MAP: nodes, view, selection, flags) + types + DOM handles.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch), `paintTick`, and the ONE spelling of "busy" (`canvasMoving`/`isBusy`). Mutate in place, never reassign.
-- `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list/table Enter, Tab, ⌘B/I/L, ⌥↑↓), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
+- `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys and the Format/Edit table menus), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`, …
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`.

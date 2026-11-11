@@ -696,23 +696,275 @@ export function startCompletion(text: string, start: number, end: number, mark: 
   return { text: splice(text, start, start, lead), start: at, end: at };
 }
 
+// ---------- the Format menu: block formats, inserts, Clear styles ----------
+// What the right-click menu's Format submenu writes (iA Writer's menu, cut to what the card renders). Each
+// is a pure edit like the keys above, and each acts on the lines the selection touches.
+
+// A line's block LEAD — heading hashes, a quote's `>`, a list marker with its task box — any number of
+// them (`> - [ ] x`), so a new format REPLACES the old one rather than stacking on it.
+const LEAD = /^(?:#{1,6}[ \t]+|>[ \t]?|(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/;
+function stripLeads(line: string): { indent: string; rest: string } {
+  const indent = line.match(/^[ \t]*/)![0];
+  let rest = line.slice(indent.length), m: RegExpMatchArray | null;
+  while ((m = rest.match(LEAD))) {
+    rest = rest.slice(m[0].length);
+  }
+  return { indent, rest };
+}
+export type Block = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'bullet' | 'number' | 'quote' | 'body';
+function blockOf(line: string): Block {
+  const h = line.match(/^ {0,3}(#{1,6})[ \t]/);
+  if (h) {
+    return `h${h[1].length}` as Block;
+  }
+  if (/^\s*>/.test(line)) {
+    return 'quote';
+  }
+  const it = itemOf(line);
+  return !it || it.task ? 'body' : /\d/.test(it.marker) ? 'number' : 'bullet';
+}
+// Make the touched lines a heading, a bulleted or numbered list, a quote — or plain BODY text again. Lines
+// that already all are that format go back to body, so picking it twice undoes it. A list keeps each
+// line's indent (its nesting); the rest start at the margin. Blank lines in a selection are left blank.
+export function setBlock(text: string, start: number, end: number, kind: Block): TextEdit {
+  const { first, last } = linesOf(text, start, end);
+  const lines = text.slice(first, last).split('\n');
+  const use = lines.map(l => !!l.trim() || lines.length === 1);
+  const to = use.some(Boolean) && lines.every((l, i) => !use[i] || blockOf(l) === kind) ? 'body' : kind;
+  const count = new Map<string, number>();       // a numbered list counts per nesting level, anew after a gap
+  const next = lines.map((l, i) => {
+    if (!use[i]) {
+      count.clear();
+      return l;
+    }
+    const { indent, rest } = stripLeads(l);
+    if (to === 'bullet') {
+      return indent + '- ' + rest;
+    }
+    if (to === 'number') {
+      const k = (count.get(indent) ?? 0) + 1;
+      count.set(indent, k);
+      return indent + `${k}. ` + rest;
+    }
+    if (to === 'quote') {
+      return '> ' + rest;
+    }
+    return to === 'body' ? rest : '#'.repeat(Number(to[1])) + ' ' + rest;
+  });
+  if (lines.length === 1) {                       // one line: the caret goes to its end, past the new lead
+    const at = first + next[0].length;
+    return renumber({ text: splice(text, first, last, next[0]), start: at, end: at });
+  }
+  return renumber({ text: splice(text, first, last, next.join('\n')), start: first, end: first + next.join('\n').length });
+}
+
+// Fence the touched lines as a code block — or, when they are one already (fences included, or just
+// outside the selection), take the fences away. On an empty line: an empty block with the caret inside.
+const FENCE = /^(```|~~~)/;
+export function codeBlock(text: string, start: number, end: number): TextEdit {
+  const { first, last } = linesOf(text, start, end);
+  const body = text.slice(first, last);
+  const lines = body.split('\n');
+  if (lines.length >= 2 && FENCE.test(lines[0]) && FENCE.test(lines[lines.length - 1])) {
+    const inner = lines.slice(1, -1).join('\n');
+    return { text: splice(text, first, last, inner), start: first, end: first + inner.length };
+  }
+  const above = first > 0 ? lineAt(text, first - 1) : null;
+  const below = last < text.length ? lineAt(text, last + 1) : null;
+  if (above && below && FENCE.test(text.slice(above.from, above.to)) && FENCE.test(text.slice(below.from, below.to))) {
+    const out = text.slice(0, above.from) + body + text.slice(below.to);
+    return { text: out, start: above.from, end: above.from + body.length };
+  }
+  const at = first + 4;
+  return { text: splice(text, first, last, '```\n' + body + '\n```'), start: at, end: at + body.length };
+}
+
+// A new two-column table on its own lines below the caret's line (or ON it, when it's empty), set apart by
+// blank lines so Obsidian reads it as one too, with the first header selected to type over.
+export function insertTable(text: string, _start: number, end: number): TextEdit {
+  const { from, to } = lineAt(text, end);
+  const blank = !text.slice(from, to).trim();
+  const t: TableAt = { from: 0, to: 0, rows: [['Column 1', 'Column 2'], [], ['', '']], cols: 2, align: ['', ''], indent: '', row: 0, col: 0 };
+  const table = writeTable(t, 0, 0).text;
+  const head = blank ? text.slice(0, from) : text.slice(0, to) + '\n\n';
+  const tail = text.slice(to);
+  const gap = tail.startsWith('\n') && tail.slice(1).split('\n')[0].trim() ? '\n' : '';
+  const at = head.length + 2;
+  return { text: head + table + gap + tail, start: at, end: at + 'Column 1'.length };
+}
+
+// `[selection]()` with the caret where the address goes; with nothing selected, `[]()` with it in the text.
+// (Pasting a URL over a selection links it too — utils/markdown.ts linkPaste.)
+export function insertLink(text: string, start: number, end: number): TextEdit {
+  const sel = text.slice(start, end);
+  const out = splice(text, start, end, `[${sel}]()`);
+  const at = sel ? start + sel.length + 3 : start + 1;
+  return { text: out, start: at, end: at };
+}
+
+// A horizontal rule under the caret's line (on it, when it's empty), with a blank line above: `---` right
+// under text is a HEADING to Obsidian and every CommonMark reader. The caret goes to the line after it.
+export function insertRule(text: string, _start: number, end: number): TextEdit {
+  const { from, to } = lineAt(text, end);
+  const blank = !text.slice(from, to).trim();
+  const prev = blank && from > 0 ? lineAt(text, from - 1) : null;
+  const pre = blank ? (prev && text.slice(prev.from, prev.to).trim() ? '\n' : '') : '\n\n';
+  const at = blank ? from : to;
+  const head = text.slice(0, at) + pre + '---';
+  const tail = text.slice(to);
+  const out = head + (tail.startsWith('\n') ? tail : '\n' + tail);
+  return { text: out, start: head.length + 1, end: head.length + 1 };
+}
+
+// Take the inline marks — bold, italic, strikethrough, highlight, code — off the selection (or the caret's
+// line), including marks sitting just OUTSIDE it, as when a word is selected inside its `**`. Block leads
+// (lists, headings) stay: Body is the command for those.
+const MARK = '*_~=`';
+export function clearStyles(text: string, start: number, end: number): TextEdit {
+  let a = start, b = end;
+  if (a === b) {
+    ({ from: a, to: b } = lineAt(text, a));
+  }
+  while (a > 0 && b < text.length && MARK.includes(text[a - 1]) && text[a - 1] === text[b]) {
+    a--;
+    b++;
+  }
+  let s = text.slice(a, b), was: string;
+  do {
+    was = s;
+    s = s.replace(/(\*\*|__|~~|==)(?=\S)(.+?)(?<=\S)\1/g, '$2')
+      .replace(/`([^`\n]+)`/g, '$1')
+      .replace(/(^|[^*\w])\*(?=[^*\s])([^*\n]*?)(?<=\S)\*(?!\*)/g, '$1$2')
+      .replace(/(^|[^_\w])_(?=[^_\s])([^_\n]*?)(?<=\S)_(?!\w)/g, '$1$2');
+  } while (s !== was);
+  return { text: splice(text, a, b, s), start: a, end: a + s.length };
+}
+
+// ---------- the Edit Table menu ----------
+// Rows and columns as a spreadsheet moves them, on the table around the caret, written back tidied
+// (writeTable) with the caret in the cell it followed. Null where the operation can't apply (no table;
+// the header row can't be deleted or moved; nothing left of the column to move into), which is also how
+// the menu knows to grey it out.
+export type TableOp = 'sortAsc' | 'sortDesc' | 'rowAbove' | 'rowBelow' | 'colBefore' | 'colAfter' |
+  'alignLeft' | 'alignCenter' | 'alignRight' | 'deleteCol' | 'deleteRow' | 'colLeft' | 'colRight' |
+  'rowUp' | 'rowDown' | 'reformat' | 'transpose';
+export function tableEdit(text: string, start: number, op: TableOp): TextEdit | null {
+  const t = tableAround(text, start);
+  if (!t) {
+    return null;
+  }
+  const r = t.row === 1 ? 0 : t.row, c = t.col;
+  const last = t.rows.length - 1;
+  const at = (rr: number, cc: number): TextEdit => placeTable(text, t, rr === 1 ? 0 : rr, cc);
+  for (const [i, row] of t.rows.entries()) {
+    while (i !== 1 && row.length < t.cols) {
+      row.push('');
+    }
+  }
+  const cells = (f: (row: string[]) => void, alignToo: (a: string[]) => void): void => {
+    t.rows.forEach((row, i) => i !== 1 && f(row));
+    alignToo(t.align);
+  };
+  const swap = <T>(xs: T[], i: number, j: number): void => { [xs[i], xs[j]] = [xs[j], xs[i]]; };
+  switch (op) {
+    case 'sortAsc':
+    case 'sortDesc': {
+      if (last < 3) {
+        return null;                           // fewer than two body rows: nothing to sort
+      }
+      const dir = op === 'sortAsc' ? 1 : -1;
+      const body = t.rows.slice(2).sort((x, y) => dir * x[c].localeCompare(y[c], undefined, { numeric: true, sensitivity: 'base' }));
+      t.rows.splice(2, body.length, ...body);
+      return at(0, c);
+    }
+    case 'rowAbove':
+      if (r < 2) {
+        return null;                           // nothing goes above the header
+      }
+      t.rows.splice(r, 0, emptyRow(t));
+      return at(r, c);
+    case 'rowBelow':
+      t.rows.splice(Math.max(2, r + 1), 0, emptyRow(t));
+      return at(Math.max(2, r + 1), c);
+    case 'colBefore':
+    case 'colAfter': {
+      const k = op === 'colBefore' ? c : c + 1;
+      cells(row => row.splice(k, 0, ''), a => a.splice(k, 0, ''));
+      t.cols++;
+      return at(r, k);
+    }
+    case 'alignLeft':
+    case 'alignCenter':
+    case 'alignRight':
+      t.align[c] = op === 'alignLeft' ? 'l' : op === 'alignCenter' ? 'c' : 'r';
+      return at(r, c);
+    case 'deleteCol':
+      if (t.cols < 2) {
+        return null;
+      }
+      cells(row => row.splice(c, 1), a => a.splice(c, 1));
+      t.cols--;
+      return at(r, Math.min(c, t.cols - 1));
+    case 'deleteRow':
+      if (r < 2) {
+        return null;
+      }
+      t.rows.splice(r, 1);
+      return at(Math.min(r, t.rows.length - 1), c);
+    case 'colLeft':
+    case 'colRight': {
+      const k = op === 'colLeft' ? c - 1 : c + 1;
+      if (k < 0 || k >= t.cols) {
+        return null;
+      }
+      cells(row => swap(row, c, k), a => swap(a, c, k));
+      return at(r, k);
+    }
+    case 'rowUp':
+    case 'rowDown': {
+      const k = op === 'rowUp' ? r - 1 : r + 1;
+      if (r < 2 || k < 2 || k > last) {
+        return null;                           // only body rows move, and only among themselves
+      }
+      swap(t.rows, r, k);
+      return at(k, c);
+    }
+    case 'reformat':
+      return at(r, c);
+    case 'transpose': {
+      const grid = [t.rows[0], ...t.rows.slice(2)];
+      const flipped = Array.from({ length: t.cols }, (_, k) => grid.map(row => row[k] ?? ''));
+      t.rows = [flipped[0], [], ...flipped.slice(1)];
+      t.cols = grid.length;
+      t.align = Array<string>(grid.length).fill('');
+      return at(0, 0);
+    }
+  }
+}
+
 // ---------- the editor's commands, ONE list for its keys and its right-click menu ----------
 // Each is a pure edit plus the key that runs it, so the keyboard and the menu can't drift apart: the card
-// editor (features/inline-edit.ts) matches a keydown with editCommandFor and lists them all on a right-click.
-// Enter, Backspace and the clipboard aren't here — they are the textarea's own keys, made smarter.
+// editor (features/inline-edit.ts) matches a keydown with editCommandFor and lists them on a right-click,
+// the keyless ones (the Format and Edit Table submenus) by id. A command whose edit returns null where the
+// caret is shows greyed out. Enter, Backspace and the clipboard aren't here — they are the textarea's own
+// keys, made smarter.
 export interface EditKey { key: string; mod?: boolean; shift?: boolean; alt?: boolean }
 export interface EditCommand {
   id: string;
   label: string;
-  shortcut: string;                    // as shown, in the ⌘ spelling (utils/dom.ts keys() makes it Ctrl+)
-  key: EditKey;
+  shortcut?: string;                   // as shown, in the ⌘ spelling (utils/dom.ts keys() makes it Ctrl+)
+  key?: EditKey;
   edit: (text: string, start: number, end: number) => TextEdit | null;
 }
+const block = (id: Block, label: string): EditCommand => ({ id, label, edit: (v, a, b) => setBlock(v, a, b, id) });
+const table = (op: TableOp, label: string): EditCommand => ({ id: `table-${op}`, label, edit: (v, a) => tableEdit(v, a, op) });
 export const EDIT_COMMANDS: EditCommand[] = [
   { id: 'bold', label: 'Bold', shortcut: '⌘B', key: { key: 'b', mod: true }, edit: (v, a, b) => toggleWrap(v, a, b, '**') },
   { id: 'italic', label: 'Italic', shortcut: '⌘I', key: { key: 'i', mod: true }, edit: (v, a, b) => toggleWrap(v, a, b, '*') },
   { id: 'strike', label: 'Strikethrough', shortcut: '⌘⇧X', key: { key: 'x', mod: true, shift: true },
     edit: (v, a, b) => toggleWrap(v, a, b, '~~') },
+  { id: 'highlight', label: 'Highlight', edit: (v, a, b) => toggleWrap(v, a, b, '==') },
+  { id: 'code', label: 'Code', edit: (v, a, b) => toggleWrap(v, a, b, '`') },
   { id: 'task', label: 'Task / tick it', shortcut: '⌘L', key: { key: 'l', mod: true }, edit: taskLines },
   { id: 'indent', label: 'Indent', shortcut: 'Tab', key: { key: 'tab' },
     edit: (v, a, b) => tableTab(v, a, b, false) ?? renumbered(indentLines(v, a, b, false)) },
@@ -722,10 +974,26 @@ export const EDIT_COMMANDS: EditCommand[] = [
     edit: (v, a, b) => renumbered(moveLines(v, a, b, true)) },
   { id: 'down', label: 'Move line down', shortcut: '⌥↓', key: { key: 'arrowdown', alt: true },
     edit: (v, a, b) => renumbered(moveLines(v, a, b, false)) },
+  block('h1', 'Heading 1'), block('h2', 'Heading 2'), block('h3', 'Heading 3'),
+  block('h4', 'Heading 4'), block('h5', 'Heading 5'), block('h6', 'Heading 6'),
+  block('bullet', 'Bulleted list'), block('number', 'Numbered list'), block('quote', 'Blockquote'), block('body', 'Body'),
+  { id: 'codeblock', label: 'Code block', edit: codeBlock },
+  { id: 'table', label: 'Add table', edit: insertTable },
+  { id: 'link', label: 'Add link', edit: insertLink },
+  { id: 'rule', label: 'Add horizontal rule', edit: insertRule },
+  { id: 'clear', label: 'Clear styles', edit: clearStyles },
+  table('sortAsc', 'Sort column ascending'), table('sortDesc', 'Sort column descending'),
+  table('rowAbove', 'Add row above'), table('rowBelow', 'Add row below'),
+  table('colBefore', 'Add column before'), table('colAfter', 'Add column after'),
+  table('alignLeft', 'Align column left'), table('alignCenter', 'Align column center'), table('alignRight', 'Align column right'),
+  table('deleteCol', 'Delete column'), table('deleteRow', 'Delete row'),
+  table('colLeft', 'Move column left'), table('colRight', 'Move column right'),
+  table('rowUp', 'Move row up'), table('rowDown', 'Move row down'),
+  table('reformat', 'Reformat table'), table('transpose', 'Transpose rows and columns'),
 ];
 
 // The command a key press runs, if any: the key, and exactly the modifiers it names (⌘ or Ctrl both count as mod).
 export function editCommandFor(e: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): EditCommand | null {
   const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
-  return EDIT_COMMANDS.find(c => c.key.key === k && !!c.key.mod === mod && !!c.key.shift === e.shiftKey && !!c.key.alt === e.altKey) ?? null;
+  return EDIT_COMMANDS.find(({ key: c }) => c && c.key === k && !!c.mod === mod && !!c.shift === e.shiftKey && !!c.alt === e.altKey) ?? null;
 }

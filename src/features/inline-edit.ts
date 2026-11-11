@@ -665,7 +665,7 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
 }
 // ---------- the editor's right-click menu ----------
 // Every command the editor knows, with its key, where the caret is (features/context-menu.ts opens it on a
-// right-click inside the card's text). The menu takes no focus (its pointerdown is held), so the textarea
+// right-click inside the card's text): the formats in a Format submenu, and in a table an Edit table one. The menu takes no focus (its pointerdown is held), so the textarea
 // keeps its caret and selection and each entry acts on them, exactly as its key would. ⇧-right-click
 // still gets the browser's own menu, for spelling suggestions.
 export function editorMenuEntries(): MenuEntry[] {
@@ -685,25 +685,39 @@ export function editorMenuEntries(): MenuEntry[] {
     inTable && id === 'indent' ? 'Next cell' : inTable && id === 'outdent' ? 'Previous cell' : l;
   const command = (id: string): MenuEntry => {
     const c = EDIT_COMMANDS.find(x => x.id === id)!;
-    return { label: label(id, c.label), shortcut: c.shortcut, run: () => run(c.edit(ta.value, ta.selectionStart, ta.selectionEnd)) };
+    return { label: label(id, c.label), shortcut: c.shortcut, disabled: !c.edit(v, a, b),
+             run: () => run(c.edit(ta.value, ta.selectionStart, ta.selectionEnd)) };
   };
+  const commands = (...ids: string[]): MenuEntry[] => ids.map(id => id === 'sep' ? 'sep' : command(id));
   const complete = (mark: '[[' | '#'): void => {
     run(startCompletion(ta.value, ta.selectionStart, ta.selectionEnd, mark));
     if (n) {
       offerNames(ta, n);
     }
   };
+  // iA Writer's Format menu, cut to what a card draws: block formats, then inline ones, then what it adds.
+  const format: MenuEntry[] = [
+    { label: 'Heading', sub: commands('h1', 'h2', 'h3', 'h4', 'h5', 'h6') },
+    { label: 'List', sub: commands('bullet', 'number', 'task') },
+    ...commands('quote', 'body', 'sep', 'bold', 'italic', 'strike', 'highlight', 'sep', 'code', 'codeblock', 'sep', 'table', 'sep', 'link'),
+    { label: 'Link to a card…', shortcut: '[[', run: () => complete('[[') },
+    { label: 'Tag…', shortcut: '#', run: () => complete('#') },
+    ...commands('sep', 'rule', 'sep', 'clear'),
+  ];
+  const table = commands('table-sortAsc', 'table-sortDesc', 'sep', 'table-rowAbove', 'table-rowBelow', 'sep',
+    'table-colBefore', 'table-colAfter', 'sep', 'table-alignLeft', 'table-alignCenter', 'table-alignRight', 'sep',
+    'table-deleteCol', 'table-deleteRow', 'sep', 'table-colLeft', 'table-colRight', 'table-rowUp', 'table-rowDown', 'sep',
+    'table-reformat', 'table-transpose');
   return [
     { label: 'Cut', shortcut: '⌘X', run: () => { document.execCommand('cut'); }, disabled: !picked },
     { label: 'Copy', shortcut: '⌘C', run: () => { document.execCommand('copy'); }, disabled: !picked },
     { label: 'Paste', shortcut: '⌘V', run: () => { void pasteClipboard(ta, false); } },
     { label: 'Paste as plain text', shortcut: '⌘⇧V', run: () => { void pasteClipboard(ta, true); } },
     'sep',
-    command('bold'), command('italic'), command('strike'),
-    { label: 'Link to a card…', shortcut: '[[', run: () => complete('[[') },
-    { label: 'Tag…', shortcut: '#', run: () => complete('#') },
+    { label: 'Format', sub: format },
+    ...(inTable ? [{ label: 'Edit table', sub: table }] : []),
     'sep',
-    command('task'), command('indent'), command('outdent'), command('up'), command('down'),
+    ...commands('indent', 'outdent', 'up', 'down'),
     'sep',
     { label: 'Selection to a new card', shortcut: '⌘⇧E', run: () => extractToCard(), disabled: !picked },
     { label: 'Done', shortcut: '⌘↩', run: () => endBodyEdit() },
