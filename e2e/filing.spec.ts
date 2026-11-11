@@ -25,7 +25,7 @@ test('a card dropped on a folded pill is filed into that section', async ({ page
   await dragOnto(page, card(page, 'A loose card'), pill);
   await expect(card(page, 'A loose card')).toBeHidden();
   await expect.poll(() => tooltip(page, pill)).toMatch(/\b3 Cards\b/);
-  expect(Object.keys(await diskFiles(page))).toContain('Box/A loose card.md');
+  expect(Object.keys(await diskFiles(page))).toContain('Box/Loose.md');
   expect(errors).toEqual([]);
 });
 
@@ -38,7 +38,7 @@ test('inside an open section, a card dropped on the map crumb moves up to the to
   await settled(page);
   await dragOnto(page, card(page, 'Inner card'), page.locator('#folderName'));
   await expect(card(page, 'Inner card')).toBeHidden();   // it left the section you are in
-  expect(Object.keys(await diskFiles(page))).toContain('Inner card.md');
+  expect(Object.keys(await diskFiles(page))).toContain('Inner.md');
   expect(errors).toEqual([]);
 });
 

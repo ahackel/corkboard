@@ -92,7 +92,17 @@ export function updateMapTitle(): void {
 }
 // ---------- reload on focus ----------
 let reloading = false;
+let reloadLater: number | undefined;
+
+// A reload that had to wait is still owed: the disk holds something this tab hasn't read, and a card
+// saved meanwhile under a name that is taken there would replace it. So it is asked again, not dropped.
+function retryReload(): void {
+  clearTimeout(reloadLater);
+  reloadLater = window.setTimeout(() => { void reloadFromDisk(); }, 1000);
+}
+
 async function reloadFromDisk(): Promise<void> {
+  clearTimeout(reloadLater);
   if (!store.isOpen) {
     return;
   }
@@ -100,14 +110,16 @@ async function reloadFromDisk(): Promise<void> {
   if (reloading) {
     return;
   }
-  // if we just wrote, the focus event is almost certainly our own round-trip — skip
+  // if we just wrote, the focus event is almost certainly our own round-trip — look again once it has settled
   if (Date.now() - (state.lastSelfWrite || 0) < 600) {
+    retryReload();
     return;
   }
   // By PATH: ids are minted fresh on every load, so a note added on disk would shift them onto a neighbour.
   const selBefore = state.nodes.get(state.selId ?? '')?.file ?? null;
   // Don't yank the rug out while the user is actively typing in a card or renaming a section.
   if (inPlaceEditActive() || isTypingInField()) {
+    retryReload();
     return;
   }
   reloading = true;
@@ -120,6 +132,7 @@ async function reloadFromDisk(): Promise<void> {
       return;
     }
     if (inPlaceEditActive() || isTypingInField()) {
+      retryReload();
       return;   // began during the write
     }
     // Nothing changed on disk: keep everything, the undo history included, rather than re-reading it all.

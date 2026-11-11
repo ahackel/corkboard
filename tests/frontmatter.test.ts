@@ -134,3 +134,51 @@ describe('parseMd / serializeMd round-trip', () => {
     expect(p.body).toBe('Body');
   });
 });
+
+describe('frontmatter the app does not own survives a save', () => {
+  const roundTrip = (text: string, edit: (n: ReturnType<typeof nodeFrom>) => void = () => {}): string => {
+    const n = nodeFrom(text);
+    edit(n);
+    return serializeMd(n);
+  };
+
+  it('keeps keys with spaces, quotes or letters outside ASCII, even under a key the app rewrites', () => {
+    const text = '---\ntags: [a]\ndate created: 2026-01-02\n"my key": 1\nÜberschrift: ja\ncolor: blue\n---\n\nBody\n';
+    const out = roundTrip(text, n => { n.tags = ['a', 'b']; n.color = 'red'; });
+    expect(out).toContain('date created: 2026-01-02');
+    expect(out).toContain('"my key": 1');
+    expect(out).toContain('Überschrift: ja');
+    expect(out).toContain('tags: [a, b]');
+    expect(out).toContain('color: red');
+  });
+
+  it('keeps a comment that follows a key the app rewrites', () => {
+    const out = roundTrip('---\ntags: [a]\n# keep me\nother: 1\n---\n\nBody\n', n => { n.tags = ['b']; });
+    expect(out).toBe('---\ntags: [b]\n# keep me\nother: 1\n---\n\nBody\n');
+  });
+
+  it('reads a tag list with a comment after it, and writes the comment back', () => {
+    const text = '---\ntags: [a, b] # x\n---\n\nBody\n';
+    expect(parseMd(text).tags).toEqual(['a', 'b']);
+    expect(roundTrip(text)).toBe(text);
+  });
+
+  it('keeps a quoted tag whole', () => {
+    const text = '---\ntags: ["a, b", c]\n---\n\nBody\n';
+    expect(parseMd(text).tags).toEqual(['a, b', 'c']);
+    expect(roundTrip(text)).toBe(text);
+  });
+
+  it('reads a list written under the key, blank line and all, and a bare `#tag`', () => {
+    expect(parseMd('---\ntags:\n  - a\n\n  - b\nother: 1\n---\nx').tags).toEqual(['a', 'b']);
+    expect(parseMd('---\ntags: #idea\n---\nx').tags).toEqual(['idea']);
+    expect(parseMd('---\ntags: idea # why\n---\nx').tags).toEqual(['idea']);
+  });
+
+  it('writes a title back with the heading level it was read with', () => {
+    expect(roundTrip('## Sub\n\nBody\n')).toBe('## Sub\n\nBody\n');
+    expect(roundTrip('### Deep\nBody\n')).toBe('### Deep\nBody\n');
+    expect(roundTrip('# Top\n\nBody\n')).toBe('# Top\n\nBody\n');
+  });
+});
+

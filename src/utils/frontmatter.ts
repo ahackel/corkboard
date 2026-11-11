@@ -31,46 +31,50 @@ export function firstTextLine(lines: string[]): number {
 // title is optional so a bare `# ` still matches: the editor needs to know a marker is sitting there
 // (to strip it again if nothing gets typed after it) where splitHeading reads that as untitled.
 // `markerLen` is what a caret must clear to land on the title, so nothing has to hard-code `'# '`.
-export function headingOnLine(line: string): { markerLen: number; title: string } | null {
-  const m = line.match(/^([^\S\n]*#{1,6}[^\S\n]+)(.*\S)?[^\S\n]*$/);
-  return m ? { markerLen: m[1].length, title: (m[2] ?? '').trim() } : null;
+// `level` is how many `#` it was written with: a note that opens on `## Notes` is still titled, and is
+// written back as it was (joinHeading) — the text is the author's, down to the heading it uses.
+export function headingOnLine(line: string): { markerLen: number; title: string; level: number } | null {
+  const m = line.match(/^([^\S\n]*(#{1,6})[^\S\n]+)(.*\S)?[^\S\n]*$/);
+  return m ? { markerLen: m[1].length, title: (m[3] ?? '').trim(), level: m[2].length } : null;
 }
 // `gap` is whether a BLANK LINE separated the heading from the note — the one thing about the split
 // that the two fields can't hold, and so the one thing a round-trip would otherwise invent. Write
 // `# Title` with the text on the very next line and it must stay there: joinHeading below reads this
 // back, and MindNode.titleGap carries it between the two. Untitled and body-less notes report the
 // default (true), so putting a title or a body on one later spaces it the ordinary way.
-export function splitHeading(text: string): { title: string; body: string; gap: boolean } {
+export function splitHeading(text: string): { title: string; body: string; gap: boolean; level: number } {
   const lines = text.split('\n');
   const i = firstTextLine(lines);
   if (i < 0) {
-    return { title: '', body: '', gap: true };
+    return { title: '', body: '', gap: true, level: 1 };
   }
   const h = headingOnLine(lines[i]);
   if (!h || !h.title) {
-    return { title: '', body: text.trim(), gap: true };
+    return { title: '', body: text.trim(), gap: true, level: 1 };
   }
   const rest = lines.slice(i + 1);
   const body = rest.join('\n').trim();
-  return { title: h.title, body, gap: body ? !rest[0]?.trim() : true };
+  return { title: h.title, body, gap: body ? !rest[0]?.trim() : true, level: h.level };
 }
 // …and back. The inverse of splitHeading, so a load/save round-trip is a no-op: an untitled note is
 // its body alone, and a titled one gets its heading back as the first line — over a blank line unless
 // the note is one of the tight ones (`gap: false`). The default is `true` for the callers that build a
 // note rather than re-reading one (a merge, an extract, the clipboard), where spaced is what to write.
-export function joinHeading(title: string, body: string, gap = true): string {
+export function joinHeading(title: string, body: string, gap = true, level = 1): string {
   const t = title.trim(), b = body.trim();
   if (!t) {
     return b;
   }
-  return b ? `# ${t}\n${gap ? '\n' : ''}${b}` : `# ${t}`;
+  const head = '#'.repeat(level) + ' ' + t;
+  return b ? `${head}\n${gap ? '\n' : ''}${b}` : head;
 }
 // A node's title and body from the whole text of its note (the editor's text, a cut, a split).
 export function setNoteText(n: MindNode, text: string): void {
-  const { title, body, gap } = splitHeading(text);
+  const { title, body, gap, level } = splitHeading(text);
   n.title = title;
   n.body = body;
   n.titleGap = gap;
+  n.titleLevel = level;
 }
 
 // A note's path -> its bare name, no directory and no `.md`. The title used to be read from exactly
@@ -115,6 +119,7 @@ export interface ParsedNote {
   tags: string[];
   body: string;
   titleGap: boolean;
+  titleLevel: number;
   mm: {
     parent: string;
     px: number | null;   // mm_position_x/y — position relative to parent (current fields)
@@ -135,18 +140,30 @@ export interface ParsedNote {
   };
 }
 
+// A top-level key is any UNINDENTED `name:` — `date created:`, `"my key":` and `Überschrift:` are keys
+// like `tags:` is. Read as continuations of the entry above, they went with it whenever that entry was
+// one the app rewrites. An unindented comment stands alone for the same reason, and so does a blank
+// line unless the value above carries on below it: they belong to the file, not to the key above them.
+const FM_KEY = /^(?![\s#-])([^:]+):(.*)$/;
+
 function parseFM(fmText: string): FmEntry[] {
   const entries: FmEntry[] = [];
-  for (const line of fmText.split('\n')){
-    const m = line.match(/^([\w-]+):(.*)$/);
+  const lines = fmText.split('\n');
+  const continues = (i: number): boolean => {
+    const next = lines.slice(i + 1).find(l => l.trim());
+    return next !== undefined && /^[\s-]/.test(next);
+  };
+  lines.forEach((line, i) => {
+    const m = line.match(FM_KEY);
+    const apart = line.startsWith('#') || (!line.trim() && !continues(i));
     if (m) {
-      entries.push({ key: m[1], lines: [line] });
-    } else if (entries.length) {
+      entries.push({ key: m[1].trim().replace(/^(["'])(.*)\1$/, '$2'), lines: [line] });
+    } else if (entries.length && entries[entries.length - 1].key !== null && !apart) {
       entries[entries.length-1].lines.push(line);   // continuation
     } else {
       entries.push({ key: null, lines: [line] });
     }
-  }
+  });
   return entries;
 }
 function fmEntry(entries: FmEntry[], key: string): FmEntry | undefined { return entries.find(e => e.key === key); }
@@ -156,6 +173,36 @@ function fmValue(entries: FmEntry[], key: string): string {
     return '';
   }
   return e.lines[0].slice(e.lines[0].indexOf(':')+1).trim();
+}
+
+// One YAML value line cut into its items and the ` # comment` after them: `[a, "b, c"] # x` is the
+// items `a` and `b, c` and the comment `# x`. Quotes hold commas, brackets and `#`.
+function flowItems(value: string): { items: string[]; comment: string } {
+  const items: string[] = [];
+  let cur = '', quote = '', i = 0;
+  const list = value.startsWith('[');
+  for (i = list ? 1 : 0; i < value.length; i++) {
+    const ch = value[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = '';
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === ',') {
+      items.push(cur);
+      cur = '';
+    } else if (list ? ch === ']' : ch === '#' && !!cur.trim() && /\s/.test(value[i - 1])) {
+      break;
+    } else {
+      cur += ch;
+    }
+  }
+  items.push(cur);
+  const rest = value.slice(value[i] === ']' ? i + 1 : i).trim();
+  return { items, comment: rest.startsWith('#') ? rest : '' };
 }
 // A tag is written bare (`tags: [idea, 🔥]`), but Obsidian also takes a quoted `"#idea"` — the `#` is
 // not part of the tag (utils/tags.ts).
@@ -167,7 +214,7 @@ function fmTags(entries: FmEntry[]): string[] {
   const inline = e.lines[0].slice(e.lines[0].indexOf(':')+1).trim();
   const bare = (s: string): string => s.trim().replace(/^["']|["']$/g,'').replace(/^#/,'').trim();
   if (inline) {
-    return inline.replace(/^\[|\]$/g,'').split(',').map(bare).filter(Boolean);
+    return flowItems(inline).items.map(bare).filter(Boolean);
   }
   return e.lines.slice(1).map(l=>l.trim()).filter(l=>l.startsWith('-'))   // YAML list form
     .map(l=>bare(l.replace(/^-\s*/,''))).filter(Boolean);
@@ -215,7 +262,7 @@ export function parseMd(text: string): ParsedNote {
   const entries = m ? parseFM(m[1]) : [];
   // The TITLE is the body's leading heading (splitHeading above); no heading = an untitled card.
   // The filename is deliberately NOT consulted — it's a derived slug, suffix and all.
-  const { title, body, gap } = splitHeading(m ? m[2] : text);
+  const { title, body, gap, level } = splitHeading(m ? m[2] : text);
   const num = (v: string): number | null => (v !== '' && !isNaN(+v)) ? +v : null;
   return {
     title,
@@ -227,6 +274,7 @@ export function parseMd(text: string): ParsedNote {
     tags: fmTags(entries),
     body,                                  // already trimmed, and shorn of the title heading
     titleGap: gap,                         // was there a blank line under the heading (see splitHeading)
+    titleLevel: level,                     // …and how many `#` it was written with
     // layout keys — note identity is its filename; parent stored as the PARENT note's path.
     mm: {
       parent: fmValue(entries, 'mm_parent'),
@@ -255,7 +303,12 @@ export function serializeMd(n: MindNode): string {
   // strip any stale mm_* (re-added fresh below); the prefix match covers every layout key
   entries.filter(e => e.key && e.key.startsWith('mm_')).forEach(e => fmRemove(entries, e.key as string));
   if (n.tags.length) {
-    fmSet(entries, 'tags', `tags: [${n.tags.join(', ')}]`);
+    // A tag YAML would read as something else — one holding a comma, a bracket or a quote — is quoted.
+    // The comment after the list, if the file had one, stays where it was.
+    const was = fmEntry(entries, 'tags')?.lines[0] ?? '';
+    const comment = flowItems(was.slice(was.indexOf(':') + 1).trim()).comment;
+    const item = (t: string): string => /^[^\s,[\]{}#"'&*!|>%@`:-][^,[\]{}"']*$/.test(t) && !/\s#|:\s/.test(t) ? t : JSON.stringify(t);
+    fmSet(entries, 'tags', `tags: [${n.tags.map(item).join(', ')}]${comment ? ' ' + comment : ''}`);
   } else {
     fmRemove(entries, 'tags');
   }
@@ -312,7 +365,7 @@ export function serializeMd(n: MindNode): string {
 // (An image card needs no arm of its own — it is untitled by definition, so joinHeading hands back the
 // picture markdown unchanged.)
 export function cardMarkdown(n: MindNode): string {
-  return joinHeading(n.title, n.body, n.titleGap !== false);
+  return joinHeading(n.title, n.body, n.titleGap !== false, n.titleLevel ?? 1);
 }
 // …and what a COLLAPSED node renders: the first line of that markdown, with `…` appended when anything
 // follows it. Still MARKDOWN, fed to the same renderer, which is the whole point — `# Name` folds to a

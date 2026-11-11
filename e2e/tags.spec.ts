@@ -44,14 +44,14 @@ test('# tags the selection — by an emoji’s name or a new word — and untick
   await page.keyboard.press('Enter');
   await expect(logo.locator('.tag')).toHaveText(['⭐', '#design']);
   let files = await diskFiles(page);
-  expect(files['Logo ideas.md']).toContain('tags: [⭐, design]');
+  expect(files['Logo.md']).toContain('tags: [⭐, design]');
   // the card's own tags are listed ticked: untick one
   await pop.locator('.tp-row.ticked', { hasText: 'design' }).click();
   await expect(logo.locator('.tag')).toHaveText(['⭐']);
   await page.keyboard.press('Escape');
   await expect(pop).toBeHidden();
   files = await diskFiles(page);
-  expect(files['Logo ideas.md']).toContain('tags: [⭐]');
+  expect(files['Logo.md']).toContain('tags: [⭐]');
   expect(errors).toEqual([]);
 });
 

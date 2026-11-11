@@ -6,7 +6,7 @@
 // `fold` is asked once per folder, outermost first, and a folder it answers yes for is LAZY — only its
 // own section note is read, and the notes under it are merely COUNTED, for the pill. Nothing below a lazy
 // folder is asked about, since nothing below it is read.
-import { SECTION_NOTE } from '../utils/filenames.js';
+import { SECTION_NOTE, pathKey } from '../utils/filenames.js';
 
 export interface LazyFolder { count: number; hasIndex: boolean; sections: number; }   // sections: of `count`
 export interface TreePlan {
@@ -48,7 +48,7 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
   const depth = (d: string): number => d.split('/').length;
   for (const d of [...dirs].sort((a, b) => depth(a) - depth(b))) {
     const n = mdCount.get(d) ?? 0;
-    if (!n) { foreign.add(d.toLowerCase()); continue; }
+    if (!n) { foreign.add(pathKey(d)); continue; }
     if ([...lazy.keys()].some(l => d.startsWith(l))) {
       continue;   // inside a folder nobody reads
     }

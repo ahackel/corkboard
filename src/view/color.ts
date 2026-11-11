@@ -16,7 +16,9 @@ export const PICKER_ROWS: string[][] = [
   ['silver','grey','red','orange','amber','green','teal','blue','violet','pink'],
 ];
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
-export const SWATCH_BG: Record<string, string> = Object.fromEntries(PALETTE.map(c => [c, pal(c)]));
+// No prototype: a colour comes from a file, and `constructor` or `toString` must not read as a palette key.
+export const SWATCH_BG: Record<string, string> = Object.assign(Object.create(null) as Record<string, string>,
+  Object.fromEntries(PALETTE.map(c => [c, pal(c)])));
 // The canvas's own THEME fill, read and cached exactly like the palette above. It's canvasSurface's last
 // resort, when the map has no colour of its own. Cached rather than read live because it runs on every
 // edge paint.

@@ -60,7 +60,7 @@ test('a plain drop on a stack puts the card on top of it', async ({ page }) => {
   await dragTo(page, await centre(card(page, 'A loose card')), await centre(stack(page)));
   await expect(stack(page)).toHaveAttribute('data-cards', '4');
   await expect(stack(page).locator('.pile-card').last()).toContainText('A loose card');
-  expect(Object.keys(await diskFiles(page))).toContain('Pile/A loose card.md');
+  expect(Object.keys(await diskFiles(page))).toContain('Pile/Loose.md');
   expect(errors).toEqual([]);
 });
 
@@ -92,7 +92,7 @@ test('a stack down to one card lets it go', async ({ page }) => {
   await expect(stack(page)).toHaveCount(0);
   await expect(card(page, 'Bottom card')).toBeVisible();
   const files = Object.keys(await diskFiles(page));
-  expect(files).toContain('Bottom card.md');
+  expect(files).toContain('One.md');
   expect(files.some(f => f.startsWith('Pile/'))).toBe(false);
   expect(errors).toEqual([]);
 });
@@ -164,7 +164,7 @@ test('Unstack spreads the cards out; Turn into section keeps them in a box', asy
   await expect(page.locator('#world .node.section')).toHaveCount(0);
   const boxes = await Promise.all(['Top card', 'Middle card', 'Bottom card'].map(t => card(page, t).boundingBox()));
   expect(new Set(boxes.map(b => `${Math.round(b!.x)},${Math.round(b!.y)}`)).size).toBe(3);   // no longer on one spot
-  expect(Object.keys(await diskFiles(page))).toContain('Top card.md');
+  expect(Object.keys(await diskFiles(page))).toContain('Three.md');
   expect(errors).toEqual([]);
 });
 

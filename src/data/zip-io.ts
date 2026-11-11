@@ -1,6 +1,6 @@
 // ---- import / export as .zip (move a map between devices / back it up) ----
 import { IMAGE_ACCEPT, IMAGE_FILE_RE } from '../utils/image-types.js';
-import { unzip, zipBlob } from '../utils/zip.js';
+import { unzip, zipBlob, entryPath } from '../utils/zip.js';
 import { setStatus, state } from '../core/state.js';
 import { createDeviceMap, resolveOnDeviceStore } from '../store/index.js';
 import { switchToDeviceMap, store } from './persistence.js';
@@ -48,7 +48,8 @@ async function importFiles(files: File[]): Promise<void> {
   // What Finder's Compress adds (`__MACOSX/._Note.md`) and other hidden files are not notes — and a
   // stray one would stop the common top folder below from being found.
   const junk = (name: string): boolean => name.split('/').some(p => p.startsWith('.') || p === '__MACOSX');
-  entries = entries.filter(e => !junk(e.name));
+  entries = entries.filter(e => !junk(e.name))
+    .flatMap(e => { const name = entryPath(e.name); return name ? [{ ...e, name }] : []; });
   let md  = entries.filter(e => /\.(md|markdown)$/i.test(e.name) && !e.name.endsWith('/'));
   let img = entries.filter(e => e.bytes && IMAGE_FILE_RE.test(e.name) && !e.name.endsWith('/'));
   if (!md.length){ setStatus('No Markdown files found to import.'); return; }
@@ -66,20 +67,32 @@ async function importFiles(files: File[]): Promise<void> {
     md  = md.map(e => ({ ...e, name: e.name.slice(top.length) }));
     img = img.map(e => e.name.startsWith(top) ? { ...e, name: e.name.slice(top.length) } : e);
   }
+  // The store already points at the new map, so the canvas MUST follow it whatever happens below: an
+  // entry the store refuses is skipped and counted, and the map is read in either way.
+  let skipped = 0;
+  const put = async (name: string, data: string | Blob): Promise<void> => {
+    try {
+      await store.write(name, data);
+    } catch (err) {
+      console.error(`Import: could not write ${name}`, err);
+      skipped++;
+    }
+  };
   for (const e of md) {
-    await store.write(e.name, e.text ?? '');
+    await put(e.name, e.text ?? '');
   }
   for (const e of img) {
-    await store.write(e.name, new Blob([e.bytes! as BlobPart]));
+    await put(e.name, new Blob([e.bytes! as BlobPart]));
   }
   // carry over the board file if the archive included one (matching the note top-folder strip)
   const board = entries.find(e => e.text != null && (e.name === BOARD_FILE || e.name === top + BOARD_FILE));
   if (board?.text != null) {
-    await store.write(BOARD_FILE, board.text);
+    await put(BOARD_FILE, board.text);
   }
   hideStart();
   await loadFromDir();
-  setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}.`);
+  setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}`
+    + (skipped ? ` — ${skipped} file${skipped === 1 ? '' : 's'} could not be written.` : '.'));
 }
 
 // download every current note (plus the image attachments they reference) packed into a .zip

@@ -19,6 +19,17 @@ describe('slugStem', () => {
     expect(safeName('  many   spaces ')).toBe('many spaces');
     expect(safeName('x'.repeat(300))).toHaveLength(120);
   });
+  it('cuts on whole characters, and by bytes, so the disk stores the name it was given', () => {
+    const straddling = safeName('x'.repeat(119) + '😀 tail');
+    expect(straddling).toBe('x'.repeat(119) + '😀');
+    expect(new TextEncoder().encode(safeName('漢'.repeat(120))).length).toBeLessThanOrEqual(200);
+  });
+  it('drops control characters and half characters, and spells accents one way', () => {
+    expect(safeName('a\u0000b\u0007c')).toBe('a b c');
+    expect(safeName('half \ud83d here')).toBe('half here');
+    expect(safeName('Cafe\u0301')).toBe('Caf\u00e9');
+    expect(safeName('NUL')).toBe('NUL_');
+  });
   it('never ends in a dot or contains `..`, so a sentence makes a valid filename', () => {
     expect(safeName('Spend it to move.')).toBe('Spend it to move');
     expect(safeName('Wait...')).toBe('Wait');
@@ -36,6 +47,12 @@ describe('desiredFileFor', () => {
   it('suffixes a collision, case-insensitively', () => {
     const inUse = new Map([['notes.md', 'other'], ['notes 2.md', 'third']]);
     expect(desiredFileFor(node('Notes'), inUse)).toBe('Notes 3.md');
+  });
+  it('keeps a name that differs only in how an accent is spelled', () => {
+    expect(desiredFileFor(node('Caf\u00e9', '', 'Cafe\u0301.md'), new Map())).toBe('Cafe\u0301.md');
+  });
+  it('keeps the name it has when asked to, and only settles the folder', () => {
+    expect(desiredFileFor(node('Meeting notes', '', '2026-11-11.md'), new Map(), 'Week/', undefined, true)).toBe('Week/2026-11-11.md');
   });
   it('does not collide with itself', () => {
     expect(desiredFileFor(node('Notes', '', 'Notes.md'), new Map([['notes.md', 'me']]))).toBe('Notes.md');

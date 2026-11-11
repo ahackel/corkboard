@@ -110,3 +110,16 @@ async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   const stream = new Blob([bytes as BlobPart]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
+
+// An archive entry's name as a path INSIDE a map: forward slashes, no leading slash, and null for one
+// that climbs out (`..`) or has an empty part. Windows tools write `\`; a store refuses such a name
+// half-way through an import, which is too late.
+export function entryPath(name: string): string | null {
+  const parts = name.replace(/\\/g, '/').replace(/^\/+/, '').split('/');
+  const dir = parts[parts.length - 1] === '';
+  const body = dir ? parts.slice(0, -1) : parts;
+  if (!body.length || body.some(p => !p || p === '.' || p === '..')) {
+    return null;
+  }
+  return body.join('/') + (dir ? '/' : '');
+}

@@ -3,15 +3,15 @@ import { type MindNode, isBoxType, state, world, setStatus } from '../core/state
 import { NODE_W, nodeW, SECTION_BORDER, nodeH, snapPt } from '../view/geometry.js';
 import { parseMd, fileStem } from '../utils/frontmatter.js';
 import { soleImage } from '../utils/markdown.js';
-import { isSectionNote, parentFileOf, dirOf, SECTION_NOTE } from '../utils/filenames.js';
-import { boardGeom, loadBoard, resolveEdges, resolveOrder, boardIsLegacy, flushBoard, unparkEdges } from './board.js';
+import { isSectionNote, parentFileOf, dirOf, SECTION_NOTE, slugStem, pathKey } from '../utils/filenames.js';
+import { boardGeom, loadBoard, resolveEdges, resolveOrder, boardIsLegacy, flushBoard, unparkEdges, takeBoardNotice } from './board.js';
 import { type TreeListing } from '../store/types.js';
 import { parentOf, childrenOf, ancestors } from '../utils/model.js';
 import { unreadSectionHolding } from './lazy.js';
 import { type FoldTest } from '../store/tree.js';
 import { scope, resolveScopeAfterLoad } from '../nav/scope.js';
 import { clearHistory } from '../features/history.js';
-import { resetSaveState, scheduleSave } from './save.js';
+import { resetSaveState, scheduleSave, noteNamed } from './save.js';
 import { resetImageCache, knowAssets } from '../features/images.js';
 import { refreshGrid } from '../view/grid.js';
 import { store, updateMapTitle } from './persistence.js';
@@ -107,6 +107,8 @@ function nodeFromNote(rel: string, parsed: ReturnType<typeof parseMd>, seeds: Se
     stack: type === 'section' && !!g?.stack,
     ...rest, dirty: unmigrated || !!mm.parent, dirtyLayout: !hasPos,   // notes lacking a position get one persisted
   };
+  // The name the file has now stands for the text it has now (data/save.ts keepsName)
+  noteNamed(rel, slugStem(node));
   if (mm.wasStack) {
     seeds.wasStack.add(node.id);
   }
@@ -146,7 +148,7 @@ function addListed(listing: TreeListing, seeds: Seeds): MindNode[] {
   }
   for (const [dir, f] of listing.lazy) {
     const path = dir + SECTION_NOTE;
-    let n = [...state.nodes.values()].find(m => m.file?.toLowerCase() === path.toLowerCase());
+    let n = [...state.nodes.values()].find(m => !!m.file && pathKey(m.file) === pathKey(path));
     if (!n) {
       add(n = folderSection(path, seeds));
     }
@@ -275,6 +277,10 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // the load actually moved something, so a stable reopen touches no files.
   if (!state.readOnly && [...state.nodes.values()].some(n => n.dirty || n.dirtyLayout)) {
     scheduleSave();
+  }
+  const notice = takeBoardNotice();
+  if (notice) {
+    setStatus(notice);
   }
   updateMapTitle();
 }

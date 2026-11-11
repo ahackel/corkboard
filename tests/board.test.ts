@@ -42,4 +42,22 @@ describe('loadBoard', () => {
     expect(state.edges[0].toAt).toBeUndefined();
     expect(state.edges[1].fromAt).toBeUndefined();
   });
+
+  it('does not take an inherited name for a canvas colour', async () => {
+    useStore(storeWithBoard({ model: 2, settings: { canvasColor: 'constructor' } }));
+    await loadBoard();
+    expect(state.canvasColor).toBe('');
+  });
+
+  it('puts a board file it cannot read aside before anything writes over it', async () => {
+    const written = new Map<string, string>();
+    useStore(fakeStore({
+      async readBlob(path) { return path === 'board.json' ? new Blob(['{"model":2,"nodes":{"A.md":{"x":1']) : null; },
+      async write(path, data) { written.set(path, String(data)); },
+    }));
+    await loadBoard();
+    const [name] = [...written.keys()];
+    expect(name).toMatch(/^board\.unreadable-\d{8}-\d{6}\.json$/);
+    expect(written.get(name)).toBe('{"model":2,"nodes":{"A.md":{"x":1');
+  });
 });

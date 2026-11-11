@@ -1,6 +1,6 @@
 // ---------- saving: the autosave, and the write of every changed note ----------
-import { state, setStatus } from '../core/state.js';
-import { retargetLinks, desiredFileFor, folderOf, dirOf, prunableDirs } from '../utils/filenames.js';
+import { state, setStatus, type MindNode } from '../core/state.js';
+import { retargetLinks, desiredFileFor, folderOf, dirOf, prunableDirs, pathKey, slugStem, ownStem } from '../utils/filenames.js';
 import { ancestorDepth, commitRel } from '../view/layout.js';
 import { ui, frozenFileNodeId } from '../core/ui-state.js';
 import { parentOf, childrenOf } from '../utils/model.js';
@@ -12,18 +12,79 @@ import { saveSucceeded, saveFailed } from './save-alert.js';
 import { setSaving } from './save-flag.js';
 import { foreignDirs, readFolder } from './load.js';
 
-// The lowercased filename -> node index the collision test reads. Built ONCE per save rather than
+// The pathKey -> node index the collision test reads. Built ONCE per save rather than
 // re-derived per candidate name: saveAll asks for every node's desired name, so a per-call
 // `[...state.nodes.values()].some(…)` made settling filenames O(n²) with two string allocations per
-// comparison. Lowercased because that is how the filesystem collides (see below).
+// comparison. Keyed the way the filesystem collides (utils/filenames.ts pathKey). A name found on DISK
+// that no node holds (diskTaken) is taken too, by nobody.
 function filesInUse(): Map<string, string> {
   const m = new Map<string, string>();
+  for (const key of diskTaken) {
+    m.set(key, '');
+  }
   for (const o of state.nodes.values()) {
     if (o.file) {
-      m.set(o.file.toLowerCase(), o.id);
+      m.set(pathKey(o.file), o.id);
     }
   }
   return m;
+}
+
+// What each note's filename was last SETTLED against: the slug its text gave it then. A name that says
+// something else than the text — `2026-11-11.md` in someone's Obsidian vault, a file named in Finder —
+// is left alone until that text changes: opening a folder must not rename what is in it.
+const namedFor = new Map<string, string>();
+
+export function noteNamed(path: string, slug: string): void { namedFor.set(path, slug); }
+
+// Does the file already carry the name its text gives it (or that name with a ` 2` suffix)? Then it is
+// the app's own name, and is re-derived as before — a suffix goes once the plain name is free.
+function tracksText(n: MindNode, slug: string): boolean {
+  const own = pathKey(ownStem(n.file!, n.type === 'section')), want = pathKey(slug);
+  return own === want || (own.startsWith(want + ' ') && /^\d+$/.test(own.slice(want.length + 1)));
+}
+
+function keepsName(n: MindNode): boolean {
+  if (!n.file) {
+    return false;
+  }
+  const slug = slugStem(n);
+  return namedFor.get(n.file) === slug && !tracksText(n, slug);
+}
+
+// Names that turned out to be on disk although no node holds them: a note another app (or another tab)
+// wrote since the map was read. Writing a new card there would replace it, so the name counts as taken.
+const diskTaken = new Set<string>();
+const CHECKS_AT_ONCE = 16;
+
+// planPaths, checked against the DISK for every path a note is about to take for the first time.
+async function planFreePaths(): Promise<Map<string, string>> {
+  const checked = new Set<string>();
+  for (let guard = 0; guard < 8; guard++) {
+    const plan = planPaths();
+    const fresh: string[] = [];
+    for (const n of state.nodes.values()) {
+      const target = plan.get(n.id)!, key = pathKey(target);
+      if (n.file !== target && !checked.has(key) && !pendingRemovals.has(target)) {
+        checked.add(key);
+        fresh.push(target);
+      }
+    }
+    let clash = false;
+    for (let i = 0; i < fresh.length; i += CHECKS_AT_ONCE) {
+      const found = await Promise.all(fresh.slice(i, i + CHECKS_AT_ONCE).map(async path => (await store.readBlob(path)) ? path : null));
+      for (const path of found) {
+        if (path) {
+          diskTaken.add(pathKey(path));
+          clash = true;
+        }
+      }
+    }
+    if (!clash) {
+      return plan;
+    }
+  }
+  return planPaths();
 }
 // Re-point inbound [[wikilinks]] across every note (utils/filenames.ts retargetLinks), returning the
 // ids whose body changed, for phase 2 to write.
@@ -56,11 +117,11 @@ function planPaths(): Map<string, string> {
     const frozen = frozenFileNodeId() === n.id || state.singleNote ? n.file : null;
     const p = parentOf(n);
     const pFile = p ? out.get(p.id) ?? p.file : null;
-    const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs);
+    const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs, keepsName(n));
     // A node's OLD name stays taken for the rest of this save: phase 3 deletes that file, and on a
     // case-insensitive disk a node handed `plan.md` for a freed `Plan.md` would be deleted with it.
     // It suffixes instead (`plan 2.md`) and takes the plain name on the next save, once it is free.
-    inUse.set(target.toLowerCase(), n.id);
+    inUse.set(pathKey(target), n.id);
     out.set(n.id, target);
   }
   return out;
@@ -108,15 +169,25 @@ async function saveAll(): Promise<void> {
   // renamed or moved section moves every note inside it: each one is a rename of its own here.
   const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
   let pathsMoved = false;   // board.json is keyed by path, so a new or renamed note needs it rewritten
-  const plan = planPaths();
+  const plan = await planFreePaths();
   for (const n of state.nodes.values()) {
     const target = plan.get(n.id)!;
     if (n.file && n.file !== target) {
-      pendingRemovals.add(n.file);                 // old file to delete once the rename is written
+      // A note renamed AGAIN before its last rename reached the disk: what waited on that write waits on this one.
+      for (const [old, to] of pendingRemovals) {
+        if (to === n.file) {
+          pendingRemovals.set(old, target);
+        }
+      }
+      pendingRemovals.set(n.file, target);         // old file to delete once the rename is written
       renames.set(n.file, target);
+      namedFor.delete(n.file);
     }
     if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }   // brand-new node, or a rename
     n.file = target;                               // adopt the final name
+    if (frozenFileNodeId() !== n.id && !keepsName(n)) {
+      namedFor.set(target, slugStem(n));
+    }
   }
 
   // Phase 1b — a rename drags its INBOUND links along: a path recorded elsewhere in the vault must not
@@ -130,26 +201,41 @@ async function saveAll(): Promise<void> {
     state.nodes.get(id)!.dirty = true;
   }
 
-  // Phase 2 — write everything that changed, now that all paths are final.
+  // Phase 2 — write everything that changed, now that all paths are final. One note that can't be
+  // written (a name the disk refuses, a file another app holds) must not keep the others from being
+  // saved: it stays dirty, the rest go on, and the failure is reported once they have.
   let written = 0;
+  const failed = new Set<string>();
+  let firstError: unknown;
   for (const n of state.nodes.values()) {
     if (!needWrite.has(n.id)) {
       continue;
     }
-    await store.write(n.file!, serializeMd(n));
+    try {
+      await store.write(n.file!, serializeMd(n));
+    } catch (err) {
+      failed.add(n.file!);
+      firstError ??= err;
+      continue;
+    }
     n.dirty = false;
     written++;
   }
-  // Phase 3 — drop files left behind by renames (unless some node now legitimately holds the path)…
-  const held = new Set([...state.nodes.values()].map(n => n.file));
-  for (const old of [...pendingRemovals]) {
-    if (!held.has(old)) { await store.remove(old); emptied.add(dirOf(old)); }
+  // Phase 3 — drop files left behind by renames, unless some node now legitimately holds the path — on
+  // ANY disk: where case or accents fold, a different spelling is the same file. A rename whose new
+  // file didn't land keeps its old one, which is the only copy on disk.
+  const held = new Set([...state.nodes.values()].map(n => n.file ? pathKey(n.file) : ''));
+  for (const [old, to] of [...pendingRemovals]) {
+    if (failed.has(to)) {
+      continue;
+    }
+    if (!held.has(pathKey(old))) { await store.remove(old); emptied.add(dirOf(old)); }
     pendingRemovals.delete(old);
   }
   // …and the FOLDERS they leave empty: a section renamed, moved or deleted leaves its old folder behind.
   // Deepest first, and up the chain, since emptying `A/B/` can empty `A/` too. removeDir only ever
   // removes an EMPTY folder, so one still holding anything — a live note, another app's file — stays.
-  const dirs = prunableDirs(emptied, held);
+  const dirs = prunableDirs(emptied, [...state.nodes.values()].map(n => n.file));
   emptied.clear();
   for (const d of dirs) {
     await store.removeDir(d);
@@ -164,13 +250,17 @@ async function saveAll(): Promise<void> {
     n.dirtyLayout = false;   // the board write carries these
   }
   state.lastSelfWrite = Date.now();   // so focus-reload can ignore our own writes
+  if (firstError !== undefined) {
+    throw firstError;
+  }
   setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
   releaseFolded();   // a folded section whose notes are all safely on disk can let go of them (data/lazy.ts)
 }
 
-// Old paths of renamed notes, still on disk until phase 3 removes them. Module-level so a failed save
-// carries them to its retry; cleared by loadFromDir, since they belong to the map that was open.
-const pendingRemovals = new Set<string>();
+// Old paths of renamed notes, still on disk until phase 3 removes them, each with the path its note
+// moved TO. Module-level so a failed save carries them to its retry; cleared by loadFromDir, since they
+// belong to the map that was open.
+const pendingRemovals = new Map<string, string>();
 // Folders a removal may have left empty, for phase 3 to prune. Module-level for the same reason.
 const emptied = new Set<string>();
 
@@ -178,6 +268,8 @@ const emptied = new Set<string>();
 export function resetSaveState(): void {
   pendingRemovals.clear();
   emptied.clear();
+  namedFor.clear();
+  diskTaken.clear();
 }
 
 // ---------- autosave (debounced) ----------

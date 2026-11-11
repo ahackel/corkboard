@@ -194,15 +194,46 @@ export function resolveOrder(byPath: Map<string | null, string>): void {
 }
 
 // ---------- reading ----------
-async function readJSON(path: string): Promise<Record<string, unknown> | null> {
+// A board file that is THERE but can't be read as one — cut short by a sync, hand-edited into a typo —
+// is not the same as no board file: every position, size and line in it is about to be written over.
+// So its text is put aside first, beside it, under a name that says when.
+let notice = '';
+
+// What the last loadBoard has to tell the user, once (data/load.ts shows it when the map is up).
+export function takeBoardNotice(): string {
+  const said = notice;
+  notice = '';
+  return said;
+}
+
+async function keepUnreadable(text: string): Promise<void> {
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-');
+  const name = `board.unreadable-${stamp}.json`;
   try {
-    const blob = await store.readBlob(path);
-    if (!blob) {
-      return null;
+    await store.write(name, text);
+    notice = `board.json could not be read, so the cards were laid out afresh. The old file is kept as ${name}.`;
+  } catch {
+    notice = 'board.json could not be read, so the cards were laid out afresh.';
+  }
+}
+
+async function readJSON(path: string): Promise<Record<string, unknown> | null> {
+  const blob = await store.readBlob(path).catch(() => null);
+  if (!blob) {
+    return null;
+  }
+  let text = '';
+  try {
+    text = await blob.text();
+    const data: unknown = JSON.parse(text);
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      return data as Record<string, unknown>;
     }
-    const data = JSON.parse(await blob.text());
-    return (data && typeof data === 'object') ? data as Record<string, unknown> : null;
-  } catch { return null; }        // missing or malformed → the caller's defaults stand
+  } catch { /* malformed: handled below */ }
+  if (path === BOARD_FILE && text.trim() && store.isOpen) {
+    await keepUnreadable(text);
+  }
+  return null;
 }
 
 // Both shapes land here: board.json nests these under `settings`, the legacy settings.json had them

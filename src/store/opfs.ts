@@ -11,6 +11,7 @@ import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob } from '.
 import type { FoldTest } from './tree.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 import type { DeviceStore, PickResult } from './types.js';
+import { keepStorage } from './persist.js';
 
 // OPFS can't change underneath us — except from ANOTHER TAB on the same map. Each write tells the other
 // tabs which map it touched, so a tab still showing the old board reloads instead of writing it back.
@@ -88,7 +89,7 @@ export const opfsStore = {
   async pick(): Promise<PickResult> { try { await this._root(); this._opened = true; return 'ok'; } catch { return 'error'; } },
   async listTree(under: string, fold: FoldTest){ return listTree(await this._root(), under, fold); },
   async removeDir(dir: string){ return removeEmptyDir(await this._root(), dir); },
-  async write(path: string, data: string | Blob){ await writeFile(await this._root(), path, data); otherTabs.postMessage(this._mapId); },
+  async write(path: string, data: string | Blob){ await writeFile(await this._root(), path, data); keepStorage(); otherTabs.postMessage(this._mapId); },
   async remove(path: string){ await removeFile(await this._root(), path); otherTabs.postMessage(this._mapId); },
   async readBlob(path: string){ return readFileBlob(await this._root(), path); },
   // A save is a burst of writes: reload once it has settled.

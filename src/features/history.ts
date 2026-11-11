@@ -65,7 +65,7 @@ function snap(n: MindNode): NodeSnap {
     collapsed: n.collapsed, locked: n.locked,
     type: n.type, w: n.w, h: n.h, clip: n.clip, stack: n.stack,
     title: n.title, color: n.color, keepStatus: n.keepStatus,
-    tags: [...n.tags], body: n.body, titleGap: n.titleGap,
+    tags: [...n.tags], body: n.body, titleGap: n.titleGap, titleLevel: n.titleLevel,
     fmEntries: n.fmEntries?.map(e => ({ key: e.key, lines: [...e.lines] })),
     kidOrder: n.kidOrder ? [...n.kidOrder] : undefined,
   };

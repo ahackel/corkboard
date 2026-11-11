@@ -7,12 +7,48 @@ import type { MindNode } from '../core/state.js';
 import { firstLineLabel, fileStem } from './frontmatter.js';
 import { soleImage } from './markdown.js';
 
+// How two paths are COMPARED: the way the least particular disk does it. macOS and Windows fold case, and
+// macOS also folds the two spellings of an accented letter (`é` as one character, or as `e` plus an
+// accent — how Finder and iCloud write it). Two paths with one key are one file there, so writing one and
+// removing "the other" removes the note.
+export function pathKey(path: string): string { return path.normalize('NFC').toLowerCase(); }
+
+// A filename may be 255 BYTES on every common disk; this leaves room for `.md` and a ` 12` suffix.
+const MAX_STEM_BYTES = 200, MAX_STEM_CHARS = 120;
+const utf8 = new TextEncoder();
+
+// Whole characters from the start of `s`, up to both limits. Counted per CODE POINT: cutting between the
+// two halves of an emoji leaves half a character, which a disk stores as something else — and the name
+// the note is then loaded under no longer matches the one its text asks for.
+function clip(s: string): string {
+  let out = '', bytes = 0, chars = 0;
+  for (const ch of s) {
+    bytes += utf8.encode(ch).length;
+    if (++chars > MAX_STEM_CHARS || bytes > MAX_STEM_BYTES) {
+      break;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+// Names Windows keeps for devices, whatever the extension.
+const DEVICE_NAME = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
+
 // title -> safe filename component: no path separators or illegal chars — and no leading or trailing
 // dot or space, and no `..`. A leading dot makes a HIDDEN file (Finder, Obsidian and `ls` all skip it),
-// and a first line that is a sentence ended its filename in `move..md`.
+// and a first line that is a sentence ended its filename in `move..md`. No control characters and no
+// half characters either (a disk drops or replaces them), and one spelling of each accented letter.
 export function safeName(title: string): string {
-  const s = title.trim().replace(/[/\\:*?"<>|]/g, '-').replace(/\s+/g,' ').replace(/\.{2,}/g, '.')
-    .slice(0,120).replace(/^[.\s]+|[.\s]+$/g, '');
+  const s = clip(title.normalize('NFC')
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is being removed
+    .replace(/[\u0000-\u001f\u007f-\u009f\ufffd]/g, ' ')
+    .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '')
+    .trim().replace(/[/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').replace(/\.{2,}/g, '.'))
+    .replace(/^[.\s]+|[.\s]+$/g, '');
+  if (DEVICE_NAME.test(s)) {
+    return s + '_';
+  }
   return s || 'Untitled';
 }
 // The filename a node SHOULD have, given its title, keeping its current directory.
@@ -67,18 +103,20 @@ export function parentFileOf(path: string): string | null {
   return dir ? dir + SECTION_NOTE : null;
 }
 // The name a node goes by in its folder, without the folder: a section's folder name, a card's stem.
-function ownStem(path: string, section: boolean): string {
+export function ownStem(path: string, section: boolean): string {
   if (section && isSectionNote(path)) { const d = dirOf(path).slice(0, -1); return d.slice(d.lastIndexOf('/') + 1); }
   return fileStem(path);
 }
 
-// `inUse` is the lowercased filename -> node id index the collision test reads (persistence.ts
+// `inUse` is the pathKey -> node id index the collision test reads (persistence.ts
 // filesInUse), built ONCE per save rather than re-derived per candidate name.
 // `dir` is the folder the node belongs in — its parent section's folder, '' at the top level. Left out,
 // the node stays in the folder it is in. `reserved` holds lowercased folders on disk that are NOT
 // sections (`attachments/`, a dot-folder): a section must not move into one of those and adopt its files.
+// `keepName` leaves the name the file already has and only settles its folder: the text that names it
+// hasn't changed since the name was last settled, so there is nothing to track (data/save.ts namedFor).
 export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body'> & { type?: MindNode['type']; stack?: boolean },
-                               inUse: Map<string, string>, dir?: string, reserved?: Set<string>): string {
+                               inUse: Map<string, string>, dir?: string, reserved?: Set<string>, keepName = false): string {
   const section = n.type === 'section';
   const at = dir ?? (n.file ? (section && isSectionNote(n.file) ? dirOf(dirOf(n.file).slice(0, -1)) : dirOf(n.file)) : '');
   let stem = slugStem(n);
@@ -87,7 +125,7 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
   // nothing to track, and renaming it would only renumber it as its neighbours come and go. A card the
   // user just CLEARED therefore keeps the slug it was named under, which utils/model.ts namelessLabel
   // leans on — the stem is the name they deleted, so nothing shows it to them again.
-  if (stem === 'Untitled' && n.file) {
+  if ((stem === 'Untitled' || keepName) && n.file) {
     stem = ownStem(n.file, section);
   } else if (stem === 'Untitled' && n.stack) {
     stem = 'Stack';   // a new pile's folder: `Stack`, `Stack 2`, …
@@ -102,10 +140,10 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
     if (!section && s.toLowerCase() === SECTION_NOTE.slice(0, -3)) {
       return true;
     }
-    if (section && reserved?.has((at + s + '/').toLowerCase())) {
+    if (section && reserved?.has(pathKey(at + s + '/'))) {
       return true;
     }
-    const owner = inUse.get(pathFor(s).toLowerCase());
+    const owner = inUse.get(pathKey(pathFor(s)));
     return owner !== undefined && owner !== n.id;
   };
   let i = 2, s = stem;
@@ -113,10 +151,11 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
     s = stem + ' ' + (i++);
   }
 
-  // A rename that only changes CASE keeps the old name: on macOS/Windows `Notes.md` and `notes.md` are
-  // one file, so saveAll would write the new name and then delete the old one, which is the same file.
+  // A rename that only changes CASE (or the spelling of an accent) keeps the old name: on macOS/Windows
+  // `Notes.md` and `notes.md` are one file, so saveAll would write the new name and then delete the old
+  // one, which is the same file.
   const path = pathFor(s);
-  return n.file && path.toLowerCase() === n.file.toLowerCase() ? n.file : path;
+  return n.file && pathKey(path) === pathKey(n.file) ? n.file : path;
 }
 
 // Re-point the links in one body that name a file a save just renamed, so a link written before the rename

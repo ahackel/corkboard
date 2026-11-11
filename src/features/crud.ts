@@ -177,7 +177,7 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
     // visibly on an image card, whose fold is its icon). titleGap rides along with the body it
     // describes, or the copy's file would gain the blank line the original doesn't have.
-    collapsed: s.collapsed, titleGap: s.titleGap,
+    collapsed: s.collapsed, titleGap: s.titleGap, titleLevel: s.titleLevel,
   });
   state.nodes.set(copy.id, copy);
   return copy;

@@ -7,6 +7,7 @@ import type { DeviceStore, PickResult, TreeListing } from './types.js';
 import { planTree, type FoldTest } from './tree.js';
 import { openRenamed, dbPut, dbGet, dbDel, dbEach } from '../utils/idb.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
+import { keepStorage } from './persist.js';
 
 export const idbStore = (() => {
   let _db: IDBDatabase | null = null, _opened = false;
@@ -85,7 +86,7 @@ export const idbStore = (() => {
       return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign, assets: plan.assets };
     },
     async removeDir(): Promise<void> { /* a flat key space has no folders to leave behind */ },
-    async write(path: string, data: string | Blob): Promise<void> { return put(prefixOf(_mapId) + path, data); },
+    async write(path: string, data: string | Blob): Promise<void> { await put(prefixOf(_mapId) + path, data); keepStorage(); },
     async remove(path: string): Promise<void> { try { await del(prefixOf(_mapId) + path); } catch {} },
     async readBlob(path: string): Promise<Blob | null> {
       try {

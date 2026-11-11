@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { zipBytes, unzip } from '../src/utils/zip.js';
+import { zipBytes, unzip, entryPath } from '../src/utils/zip.js';
 
 describe('zip', () => {
   const files = [{ name: 'Ideen/Übersicht 🔥.md', data: '# Hi' }, { name: 'a.png', bytes: new Uint8Array([1, 2, 3]) }];
@@ -25,5 +25,19 @@ describe('zip', () => {
     expect(back.map(e => e.name)).toEqual(files.map(f => f.name));
     expect(back[0].text).toBe('# Hi');
     expect([...back[1].bytes]).toEqual([1, 2, 3]);
+  });
+});
+
+describe('entryPath', () => {
+  it('reads a Windows or absolute name as a path inside the map', () => {
+    expect(entryPath('Ideas\\Note.md')).toBe('Ideas/Note.md');
+    expect(entryPath('/Ideas/Note.md')).toBe('Ideas/Note.md');
+    expect(entryPath('Ideas/')).toBe('Ideas/');
+  });
+  it('refuses a name that climbs out or has an empty part', () => {
+    expect(entryPath('../secret.md')).toBeNull();
+    expect(entryPath('a/../../b.md')).toBeNull();
+    expect(entryPath('a//b.md')).toBeNull();
+    expect(entryPath('')).toBeNull();
   });
 });

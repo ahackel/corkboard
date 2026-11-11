@@ -18,9 +18,9 @@ test('an old flat map moves into folders: a section becomes its folder, its card
   await openBoard(page);
   await seedBoard(page, LEGACY);
   const files = await diskFiles(page);
-  // (each file is named off its text, as always: `Milk.md` holds "Buy milk")
-  expect(Object.keys(files).sort()).toEqual(['A loose card.md', 'Todo/Buy milk.md', 'Todo/_index.md']);
-  expect(files['Todo/Buy milk.md']).not.toContain('mm_parent');
+  // (each file keeps the name it came with: only its folder changes)
+  expect(Object.keys(files).sort()).toEqual(['Loose.md', 'Todo/Milk.md', 'Todo/_index.md']);
+  expect(files['Todo/Milk.md']).not.toContain('mm_parent');
   await reload(page);
   await expect(section(page, 'Todo')).toBeVisible();
   await expect(card(page, 'Buy milk')).toBeVisible();
@@ -78,7 +78,7 @@ test('a folder made outside the app arrives as a folded section named after it',
   await expect(card(page, 'Call Sam')).toBeVisible();
   const files = await diskFiles(page);
   expect(files['Inbox/_index.md']).toContain('# Inbox');            // it is an ordinary section now
-  expect(files['Inbox/Call Sam.md']).toContain('Call Sam');          // named off its text, like every note
+  expect(files['Inbox/From phone.md']).toContain('Call Sam');        // under the name it arrived with
   expect(errors).toEqual([]);
 });
 
@@ -94,7 +94,7 @@ test('renaming a section renames its folder and moves its notes, read or not', a
   await page.keyboard.type('Crate');
   await page.keyboard.press('Enter');
   const files = await diskFiles(page);
-  expect(Object.keys(files).sort()).toEqual(['A loose card.md', 'Crate/First inside.md', 'Crate/Second inside.md', 'Crate/_index.md']);
+  expect(Object.keys(files).sort()).toEqual(['Crate/One.md', 'Crate/Two.md', 'Crate/_index.md', 'Loose.md']);
   await reload(page);
   await expect(page.locator('#freeEdges path.fe')).toHaveCount(1);
   expect(errors).toEqual([]);
@@ -179,3 +179,25 @@ test('a folded section is a folder and its name; what it holds is in its tooltip
   await expect.poll(() => tooltip(page, pill)).toBe('Box\n3 Cards, 1 Section');   // unread: counted
   expect(errors).toEqual([]);
 });
+
+// Opening a folder renames nothing in it: a file keeps the name it came with until the text that names
+// it is edited (data/save.ts keepsName).
+test('a note keeps its filename until its first line is edited, then is named after it', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, { '2026-11-11.md': note('Meeting notes\n\nagenda'), 'Other.md': note('# Other') });
+  const daily = card(page, 'Meeting notes');
+  await select(page, daily);
+  await page.keyboard.press('3');   // a colour: the note is rewritten, its name is not
+  let files = await diskFiles(page);
+  expect(Object.keys(files).sort()).toEqual(['2026-11-11.md', 'Other.md']);
+  expect(files['2026-11-11.md']).toContain('color:');
+  await page.keyboard.press('e');
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.insertText('Planning\n\nagenda');
+  await page.keyboard.press('Escape');
+  files = await diskFiles(page);
+  expect(Object.keys(files).sort()).toEqual(['Other.md', 'Planning.md']);
+  expect(errors).toEqual([]);
+});
+

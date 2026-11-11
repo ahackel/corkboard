@@ -82,6 +82,8 @@ export interface MindNode {
                                     // NOT a frontmatter key — it's implicit in the file's own text,
                                     // and read back by joinHeading so a round-trip invents nothing.
                                     // Absent means the default, spaced form.
+  titleLevel?: number;             // how many `#` the title's heading is written with (absent = 1):
+                                    // a note that opens on `## Notes` is saved as it was
   fmEntries?: FmEntry[];           // original frontmatter, preserved verbatim on save
   dirty: boolean;                  // needs a disk write
   dirtyLayout: boolean;            // needs (re)positioning by applyLayouts
