@@ -1,6 +1,6 @@
 # Corkboard
 
-A single-file, zero-build visual editor for a **local folder of Markdown notes**.
+A single-file visual editor for a **local folder of Markdown notes**.
 Every `.md` file becomes a card on an infinite canvas; edits are saved straight back to
 disk as plain Markdown.
 
@@ -15,11 +15,13 @@ time; see *Hosting* below.) It's **local-first**: the map is saved in a private 
 store (the browser's
 [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system))
 and reopens automatically every visit — no sign-in, no setup, works on every browser
-including iPad. Notes never leave the machine.
+including iPad. Notes never leave the machine, and once it has loaded the app opens without a
+network (a small service worker keeps the last copy of the page).
 
 A map is a **folder**: one `.md` file per card, and a **section is a sub-folder** (its label is
 its `_index.md`), so Finder and Obsidian see the same grouping the board shows. A note's path is
-its identity, and its title is the body's leading `# ` heading, which the filename follows.
+its identity, and its title is the body's leading `# ` heading, which the filename follows — a file
+you named yourself keeps its name until you change that heading.
 Frontmatter describes the note (`tags`, `color`, a few `mm_*` keys); serialization rewrites only
 those app-owned keys and preserves every other field and the note body verbatim. The board's
 **arrangement** — positions, sizes, folded sections and the lines you draw — lives in one
@@ -28,14 +30,17 @@ those app-owned keys and preserves every other field and the note body verbatim.
 
 ## Storage
 
-All file I/O goes through a single swappable `store` adapter (`src/store/`). Two
-implementations share one interface:
+All file I/O goes through a single swappable `store` adapter (`src/store/`). The two
+main implementations share one interface:
 
 - **`opfsStore`** — the local-first on-device default (Origin Private File System). Works on
   every browser incl. iPad; per-device, no built-in cross-device sync.
 - **`fsaStore`** — a real local folder on Chrome/Edge (File System Access API), autosaved
   directly. Point it at a cloud-synced folder (iCloud Drive, Dropbox, …) and the map lives
   in that cloud with no app-side server config.
+
+Two more cover the edges: `idbStore`, the on-device fallback where OPFS cannot write, and
+`noteStore`, which opens ONE `.md` file as a map of a single card.
 
 `.zip` **import / export** moves a map in and out (the inline ZIP reader/writer is
 zero-dependency). Add `?nofsa` to the URL to preview the no-local-folder (iPad-style)
@@ -48,7 +53,7 @@ layout on desktop.
 - Stacks: hold a card over another to pile them up, click to fan the pile out
 - A pasted list becomes one card per item; number keys 1–9 colour the selection
 - Colours and Obsidian tags; lines between cards with arrows, dots and labels
-- Smart guides while dragging, tidy-up on request, search, read-only mode
+- Smart guides while dragging, tidy-up on request, search
 - Undo / redo, image paste & drop, PNG/PDF export, and ⌘P to find every action
 - Autosave back to the source files, with a visible warning if a save fails
 
@@ -76,7 +81,8 @@ typecheck` runs `tsc --noEmit`.
 
 Tests: `npm test` checks the file format (vitest). `npm run e2e` drives the app in a real
 browser (Playwright, `e2e/`); the first time, install its browser with
-`npx playwright install chromium`.
+`npx playwright install chromium`. Every pull request runs typecheck, lint and both suites
+(`.github/workflows/ci.yml`), and so does the deploy before it publishes. Node 22 (`.nvmrc`).
 
 ## Versioning
 

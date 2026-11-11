@@ -13,7 +13,7 @@ that folder to live in **iCloud Drive**. A map in the browser's own storage can'
 2. Right-click the folder → **Keep Downloaded**. Otherwise macOS may keep a new note in the cloud until
    something opens it, and it can show up on the board one switch-back late.
 3. In Corkboard: Home → *Folder* → *Open folder…* → pick the folder in iCloud Drive.
-4. Press **⌘P** and run **Inbox**. It makes the Inbox section (and its `Inbox/` folder) beside your board.
+4. Press **⌘P** and run **Go to the Inbox**. It makes the Inbox section (and its `Inbox/` folder) beside your board.
    Run it again any time to jump there.
 
 ## 2. On the iPhone: a Shortcut that saves to the Inbox

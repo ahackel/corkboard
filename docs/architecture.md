@@ -4,12 +4,11 @@ The long form of [CLAUDE.md](../CLAUDE.md): why each invariant holds and what br
 CLAUDE.md is the index and stays under 100 lines; detail belongs here. Topics are findable by their
 **bolded lead sentence** — CLAUDE.md's pointers quote them. Build commands and module layout live in
 CLAUDE.md and are not repeated. Symbol names are the contract; grep for them.
-Known room for improvement (speed, structure) is listed in [possible-improvements.md](possible-improvements.md).
 
 ## Identity, titles, frontmatter
 
 **One `.md` file per node; the file's PATH is the node's identity** — it says which section holds the node
-(its folder: see "A section IS a folder") and it is what the hash and `board.json` encode. No database, no sidecar. In-memory `id`s are minted fresh on every load; never
+(its folder: see "A section IS a folder") and it is what the hash and `board.json` encode. No database; the one sidecar is `board.json`, which holds arrangement and never content. In-memory `id`s are minted fresh on every load; never
 persist them.
 
 **A node's TITLE is the leading `# ` line of its body, and nothing else is** (`splitHeading`/`joinHeading`,
@@ -17,15 +16,16 @@ persist them.
 filename. Three things follow:
 
 - **Two cards may share a title.** The filename is a derived SLUG that takes a ` 2` suffix to stay unique on
-  disk (`desiredFileFor`, `data/persistence.ts`); nothing reads the title back off it, so the suffix never
+  disk (`desiredFileFor`, `utils/filenames.ts`); nothing reads the title back off it, so the suffix never
   shows. Duplicate titles therefore need no `title:` key, and `# Notes` is what a Markdown author writes
   anyway — it reads correctly in Obsidian.
 - **No heading means the card is UNTITLED** — only its text, no title row (`no-title`, `styles.css`). Hence
   the test is `#{1,6}` and nothing else. `firstLineLabel` (same file) additionally strips bullets, quotes and
   list numbers, which is right when minting a name for something unnamed (an untitled card's slug, the
   text-drag ghost's caption) and wrong here: a note beginning `- milk` is a list, not a card titled "milk".
-- **The slug TRACKS the note's text** (`slugStem`/`desiredFileFor`, `data/persistence.ts`). Every save
-  re-derives it, so a file always reads as the name the card shows: its `# ` heading, else its first
+- **The slug TRACKS the note's text** (`slugStem`/`desiredFileFor`, `utils/filenames.ts`; `planPaths`,
+  `data/save.ts`). A save re-derives it — for a name the app gave (see "A file keeps the name it CAME with"
+  below for one it didn't) — so a file reads as the name the card shows: its `# ` heading, else its first
   line, else — for an image card — its picture. It used to be minted ONCE and left to go stale, on the
   argument that an untitled card has no name to be wrong about. That argument was wrong about the
   ORDINARY card: every card is born empty and the autosave 400ms later names it off nothing, so it got
@@ -37,7 +37,7 @@ filename. Three things follow:
   `retargetWikilinks`): a whole-path `[[Ideas/Old]]` or `[x](Ideas/Old.md)`, and Obsidian's SHORT `[[Old]]` for a note
   in a folder — but only when nothing else in the map still answers to that name. Alias, `#heading` and the
   link's spelling (`<…>`, `%20`) are kept verbatim. Title-form links need no fixup: re-slugging a file never changes a title.
-- **It is not a rename per keystroke.** While any of the four editors holds the note's text the name is
+- **It is not a rename per keystroke.** While either editor (a card's, a section's label) holds the note's text the name is
   FROZEN (`ui-state.ts frozenFileNodeId`), so the rename lands once, when the edit session commits —
   never as `M.md`, `Ma.md`, `Mag.md`. That freeze is what makes tracking affordable at all.
 - **A collision takes a NUMBER, and the note keeps its name** — `Notes.md`, `Notes 2.md`, both titled
@@ -122,7 +122,7 @@ is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts
   (`historyRefs`), a search result, the section you stand in. Their geometry is remembered in `board.json`
   (`rememberGeom`), their lines PARK on the section (an end keeps its path, `fromPath`/`toPath`, and the section
   stands in for it the way a pill always did — `parkEdges` / `unparkEdges`), their pictures' blob URLs are
-  revoked (`forgetImages`). Demo and read-only mode never let go.
+  revoked (`forgetImages`). Demo mode never lets go.
 - **What doesn't see unread notes:** search, and `[[wikilink]]` fix-up — a path-form link INSIDE an unread note
   isn't re-pointed when its target is renamed. FOLLOWING a link that names nothing in memory reads every folded
   section first (`focusByTitle` → `afterReading`), so it goes to the note rather than writing a second one.
@@ -149,7 +149,7 @@ onto ANY point of another card; an end handle moves that end. Older boards may c
 where lines met away from a card) and per-end faces: the faces are ignored, and junctions are flattened
 into card-to-card lines on load (`utils/edge-graph.ts flattenJunctions`, tested).
 
-**Layout lives in frontmatter as `mm_*` keys:** `mm_position_x`/`_y` (relative to the parent,
+**Layout USED to live in frontmatter as `mm_*` keys:** `mm_position_x`/`_y` (relative to the parent,
 world origin for a root — see `commitRel`), `mm_collapsed`, `mm_type`, `mm_w`/`mm_h`, plus the flags
 `mm_locked` and `mm_blank` (positions, sizes and collapse now live in `board.json` and are only READ from an
 older note). `mm_parent` is READ only from a top-level note of an old flat map (the folder says it now).
@@ -199,6 +199,27 @@ cards (`arrangeSections` with `fresh`, the inbox's rule — its folder read firs
 of the open-section path and they go up to that level (the map crumb: the top level), in a column right of the
 section they came out of. The pointer decides, not the card's centre: both are small targets you aim at. Either
 way the cards leave the canvas you're looking at, so a toast says where they went. One undo step.
+
+**A file keeps the name it CAME with until the text that names it changes (`keepsName`, `data/save.ts`).**
+The slug tracks the text for names the app gave. A name that says something else than the note —
+`2026-11-11.md` in an Obsidian vault holding "Meeting notes", a file named in Finder — is somebody's, and
+opening a folder must not rename what is in it: the first save after a load used to rename every such file
+to its first line. So each loaded path is remembered with the slug its text gave it THEN (`noteNamed`,
+called by `nodeFromNote`); while that slug is unchanged and the filename is not the slug (or the slug with a
+` 2` suffix, which is the app's own and still loses its suffix once the plain name is free), `planPaths`
+passes `keepName` to `desiredFileFor`, which settles only the folder. A recolour, a tag, a move into a
+section all leave the name alone; editing the heading or first line renames it, as for any card.
+
+**A path is COMPARED the way the least particular disk does (`pathKey`, `utils/filenames.ts`).** macOS and
+Windows fold case; macOS also folds the two spellings of an accented letter (`é` as one character, or `e`
+plus an accent, which is how Finder and iCloud write names). Two paths with one key are ONE file there, so
+"write the new name, then remove the old one" removes the note. Every path comparison in a save goes through
+`pathKey` (NFC + lowercase): the collision index, the "is this rename only a respelling" test in
+`desiredFileFor` (which then keeps the old name), and the test for whether an old path is still held before
+it is removed. `safeName` makes a slug the disk will store as given: cut on whole CODE POINTS and capped at
+200 UTF-8 bytes (a filename is 255 bytes; half an emoji is stored as something else, and the name the note
+is next loaded under then differs from the one its text asks for), no control characters, NFC, and never a
+Windows device name.
 
 ## Sections
 
@@ -402,10 +423,9 @@ its interior is the whole viewport, and the crumb bar is the way back out. Nesti
 - **Opening is NAVIGATION, so it isn't undoable** — same class as `revealInView`, and it writes no node field.
   A FOLDED section stays folded: while you stand in it its interior is the canvas whatever its fold says
   (`isHidden` asks about the open section before the fold; `containerHost` and paintNode's nesting treat it as
-  the canvas too), and leaving lands you back at the same pill, the box neither moved nor resized. Allowed in
-  read-only and on a LOCKED section (`activateTab`'s exemption: looking inside the box isn't changing it) —
-  though the double-click route still folds in read-only, since `activateNode` short-circuits there, leaving
-  `⌘↓`, the float bar's Open and the right-click menu as the ways in (and a folded pill's double-click).
+  the canvas too), and leaving lands you back at the same pill, the box neither moved nor resized. Allowed
+  on a LOCKED section (looking inside the box isn't changing it); `⌘↓`, the float bar's Open, the right-click
+  menu and a folded pill's double-click are the ways in.
 - **"No parent" means the OPEN SECTION** (`detachParentId`) — for `createNode`, `createDetachedNode`, a paste's
   payload roots, and a card dropped outside every section. A real root would land outside the scope and vanish.
 - **You can't drag a card out of the section you're in**: its interior is the whole canvas, so there's nowhere
@@ -648,6 +668,47 @@ it), and no block at all for a note with nothing in it — a note opened from el
 vault) comes back as the text it was. The one exception is a note whose text opens on a `---` line: it keeps
 an empty block, or a reader would take that line for the start of one.
 
+**A save never writes over what it has not read (`planFreePaths`, `data/save.ts`).** Collisions used to be
+judged against the notes in memory alone, so a card titled "Idea" replaced an `Idea.md` that another app, or
+another tab, had written since the load. Every path a note is about to take for the FIRST time is asked of the
+disk (`store.readBlob`, sixteen at a time); a name found there that no node holds joins `diskTaken` and the
+plan is made again, which suffixes it. A reload that had to wait — you were typing, or this tab had just
+written — is asked again a second later (`retryReload`, `data/persistence.ts`) instead of dropped, so the
+tab does come to see what the other one wrote.
+
+**One note that cannot be written does not hold up the others.** Phase 2 of `saveAll` writes eight notes at
+a time and catches each failure on its own: that note stays dirty, the rest land, and the first error is
+thrown at the end so the banner shows and retries. `pendingRemovals` maps each renamed note's old path to
+its new one, and an old file is removed only once the new one has landed — a rename whose write failed keeps
+the only copy on disk. A note edited while its write is in flight is dirty again (the flag is cleared
+before the write, with the text already serialized), so the follow-up save carries the newer text.
+
+**A `board.json` that cannot be read is put aside, not written over (`keepUnreadable`, `data/board.ts`).**
+A file that is there but is not JSON — cut short by a sync, hand-edited into a typo — used to read as "no
+board", and the autosave that follows a load then replaced every position, size and line in it. Its text is
+first written beside it as `board.unreadable-<date>-<time>.json`, and a toast says so. A missing file is
+still simply a new or legacy map.
+
+**A map from a NEWER build is shown, never written (`holdWrites`, `data/save-alert.ts`).** `board.json`
+carries `version` (the file's generation) and `model` (the containment migration). If either is higher than
+this build knows, the banner says the map was saved by a newer Corkboard and offers Reload; `saveAll`,
+`scheduleSave` and the board's own writer all stand down until another map is loaded. Short of that, a
+build writes back what it has no name for: unknown keys at the top level, in `settings`, on a node and on a
+line are kept (`extraTop`/`extraSettings`/`extraNode`/`extraEdge`) and follow a note through a rename
+(`boardPathMoved`) — the same promise `serializeMd` makes about frontmatter.
+
+**The page loads without a network, and runs only its own script.** `public/sw.js` keeps the last copy of
+the page (and its icons and manifest): every same-origin GET is asked of the network first, so a deploy is
+picked up on the next visit, and answered from the kept copy only when the network does not answer. It is
+registered by the built app only. The build also writes a Content-Security-Policy into the page
+(`contentSecurityPolicy` in `vite.config.js`, after `vite-plugin-singlefile`): the one inline script is
+allowed by its hash and nothing else may run — no inline handler, no script from anywhere — which is the
+net under the hand-rolled markdown renderer. For the same reason an SVG attachment is handed out as a
+`data:` URL, never a `blob:` URL of the app's origin (`imageUrl`, `features/images.ts`): opened in its own
+tab, a blob would run the SVG's script with the app's storage in reach. On-device storage asks the browser
+to keep it on the first write (`keepStorage`, `store/persist.ts`); without that it is "best effort" and may
+be cleared when the disk runs low.
+
 ## Interaction
 
 **There is no toolbar; the ⌘P PALETTE is the one list of every action** (`features/palette.ts`, button
@@ -657,8 +718,9 @@ disabled. It is FigJam's QUICK ACTIONS — ⌘P, and the dock's Actions button, 
 bottom centre, pinned by its bottom with the input LAST, so the input stays put next to the dock while the
 list above it grows and shrinks. ⌘P is taken from
 the browser even while typing, so it never prints. Each entry shows its shortcut, which is how shortcuts are learned now that the help map is gone —
-so a new action gets a palette entry, or it is undiscoverable. Read-only shows a pill (`#roBadge`) that is
-also the way out of it.
+so a new action gets a palette entry, or it is undiscoverable. A shortcut is written the Mac way (`⌘S`,
+`⌥⇧⌘R`) and shown through `keys()` (`utils/dom.ts`), the one spelling the palette, the menus and the
+tooltips share: off a Mac it names the keys (`Ctrl+S`, `Alt+Shift+Ctrl+R`).
 
 **Touch input:** pan/zoom on the canvas is a unified Pointer-Events gesture layer on `#stage` (one finger
 pans, two fingers pinch-zoom + pan); node drag/reparent uses the per-node pointer handlers in `bindNodeDrag`.
@@ -793,14 +855,13 @@ Web Animations on width/height with the content clipped, a section's content wra
   way in, since touch has no hover. Cards only: a folded section's pill is a count, not a note.
 
 **A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — the one plain
-double-click that navigates is on a FOLDED section's pill, which goes in the way a folder icon in Finder does
-(even in read-only); otherwise it is one rule in place of a per-kind table. Editing is what the
+double-click that navigates is on a FOLDED section's pill, which goes in the way a folder icon in Finder does;
+otherwise it is one rule in place of a per-kind table. Editing is what the
 gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
 the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
 and only a section opens: on a card ⌥-double-click is a plain double-click. Its touch spelling is a TWO-FINGER
 double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `⌘↓`, the float bar's
-Open and `⋯ → Open` are the same verb without a gesture. The `open` branch sits ahead of the read-only bail,
-the exemption `openSection` itself takes: looking inside something isn't changing it.
+Open and `⋯ → Open` are the same verb without a gesture.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: on a
 CARD it edits the note with ALL of it selected, wherever it landed — the title is just the note's first line, so
 there is no title-row case; a section's folder tab or its rim renames via `startInlineEdit` — the single rename
@@ -824,9 +885,6 @@ that section (`detachParentId`). Four things hold it together:
   counter bail on it, or the second click would fire the button AND open the card.
 - **A folded node is nothing but its chip or pill** (`.node.collapsed .body { display:none }`), so a double-click
   on it never edits — it would open an editor inside a hidden `.body`: a folded card UNFOLDS, a folded section opens.
-- **Read-only keeps the old meaning** (fold/unfold, the one thing the mode allows). The short-circuit sits
-  ahead of everything, so a read-only double-click on an expanded section FOLDS it rather than opening it — `⌘↓` and the ⋯
-  menu are the routes in.
 
 **A click on the SELECTED node writes on it** (`editOnClick` in `main.ts`) — FigJam's two steps: the first click
 selects, a click on what is ALREADY the only selection opens its text with the caret where it landed (a card's
@@ -840,7 +898,7 @@ why it was cut. A double-click is then select-all wherever it starts, by two rou
 - **Selected:** the first click opened the editor at the caret, and the `dblclick` that follows selects ALL
   (`openedSince` — opened after the double-click's first press). Any other double-click inside an open editor is
   the browser's word select, as before.
-- **Not for** a folded node, an image card, a locked one, read-only, `NODE_CONTROLS`, or a press with a modifier
+- **Not for** a folded node, an image card, a locked one, `NODE_CONTROLS`, or a press with a modifier
   or from the selection frame — those keep "a click selects", and their double-click falls through to `activateNode`.
 - **Touch** is the same with taps (`features/drag.ts`): a tap opens it, and that tap's `touchend` is cancelled,
   since the browser's emulated mousedown that follows lands on the card and would blur the new textarea shut. The
@@ -1072,6 +1130,26 @@ card you were LOOKING at**, not the one you came in from: page three pictures al
 card is selected, so the next thing you do lands where your eyes already were. Selection only — the camera
 stays put.
 
+**Esc peels ONE layer.** A popover closes on Esc and the press stops there (`closeOnOutside`,
+`utils/dom.ts`): the card under it stays selected, and a second Esc lets go of it — the order a context
+menu, the palette and the search already kept.
+
+**The Back button walks where you STOOD, not what you clicked.** Opening or leaving a section pushes a
+history entry (`syncUrl`); the selection, the camera and the search replace the current one
+(`scheduleUrlSync`). A selection used to push, so Back stepped through every card clicked since the page
+loaded.
+
+**⇧-click and ⌘/Ctrl-click both add to the selection, or take a card out; ⇧-DRAG clones.** The two share a
+key without colliding: a press that does not move is a click (`drag.meta`), one that does is the clone.
+⇧ on a rubber band adds to the selection too.
+
+**An empty map says how to begin (`#emptyHint`).** One line in the middle of the board — double-click or
+press N — shown by `body.empty-map`, which `paintAll` sets while the map holds no node. It is gone with the
+first card and never comes back for that map; it is not the help map (docs/PRODUCT.md, "Cut").
+
+**Tab belongs to the browser except on a section**, where it adds a card inside. The home sidebar is
+`inert` while closed, so the Tab order never lands on a control that is off screen.
+
 ## Colour and zoom
 
 **ONE theme, FigJam's.** There is no light/dark switch: a pale grey board (`--bg` #f5f5f5) with a dot grid,
@@ -1107,7 +1185,7 @@ corner. The frame stops shrinking where its tightest member hits its minimum, so
 corner scales both axes alike; the dragged side lands on the grid. Cards then let go of what they no longer
 author (`settleCardSize`, shared with a single resize) and sections re-collect (`settleSections`).
 `syncSelFrame` redraws it from the selection funnel, every `paintAll`, each drag frame and resize step; it
-stands down while a fold glides (`body.layout-anim`), and read-only or with a locked member it loses its grips.
+stands down while a fold glides (`body.layout-anim`), and with a locked member it loses its grips.
 
 **Selection, ports and lines are FigJam's.** A lone selection shows a white rounded square on each corner
 (drawn on the corner resize zones, `.node.solo > .fh-*::after`), and four PORTS float `SOCKET_OUT` outside
@@ -1254,13 +1332,12 @@ world geometry that guides, drops and lines measure, and a visual scale would co
 
 **An edit RUNS through `mutate()` (`features/mutate.ts`).** A one-shot edit — a command, a menu or bar
 button, a paste — is `mutate(ids, fn, { reflow, status?, edges?, canvas? })`, and the runner applies the rules
-each call site used to spell out: read-only refuses it (returning false, changing nothing), it is ONE undo
+each call site used to spell out: it is ONE undo
 step, the `reflow` (`remeasure` / `relayout` / `paint` / `none`) runs INSIDE that step so undo and redo
 restore what layout settled on, and it ends in `scheduleSave()`. Two kinds of edit stay outside it on
 purpose. GESTURES (drag, resize, inline edit, drawing a line, a text or image drag) last longer than one
 call, so they `touch()` as they go and `commitStep()` at their own boundary. FOLDING and the reveal a
-search or link does use `record()` directly, because they must work in read-only and `mutate` would
-refuse them. `record()` counts ANY open half of a step — nodes, canvas colour or the edge list — as an
+search or link does use `record()` directly: they animate their own layout. `record()` counts ANY open half of a step — nodes, canvas colour or the edge list — as an
 outer owner, so an edge-label session and a chip click inside it make one step, not two.
 
 **Pure logic lives in `utils/`, rendering and state in `view/` and `features/`.** A function that only
@@ -1270,9 +1347,9 @@ those values and paints the result. `utils/edge-route.ts` is the model: the elbo
 sides, `view/free-edges.ts` knows cards, the camera and the SVG.
 
 **The mutable `state` (`core/state.ts`) is the MAP:** `nodes` (id → node), `view` (`{x,y,k}`), selection (`selId`
-+ `sel` Set), `readOnly`, `canvasColor`, the grid settings, … Every field is either the notes
++ `sel` Set), `canvasColor`, the grid settings, … Every field is either the notes
 themselves or something mirrored to disk/localStorage and restored on load. The render pipeline is `paintNode` /
-`paintEdges` / `paintAll`; DOM nodes live under `#world`/`#stage`, edges in the `#edges` SVG. The open-section
+`paintFreeEdges` / `paintAll`; DOM nodes live under `#world`/`#stage`, lines in the `#freeEdges` SVG. The open-section
 scope is deliberately **not** in here (it lives in `nav/scope.ts`): a scope is where you're STANDING, never
 reaches frontmatter, is mirrored only into the hash, and its camera stack is session-only.
 
@@ -1280,10 +1357,47 @@ reaches frontmatter, is mirrored only into the hash, and its camera stack is ses
 persisted outside the vault is prefixed `corkboard.` (localStorage) or named `corkboard`/`corkboard-vault`
 (IndexedDB), and neither kind of name can be renamed in place — so both are carried over ONCE:
 `utils/legacy-keys.ts` sweeps the `mindmap.*` keys on import (imported FIRST in `main.ts`, since
-`initEdgeStyle`/`setupTheme` read settings while `main.ts`'s own body evaluates), and `openRenamed`
+other modules read settings while `main.ts`'s own body evaluates), and `openRenamed`
 (`utils/idb.ts`) copies a legacy database into the new one on first open, guarded on the new store being EMPTY so
 it can run only once and can't overwrite fresher data. What must NOT be renamed: the notes' **`mm_*` frontmatter
 keys** — that's the file format, not the product, and a vault has to keep opening in Obsidian and in older
 builds. The clipboard marker splits the difference: it WRITES `<!-- corkboard-card: … -->` and READS both
 spellings (`features/clipboard.ts`). Use "map"/"board" for the document (`store.name`, the registry, `mm_*`) and
 "Corkboard" only for the product.
+
+## What a frame may cost
+
+Measured on a 1,500-card board. These are the rules that came out of it; break one and the board gets
+slow again without any single line looking wrong.
+
+**Nothing invisible is painted under the cards.** A line's click target (`path.fe-hit`) is
+`visibility:hidden` with `pointer-events:stroke`, which takes the press without being painted. As a
+TRANSPARENT stroke it was painted, 18px wide, under every card, and the compositor re-sorted the board's
+layers on each frame of a pan.
+
+**No rule may make the whole board restyle on a class change.** `:has()` on a node (`.node:has(.editing)`)
+is re-evaluated for every node when anything is inserted anywhere, and a rule ending in `*` under a class on
+`<body>` restyles every element when that class flips. State the code knows is a CLASS on the element that
+has it: `title-editing` (paintNode, from `ui.titleEdit`), `with-hl` on the editor's textarea, `save-failing`
+on `<body>` for the one element it hides. The grabbing hand is worn by the cards in hand (`.grabbed`, which
+are what the pointer is over), not by everything under `body.grabbing`.
+
+**Per-frame code LOOKS; it measures only when something moved.** The selection toolbar's loop compares a
+signature — the world's transform, `ui.paintTick` (bumped by every `paintNode` and `placeSelf`), the
+selection, the window — and reads rects only when it changes or a glide is running. A rubber band takes
+every card's box once (`Marquee.boxes`) and touches the selection only when it takes a card in or lets one
+go. A drag finds its guide neighbours once per gesture and view (`features/guides.ts`), and asks the
+browser what is drawn under the pointer (`elementsFromPoint`, for a pile) only when the model says a card
+is near (`pileNear`).
+
+**`childrenOf` scans the map; ask it in a loop only inside `withKids` (`utils/model.ts`).** It answers
+from one parent → children index for the length of the call. Only around code that READS the tree — a
+repaint, the start of a drag — since a parent changed inside would not show.
+
+**`remeasure()` paints twice only when the second paint has something to show** (`applyLayouts` says
+whether the scope was pruned or the board has stacks). Search runs a beat after the last key (`runSoon`)
+and paints once per run.
+
+**"The canvas is busy" has one spelling (`core/ui-state.ts`).** `canvasMoving()` — a drag, pan, pinch,
+rubber band, wheel or open editor — is what the selection bars hide for; `isBusy()` adds a line being drawn
+and a picture being pulled out of a card, and is what a hover peek waits for.

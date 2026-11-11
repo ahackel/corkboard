@@ -42,7 +42,8 @@ What it has been used for, and what it must stay good at:
 
 - **Desk first.** Sorting happens with a mouse and keyboard.
 - **Its own home.** Corkboard keeps its own notes; the Markdown format keeps them safe and readable
-  by Obsidian, which doubles as the reading/wiki view. Corkboard does not grow a document view.
+  by Obsidian, which doubles as the reading/wiki view. Corkboard does not grow a document view. A file
+  somebody else named keeps its name, and once loaded the app opens without a network.
 - **The phone is an inbox, not a second app.** Notes saved into the map's `Inbox/` folder from a phone
   show up in the Inbox section to sort at the desk ([inbox.md](inbox.md): a map folder in iCloud Drive plus
   an iOS Shortcut). It needs a FOLDER map; one in the browser's own storage can't be reached from a phone.
@@ -97,7 +98,9 @@ zoomed out · the phone inbox · export the board or a selection as PNG or PDF f
 - *A section's description* — its label is its name alone; anything else in its note stays in the file, unshown.
 - *SVG export* — it could only wrap HTML, which each viewer draws differently (or not at all); PNG does the job.
 - *The permanent toolbar* — replaced by ⌘P and the selection bar.
-- *The help map* — the palette lists every action with its shortcut; that is the reference.
+- *The help map* — the palette lists every action with its shortcut; that is the reference. (An EMPTY
+  map shows one line saying how to begin, gone with the first card: a hint, not a manual.)
+- *Read-only mode* — set aside for now: one more mode to explain, and its `R` key was easy to hit by accident.
 - *Outline view (and its phone editor)* — built for working on a phone; the phone is an inbox now,
   search finds things, and Obsidian is the reading view.
 - *Cards inside cards (the outliner), checklist mode, and sections that auto-arrange their cards* — two

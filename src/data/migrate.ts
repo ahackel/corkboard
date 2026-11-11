@@ -39,7 +39,7 @@ export function foldCardsIntoSections(): number {
 // So convert instead: each of those children becomes a TOP-LEVEL card at the absolute position it
 // already renders at, and the branch it used to have becomes a drawn edge. The map looks IDENTICAL
 // on first open; what it loses is collapse on those groups, which the user gets back deliberately by
-// nesting a group again. See docs/spec-edges-and-containment.md.
+// nesting a group again. See docs/archive/spec-edges-and-containment.md.
 //
 // Four things are deliberately NOT flattened, each because flattening it would CHANGE what you see:
 //   · a child of a legacy STACK (or of anything inside one) — it was already drawn inside its parent.

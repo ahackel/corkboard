@@ -40,14 +40,19 @@ color: blue
 The body: a small Markdown subset.
 ```
 
-- **The title is the body's leading `# ` line and nothing else.** No heading = an untitled sticky.
-  It is not read from frontmatter or the filename.
-- **The filename is a slug of the title**: the title with `/ \ : * ? " < > |` replaced by `-`,
-  whitespace collapsed, at most 120 chars, plus `.md`. On a clash, append ` 2`, ` 3` (`Notes 2.md`).
-  The app re-derives it on save, so a mismatch is harmless, but writing it right keeps `board.json` stable.
+- **The title is the body's leading heading and nothing else.** No heading = an untitled sticky.
+  It is not read from frontmatter or the filename. `# Title` is what the app writes; a note that opens on
+  `## Title` is titled too, and is written back with the level it had.
+- **The filename is a slug of the title** (of the first line, for an untitled note): `/ \ : * ? " < > |`
+  replaced by `-`, whitespace collapsed, control characters dropped, at most 120 characters and 200 bytes,
+  plus `.md`. On a clash, append ` 2`, ` 3` (`Notes 2.md`). Names are compared ignoring case and the
+  spelling of accents, as macOS does.
+- **A file you name yourself keeps its name.** The app renames a file only when the text that names it
+  (its heading, else its first line) is edited in the app. So `2026-11-11.md` stays `2026-11-11.md`
+  whatever it holds, and `board.json` keeps pointing at it.
 - **Frontmatter is optional.** App-owned keys: `tags` (Obsidian tags, written bare), `color`, and `mm_*`.
-  Every other key is kept verbatim. The app writes a key only when it says something (no `tags: []`, no
-  date), and no block at all when a note has nothing in it.
+  Every other key is kept verbatim, comments included. The app writes a key only when it says something
+  (no `tags: []`, no date), and no block at all when a note has nothing in it.
   - `color`: a palette key or a custom hex, QUOTED (`color: "#ff8800"`; bare `#` is a YAML comment).
     Sticky (pastel) keys: `grey red orange amber green teal blue violet pink silver`.
     Strong keys: `black stone bold-red bold-orange bold-yellow bold-green bold-teal bold-blue bold-violet bold-pink white`.
@@ -89,6 +94,11 @@ The body: a small Markdown subset.
     taller. A section's `w`/`h` is its box, exactly; it never grows to fit its cards, so size it yourself.
   - `collapsed: true` folds a card to a chip and a section to its pill. **A section with no entry
     here opens FOLDED**, so give every `_index.md` an entry.
+  - `clip: true` on a card: its `h` is exact, and text past it is cut off (a card dragged shorter than
+    its text).
+  - `stack: true` on a section's `_index.md`: its cards are drawn as a pile instead of in a box.
+  - `order`: on a section, its cards' paths in order — a sort hint for a stack's pile, never a record
+    of what the section holds (the folder says that).
 - **`edges`** are drawn lines; they mean nothing structural.
   - `from`/`to`: note paths (a section's `_index.md` joins to the section box). `id`: any unique string.
   - `dashed`: always write it (`false` = solid).
@@ -101,7 +111,15 @@ The body: a small Markdown subset.
 - **Routing**: lines are orthogonal elbows that always run port to port: from the middle of a face (or the
   `fromAt`/`toAt` point of a pinned one) to the middle of a face. They avoid ONLY the two boxes they join and
   never route around other cards, so lay cards out so lines don't have to cross anything.
-- `settings.grid`: `none` | `dot` | `mesh` | `line`. `settings.canvasColor`: optional colour.
+- `settings.grid`: `none` | `dot` | `mesh` | `line`. `settings.gridSize`: the snap step in px.
+  `settings.canvasColor`: optional colour.
+- **`version`** is the file's generation and **`model`** its containment model; write `1` and `2`.
+  The app refuses to WRITE a map whose `version` or `model` is higher than it knows (it shows the map and
+  asks for a reload), so raise one only for a change an older build would get wrong.
+- **Keys the app does not know are kept**: at the top level, in `settings`, on a node and on an edge, they
+  are written back as they came, so a script may keep its own data there.
+- A `board.json` that is not valid JSON is not used and not overwritten in place: the app first saves it
+  beside itself as `board.unreadable-<date>-<time>.json`, then lays the cards out afresh.
 
 ## Layout notes
 

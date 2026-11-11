@@ -16,7 +16,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 ## Running / developing
 
 - `npm install` once, then `npm run dev` (localhost:5173). OPFS needs https/localhost — not `file://`.
-- `npm run build` → `dist/index.html`; `npm run preview` serves it; a push to `main` deploys it (`deploy.yml`) with `public/format.md` (the file-format spec — update it with any format change) and `public/about/` (the about page).
+- `npm run build` → `dist/index.html`; `npm run preview` serves it; a push to `main` deploys it (`deploy.yml`) with `public/format.md` (the file-format spec — update it with any format change), `public/about/` (the about page) and `public/sw.js` (the offline copy). CI (`ci.yml`) runs typecheck, lint, vitest and e2e on every PR.
 - `npm run typecheck` after touching types (fully strict, no `@ts-nocheck`); verify in a browser by exercising
   the canvas. Keep `.js` in import specifiers (bundler resolution maps them to `.ts`).
 - **Code style** (all code you write or touch): readable code over comments — comment only what it can't say;
@@ -27,18 +27,18 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 
 - `core/state.ts` — the mutable `state` (the MAP: nodes, view, selection, flags) + types + DOM handles.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
-  pinch). Mutate in place, never reassign, so every module shares one interaction state.
+  pinch), `paintTick`, and the ONE spelling of "busy" (`canvasMoving`/`isBusy`). Mutate in place, never reassign.
 - `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys: list/table Enter, Tab, ⌘B/I/L, ⌥↑↓), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
-  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`), `filenames.ts` (slug/rename/link fixup), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts`, `num.ts`.
+  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`, …
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
-  `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `types.ts`, `index.ts`.
+  `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`.
 - `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
-  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts`, `save-flag.ts` (`data-saving`, for e2e).
+  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts` (the banner; `writesHeld`), `save-flag.ts` (`data-saving`, for e2e).
 - `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
   grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
-  resize, sel-frame (the multi-selection frame), text-drag, attachments, clipboard, search, guides, float-bar, properties, breadcrumbs, history, …
+  resize, sel-frame (the multi-selection frame), stacks, text-drag, attachments, clipboard, search, guides, float-bar, edge-tools/edge-bar (lines), palette, context-menu, tags, history, …
   `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
 - `main.ts` — entry + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`); its `main`↔feature cycles are runtime-only.
@@ -52,7 +52,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   (`planPaths`). A FOLDED section's folder is NOT READ until needed and lets go once saved (`data/lazy.ts`).
 - **A node's TITLE is the leading `# ` line of its body and nothing else** (`splitHeading`/
   `joinHeading`, exact inverses). Not frontmatter, not the filename; no heading = an UNTITLED card. The
-  filename is a slug TRACKING that text: re-derived each save, renamed on edit-commit, suffixed `Notes 2.md`.
+  filename is a slug TRACKING that text: renamed on edit-commit, suffixed `Notes 2.md` — but a file named elsewhere KEEPS its name until that text changes (`keepsName`); paths compare through `pathKey`.
 - **Where a name is SHOWN, use `nodeLabel`** (title → first line → `No-title N`, never the filename
   stem); `disambiguatedLabel` for flat lists only. An emptied note says so: `mm_blank`.
 - **Hierarchy is CONTAINMENT; every LINE is a drawn edge** — a card sits in the section that is its parent;
@@ -67,8 +67,8 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   Derived from the text (`isImageCard`), never a kind. A card measures its height.
 - **Visibility has ONE gate, `isHidden`**: a FOLDED section ancestor (persisted), the open-section scope
   (ephemeral) and a STACK not fanned out. Add new terms IN it, never beside it. Nothing writes through it.
-- **A one-shot edit goes through `mutate()`** ("An edit RUNS through mutate"); every mutation ends in `scheduleSave()` (flushed on tab-hide; a failure shows a banner and retries); `state.readOnly` and `store.isOpen === false` (demo mode)
-  make writes no-ops. Folding a card and opening a section stay allowed in read-only — they mutate nothing.
+- **A one-shot edit goes through `mutate()`** ("An edit RUNS through mutate"); every mutation ends in `scheduleSave()` (flushed on tab-hide; a failure shows a banner and retries); `store.isOpen === false` (demo mode) and a map from a
+  NEWER build (`writesHeld`) make writes no-ops. A save never writes over a file it has not read (`planFreePaths`).
 - **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
   layout pass reads `offsetHeight`, so it needs current DOM (the paint-before-measure rule).
@@ -80,7 +80,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
 - **Markdown rendering is a small hand-rolled subset** (`renderBodyHTML`) — extend it rather than
   reaching for a library; the no-dependency single-file constraint is deliberate.
 - **The product is "Corkboard"; the document is a "map"/"board".** The old `mindmap` name survives
-  only in `utils/legacy-keys.ts`, `openRenamed` (`utils/idb.ts`) and the `mm_*` keys.
+  only in `utils/legacy-keys.ts`, `openRenamed` (`utils/idb.ts`), the `MindNode` type and the `mm_*` keys.
 
 ## Deep dives (`docs/architecture.md`) — look each up by its **bolded lead sentence**
 
@@ -92,9 +92,9 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   says so" · "A card whose whole note is one image IS that image" · "A table wraps between WORDS".
 - Interaction — "Collapse folds a card to a CHIP and a section to its PILL" (arrow, peek, fold all) · "A plain double-click
   MAKES OR EDITS; ⌥-double-click OPENS" · "A click on the SELECTED node writes on it" · "Arrow keys go IN and OUT" · "The card editor WRITES a little markdown" · "A SMART duplicate makes the NEXT card" · "A TAG is an OBSIDIAN tag" · "MERGING notes and BREAKING them apart are
-  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
+  two DRAGS" · "`⌘A` selects everything ON THE CANVAS" · "Esc peels ONE layer" · "The Back button walks where you STOOD" · "An empty map says how to begin" · "Touch input" · "The grid QUANTISES" · "Smart guides PULL" · "The page runs EDGE TO EDGE"
   (`viewport-fit=cover`; every fixed control adds `--sa-t/r/b/l` back — read it before adding one).
 - Storage — "The `store` adapter is the single swappable I/O boundary" (OPFS, IndexedDB
-  fallback, FSA, single note) · "A single NOTE opens as a map of ONE card" (`singleNoteRefuses`) · "A note dragged in from the OS is OPENED on the pill" · "Boot order" · "External-change reload" · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
+  fallback, FSA, single note) · "A single NOTE opens as a map of ONE card" (`singleNoteRefuses`) · "A note dragged in from the OS is OPENED on the pill" · "Boot order" · "External-change reload" · "A file keeps the name it CAME with" · "A save never writes over what it has not read" · "A map from a NEWER build is shown, never written" · "The page loads without a network, and runs only its own script" (CSP, `sw.js`) · "The phone INBOX is a folder" ([docs/inbox.md](docs/inbox.md)).
 - Colour and zoom — "ONE theme, FigJam's" · "The colour picker is FigJam's" · "Selection, ports and lines" · "A multi-selection wears ONE FRAME" · "The dock" · "A card's text colour is DERIVED from its
-  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes".
+  fill" · "Recently-used custom colours" · "Below `FAR_ZOOM`" · "The look: a FigJam board of sticky notes"; speed — the section "What a frame may cost" (read it before adding a `:has()`, a `body.x *` rule or per-frame measuring).

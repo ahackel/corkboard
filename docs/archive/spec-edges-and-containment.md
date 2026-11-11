@@ -1,3 +1,8 @@
+> **Archived.** A design document from before containment landed. It is kept for the reasoning behind
+> the load migration (`src/data/migrate.ts`) and describes features that were later cut (cards as
+> outlines, annotation and query kinds, junctions). The live rules are in [architecture.md](../architecture.md)
+> and [PRODUCT.md](../PRODUCT.md).
+
 # Spec — edges and containment
 
 **Status: PARTIALLY IMPLEMENTED** — see "Implementation status" at the foot of this file. This describes a change to how hierarchy and relations
