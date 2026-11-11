@@ -999,7 +999,8 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
 else the last number up, keeping its padding; a card with no heading advances its first line), and it lands in
 the next slot of its ROW — to the right, at the gap the row already keeps from its left neighbour, past
 anything already there (its section is not resized for it). Plain D stays an EXACT copy, just below: the two
-are different jobs, so neither guesses which one you meant.
+are different jobs, so neither guesses which one you meant. Either way the copy comes out SELECTED, never in an
+editor, so pressing it again copies the copy: ⇧D ⇧D ⇧D lays out a week.
 
 **A TAG is an OBSIDIAN tag, and its job is FINDING cards** (`utils/tags.ts`, tested). Any word, nested with `/`;
 an emoji is just the shortest one. A note carries tags two ways, both Obsidian's own: its frontmatter `tags:`

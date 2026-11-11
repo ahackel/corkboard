@@ -213,9 +213,9 @@ function copyNext(s: MindNode): MindNode {
   return c;
 }
 // Duplicate every selected card (or just the one). Each copy keeps its source's parent, so it
-// stays connected. One card → open its rename like a fresh node; many → select the new copies.
-// `edit:false` skips the rename, so a duplicate doesn't yank the user into an editor. `next` is the
-// smart duplicate (copyNext above); without it the copy is exact, just below its source.
+// stays connected. The copies come out SELECTED, never in an editor — so D / ⇧D pressed again
+// copies the copy, and a run of them builds a series. `next` is the smart duplicate (copyNext
+// above); without it the copy is exact, just below its source.
 export function duplicateSelection({ next = false }: { next?: boolean } = {}): MindNode[] | undefined {
   if (singleNoteRefuses()) {
     return;
@@ -233,11 +233,10 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
   remeasure();
   if (copies.length === 1){
     selectNode(copies[0].id);
-    startInlineEdit(copies[0], { isNew: false });
   } else {
     setSelectionSet(copies.map(c => c.id));
-    commitStep();   // no rename opens, so the step ends here
   }
+  commitStep();
   if (next) {
     setStatus(copies.length === 1 ? `Next → “${nodeLabel(copies[0])}”` : `Made the next of ${copies.length} cards`);
   }

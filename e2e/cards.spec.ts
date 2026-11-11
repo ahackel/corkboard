@@ -79,15 +79,36 @@ test('⇧D duplicates a card as the next of its series: next day, next slot of t
   const tue = card(page, 'Tuesday');
   await tue.click();
   await page.keyboard.press('Shift+D');
-  await page.keyboard.press('Escape');
   const wed = card(page, '2026-10-28 Wednesday');
   await expect(wed).toBeVisible();
+  await expect(page.locator('textarea.body-edit')).toHaveCount(0);   // the copy is selected, not opened
   await expect(wed).toContainText('GPU memory optimization');
   const [m, t, w] = [await card(page, 'Monday').boundingBox(), await tue.boundingBox(), await wed.boundingBox()];
   expect(Math.round(w!.y)).toBe(Math.round(t!.y));                                   // same row
   expect(Math.round(w!.width)).toBe(Math.round(t!.width));                           // same size
   expect(Math.round(w!.x - (t!.x + t!.width))).toBe(Math.round(t!.x - (m!.x + m!.width)));   // same gap
+
+  // …so pressing it again (⇧ or ⌘⇧) carries the series on from the copy.
+  await page.keyboard.press('Shift+D');
+  await page.keyboard.press('ControlOrMeta+Shift+D');
+  await expect(card(page, '2026-10-29 Thursday')).toBeVisible();
+  await expect(card(page, '2026-10-30 Friday')).toBeVisible();
+  await expect(page.locator('textarea.body-edit')).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test('D duplicates a card below it, selected and NOT opened, so D again copies the copy', async ({ page }) => {
+  await openBoard(page);
+  const c = await makeCard(page, 400, 300, 'Copy me');
+  await clickAway(page);
+  await select(page, c);
+  await page.keyboard.press('d');
+  await page.keyboard.press('d');
+  await expect(page.locator('textarea.body-edit')).toHaveCount(0);
+  const copies = page.locator('#world .node', { hasText: 'Copy me' });
+  await expect(copies).toHaveCount(3);
+  const ys = await copies.evaluateAll(els => els.map(el => el.getBoundingClientRect().y));
+  expect(new Set(ys.map(Math.round)).size).toBe(3);   // each below the last, not stacked on one spot
 });
 
 test('a card casts no shadow, at rest or in hand; in hand it keeps its ring and nothing of it fades', async ({ page }) => {
