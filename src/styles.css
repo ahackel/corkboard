@@ -1286,9 +1286,10 @@ body.layout-anim #selFrame { display:none; }
 .node .body .lk { color:inherit; text-decoration:underline; text-underline-offset:2px;
   cursor:pointer; opacity:1; }
 .node .body .lk:hover { text-decoration-thickness:2px; }
-/* inline images: always full card width, aspect ratio kept; never intercept card drag */
+/* inline images: always full card width, aspect ratio kept; never intercept card drag. No background: a
+   transparent PNG shows the card's own colour, untinted. */
 .node .body img.md-img { display:block; width:100%; height:auto; margin:.45em 0; border-radius:6px;
-  background:color-mix(in srgb, var(--ink) 6%, transparent); pointer-events:none; -webkit-user-drag:none; user-select:none; }
+  pointer-events:none; -webkit-user-drag:none; user-select:none; }
 .node .body img.md-img[data-img-src] { min-height:14px; }   /* slot before it resolves */
 .node .body img.md-img-missing { min-height:0; padding:6px 8px; box-sizing:border-box;
   border:1px dashed color-mix(in srgb, var(--ink) 40%, transparent); border-radius:6px; }
