@@ -4,7 +4,7 @@ A single-file, zero-build visual editor for a **local folder of Markdown notes**
 Every `.md` file becomes a card on an infinite canvas; edits are saved straight back to
 disk as plain Markdown.
 
-**[▶ Open the app](https://andreashackel.de/corkboard/)** — what it is for, and what it is not,
+**[▶ Open the app](https://andreashackel.de/corkboard/)** · **[What it is, with pictures](https://andreashackel.de/corkboard/about/)** — what it is for, and what it is not,
 is in [docs/PRODUCT.md](docs/PRODUCT.md).
 
 ## How it works

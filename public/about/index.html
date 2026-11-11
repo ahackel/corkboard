@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Corkboard: sort your thoughts by hand</title>
+<meta name="description" content="A bright wall of sticky notes in the browser. Pour your ideas in, push them around until the shape shows, and every note stays a plain Markdown file.">
+<link rel="canonical" href="https://andreashackel.de/corkboard/about/">
+<link rel="icon" href="../icon.svg">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Corkboard: sort your thoughts by hand">
+<meta property="og:description" content="A bright wall of sticky notes in the browser. Pour your ideas in, push them around until the shape shows, and every note stays a plain Markdown file.">
+<meta property="og:url" content="https://andreashackel.de/corkboard/about/">
+<meta property="og:image" content="https://andreashackel.de/corkboard/about/img/hero.png">
+<meta name="twitter:card" content="summary_large_image">
+<style>body { margin: 0; }</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
+<style>
+  /* Layout: the page is the app's dotted board. Each highlight is one band, copy beside a real capture;
+     the app's own sticky colours mark each band. One light theme, like the app itself. */
+  :root {
+    --board: #f5f5f5;
+    --dot: #d9d9d9;
+    --paper: #ffffff;
+    --ink: #1e1e1e;
+    --ink-soft: #5c5c66;
+    --line: #e3e3e3;
+    --accent: #0d99ff;
+    --amber: #ffd966;
+    --yellow: #ffc943;
+    --blue: #80caff;
+    --orange: #ffd3a8;
+    --pink: #ffbdf2;
+    --teal: #80e3d9;
+    --violet: #d9b8ff;
+    --green: #85e0a3;
+    --font: "Nunito", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --lift: 0 0 0 1px rgba(0,0,0,.05), 0 18px 40px -14px rgba(30,30,40,.25);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background-color: var(--board);
+    background-image: radial-gradient(var(--dot) 1.1px, transparent 1.2px);
+    background-size: 20px 20px;
+    color: var(--ink);
+    font: 400 1.0625rem/1.6 var(--font);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 1140px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1, h2, h3 { margin: 0; font-family: var(--font); text-wrap: balance; letter-spacing: -0.015em; }
+  p { margin: 0; }
+  a { color: inherit; }
+  code { font: 600 0.9em var(--mono); background: rgba(0,0,0,.05); padding: 1px 5px; border-radius: 5px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+  .media { display: block; width: 100%; height: auto; border-radius: 14px; background: var(--paper); box-shadow: var(--lift); }
+  .gif { image-rendering: auto; }
+
+  /* ---------- hero ---------- */
+  .hero { padding-block: 64px 32px; display: grid; gap: 44px; }
+  .hero-copy { display: grid; gap: 22px; justify-items: start; max-width: 760px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1rem; background: var(--paper);
+           padding: 8px 14px 8px 8px; border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 6px 16px rgba(0,0,0,.06); }
+  .brand svg { width: 30px; height: 30px; }
+  h1 { font-size: clamp(2.6rem, 6.2vw, 4.6rem); font-weight: 900; line-height: 1.02; }
+  h1 .note { display: inline-block; background: var(--amber); padding: 0 .18em .04em; rotate: -2deg; box-shadow: 0 6px 14px rgba(0,0,0,.08); }
+  .lede { font-size: 1.22rem; color: var(--ink-soft); max-width: 50ch; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 12px; font: 800 1rem var(--font);
+         text-decoration: none; transition: translate .15s ease, box-shadow .15s ease; }
+  .btn-main { background: var(--ink); color: #fff; }
+  .btn-alt { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+  .btn:hover { translate: 0 -2px; box-shadow: 0 8px 18px rgba(0,0,0,.14); }
+
+  /* ---------- bands ---------- */
+  .band { padding-block: 60px; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 52px; align-items: center; }
+  .band.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .band.flip .copy { order: 2; }
+  .copy { min-width: 0; display: grid; gap: 16px; justify-items: start; }
+  .chip { font: 800 0.78rem var(--font); letter-spacing: .08em; text-transform: uppercase; padding: 5px 11px; border-radius: 6px; background: var(--c); }
+  .band h2 { font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 900; line-height: 1.08; }
+  .copy > p { color: var(--ink-soft); max-width: 46ch; }
+  .points { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 12px; }
+  .points li { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 12px; align-items: baseline; color: var(--ink-soft); }
+  .points li::before { content: ""; width: 16px; height: 16px; border-radius: 3px; translate: 0 2px; background: var(--c); box-shadow: 0 2px 4px rgba(0,0,0,.08); }
+  .points b { color: var(--ink); }
+  figure { margin: 0; min-width: 0; display: grid; gap: 10px; }
+  figcaption { font-size: 0.88rem; color: var(--ink-soft); text-align: center; }
+  kbd { font: 800 0.82em var(--font); background: var(--paper); border-radius: 6px; padding: 1px 7px; box-shadow: inset 0 -2px 0 var(--line), 0 0 0 1px var(--line); }
+
+  /* before/after: full-width under the sorting band */
+  .compare-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; padding-bottom: 28px; max-width: 940px; }
+  .compare { position: relative; border-radius: 14px; overflow: hidden; box-shadow: var(--lift); --pos: 50%; touch-action: pan-y; }
+  .compare img { display: block; width: 100%; height: auto; }
+  .compare .before { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--pos)) 0 0); }
+  .compare input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+  .handle { position: absolute; top: 0; bottom: 0; left: var(--pos); width: 3px; translate: -1.5px 0; background: var(--ink); pointer-events: none; }
+  .handle::after { content: "⟷"; position: absolute; top: 50%; left: 50%; translate: -50% -50%; width: 44px; height: 44px; border-radius: 50%;
+                   display: grid; place-items: center; background: var(--ink); color: #fff; font-size: 1.15rem; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+  .compare input:focus-visible ~ .handle::after { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .tag { position: absolute; bottom: 14px; padding: 4px 12px; border-radius: 8px; pointer-events: none; font: 800 0.95rem var(--font);
+         box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  .tag.l { left: 14px; background: var(--amber); } .tag.r { right: 14px; background: var(--blue); }
+
+  .keys { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: 28px; align-items: center; padding-block: 8px 24px; }
+  .keys p { color: var(--ink-soft); }
+  .keys img { width: 100%; height: auto; border-radius: 12px; box-shadow: var(--lift); }
+
+  /* files */
+  .files { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .files .media, .files .wide { grid-column: 1 / -1; }
+  .panel { background: var(--paper); border-radius: 12px; box-shadow: var(--lift); overflow: hidden; min-width: 0; }
+  .panel-head { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line); font: 800 0.8rem var(--font); color: var(--ink-soft); }
+  .panel-head i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+  .panel-head span { margin-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  pre { margin: 0; padding: 14px 16px; font: 0.84rem/1.6 var(--mono); overflow-x: auto; color: var(--ink); }
+  .dim { color: #9a9aa3; } .fm { color: #b5527c; } .hd { font-weight: 700; } .hi { background: var(--blue); border-radius: 3px; padding: 0 2px; }
+  .k { color: #2f6fb3; }
+
+  /* closing */
+  .closing { padding-block: 72px 56px; display: grid; justify-items: center; gap: 18px; text-align: center; }
+  .closing h2 { font-size: clamp(2rem, 4.4vw, 3.1rem); font-weight: 900; }
+  .closing > p { color: var(--ink-soft); max-width: 52ch; }
+  .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; max-width: 760px; }
+  .facts span { padding: 7px 14px; font: 700 0.92rem var(--font); background: var(--c, var(--paper)); box-shadow: 0 2px 6px rgba(0,0,0,.07); border-radius: 4px; }
+  .facts span:nth-child(odd) { rotate: -1.5deg; } .facts span:nth-child(even) { rotate: 1.2deg; }
+  .credit { margin-top: 18px; font-size: 0.92rem; color: var(--ink-soft); }
+  .credit a { font-weight: 800; }
+
+  @media (max-width: 860px) {
+    .hero { padding-block: 40px 20px; gap: 32px; }
+    .band, .band.flip { grid-template-columns: minmax(0, 1fr); gap: 26px; padding-block: 40px; }
+    .band.flip .copy { order: 0; }
+    .keys, .files { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover { translate: none; } }
+</style>
+</head>
+<body>
+<header class="wrap hero">
+  <div class="hero-copy">
+    <div class="brand">
+      <svg viewBox="0 0 30 30" aria-hidden="true">
+        <rect x="1" y="1" width="28" height="28" rx="7" fill="#c97a3c"/>
+        <rect x="5" y="5" width="10" height="9" rx="1.5" fill="#ffd966"/>
+        <rect x="16" y="6" width="9" height="8" rx="1.5" fill="#80caff" transform="rotate(5 20 10)"/>
+        <rect x="7" y="16" width="10" height="9" rx="1.5" fill="#ffbdf2" transform="rotate(-4 12 20)"/>
+        <rect x="18" y="16" width="7" height="8" rx="1.5" fill="#80e3d9"/>
+      </svg>
+      Corkboard
+    </div>
+    <h1>Sort your thoughts <span class="note">by hand.</span></h1>
+    <p class="lede">A bright wall of sticky notes in the browser. Pour your ideas in, push them around until the shape shows, and every note stays a plain Markdown file.</p>
+    <div class="ctas">
+      <a class="btn btn-main" href="../">Open Corkboard →</a>
+      <a class="btn btn-alt" href="https://github.com/ahackel/corkboard" target="_blank" rel="noopener">Read the code</a>
+    </div>
+  </div>
+  <img class="media" src="img/hero.png" width="2880" height="1800" alt="A Corkboard board for a game jam: sections called Mechanics, Tiny worlds and Look &amp; feel full of coloured sticky notes, a 'Maybe later' stack, two lines joining Gravity flip and Pocket planet into a yellow card called The pitch, and a 'Before Friday' checklist.">
+</header>
+
+<main>
+  <section class="wrap band" style="--c:var(--amber)">
+    <div class="copy">
+      <span class="chip">Pour in, then sort</span>
+      <h2>Dump it all out. Then move it around.</h2>
+      <p>Paste a list and every line becomes its own card. Drag the cards into sections and colour them as you go. The moment the clusters show up is the moment you understand what you have.</p>
+      <ul class="points">
+        <li style="--c:var(--amber)"><span><b>One keystroke</b> from a thought to a card: <kbd>N</kbd> makes one under the pointer.</span></li>
+        <li style="--c:var(--blue)"><span><b>Number keys 1–9</b> colour whatever is selected.</span></li>
+        <li style="--c:var(--pink)"><span><b>Nothing moves by itself.</b> Guides only help while you drag.</span></li>
+      </ul>
+    </div>
+    <figure>
+      <img class="media gif" src="img/sort.gif" width="960" height="480" alt="Recording: six game ideas are pasted as a column of yellow cards, then dragged one by one into the Mechanics and Tiny worlds sections and coloured blue and orange with the number keys.">
+      <figcaption>Recorded in the app. The pointer and the key badges are drawn in.</figcaption>
+    </figure>
+  </section>
+
+  <div class="wrap compare-row">
+    <div class="compare" id="compare">
+      <img src="img/after.png" width="2400" height="1520" loading="lazy" alt="The same twelve game ideas sorted: blue cards in Mechanics, orange in Tiny worlds, pink in Look &amp; feel, and two leftovers on a Maybe later stack.">
+      <img class="before" src="img/before.png" width="2400" height="1520" loading="lazy" alt="Twelve yellow sticky notes with game ideas, scattered loosely across the board.">
+      <input id="compareRange" type="range" min="0" max="100" value="50" aria-label="Slide between the loose pile and the sorted board">
+      <span class="handle" aria-hidden="true"></span>
+      <span class="tag l" aria-hidden="true">the pile</span>
+      <span class="tag r" aria-hidden="true">sorted</span>
+    </div>
+    <div class="keys">
+      <p>The nine colours on the number keys. The picker has the full FigJam set of 22, plus any hex you like.</p>
+      <img src="img/keys.png" width="1840" height="230" loading="lazy" alt="Nine sticky notes in a row, numbered 1 to 9: grey, red, orange, amber, green, teal, blue, violet and pink.">
+    </div>
+  </div>
+
+  <section class="wrap band flip" style="--c:var(--teal)">
+    <div class="copy">
+      <span class="chip">Sections &amp; stacks</span>
+      <h2>Two kinds of thing. That's the whole model.</h2>
+      <p>A board has cards and sections, nothing else. A card sits in whichever section its centre is over. A stack is a section drawn as a pile, for the ideas you're not ready to throw away.</p>
+      <ul class="points">
+        <li style="--c:var(--teal)"><span><b>Hold a card over another</b> for a moment and they stack. Drop more on the pile to add them.</span></li>
+        <li style="--c:var(--violet)"><span><b>Click the pile</b> to fan it out and read it. <kbd>Esc</kbd> puts it back.</span></li>
+        <li style="--c:var(--orange)"><span><b>Open a section</b> with <kbd>⌥</kbd>-double-click and the canvas becomes its inside.</span></li>
+      </ul>
+    </div>
+    <figure>
+      <img class="media gif" src="img/stack.gif" width="960" height="480" loading="lazy" alt="Recording: Online co-op is held over Grappling hook until they form a stack, Level editor is dropped on top, then a click fans the three cards out and Esc folds them back into the pile.">
+      <figcaption>Recorded in the app, pointer drawn in.</figcaption>
+    </figure>
+  </section>
+
+  <section class="wrap band" style="--c:var(--blue)">
+    <div class="copy">
+      <span class="chip">Plain Markdown files</span>
+      <h2>Your notes stay yours.</h2>
+      <p>Every card is a <code>.md</code> file and every section is a folder. Open the same folder in Obsidian or Finder and you see the same grouping the board shows. No database, no export step.</p>
+      <ul class="points">
+        <li style="--c:var(--blue)"><span><b>A card's first heading</b> is its title, and the file name follows it.</span></li>
+        <li style="--c:var(--amber)"><span><b>Positions and lines</b> live in one <code>board.json</code>, never in your text.</span></li>
+        <li style="--c:var(--green)"><span><b>Fold a section</b> and its folder isn't even read until you open it, so big boards stay quick.</span></li>
+      </ul>
+    </div>
+    <div class="files">
+      <img class="media" src="img/mechanics.png" width="1040" height="780" loading="lazy" alt="The Mechanics section from the game jam board: Grow &amp; shrink, Rewind, One button (tagged #mobile) and Gravity flip.">
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>Game jam</span></div>
+<pre>Game jam/
+  board.json
+  The pitch.md
+  Before Friday.md
+  <span class="dim">▾</span> Mechanics/
+      _index.md
+      <span class="hi">Gravity flip.md</span>
+      Grow &amp; shrink.md
+      One button.md
+      Rewind.md
+  <span class="dim">▸</span> Maybe later/
+  <span class="dim">▸ …</span></pre>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><i></i><i></i><i></i><span>Mechanics/Gravity flip.md</span></div>
+<pre><span class="fm">---
+color: blue
+---</span>
+
+<span class="hd"># Gravity flip</span>
+Tap to swap which way is down.</pre>
+      </div>
+      <div class="panel wide">
+        <div class="panel-head"><i></i><i></i><i></i><span>board.json — where that card sits, and its line to The pitch (excerpt)</span></div>
+<pre><span class="k">"Mechanics/Gravity flip.md"</span>: { "x": 260, "y": 180, "w": 220, "h": 130 }
+{ "from": <span class="k">"Mechanics/Gravity flip.md"</span>, "to": <span class="k">"The pitch.md"</span>, "fromPort": "right", "toPort": "left" }</pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap closing">
+  <h2>Got a pile of ideas? Bring it.</h2>
+  <p>It opens straight onto a board, no account and no setup. Press <kbd>N</kbd>, type, and start moving things around. <kbd>⌘P</kbd> lists every action with its shortcut.</p>
+  <div class="facts">
+    <span style="--c:var(--amber)">One HTML file, no server</span>
+    <span style="--c:var(--blue)">No runtime dependencies</span>
+    <span style="--c:var(--pink)">Notes stay on your device</span>
+    <span style="--c:var(--teal)">Opens a folder of notes in Chrome &amp; Edge</span>
+    <span style="--c:var(--green)">Works on iPad too</span>
+  </div>
+  <div class="ctas" style="justify-content:center">
+    <a class="btn btn-main" href="../">Open Corkboard →</a>
+    <a class="btn btn-alt" href="https://github.com/ahackel/corkboard" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <p class="credit">Built in conversation with <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code</a>. Every picture on this page is the real app.</p>
+</footer>
+
+<script>
+  const compare = document.getElementById('compare');
+  const range = document.getElementById('compareRange');
+  range.addEventListener('input', () => compare.style.setProperty('--pos', range.value + '%'));
+</script>
+</body>
+</html>
