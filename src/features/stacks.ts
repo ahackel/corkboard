@@ -85,9 +85,10 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
     // card its text over its authored minimum.
     const exactH = image ? nodeH(k) : k.clip && k.h != null ? k.h : null;
     const minH = !image && !k.clip && k.h != null ? k.h : null;
-    const key = [col, imageLook(k), under, nodeW(k), baseW, exactH, minH, places[i], md].join('\u0000');
+    const key = [k.id, col, imageLook(k), under, nodeW(k), baseW, exactH, minH, places[i], md].join('\u0000');
     if (card.dataset.key !== key) {
       card.dataset.key = key;
+      card.dataset.kid = k.id;   // which card this drawing is, for a press on it (beginPileGesture)
       card.className = 'pile-card ' + colorClass(col) + (imageLook(k) ? ' image-card' : '') + (under ? ' under' : '');
       applyColorVars(card, col);
       card.style.width = nodeW(k) + 'px';
@@ -162,14 +163,18 @@ function ringPile(face: HTMLElement, pile: HTMLElement, shown: MindNode[], mess:
 }
 
 // ---------- pressing the pile ----------
-// A press on the pile's BODY (bindNodeDrag hands it over): a click fans it out, a drag LIFTS its top card off
-// and carries it away through the ordinary drag, so it lands by the ordinary drop rule — back on this pile,
+// A press on the pile's BODY (bindNodeDrag hands it over): a click fans it out, a drag LIFTS the card it
+// pressed off — the top one, or a lower one showing from under it — and carries it away through the ordinary drag, so it lands by the ordinary drop rule — back on this pile,
 // on another, in a section or on the board. The pin and the name tab take the ordinary path instead: they
 // select the stack and move it whole.
 export function beginPileGesture(n: MindNode, e: PointerEvent): void {
   try { n.el?.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
   const sx = e.clientX, sy = e.clientY, slop = e.pointerType === 'touch' ? 8 : 2;
   let lifted = false;
+
+  // the card drawn under the pointer — a card lying lower in the pile shows round the edges of those above it
+  const drawn = (e.target as Element | null)?.closest<HTMLElement>('.pile-card');
+  const pressed = pileKids(n).find(k => k.id === drawn?.dataset.kid) ?? null;
   const stop = trackPointer({ move, up, cancel: up });
 
   function move(ev: PointerEvent): void {
@@ -180,7 +185,7 @@ export function beginPileGesture(n: MindNode, e: PointerEvent): void {
     if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) <= slop || isLockedEffective(n)) {
       return;
     }
-    const top = topOfPile(n);
+    const top = pressed ?? topOfPile(n);
     if (!top) {
       return;
     }

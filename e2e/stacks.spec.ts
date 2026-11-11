@@ -81,6 +81,28 @@ test('dragging the pile lifts its top card off; dragging the pin moves the whole
   expect(errors).toEqual([]);
 });
 
+test('dragging a lower card that shows round the top one lifts THAT card off, not the top', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  await seedBoard(page, {
+    'Pile/_index.md': note('', { 'mm_type': 'frame', 'mm_blank': 'true' }),
+    'Pile/Wide.md': note('Wide bottom card'),
+    'Pile/Narrow.md': note('Narrow top card'),
+    'Pile/Third.md': note('Third card'),
+    'board.json': board({
+      'Pile/_index.md': { x: 0, y: 0, stack: true, order: ['Pile/Wide.md', 'Pile/Narrow.md', 'Pile/Third.md'] },
+      'Pile/Wide.md': { x: 0, y: 0, w: 400, h: 200 }, 'Pile/Narrow.md': { x: 0, y: 0 }, 'Pile/Third.md': { x: 0, y: 0 },
+    }),
+  });
+  const box = (await stack(page).boundingBox())!;
+  const from = { x: box.x + 14, y: box.y + box.height / 2 };   // on the wide card, clear of the narrow ones over it
+  await dragTo(page, from, { x: from.x + 250, y: from.y + 250 });
+  await expect(stack(page)).toHaveAttribute('data-cards', '2');
+  await expect(page.locator('#world .node:not(.stack)', { hasText: 'Wide bottom card' })).toBeVisible();
+  await expect(stack(page).locator('.pile-card').last()).toContainText('Third card');   // the top one stayed
+  expect(errors).toEqual([]);
+});
+
 test('a stack down to one card lets it go', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

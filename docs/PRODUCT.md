@@ -72,7 +72,7 @@ one searchable list.
   until you open it, which keeps a big board quick.
 - A **stack** is a section drawn as a pile, like a Dock stack: hold a dragged card over another for a moment
   and they stack; drop more on the pile to add them on top. A click fans it out to read; drag the pile to lift
-  its top card off, or its red pin to move it whole. Unstack spreads the cards out again, or Turn into section
+  the card under the pointer off (the top one, or a lower one showing), or its red pin to move it whole. Unstack spreads the cards out again, or Turn into section
   gives them a box. Down to one card, it lets go of it.
 - **The rule:** a card is in the section its centre is over — whether you drop the card there (a dragged
   group all goes into the section under the pointer), or move,

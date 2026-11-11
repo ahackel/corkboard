@@ -301,7 +301,7 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   stack's corner, or at their spots in the fan. Never authored, so a position written there is nothing anyone
   chose; Unstack and Turn into section lay the cards out afresh in a grid (`layGrid`).
 - **Three gestures on the pile, by where you press** (`bindNodeDrag` hands a plain press on the body to
-  `beginPileGesture`): a CLICK fans it out; a DRAG lifts the top card off — reparented to whatever the pile
+  `beginPileGesture`): a CLICK fans it out; a DRAG lifts the card pressed off (the top one, or a lower one showing round it) — reparented to whatever the pile
   lies in and handed to the ordinary drag (`startNodeDrag`), so it lands by the ordinary drop rule, back on
   this pile included; the PIN and the name tab take the ordinary path — select, and move the stack whole.
   A double-click does nothing more (the click already fanned it) except rename on the tab.
