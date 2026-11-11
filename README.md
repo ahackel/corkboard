@@ -81,13 +81,13 @@ typecheck` runs `tsc --noEmit`.
 
 Tests: `npm test` checks the file format (vitest). `npm run e2e` drives the app in a real
 browser (Playwright, `e2e/`); the first time, install its browser with
-`npx playwright install chromium`. Every pull request runs typecheck, lint and both suites
-(`.github/workflows/ci.yml`), and so does the deploy before it publishes. Node 22 (`.nvmrc`).
+`npx playwright install chromium`. The deploy runs typecheck, lint and the unit tests before it
+publishes; the end-to-end specs are run locally, or by hand on GitHub (Actions ▸ Checks). Node 22 (`.nvmrc`).
 
 ## Versioning
 
-The displayed version is set by the deploy workflow: `0.1.<GitHub run number>`, so it
-bumps automatically per deploy — local builds show `0.1.0-dev` instead. It's shown at
+The displayed version is set by the deploy workflow: `1.0.<deploys since 1.0.0>`, so it
+bumps automatically per deploy — local builds show `1.0.0-dev` instead. It's shown at
 the bottom of the home sidebar (home button, top left).
 
 ## License

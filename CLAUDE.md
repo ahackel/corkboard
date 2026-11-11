@@ -16,7 +16,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 ## Running / developing
 
 - `npm install` once, then `npm run dev` (localhost:5173). OPFS needs https/localhost — not `file://`.
-- `npm run build` → `dist/index.html`; `npm run preview` serves it; a push to `main` deploys it (`deploy.yml`) with `public/format.md` (the file-format spec — update it with any format change), `public/about/` (the about page) and `public/sw.js` (the offline copy). CI (`ci.yml`) runs typecheck, lint, vitest and e2e on every PR.
+- `npm run build` → `dist/index.html`; `npm run preview` serves it; a push to `main` deploys it (`deploy.yml`) with `public/format.md` (the file-format spec — update it with any format change), `public/about/` (the about page) and `public/sw.js` (the offline copy). `ci.yml` runs every check incl. e2e, by hand only.
 - `npm run typecheck` after touching types (fully strict, no `@ts-nocheck`); verify in a browser by exercising
   the canvas. Keep `.js` in import specifiers (bundler resolution maps them to `.ts`).
 - **Code style** (all code you write or touch): readable code over comments — comment only what it can't say;

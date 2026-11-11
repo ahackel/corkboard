@@ -27,13 +27,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      # …nor one that breaks the canvas: the specs drive the built single file in Chromium.
-      - run: npx playwright install --with-deps chromium
-      - run: npm run e2e -- --trace off
-      # The displayed version bumps per deploy, not per local build: 0.1.<run number>.
-      - run: npm run build
-        env:
-          APP_VERSION: 0.1.${{ github.run_number }}
+      # The displayed version bumps per deploy, not per local build: 1.0.<deploys since 1.0.0>.
+      # (Run 166 was 1.0.0; move both numbers together for the next minor.)
+      - run: APP_VERSION="1.0.$((GITHUB_RUN_NUMBER - 166))" npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

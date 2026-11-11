@@ -38,7 +38,7 @@ function contentSecurityPolicy() {
   };
 }
 
-// The deploy workflow injects APP_VERSION (0.1.<GitHub run number>), so the version only
+// The deploy workflow injects APP_VERSION (1.0.<deploys since 1.0.0>), so the version only
 // bumps on actual deploys. Local/dev builds are marked as such instead of counting.
 const appVersion = process.env.APP_VERSION || `${pkg.version}-dev`;
 

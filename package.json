@@ -1,6 +1,6 @@
 {
   "name": "corkboard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Single-file, local-first visual editor for a folder of Markdown notes.",
   "private": true,
   "type": "module",

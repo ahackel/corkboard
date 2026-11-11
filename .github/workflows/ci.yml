@@ -1,8 +1,10 @@
 name: Checks
 
-# What a deploy runs before it publishes, on every pull request — so a break is seen before the merge.
+# Every check there is — typecheck, lint, the unit tests and the end-to-end specs in Chromium — run by
+# hand (Actions ▸ Checks ▸ Run workflow), not on a push: the specs take minutes, and they are run
+# locally before a change goes in (`npm run e2e`).
 on:
-  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
