@@ -97,7 +97,7 @@ function removeImage(n: MindNode, path: string): void {
     n.body = stripImageRef(n.body, path);
     n.dirty = true;
     syncOpenEditor(n);
-  }, { reflow: 'relayout', status: 'Image removed' });
+  }, { reflow: 'relayout' });
 }
 // Copy the bitmap to the clipboard. Browsers only accept PNG ClipboardItems, so anything else is
 // re-encoded via a canvas first. Remote CORS-tainted images fail → status message.

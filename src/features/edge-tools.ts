@@ -109,7 +109,9 @@ export function connectSelection(): void {
       }
     }
   }, { edges: true, reflow: 'paint' });
-  setStatus(made ? `Connected ${made + 1} cards` : 'Already connected');
+  if (!made) {
+    setStatus('Already connected');
+  }
 }
 
 // The end that STAYS while one is dragged: a moved end's other end as it's pinned, or the port a fresh draw left.
@@ -258,7 +260,7 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
       if (toEnd) { existing.to = target; delete existing.toPath; }
       else { existing.from = target; delete existing.fromPath; }
       setPin(existing, toEnd ? 'to' : 'from', overPin);
-    }, { edges: true, reflow: 'paint', status: 'Edge moved' });
+    }, { edges: true, reflow: 'paint' });
     syncEdgeBar();
     return;
   }
@@ -317,7 +319,7 @@ export function deleteSelectedEdge(): boolean {
   mutate([], () => {
     state.edges = state.edges.filter(e => !state.selEdges.has(e.id));
     state.selEdges.clear();
-  }, { edges: true, reflow: 'paint', status: ids.length > 1 ? `${ids.length} edges deleted` : 'Edge deleted' });
+  }, { edges: true, reflow: 'paint' });
   syncEdgeBar();
   return true;
 }

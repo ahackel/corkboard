@@ -250,7 +250,6 @@ async function saveAll(): Promise<void> {
   if (firstError !== undefined) {
     throw firstError;
   }
-  setStatus(`Saved ${written} file${written===1?'':'s'} · ` + new Date().toLocaleTimeString());
   releaseFolded();   // a folded section whose notes are all safely on disk can let go of them (data/lazy.ts)
 }
 
@@ -279,7 +278,6 @@ export function scheduleSave(): void {
   // Geometry lives in board.json, so the two files settle together: every mutation path in the app
   // ends in scheduleSave(), and a great many of them move something.
   scheduleSaveBoard();
-  setStatus('Saving…');
   setSaving('notes', true);
   clearTimeout(saveTimer);
   saveTimer = window.setTimeout(flushSave, 400);

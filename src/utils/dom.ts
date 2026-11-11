@@ -48,9 +48,12 @@ export function classMarker(cls: string): (el: Element | null) => void {
 // and view/grid.ts, which test for the element before wiring it up.
 export const IS_MAC = /Mac|iPhone|iPad/.test(navigator.userAgent);
 
-// Shortcuts are written with ⌘; elsewhere that key is Ctrl.
+// Shortcuts are written the Mac way (⌘ ⌥ ⇧ ⌃ ⌫); elsewhere those keys have names. The ONE spelling of
+// a shortcut on screen: the palette, every menu and every tooltip go through this.
+const PC_KEYS: Record<string, string> = { '⌘': 'Ctrl+', '⌃': 'Ctrl+', '⌥': 'Alt+', '⇧': 'Shift+', '⌫': 'Backspace' };
+
 export function keys(s: string): string {
-  return IS_MAC ? s : s.replace(/⌘/g, 'Ctrl+');
+  return IS_MAC ? s : s.replace(/[⌘⌃⌥⇧⌫]/g, k => PC_KEYS[k]).replace(/Ctrl\+Ctrl\+/g, 'Ctrl+');
 }
 
 export function byId<T extends Element = HTMLElement>(id: string): T { return document.getElementById(id) as unknown as T; }
@@ -117,8 +120,11 @@ export function closeOnOutside(pop: HTMLElement, trigger: HTMLElement, close: ()
       close();
     }
   }, true);
+  // Esc closes the popover and NOTHING else: the selection under it stays (the press stops here).
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && pop.classList.contains('open')) {
+      e.preventDefault();
+      e.stopPropagation();
       close();
     }
   }, true);

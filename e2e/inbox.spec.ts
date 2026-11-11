@@ -79,7 +79,7 @@ test('a note that lands in a FOLDED Inbox pulses its pill, which counts it', asy
   await expect.poll(() => tooltip(page, pill)).toMatch(/\b2 Cards\b/);
   await expect(pill).toHaveClass(/arrived/);
   // the palette's Inbox reads it and opens it up
-  await palette(page, 'Inbox');
+  await palette(page, 'Go to the Inbox');
   await expect(card(page, 'Two')).toBeVisible();
   await expect(card(page, 'One')).toBeVisible();
 });
@@ -89,7 +89,7 @@ test('the palette’s Inbox makes the Inbox section beside the board, then goes 
   await seedFolder(page, { 'Loose.md': 'A loose card\n',
     'board.json': JSON.stringify({ version: 1, model: 2, edges: [], nodes: { 'Loose.md': { x: 0, y: 0 } } }) });
   await openFolder(page);
-  await palette(page, 'Inbox');
+  await palette(page, 'Go to the Inbox');
   const inbox = section(page, 'Inbox');
   await expect(inbox).toBeVisible();
   const f = (await inbox.boundingBox())!, c = (await card(page, 'A loose card').boundingBox())!;
@@ -100,7 +100,7 @@ test('the palette’s Inbox makes the Inbox section beside the board, then goes 
     try { await (await root.getDirectoryHandle('Inbox')).getFileHandle('_index.md'); return true; } catch { return false; }
   })).toBe(true);
   // a second time just goes there
-  await palette(page, 'Inbox');
+  await palette(page, 'Go to the Inbox');
   await expect(page.locator('#world .node.section', { hasText: 'Inbox' })).toHaveCount(1);
 });
 

@@ -295,7 +295,7 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
       // doesn't inherit createNode's own default.
       n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : newIds.get(c.p.mm.parent)!;
     }
-  }, { reflow: 'remeasure', status: `Pasted ${cards.length} card${cards.length === 1 ? '' : 's'}` });
+  }, { reflow: 'remeasure' });
   setSelectionSet(rootIds);
   return true;
 }
@@ -350,7 +350,6 @@ export function bindCardFileDrag(n: MindNode): void {
     e.dataTransfer.effectAllowed = 'copy';
     // ONLY DownloadURL — Chrome ignores it when other formats are set alongside (crbug 55071)
     e.dataTransfer.setData('DownloadURL', `${f.mime}:${f.name}:data:${f.mime};base64,${b64(f.bytes)}`);
-    setStatus(`Drop to save ${f.name}`);
   });
 }
 

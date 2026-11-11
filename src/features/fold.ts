@@ -1,6 +1,6 @@
 // ---------- folding: a card to its chip, a section to its pill ----------
 import { state, setStatus, type MindNode } from '../core/state.js';
-import { isLockedEffective, isHidden, nodesOf, nodeLabel, subtreeIds } from '../utils/model.js';
+import { isLockedEffective, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
 import { canFold, canToggleFold } from '../view/geometry.js';
 import { animateLayout } from '../main.js';
 import { afterReading } from '../data/lazy.js';
@@ -52,13 +52,11 @@ function applyCollapsed(cards: MindNode[], collapsed: boolean): void {
   if (!collapsed && afterReading(cards.map(n => n.id), () => applyCollapsed(cards, false), false)) {
     return;
   }
-  const what = cards.length > 1 ? `${cards.length} notes` : `“${nodeLabel(cards[0]!)}”`;
   record(cards.map(n => n.id),
     () => animateLayout(() => { for (const n of cards){ n.collapsed = collapsed; n.dirtyLayout = true; } }));
   dropHiddenFromSelection();
   syncFloatBar();   // its fold button shows the state a click would make
   scheduleSave();
-  setStatus(`${collapsed ? 'Collapsed' : 'Expanded'} ${what}`);
 }
 export function toggleCollapseSelection(ids: Iterable<string>): void {
   const cards = foldableSelection(ids);

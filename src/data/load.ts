@@ -268,7 +268,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   if (flattened && store.isOpen) {
     try { await flushBoard(); }
     catch { setStatus('⚠ Could not write board.json — leaving this map as it was.'); return; }
-    setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to edges — nothing moved.`);
+    setStatus(`Converted ${flattened} branch${flattened === 1 ? '' : 'es'} to lines — nothing moved.`);
   }
   if (folded) {
     setStatus(`Turned ${folded} card${folded === 1 ? '' : 's'} with cards inside into section${folded === 1 ? '' : 's'}`);

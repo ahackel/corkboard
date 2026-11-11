@@ -172,6 +172,17 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
   box-shadow:0 4px 16px rgba(0,0,0,.2); opacity:0; transform:translate(-50%, 8px);
   transition:opacity .2s ease, transform .2s ease; }
 #status.show { opacity:1; transform:translate(-50%, 0); }
+/* The first-run hint: one quiet line in the middle of a map with nothing on it (main.ts paintAll). */
+#emptyHint { display:none; position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); margin:0;
+  max-width:calc(100% - 48px); text-align:center; font-size:15px; color:var(--muted); pointer-events:none; }
+body.empty-map #emptyHint { display:block; }
+#emptyHint kbd { font:inherit; font-weight:700; padding:1px 6px; border-radius:6px; background:var(--panel);
+  box-shadow:0 0 0 1px var(--node-border); }
+#emptyHint .eh-coarse { display:none; }
+@media (pointer: coarse) {
+  #emptyHint .eh-fine, #emptyHint .eh-more { display:none; }
+  #emptyHint .eh-coarse { display:inline; }
+}
 body:has(#saveAlert:not([hidden])) #status { display:none; }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
 /* Open-in-place drop target (features/open-drop.ts): a dark pill at the top centre while a note is dragged in,
@@ -323,6 +334,8 @@ body.scoped #scopeBar { display:flex; }
   display:none; align-items:center; width:300px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
   background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
+/* the pill wears the focus its field hides */
+#searchWrap:focus-within { box-shadow:var(--shadow-ui), 0 0 0 2px var(--accent); }
 #searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
   display:block; color:var(--muted); pointer-events:none; flex:none; }
 /* The field FILLS the bar — transparent, no fill of its own and no focus ring, so the whole pill

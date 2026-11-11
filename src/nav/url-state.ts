@@ -14,10 +14,10 @@
 // (open section/camera/search) — all of it ephemeral: none of these fields are ever
 // written back to a note's frontmatter, they only ever flow FROM state INTO the URL.
 //
-// Selecting a different node pushes a new history entry (it's the primary unit of
-// back/forward navigation); camera/search changes replace the current entry
-// instead (scheduleUrlSync, debounced) — they tag along with wherever you last navigated
-// rather than creating their own back-stops.
+// Opening or leaving a section pushes a new history entry: where you STAND is the unit of back/forward
+// navigation. The selection, the camera and the search replace the current entry instead
+// (scheduleUrlSync, debounced) — they tag along with wherever you last navigated rather than creating
+// their own back-stops. (A selection used to push: Back then walked through every card you had clicked.)
 // ============================================================
 import { revealPath } from '../data/lazy.js';
 import { state, setStatus } from '../core/state.js';

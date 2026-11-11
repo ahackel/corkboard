@@ -88,7 +88,7 @@ test('a right-click in a card’s text lists the editor’s commands with their 
     'Spelling suggestions',
   ]);
   const keysShown = await page.$$eval('#ctxMenu .cm-item', els => els.map(e => e.querySelector('kbd')?.textContent ?? ''));
-  expect(keysShown).toContain('⇧Tab');
+  expect(keysShown).toContain('Shift+Tab');
   await page.locator('#ctxMenu .cm-item', { hasText: /^Bold/ }).click();
   await expect(page.locator('#ctxMenu')).not.toHaveClass(/open/);
   await expect(ta).toBeFocused();                      // the menu took no focus: the editor is still open…

@@ -129,7 +129,6 @@ export function openSection(target: MindNode | undefined): void {
     return;                  // already standing in it
   }
   applyScope(t, { back });
-  setStatus(`Opened “${nodeLabel(t)}”`);
 }
 // Leave the innermost level.
 export function exitScope(): void {

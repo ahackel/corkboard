@@ -231,8 +231,6 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
   }
   const copies = srcs.map(next ? copyNext : copyNode);
   remeasure();
-  const msg = copies.length === 1 ? `${next ? 'Next' : 'Duplicated'} → “${nodeLabel(copies[0])}”`
-    : `${next ? 'Made the next of' : 'Duplicated'} ${copies.length} cards`;
   if (copies.length === 1){
     selectNode(copies[0].id);
     startInlineEdit(copies[0], { isNew: false });
@@ -240,16 +238,16 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
     setSelectionSet(copies.map(c => c.id));
     commitStep();   // no rename opens, so the step ends here
   }
-  setStatus(msg);
+  if (next) {
+    setStatus(copies.length === 1 ? `Next → “${nodeLabel(copies[0])}”` : `Made the next of ${copies.length} cards`);
+  }
   scheduleSave();
   return copies;
 }
 // Shift+drag clone: drop a copy at `pos` that keeps the source's parent (a sibling),
 // while the original is the node being dragged away. Doesn't steal selection/focus.
 export function leaveClone(s: MindNode, pos: Pt): MindNode {
-  const copy = cloneNodeAt(s, pos.x, pos.y);
-  setStatus(`Cloned → “${nodeLabel(copy)}”`);
-  return copy;
+  return cloneNodeAt(s, pos.x, pos.y);
 }
 
 // ---------- a new card inside a section / after a card / a new section ----------
@@ -366,7 +364,6 @@ export function extractToCard(): void {
   state.nodes.set(card.id, card);
   remeasure(); selectNode(card.id); popIn(card); scheduleSave();
   commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
-  setStatus(`Extracted “${nodeLabel(card)}”`);
 }
 // WHICH TEXT is being dragged: a range of the card's one editor (features/text-drag.ts captures this
 // at dragstart; the offsets are into that editor's live text, which is why the drop re-reads it rather
@@ -410,7 +407,6 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
     touch(t.id);
     appendToBody(t, text.trim());
     relayout(); selectNode(t.id); scheduleSave(); commitStep();
-    setStatus(`Moved text into “${nodeLabel(t)}”`);
     return;
   }
   if (singleNoteRefuses()) {
@@ -430,7 +426,6 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   });
   state.nodes.set(card.id, card);
   remeasure(); selectNode(card.id); scheduleSave(); commitStep();
-  setStatus(`Extracted “${nodeLabel(card)}”`);
 }
 
 // ---------- merging cards into one ----------
@@ -559,7 +554,7 @@ export function deleteSelection(): void {
   mutate([], () => {                 // ids are touched inside deleteNodes
     state.sel.clear(); state.selId = null;
     deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
-  }, { reflow: 'relayout', status: `Deleted ${ids.length} card${ids.length===1?'':'s'}` });
+  }, { reflow: 'relayout' });
   applySelection();
 }
 // A node is safe to delete-and-promote when it's unlocked, its own parent isn't locked (the
@@ -659,7 +654,6 @@ export function extractImage(sourceId: string, path: string, alt: string,
       touch(tgt.id);
       appendToBody(tgt, md);
     }
-    setStatus('Image moved');
   } else {
     // untitled: the note is the picture and nothing else, which is what makes it render as one
     // (core/state.ts isImageCard). The alt rides along in the markdown and names the file.
@@ -668,7 +662,6 @@ export function extractImage(sourceId: string, path: string, alt: string,
       body: md, color: 'none', w: target.w, h: target.h });
     touch(n.id);                 // before-image is null (not yet in state) → undo removes it
     state.nodes.set(n.id, n);
-    setStatus('Image extracted');
   }
   relayout();
   scheduleSave();

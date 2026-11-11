@@ -336,7 +336,7 @@ export function bindNodeDrag(n: MindNode): void {
     // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the section's
     // own handle, so pressing it always takes the card path — a press there selects and drags the
     // section itself, the way a card's title does, rather than rubber-banding its contents.
-    if (isSection(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey) {
+    if (isSection(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
       e.stopPropagation();
       beginMarqueeFromNode(e, n.id);
       return;
@@ -385,7 +385,7 @@ function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
   const origins = new Map(ids.map(id => { const m2 = state.nodes.get(id)!; return [id, { x:m2.x, y:m2.y }] as [string, Pt]; }));
   ui.drag = { n, active:n, multi, sx:e.clientX, sy:e.clientY, cx:e.clientX, cy:e.clientY, start, targets, origins, selRoots,
            moved:false, dropTarget:n.parent, alt:e.altKey, shift:e.shiftKey, cloned:false,
-           meta: e.metaKey || e.ctrlKey,     // ⌘/Ctrl-click toggles this card in the selection
+           meta: e.metaKey || e.ctrlKey || e.shiftKey,   // ⇧- or ⌘/Ctrl-click toggles this card in the selection
            touch: e.pointerType === 'touch',  // higher move threshold for finger taps
            cardMerge: null, fromFrame,
            reclick: !fromFrame && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
@@ -496,7 +496,7 @@ function dragPointerUp(): void {
         ui.drag = null;
         // (A click inside the frame, between cards, leaves the selection standing.)
         if (drag.meta) {
-          toggleSel(n.id);                 // ⌘/Ctrl-click: add/remove from selection
+          toggleSel(n.id);                 // ⇧- or ⌘/Ctrl-click: add/remove from selection
         } else if (!drag.fromFrame && (state.selId !== n.id || state.sel.size !== 1)) {
           selectNode(n.id);   // reduce a multi-selection to this card
         }
@@ -515,9 +515,6 @@ function dragPointerUp(): void {
         if (fuseNode) {
           const merged = mergeCardsInto(fuseNode.id, selRoots);
           if (merged){
-            setStatus(merged > 1
-              ? `Merged ${merged} cards into “${nodeLabel(fuseNode)}”`
-              : `Merged “${nodeLabel(act)}” into “${nodeLabel(fuseNode)}”`);
             remeasure();
             selectNode(fuseNode.id);
             scheduleSave(); commitStep();

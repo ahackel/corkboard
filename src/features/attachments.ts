@@ -13,7 +13,6 @@ import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
 import { appendMd, imageMd } from '../utils/markdown.js';
-import { nodeLabel } from '../utils/model.js';
 import { autosizeBody, syncOpenEditor } from './inline-edit.js';
 import { touch } from './history.js';
 import { mutate } from './mutate.js';
@@ -113,7 +112,6 @@ async function appendImagesToNode(id: string, files: FileList | File[]): Promise
     setStatus('Locked — can’t add images');
     return;
   }
-  setStatus('Adding image…');
   const md = await markdownForImages(imgs);
   mutate([id], () => {
     n.body = appendMd(n.body, md);
@@ -134,7 +132,6 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
   }
   const ta = ui.bodyEdit.ta;
   touch(n.id);   // inside an open body-edit session — merges into (and commits with) that step
-  setStatus('Adding image…');
   const md = await markdownForImages(imgs);
   const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
   const ins = (s > 0 && v[s-1] !== '\n' ? '\n' : '') + md + '\n';
@@ -155,7 +152,6 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
   if (!imgs.length || !canAttach()) {
     return;
   }
-  setStatus('Adding image…');
   const p = worldAtOrCentre(sx, sy);
   let i = 0;
   for (const f of imgs){
@@ -264,20 +260,14 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   const items = splitPastedList(text);
   if (items){
     const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(worldAtOrCentre());
-    const made = createCards(items, at, opts.parent);
-    if (made.length) {
-      setStatus(`Pasted ${made.length} cards`);
-    }
+    createCards(items, at, opts.parent);
     return;
   }
   // Pasted text is a card's text, so it splits the way a card's own does (splitHeading): a leading
   // `# ` line becomes the title, and without one the card is untitled and this is all body. It used to
   // hand-roll its own first-line-as-title read here, complete with a second copy of the marker strip.
   const { title, body } = splitHeading(text);
-  const n = createNode({ ...opts, title, body });
-  if (n) {
-    setStatus(`Pasted “${nodeLabel(n)}”`);
-  }
+  createNode({ ...opts, title, body });
 }
 document.addEventListener('paste', (e) => {
   if (isTypingInField()) {

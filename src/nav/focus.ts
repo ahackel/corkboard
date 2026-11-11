@@ -71,9 +71,7 @@ export function focusByTitle(link: string, from?: MindNode, readFolded = false):
       setStatus(`No node titled “${title}” in this map`); return;
     }
     const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
-    if (createNode({ x: at.x, y: at.y, title, edit: false })) {
-      setStatus(`Created “${title}”`);
-    }
+    createNode({ x: at.x, y: at.y, title, edit: false });
     return;
   }
   popScopeFor(target);

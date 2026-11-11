@@ -140,6 +140,7 @@ function isCurrent(m: MapRef): boolean {
 }
 
 let renaming: string | null = null;   // map id whose row shows the inline rename input
+let naming: string | null = null;     // …and the one just made, whose first name closes the sidebar
 let activeTab: MapKind = 'device';    // which backend's maps the sidebar shows
 
 const NEW_LABEL: Record<MapKind, string> = { device: 'New map', folder: 'Open folder…', note: 'Open a note…' };
@@ -152,7 +153,7 @@ function selectTab(tab: MapKind): void {
   byId('tabNote').classList.toggle('active', tab === 'note');
   // the "+" action creates where the active tab points
   byId('newBtnLabel').textContent = NEW_LABEL[tab];
-  renaming = null;
+  renaming = naming = null;
   renderMapList();
 }
 
@@ -201,12 +202,22 @@ function renderMapList(): void {
     const inp = row.querySelector<HTMLInputElement>('.mi-name-input');
     if (inp) {
       inp.focus(); inp.select();
+      // A map made a moment ago is being NAMED, not renamed: once it has its name (or keeps "Untitled"),
+      // the sidebar has done its job and the new board is what you want to see.
+      const done = (): void => {
+        if (naming === m.id) {
+          naming = null;
+          hideStart();
+        }
+      };
       inp.onkeydown = e => {
         if (e.key === 'Enter') {
           inp.blur();
         } else if (e.key === 'Escape') {
+          e.stopPropagation();
           renaming = null;
           renderMapList();
+          done();
         }
       };
       inp.onblur = () => {
@@ -214,7 +225,7 @@ function renderMapList(): void {
           return;   // Escape already cancelled (re-render detached us)
         }
         renaming = null;
-        commitRename(m, inp.value);
+        void commitRename(m, inp.value).then(done);
       };
     }
   });
@@ -277,24 +288,38 @@ async function deleteMap(m: MapRef): Promise<void> {
 // ---------- home sidebar ----------
 const startScreen = byId('startScreen');
 export function showStart(): void {
-  renaming = null;
+  renaming = naming = null;
   byId<HTMLButtonElement>('tabFolder').disabled = !HAS_FSA;
   byId<HTMLButtonElement>('tabNote').disabled = !HAS_FSA;
   // open on the tab of the map currently on the canvas
   selectTab(HAS_FSA && currentMap ? currentMap.kind : 'device');
   startScreen.classList.remove('hidden');
+  startScreen.inert = false;
 }
-export function hideStart(): void { startScreen.classList.add('hidden'); }
+
+// Closed, the sidebar is only slid out of sight: `inert` takes its buttons out of the Tab order too.
+export function hideStart(): void {
+  startScreen.classList.add('hidden');
+  startScreen.inert = true;
+}
 
 byId('tabDevice').onclick = () => selectTab('device');
 byId('tabFolder').onclick = () => selectTab('folder');
 byId('tabNote').onclick = () => selectTab('note');
 // the "+" action: a new on-device map, the FSA folder picker or the note picker — per the active tab
+// A fresh on-device map, opened, with its name selected in the sidebar to type over; Enter goes to the board.
+export async function newDeviceMap(): Promise<void> {
+  showStart();
+  selectTab('device');
+  const ref = await createDeviceMap(await resolveOnDeviceStore());
+  await openDeviceMap(ref);
+  renaming = naming = ref.id;
+  renderMapList();
+}
+
 byId('newBtn').onclick = async () => {
   if (activeTab === 'device'){
-    const ref = await createDeviceMap(await resolveOnDeviceStore());
-    await openDeviceMap(ref);
-    hideStart();
+    await newDeviceMap();
   } else if (activeTab === 'note') {
     await pickNote();
   } else {

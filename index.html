@@ -69,6 +69,9 @@
   </div>
 
   <div id="stage">
+    <!-- an EMPTY map says how to begin, once: gone with the first card (main.ts paintAll, body.empty-map) -->
+    <p id="emptyHint"><span class="eh-fine">Double-click or press <kbd>N</kbd> to write a note</span><span
+      class="eh-coarse">Double-tap to write a note</span><span class="eh-more"> · <kbd id="emptyHintKey">⌘P</kbd> for everything else</span></p>
     <!-- background grid (none/dot/mesh/line, set in the map settings): a SCREEN-SPACE layer, sibling of
          (and painted below) #world — deliberately NOT inside #world. A pattern that inherits the
          zoom transform scales its own dots/strokes with it, so at any k≠1 the browser resamples
@@ -142,7 +145,7 @@
        its controls. Starts closed so it doesn't flash in before the first sync. -->
   <div id="edgeBar">
     <!-- every button that opens a picker is a dropdown (.fb-dd): its face, then a chevron -->
-    <button id="ebColor" class="fb-dd" title="Colour" aria-label="Edge colour">
+    <button id="ebColor" class="fb-dd" title="Colour" aria-label="Line colour">
       <span id="ebColorDot" class="fb-swatch swatch"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
     <button id="ebDash" class="fb-icon fb-dd" title="Line style" aria-label="Line style"></button>
     <button id="ebArrows" class="fb-icon fb-dd" title="Line ends" aria-label="Line ends"></button>
@@ -151,7 +154,7 @@
   <div id="ebArrowPop" class="fb-pop"><div id="ebArrowChips" class="capcols"></div></div>
   <div id="ebDashPop" class="fb-pop"><div id="ebDashChips" class="layoutchips"></div></div>
   <!-- the label editor, opened by DOUBLE-CLICKING an edge; positioned over the line's midpoint -->
-  <input id="ebLabelEdit" type="text" spellcheck="false" placeholder="Label…" aria-label="Edge label">
+  <input id="ebLabelEdit" type="text" spellcheck="false" placeholder="Label…" aria-label="Line label">
 
   <div id="fbColorPop" class="fb-pop">
     <div id="edColors" class="swatches"></div>

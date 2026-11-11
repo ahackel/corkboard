@@ -43,6 +43,7 @@ import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { readOpenUnread } from './data/lazy.js';
+import { store } from './data/persistence.js';
 import { showStart, boot } from './boot.js';
 import { isScopeRoot, canOpen } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
@@ -842,6 +843,7 @@ export function paintAll(): void {
   paintFreeEdges();
   syncSelFrame();     // the frame round a multi-selection (features/sel-frame.ts)
   syncScopeChrome();   // crumbs + reading class + the recovery when the section you were inside has gone
+  document.body.classList.toggle('empty-map', !state.nodes.size && store.isOpen && !state.singleNote);   // #emptyHint
 }
 // The two shapes of "settle the canvas after a change", spelled once each. Nearly every mutation path
 // in the app ends in one of them, and which one is correct turns on a single question: did the change

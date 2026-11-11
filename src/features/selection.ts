@@ -7,7 +7,7 @@ import { paintNode } from '../main.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { syncFloatBar } from './float-bar.js';
 import { syncSelFrame } from './sel-frame.js';
-import { syncUrl, updateDocumentTitle } from '../nav/url-state.js';
+import { scheduleUrlSync, updateDocumentTitle } from '../nav/url-state.js';
 import { outOfScope } from '../nav/scope.js';
 
 // Select everything ON THE CANVAS — which, inside an open section, is that section's contents and nothing
@@ -16,7 +16,9 @@ import { outOfScope } from '../nav/scope.js';
 // locked card's descendants). Shared by ⌘A and the canvas context menu, so the two can't diverge.
 export function selectAll(): void {
   setSelectionSet([...state.nodes.values()].filter(n => !isHidden(n)).map(n => n.id));
-  setStatus(state.sel.size ? `Selected ${state.sel.size} card${state.sel.size > 1 ? 's' : ''}` : 'Nothing to select');
+  if (!state.sel.size) {
+    setStatus('Nothing to select');
+  }
 }
 // the ids currently being edited (one or many) — colour and lock apply to all of them
 export function selectedIds(): string[] { return state.sel.size ? [...state.sel] : (state.selId ? [state.selId] : []); }
@@ -44,7 +46,7 @@ export function applySelection(): void {
       paintNode(n);
     }
   }
-  paintFreeEdges(); syncSelFrame(); syncFloatBar(); syncUrl(); updateDocumentTitle();
+  paintFreeEdges(); syncSelFrame(); syncFloatBar(); scheduleUrlSync(); updateDocumentTitle();
 }
 // A descendant of a locked card can't be selected at all — the locked card itself still can be
 // (see utils/model.ts hasLockedAncestor). Nor can anything outside the section you're standing in:

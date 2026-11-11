@@ -132,7 +132,7 @@ export function autoSizeSelection(): void {
 // grouping a parent together with its own child would otherwise reparent the parent under the
 // section while the section sits under that same parent, a cycle), sized to enclose the selection's
 // current positions (same fit math as fitSectionToContent). Every selected card is reparented
-// under the new section, which ends up selected. Shared by the 'G' shortcut and the context menu.
+// under the new section, which ends up selected. Shared by ⌘S, the bar and the context menu.
 export function groupSelectionIntoSection(): void {
   if (singleNoteRefuses()) {
     return;
@@ -167,8 +167,10 @@ export function groupSelectionIntoSection(): void {
     state.nodes.set(sectionId, section);
     for (const n of nodes) { touch(n.id); n.parent = sectionId; n.dirty = true; }
     settleSections([sectionId]);   // …and whatever else its box now covers
-  }, { reflow: 'relayout', status: `Grouped ${nodes.length} card${nodes.length === 1 ? '' : 's'} into a section` });
+  }, { reflow: 'relayout' });
   selectNode(sectionId);
+  // …with its name open to type over, as a new section's is. Esc or a click away keeps "Section N".
+  startInlineEdit(state.nodes.get(sectionId));
 }
 // Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
 function markOpen(): void {

@@ -217,7 +217,7 @@ async function openBox(page: Page, box: Record<string, string>, card: string): P
       'Box/_index.md': { x: 0, y: 0, w: 500, h: 400 }, 'Box/Inside.md': { x: 40, y: 60 } } }),
   });
   await section(page, 'Box').locator(':scope > .title-row').click();
-  await palette(page, 'Open');
+  await palette(page, 'Open the section');
 }
 
 test('ungrouping a section keeps its cards and leaves no empty wrapper behind', async ({ page }) => {
@@ -273,6 +273,10 @@ test('⌘S wraps the selection in "Section N" from the bar, and ⌘⌫ ungroups 
   await expect(page.locator('#fbWrap')).toBeVisible();
   await page.keyboard.press('ControlOrMeta+s');
   await expect(section(page, 'Section 1')).toBeVisible();
+  // its name is open to type over, as a new section's is
+  await page.keyboard.type('Pair');
+  await page.keyboard.press('Enter');
+  await expect(section(page, 'Pair')).toBeVisible();
   await expect(page.locator('#fbUngroup')).toBeVisible();
   await page.keyboard.press('ControlOrMeta+Backspace');
   await expect(page.locator('#world .node.section')).toHaveCount(0);

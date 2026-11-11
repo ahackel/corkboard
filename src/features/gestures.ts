@@ -66,8 +66,8 @@ stage.addEventListener('pointerdown', (e) => {
     stage.classList.add('panning');
     return;
   }
-  // start a marquee. ⌘/Ctrl keeps the existing selection and adds to it.
-  ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey, base:new Set(state.sel), moved:false };
+  // start a marquee. ⇧ or ⌘/Ctrl keeps the existing selection and adds to it.
+  ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey||e.shiftKey, base:new Set(state.sel), moved:false };
   drawMarquee(e.clientX, e.clientY);
   marqueeEl.style.display = 'block';
 });
@@ -174,7 +174,7 @@ export function beginMarqueeFromNode(e: PointerEvent, nodeId: string): void {
   if (e.pointerType !== 'mouse') {
     gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
   }
-  ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey, base:new Set(state.sel), moved:false, clickNode:nodeId };
+  ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey||e.shiftKey, base:new Set(state.sel), moved:false, clickNode:nodeId };
   drawMarquee(e.clientX, e.clientY);
   marqueeEl.style.display = 'block';
 }

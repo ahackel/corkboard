@@ -12,11 +12,13 @@ import { store } from '../data/persistence.js';
 import { openPalette, type Command, setPaletteSource, paletteOpen, closePalette } from './palette.js';
 import { undo, redo } from './history.js';
 import { clearEdgeSelection, deleteSelectedEdge, connectSelection } from './edge-tools.js';
+import { pasteFromClipboard, pickImagesAt } from './attachments.js';
+import { copyFilePath } from './context-menu.js';
 import { tidyShortcut, TIDY_ACTIONS, canTidySection, tidySection } from './tidy.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
 import { autoSizeSelection, groupSelectionIntoSection, colorSelection, KEY_COLORS } from './float-bar.js';
-import { copySelection, copyFormatted, cutSelection } from './clipboard.js';
+import { copySelection, copyFormatted, cutSelection, exportSelection, shareSelection, canShareFiles } from './clipboard.js';
 import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
 import { openImageAt } from '../main.js';
@@ -24,11 +26,11 @@ import { inboxSection, goToInbox } from './inbox.js';
 import { canEnter, canOpen, scopeActive } from '../nav/scope.js';
 import { hasStackSelected, unstackSelection, stackToSection } from './stacks.js';
 import { openSettings } from './canvas-color.js';
-import { byId, IS_MAC } from '../utils/dom.js';
-import { showStart, pickNote } from '../boot.js';
+import { byId, keys } from '../utils/dom.js';
+import { showStart, pickNote, newDeviceMap } from '../boot.js';
 import { flushSave } from '../data/save.js';
 import { nodesOf } from '../utils/model.js';
-import { exportZip } from '../data/zip-io.js';
+import { exportZip, openImportPicker } from '../data/zip-io.js';
 import { exportImage, type ImageFormat } from './export-image.js';
 
 // A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
@@ -40,6 +42,11 @@ function newCardAtPointer(): void {
 // …and an empty SECTION there, named on the spot — the palette's "New section".
 function newSectionAtPointer(): void {
   newSectionAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y));
+}
+
+// Where the pointer is, in SCREEN coords — the middle of the window before the mouse has moved.
+function pointerOrCentre(): { x: number; y: number } {
+  return ui.lastMouse ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 }
 
 // Zoom about the middle of the screen — ⌘+/⌘− and the palette's Zoom in/out.
@@ -225,12 +232,11 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
-  // Tab puts a new card INSIDE the selected section — the one thing that has an inside.
-  if (key === 'Tab' && state.selId){
+  // Tab puts a new card INSIDE the selected section — the one thing that has an inside. Anywhere else
+  // it stays the browser's: the way to the dock and the bars without a mouse.
+  if (key === 'Tab' && !e.shiftKey && state.selId && canOpen(state.nodes.get(state.selId))){
     e.preventDefault();
-    if (canOpen(state.nodes.get(state.selId))) {
-      addCardInside(state.selId);
-    }
+    addCardInside(state.selId);
     return;
   }
   if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
@@ -272,7 +278,6 @@ window.addEventListener('keyup', (e) => {
 // ---------- the ⌘P command palette's list ----------
 // Every action the app has, with the shortcut that does the same — built here because every action
 // function is in scope here. `when` hides what can't apply right now (features/palette.ts).
-const MOD = IS_MAC ? '⌘' : 'Ctrl ';
 const editable = (): boolean => store.isOpen;
 const hasSel = (): boolean => state.sel.size > 0 && editable();
 // What adds or removes a card — none of it applies to a single note (core/state.ts singleNoteRefuses).
@@ -285,35 +290,34 @@ const plainSectionSelected = (): boolean => nodesOf(selectedIds()).some(n => n.t
 function paletteCommands(): Command[] {
   return [
     { label: 'New card', shortcut: 'N', keywords: 'add create note', when: canGrow, run: newCardAtPointer },
-    { label: 'Find…', shortcut: MOD + 'F', keywords: 'search filter tags card', run: () => openSearch() },
+    { label: 'Find…', shortcut: '⌘F', keywords: 'search filter tags card', run: () => openSearch() },
     { label: trayOpen() ? 'Hide the tag tray' : 'Show the tag tray', shortcut: 'T', keywords: 'tags stickers emoji', run: () => toggleTray() },
-    { label: 'Undo', shortcut: MOD + 'Z', when: editable, run: undo },
-    { label: 'Redo', shortcut: '⇧' + MOD + 'Z', when: editable, run: redo },
+    { label: 'Undo', shortcut: '⌘Z', when: editable, run: undo },
+    { label: 'Redo', shortcut: '⇧⌘Z', when: editable, run: redo },
     { label: state.selId ? 'Focus the selection' : 'Fit the map to the screen', shortcut: 'F', keywords: 'zoom view', run: focusOrFit },
-    { label: 'Zoom in', shortcut: MOD + '+', run: () => zoomStep(1.2) },
-    { label: 'Zoom out', shortcut: MOD + '−', run: () => zoomStep(1 / 1.2) },
-    { label: 'Select all', shortcut: MOD + 'A', run: selectAll },
-    { label: 'Edit the note', shortcut: 'E', when: () => editable() && !!oneSel(), run: () => {
-      const n = oneSel();
-      if (n) {
-        startBodyEdit(n);
-      }
-    } },
+    { label: 'Zoom in', shortcut: '⌘+', run: () => zoomStep(1.2) },
+    { label: 'Zoom out', shortcut: '⌘−', run: () => zoomStep(1 / 1.2) },
+    { label: 'Select all', shortcut: '⌘A', run: selectAll },
+    { label: 'Edit', shortcut: 'E', keywords: 'note text write', when: () => editable() && !!oneSel() && oneSel()!.type !== 'section', run: () => startBodyEdit(oneSel()!) },
+    { label: 'Rename', shortcut: 'F2', keywords: 'title name', when: () => editable() && oneSel()?.type === 'section', run: () => startInlineEdit(oneSel()) },
     { label: 'Add a card inside the section', shortcut: 'Tab', keywords: 'child', when: () => canGrow() && canOpen(oneSel()), run: () => addCardInside(state.selId!) },
     { label: 'New section', keywords: 'group box section', when: canGrow, run: newSectionAtPointer },
-    { label: 'Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || canGrow(), run: goToInbox },
-    { label: 'Leave the section', shortcut: MOD + '↑', keywords: 'exit back up out parent', when: scopeActive, run: exitScope },
+    { label: 'Go to the Inbox', keywords: 'phone capture new notes icloud', when: () => !!inboxSection() || canGrow(), run: goToInbox },
+    { label: 'Leave the section', shortcut: '⌘↑', keywords: 'exit back up out parent', when: scopeActive, run: exitScope },
     { label: 'Add a card after', shortcut: 'Enter', keywords: 'sibling', when: () => canGrow() && !!oneSel(), run: () => createSibling(state.selId!) },
-    { label: 'Open', shortcut: MOD + '↓', keywords: 'enter section', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
-    { label: 'Connect the selected cards', shortcut: MOD + 'L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
-    { label: 'Wrap in new section', shortcut: MOD + 'S', keywords: 'group', when: growSel, run: groupSelectionIntoSection },
-    { label: 'Resize to fit', shortcut: '⌥⇧' + MOD + 'R', keywords: 'fit contents auto size shrink grow', when: hasSel, run: autoSizeSelection },
-    { label: 'Copy', shortcut: MOD + 'C', keywords: 'clipboard markdown outline', when: () => state.sel.size > 0, run: () => { void copySelection(); } },
+    { label: 'Open the section', shortcut: '⌘↓', keywords: 'enter go in', when: () => canEnter(oneSel()), run: () => openSection(oneSel()) },
+    { label: 'Connect the selected cards', shortcut: '⌘L', keywords: 'line edge arrow link', when: () => hasSel() && state.sel.size > 1, run: connectSelection },
+    { label: 'Wrap in new section', shortcut: '⌘S', keywords: 'group', when: growSel, run: groupSelectionIntoSection },
+    { label: 'Resize to fit', shortcut: '⌥⇧⌘R', keywords: 'fit contents auto size shrink grow', when: hasSel, run: autoSizeSelection },
+    { label: 'Copy', shortcut: '⌘C', keywords: 'clipboard markdown outline', when: () => state.sel.size > 0, run: () => { void copySelection(); } },
     { label: 'Copy as formatted text', keywords: 'clipboard rich text html styled docs mail word', when: () => state.sel.size > 0, run: () => { void copyFormatted(); } },
+    { label: 'Cut', shortcut: '⌘X', keywords: 'clipboard move', when: growSel, run: () => { void cutSelection(); } },
+    { label: 'Paste', shortcut: '⌘V', keywords: 'clipboard insert', when: canGrow, run: () => { const p = pointerOrCentre(); void pasteFromClipboard(p.x, p.y, null); } },
+    { label: 'Insert image…', keywords: 'picture photo file attach', when: canGrow, run: () => { const p = pointerOrCentre(); pickImagesAt(p.x, p.y, null); } },
     { label: 'Duplicate', shortcut: 'D', keywords: 'copy', when: growSel, run: () => duplicateSelection() },
     { label: 'Duplicate as the next one', shortcut: '⇧D', keywords: 'copy smart series next day date increment log', when: growSel, run: () => duplicateSelection({ next: true }) },
     { label: 'Tag…', shortcut: '#', keywords: 'tags emoji label obsidian', when: () => editable() && taggableSelection().length > 0, run: openTagPicker },
-    { label: 'Collapse / expand', shortcut: 'X', keywords: 'collapse expand', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
+    { label: nodesOf(selectedIds()).some(n => !n.collapsed) ? 'Collapse' : 'Expand', shortcut: 'X', keywords: 'collapse expand fold unfold', when: () => state.sel.size > 0, run: () => toggleCollapseSelection(state.sel) },
     ...TIDY_ACTIONS.map(a => ({ label: a.label, shortcut: a.shortcut || undefined, keywords: 'tidy align arrange distribute layout',
       when: () => state.sel.size >= (a.min ?? 2), run: a.run })),
     { label: 'Tidy up the section', keywords: 'tidy arrange layout grid clean', when: () => state.sel.size === 1 && canTidySection(oneSel()), run: () => tidySection(oneSel()!) },
@@ -322,12 +326,19 @@ function paletteCommands(): Command[] {
     ...KEY_COLORS.map((c, i) => ({ label: `Colour ${c}`, shortcut: String(i + 1), keywords: 'color fill paint', when: hasSel, run: () => colorSelection(c) })),
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
     // ⌘⌫ is listed once: Unstack when only stacks are selected, else Ungroup, which unstacks the stacks among them too
-    { label: 'Unstack', shortcut: MOD + '⌫', keywords: 'stack pile spread cards out', when: () => hasStackSelected() && !plainSectionSelected(), run: unstackSelection },
+    { label: 'Unstack', shortcut: '⌘⌫', keywords: 'stack pile spread cards out', when: () => hasStackSelected() && !plainSectionSelected(), run: unstackSelection },
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
-    { label: 'Ungroup', shortcut: MOD + '⌫', keywords: 'delete section keep cards', when: () => canGrow() && plainSectionSelected(), run: deleteSelectionKeepChildren },
+    { label: 'Ungroup', shortcut: '⌘⌫', keywords: 'delete section keep cards', when: () => canGrow() && plainSectionSelected(), run: deleteSelectionKeepChildren },
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: growSel, run: deleteSelection },
+    { label: 'Delete the line', shortcut: '⌫', keywords: 'remove edge arrow', when: () => editable() && state.selEdges.size > 0, run: () => { deleteSelectedEdge(); } },
+    { label: 'Copy file path', keywords: 'location folder finder', when: () => !!oneSel()?.file, run: () => copyFilePath(oneSel()!) },
+    { label: 'Download as Markdown', keywords: 'export save file md', when: () => state.sel.size > 0, run: exportSelection },
+    { label: 'Share…', keywords: 'send airdrop', when: () => canShareFiles && state.sel.size > 0, run: () => { void shareSelection(); } },
     { label: 'Map settings…', keywords: 'canvas colour color background grid dots lines mesh snap', run: openSettings },
     { label: 'Your maps…', keywords: 'home open folder switch', run: showStart },
+    { label: 'New map', keywords: 'board create blank', run: () => { void newDeviceMap(); } },
+    { label: 'Import .zip…', keywords: 'restore backup upload', run: openImportPicker },
+    { label: 'Save now', shortcut: '⌘S', keywords: 'write disk', when: () => store.isOpen && !state.sel.size, run: () => { void flushSave(); } },
     { label: 'Open a note…', keywords: 'file markdown md single card', when: () => 'showOpenFilePicker' in window, run: () => { void pickNote(); } },
     { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
     ...(['png', 'pdf'] as ImageFormat[]).map(f => ({
@@ -341,7 +352,8 @@ function paletteCommands(): Command[] {
   ];
 }
 setPaletteSource(paletteCommands);
-byId('paletteBtn').title = `Actions (${MOD.trim() === '⌘' ? '⌘P' : 'Ctrl+P'})`;
+byId('paletteBtn').title = `Actions (${keys('⌘P')})`;
+byId('emptyHintKey').textContent = keys('⌘P');
 byId('paletteBtn').onclick = (e) => {
   e.stopPropagation();
   if (paletteOpen()) {

@@ -8,7 +8,7 @@
 // (nothing selected), rather than listing it disabled: a list of things you can't do is
 // noise in a box you type into.
 // ============================================================
-import { byId } from '../utils/dom.js';
+import { byId, keys } from '../utils/dom.js';
 import { esc } from '../utils/markdown.js';
 
 export interface Command {
@@ -69,7 +69,7 @@ function render(): void {
   }
   list.innerHTML = shown.length
     ? shown.map((c, i) => `<div class="pal-item${i === active ? ' active' : ''}" role="option" data-i="${i}">`
-        + `<span>${esc(c.label)}</span>${c.shortcut ? `<kbd>${esc(c.shortcut)}</kbd>` : ''}</div>`).join('')
+        + `<span>${esc(c.label)}</span>${c.shortcut ? `<kbd>${esc(keys(c.shortcut))}</kbd>` : ''}</div>`).join('')
     : '<div class="pal-empty">No matching command</div>';
   list.querySelector('.pal-item.active')?.scrollIntoView({ block: 'nearest' });
 }
