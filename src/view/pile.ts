@@ -99,7 +99,7 @@ export function layStacks(): boolean {
 }
 
 // Where each card of a FANNED stack shows, the top card first: an arc for a handful — a hand of cards held up
-// over the pile, side by side so each reads whole, the middle highest — and a grid centred on the pile for
+// over the pile, side by side so each reads whole, top edges level, the middle highest — and a grid centred on the pile for
 // more.
 interface Spot extends Pt { tilt: number }
 
@@ -110,11 +110,12 @@ function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
   if (shown.length <= FAN_ARC_MAX) {
     const step = Math.max(...shown.map(nodeW)) + FAN_GAP;
     const last = shown.length - 1;
+    const tallest = Math.max(...shown.map(nodeH));
     shown.forEach((k, i) => {
       const t = last ? (i / last) * 2 - 1 : 0;   // -1 at the left end, +1 at the right
       out.set(k.id, {
         x: cx + (i - last / 2) * step - nodeW(k) / 2,
-        y: s.y - FAN_GAP * 2 - nodeH(k) - (1 - t * t) * ARC_DIP,
+        y: s.y - FAN_GAP * 2 - tallest - (1 - t * t) * ARC_DIP,   // TOP edges level, as on the pile: a taller card hangs lower
         tilt: t * ARC_TILT,
       });
     });

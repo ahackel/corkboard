@@ -315,7 +315,7 @@ fold lives, since how a folder is DRAWN is arrangement, not content. A new, unna
   removes something you didn't — docs/PRODUCT.md's "nothing moves on its own" bends for it, because a pile of
   one is a card with a pin in it.
 - **The FAN is a way of looking, not an edit** (`ui.fan`, ephemeral). Up to `FAN_ARC_MAX` cards fan up in an
-  arc above the pile, more open as a grid centred on it (`fanSpots`); the cards are real nodes then, hosted
+  arc above the pile, TOP edges level (a taller card hangs lower), more open as a grid centred on it (`fanSpots`); the cards are real nodes then, hosted
   straight in `#world` (`hostSection` returns null for a stack's card) above a scrim (`#fanScrim`, z 60/61,
   the drag layer lifted to 62). Drag one out and it leaves the pile; drag it within the fan and it takes that
   place (`fanSlot`/`reorderPile`), the gap it would drop into marked by a line (`showFanInsert`, `#fanInsert`). A click on the scrim, Esc or the pile closes it; search fans the stack a hit

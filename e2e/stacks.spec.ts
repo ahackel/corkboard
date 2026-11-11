@@ -199,6 +199,26 @@ test('the fan turns and dims each card as it lies on the pile, so the pile does 
   await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
 });
 
+test('a fan lines its cards up by their TOP edges, a taller one hanging lower', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, {
+    'Pile/_index.md': note('', { 'mm_type': 'frame', 'mm_blank': 'true' }),
+    'Pile/Short.md': note('Short card'),
+    'Pile/Tall.md': note('Tall card'),
+    'board.json': board({
+      'Pile/_index.md': { x: 0, y: 0, stack: true, order: ['Pile/Short.md', 'Pile/Tall.md'] },
+      'Pile/Short.md': { x: 0, y: 0 }, 'Pile/Tall.md': { x: 0, y: 0, w: 200, h: 300 },
+    }),
+  });
+  await stack(page).click();
+  await settled(page);
+  const top = async (t: string): Promise<number> => (await page.locator('#world .node.fanned:visible', { hasText: t }).boundingBox())!.y;
+  const heights = await Promise.all(['Short card', 'Tall card'].map(async t =>
+    (await page.locator('#world .node.fanned:visible', { hasText: t }).boundingBox())!.height));
+  expect(heights[1]).toBeGreaterThan(heights[0] + 50);
+  expect(Math.abs(await top('Short card') - await top('Tall card'))).toBeLessThan(12);   // the tilt moves a corner a little
+});
+
 test('Unstack spreads the cards out; Turn into section keeps them in a box', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);
