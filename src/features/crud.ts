@@ -4,7 +4,7 @@
 // by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
 import { state, setStatus, singleNoteRefuses, isStack, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
-import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
+import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds, takesDrop } from '../utils/model.js';
 import { stripImageRef, appendMd, imageMd } from '../utils/markdown.js';
 import { advanceTitle } from '../utils/advance.js';
 import { splitHeading, setNoteText } from '../utils/frontmatter.js';
@@ -400,7 +400,7 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   // card's text alone rather than removing it with nowhere to put it.
   if ('into' in dest){
     const t = dest.into;
-    if (t.id === src.id || !canMerge(t)) {
+    if (t.id === src.id || !takesDrop(t)) {
       return;
     }
     const text = cutCardText(n, src.start, src.end, value);
@@ -429,10 +429,10 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
 }
 
 // ---------- merging cards into one ----------
-// What can FUSE with another note, on EITHER side of the gesture: a plain card — the kind whose whole
-// content is a body (with a title above it). A section is a box whose own shape is the point,
-// so folding it into a body would throw away exactly what it is. One predicate rather than a
-// source/target pair, because the answer really is the same question both ways round.
+// What can be FOLDED INTO another note: a card — the kind whose whole content is a body (with a title
+// above it), an image card included: its picture goes into the note it is dropped on. A section is a box
+// whose own shape is the point, so folding it into a body would throw away exactly what it is. What can
+// RECEIVE one is the narrower question, and has one answer for every kind of drop: utils/model.ts takesDrop.
 export const canMerge = (n: MindNode): boolean =>
   n.type === 'card' && !isLockedEffective(n);
 // ⌥-drop card(s) onto another card (features/drag.ts): fold each dragged note into the target's
@@ -443,7 +443,7 @@ export const canMerge = (n: MindNode): boolean =>
 // commits. Returns how many cards were folded in.
 export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): number {
   const target = state.nodes.get(targetId);
-  if (!target || !canMerge(target)) {
+  if (!takesDrop(target)) {
     return 0;
   }
   const cards = [...sourceIds]

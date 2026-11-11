@@ -1,7 +1,7 @@
 // ---------- hierarchy helpers ----------
 // The tree is DERIVED from each node's `parent` (no stored edge list). These queries
 // walk that live structure in state.nodes.
-import { state, isStack, type MindNode } from '../core/state.js';
+import { state, isStack, isImageCard, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
 import { scope } from '../nav/scope.js';
 import { ui } from '../core/ui-state.js';
@@ -172,6 +172,15 @@ export function hasLockedAncestor(n: MindNode): boolean {
 export function isLockedEffective(n: MindNode): boolean { return n.locked || hasLockedAncestor(n); }
 // Locked somewhere in id's own subtree (itself or any descendant) — used to refuse deleting a whole
 // branch that contains a locked card, even when the branch's root itself isn't locked.
+// Can something be dropped INTO this card's note — another card ⌥-merged in, text dragged out of an
+// editor, a picture pulled from a card or dropped from the OS? The ONE answer for all four: a plain,
+// unlocked card. Not a section (a box holds cards, its note is its label), and not an IMAGE card: that
+// card IS its picture, and anything added to its note would end that. What can't take the drop is
+// treated as board: the thing lands beside it.
+export function takesDrop(n: MindNode | null | undefined): n is MindNode {
+  return !!n && n.type === 'card' && !isImageCard(n) && !isLockedEffective(n);
+}
+
 export function subtreeHasLocked(id: string): boolean {
   const n = state.nodes.get(id);
   if (n?.locked) {

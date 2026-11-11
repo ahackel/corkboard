@@ -3,7 +3,7 @@
 // Added by pasting into the in-card body editor, dropping a file on a card (or the editor), or by
 // typing the markdown. Importing this module registers the document-level drag/drop listeners.
 import { state, setStatus, isImageCard } from '../core/state.js';
-import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
+import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
 import { store } from '../data/persistence.js';
 import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
@@ -375,7 +375,7 @@ document.addEventListener('drop', async (e) => {
   else if (cardEl && cardIsSection && !cardIsLocked) {
     selectNode(cardId);
     await createImageCards(imgs, e.clientX, e.clientY, cardId);
-  } else if (cardEl && !cardIsImage && !cardIsLocked) {
+  } else if (cardEl && takesDrop(cardNode)) {
     selectNode(cardId);
     await appendImagesToNode(cardId!, imgs);
   } else if (!cardEl || !cardIsLocked) {

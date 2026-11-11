@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { openBoard, makeCard, select, clickAway, reload, card, watchErrors, seedBoard, note, settled } from './helpers';
+import { test, expect, type Locator } from '@playwright/test';
+import { openBoard, makeCard, select, clickAway, reload, card, watchErrors, seedBoard, note, settled, centre } from './helpers';
 
 test('a card is made, edited and kept across a reload', async ({ page }) => {
   const errors = watchErrors(page);
@@ -143,4 +143,42 @@ test('undo and redo say what they took back', async ({ page }) => {
   await expect(page.locator('#status')).toHaveText('Undo: Deleted “Groceries”');
   await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect(page.locator('#status')).toHaveText('Redo: Deleted “Groceries”');
+});
+
+// What a card's note takes dropped into it has ONE rule (utils/model.ts takesDrop): a plain, unlocked card.
+// An image card IS its picture, so a card ⌥-dropped on it is not folded in — it lands on the board.
+test('⌥-dropping a card merges it into a plain card, never into an image card', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="red"/></svg>');
+  await seedBoard(page, {
+    'One.md': note('# One'),
+    'Two.md': note('# Two'),
+    'Target.md': note('# Target'),
+    'Pic.md': note(`![pic](data:image/svg+xml;base64,${svg.toString('base64')})`),
+    'board.json': JSON.stringify({ version: 1, model: 2, settings: { grid: 'dot', gridSize: 20 }, edges: [], nodes: {
+      'One.md': { x: 0, y: 0, w: 200 }, 'Two.md': { x: 0, y: 260, w: 200 },
+      'Target.md': { x: 400, y: 0, w: 200 }, 'Pic.md': { x: 400, y: 260, w: 200, h: 150 } } }),
+  });
+  const altDrop = async (what: string, onto: Locator): Promise<void> => {
+    const from = await centre(card(page, what)), to = await centre(onto);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 30, from.y + 10, { steps: 3 });
+    await page.keyboard.down('Alt');   // ⌥ is pressed with the card already in hand
+    await page.mouse.move(to.x, to.y, { steps: 10 });
+    await settled(page);   // the drop target is settled on the frame after the last move
+    await page.mouse.up();
+    await page.keyboard.up('Alt');
+    await settled(page);
+  };
+  await altDrop('One', card(page, 'Target'));
+  await expect(page.locator('#world .node')).toHaveCount(3);           // One went into Target
+  await expect(card(page, 'Target')).toContainText('One');
+  const pic = page.locator('#world .node.image-card');
+  await altDrop('Two', pic);
+  await expect(page.locator('#world .node')).toHaveCount(3);           // Two is still its own card
+  await expect(pic).toHaveCount(1);
+  await expect(pic.locator('img.md-img')).toBeVisible();
+  expect(errors).toEqual([]);
 });

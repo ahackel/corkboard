@@ -1049,8 +1049,11 @@ delete, a break is a body edit plus a create.
 - **⌥-drop card(s) onto a card MERGES them into it** (`mergeDrag`/`cardMerge` in `features/drag.ts`,
   `mergeCardsInto` in `crud.ts`). The card you dropped ONTO survives — its id, file, colour, size and flags —
   and each dragged note folds into its body as `## Title` then its text, in selection order. Tags are unioned
-  in. `canMerge` is the ONE kind test and answers for both sides: a plain card. Every other kind
-  is a box whose shape is the point.
+  in. `canMerge` says what can be folded IN (a card, an image card included; never a section, a box whose
+  shape is the point). What can RECEIVE is `takesDrop` (`utils/model.ts`), the one rule for every drop into a
+  note — a merge, text dragged out of an editor, a picture pulled from a card or dropped from the OS: a
+  plain, unlocked card. An IMAGE card refuses all of them (it IS its picture), and what it refuses lands
+  on the board beside it.
 - **⌥ is free for it** — a plain drag moves (in and out of sections), ⇧ clones, ⌘ toggles the selection. One
   knock-on: `paintDetachPreview` (⌥
   pressed mid-drag) goes through `dragFollow`, so the target's outline appears on the KEYPRESS rather than the

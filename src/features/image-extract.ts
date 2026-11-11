@@ -5,10 +5,9 @@
 // image either MOVES into the card released on (dashed .drop-merge highlight) or becomes a fresh
 // image-only card on empty canvas. Escape / released-nowhere-valid still creates the card at the
 // drop point (a canvas drop); pointercancel or a no-move press leaves the card untouched.
-import { state, isImageCard, type MindNode } from '../core/state.js';
+import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
-import { isSection } from '../view/layout.js';
-import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
+import { nodeAtTarget, takesDrop } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
 import { extractImage } from './crud.js';
 import { classMarker, trackPointer } from '../utils/dom.js';
@@ -28,7 +27,7 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   const under = document.elementFromPoint(x, y) as HTMLElement | null;
   preview.style.display = '';
   const node = nodeAtTarget(under);
-  if (!node?.el || node.id === sourceId || isImageCard(node) || isSection(node) || isLockedEffective(node)) {
+  if (!takesDrop(node) || !node.el || node.id === sourceId) {
     return null;
   }
   return { el: node.el, id: node.id };

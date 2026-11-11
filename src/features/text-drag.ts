@@ -17,10 +17,10 @@
 // Registers its listeners on import, like features/attachments.ts and features/gestures.ts.
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
-import { isLockedEffective, nodeAtTarget } from '../utils/model.js';
+import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
 import { isSection } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
-import { centredAt, dropCardText, cardText, canMerge,
+import { centredAt, dropCardText, cardText,
          type TextSource } from './crud.js';
 import { firstLineSplit } from '../utils/frontmatter.js';
 import { effectiveColor } from '../main.js';
@@ -50,7 +50,7 @@ function destAt(t: EventTarget | null, sourceId: string): Dest | null {
   if (isLockedEffective(n)) {
     return null;                 // locked: no drop, no hint
   }
-  if (canMerge(n)) {
+  if (takesDrop(n)) {
     return { into: n };                    // a card swallows the text
   }
   if (isSection(n)) {

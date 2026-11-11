@@ -7,7 +7,7 @@
 // drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds, withKids } from '../utils/model.js';
+import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds, withKids, takesDrop } from '../utils/model.js';
 import { detachParentId, scope } from '../nav/scope.js';
 import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection, moveSubtreeTo } from '../view/layout.js';
 import { cancelViewAnim, applyView, screenToWorld } from '../view/camera.js';
@@ -757,14 +757,14 @@ function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: numb
   const mergeDrag = drag.alt && drag.selRoots.length > 0
     && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
   if (mergeDrag) {
-    // the CARD under the pointer (sections never take a merge — canMerge), first hit wins
+    // the CARD under the pointer (what may take a merge: utils/model.ts takesDrop), first hit wins
     const wx = (e.clientX - state.view.x) / state.view.k, wy = (e.clientY - state.view.y) / state.view.k;
     for (const [id, m] of state.nodes) {
       if (sub.has(id) || isHidden(m) || m.type !== 'card') {
         continue;
       }
       if (wx >= m.x && wx <= m.x + nodeW(m) && wy >= m.y && wy <= m.y + nodeH(m)) {
-        if (canMerge(m)) {
+        if (takesDrop(m)) {
           fuse = id;
         }
         break;
