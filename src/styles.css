@@ -76,6 +76,7 @@
 
   /* shared roundness scale — keep every surface on one of these steps */
   --r-card: 3px;   /* board cards (FigJam's near-square stickies), the ghost card, image cards */
+  --pile-dim: .93;   /* every pile card but the top one; a fanned card glides to and from it (features/stacks.ts) */
   --r-section: 12px; /* a section's box — rounder, like a FigJam section */
   /* one step INSIDE a card — in-place editors. Anything sitting within a box wants an inner radius,
      not the outer one, or it bulges against the corners it's supposed to sit inside. */
@@ -742,7 +743,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   background:var(--card, var(--node)); color:var(--ink, #fff); border-radius:var(--r-card);
   padding:var(--pad-y) var(--pad-x); }
 .pile-card:first-child { position:relative; }
-.pile-card.under { filter:brightness(.93); }
+.pile-card.under { filter:brightness(var(--pile-dim)); }
 .pile-card.image-card { padding:0; background:transparent; }   /* the picture itself: the image-card .body rules further down */
 .pile-card .img-zoom { display:none !important; }
 /* THE PIN: a plain disc in the STACK's colour — bold red until one is picked (paintPile sets it inline) — the size
@@ -797,11 +798,11 @@ body.fan-closing #fanScrim { opacity:0; }
    picture UNDER the scrim, out of reach (a press went to the scrim, which closed the fan). */
 /* Held up over the board, a fanned card casts a shadow on it — a `filter`, so it never fights the selection
    ring's box-shadow. The flat value keeps the same two shadows, so the change between them interpolates. */
-.node.fanned, .node.image-card.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
+.node.fanned, .node.image-card.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:brightness(var(--fan-dim, 1)) var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
   --fan-shadow:drop-shadow(0 2px 3px rgba(0,0,0,.12)) drop-shadow(0 8px 18px rgba(0,0,0,.18)); }
 body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); }
-/* …and it starts turned and nudged the way it lay on the pile (syncFan), so nothing snaps as the pile gives way */
-@keyframes fan-lift { from { filter:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0));
+/* …and it starts turned, nudged and dimmed the way it lay on the pile (syncFan), so nothing snaps as the pile gives way */
+@keyframes fan-lift { from { filter:brightness(var(--pile-card-dim, 1)) drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0));
   rotate:var(--pile-tilt, 0deg); translate:var(--pile-nudge, 0 0); } }
 /* dragging a fanned card within the fan: a line down the gap it would drop into (features/stacks.ts
    showFanInsert) — over the fanned cards, under the one in hand */

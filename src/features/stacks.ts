@@ -121,6 +121,11 @@ export function paintPile(n: MindNode, el: HTMLElement): void {
   }
 }
 
+// How dark a card lies on the pile: all but the top one are dimmed (`.pile-card.under`, --pile-dim).
+function pileDim(place: number, count: number): string {
+  return place === count - 1 ? '1' : 'var(--pile-dim)';
+}
+
 // How a card lies, by its place in the pile from the bottom: an angle (degrees) and a nudge (px). The BOTTOM
 // card lies square — the pile's footing; every card above it takes the next of a fixed list, cycled, so the
 // same pile always looks the same.
@@ -265,6 +270,7 @@ export function closeFan(): void {
     kids.forEach((k) => {
       k.el?.classList.remove('lt-anim');   // or a later drag of the card would glide too
       k.el?.style.removeProperty('translate');
+      k.el?.style.removeProperty('--fan-dim');
     });
     if (ui.fan === id) {
       ui.fan = null;
@@ -285,6 +291,7 @@ export function closeFan(): void {
     const lie = messAt(place.get(k.id) ?? 0);
     k.el!.classList.add('lt-anim');
     k.el!.style.setProperty('--tilt', lie.tilt + 'deg');
+    k.el!.style.setProperty('--fan-dim', pileDim(place.get(k.id) ?? 0, place.size));
     k.el!.style.translate = `${lie.dx}px ${lie.dy}px`;
     placeSelf(k, pileX(s, k), s.y);
   }
@@ -296,8 +303,8 @@ export function closeFan(): void {
 // set here and only here — after the layout that decided it, which for openFan's animateLayout comes AFTER
 // its paint; a custom property, so the glide's own left/top transition keeps running. A card that leaves the
 // fan keeps a stale `--tilt`, which nothing reads once it isn't `.fanned`. `--fan-z` is its place in the pile
-// (bottom 0), so the cards stack as the pile does while they glide out and back. `--pile-tilt`/`--pile-nudge`
-// are how it lay on the pile, so the glide out starts from there and the glide home ends there (closeFan).
+// (bottom 0), so the cards stack as the pile does while they glide out and back. `--pile-tilt`/`--pile-nudge`/
+// `--pile-card-dim` are how it lay on the pile, so the glide out starts from there and the glide home ends there (closeFan).
 export function syncFan(): void {
   const on = !!ui.fan;
   document.body.classList.toggle('fan-open', on);
@@ -317,6 +324,7 @@ export function syncFan(): void {
     const lie = messAt(i);
     k.el?.style.setProperty('--pile-tilt', lie.tilt + 'deg');
     k.el?.style.setProperty('--pile-nudge', `${lie.dx}px ${lie.dy}px`);
+    k.el?.style.setProperty('--pile-card-dim', pileDim(i, kids.length));
   });
 }
 

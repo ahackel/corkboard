@@ -162,7 +162,7 @@ test('the cards keep the pile\'s z order while the fan glides out and back', asy
   await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
 });
 
-test('the fan turns each card to the angle it lies at on the pile, so the pile does not snap it', async ({ page }) => {
+test('the fan turns and dims each card as it lies on the pile, so the pile does not snap it', async ({ page }) => {
   await openBoard(page, { motion: true });
   await seedBoard(page, BOARD);
   const lie = (loc: Locator): Promise<string> => loc.evaluate(e => {
@@ -188,6 +188,14 @@ test('the fan turns each card to the angle it lies at on the pile, so the pile d
     expect(parseFloat(tilt)).toBeCloseTo(parseFloat(rot), 1);
     expect(shift).toBe(nudge);
   }
+
+  // …and the pile's darkening of every card but the top one
+  const dim = async (t: string): Promise<string> =>
+    page.locator('#world .node.fanned', { hasText: t }).evaluate(e => (e as HTMLElement).style.getPropertyValue('--fan-dim'));
+  expect(await dim('Middle card')).toBe('var(--pile-dim)');
+  expect(await dim('Top card')).toBe('1');
+  await expect(stack(page).locator('.pile-card', { hasText: 'Middle card' })).toHaveClass(/under/);
+  await expect(stack(page).locator('.pile-card', { hasText: 'Top card' })).not.toHaveClass(/under/);
   await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
 });
 
