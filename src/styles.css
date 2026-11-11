@@ -574,7 +574,7 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
 body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .section-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
-.node.lt-anim { transition: opacity .2s ease, scale .12s ease, rotate .5s cubic-bezier(.45,0,.25,1), filter .5s cubic-bezier(.45,0,.25,1),
+.node.lt-anim { transition: opacity .2s ease, scale .12s ease, rotate .5s cubic-bezier(.45,0,.25,1), translate .5s cubic-bezier(.45,0,.25,1), filter .5s cubic-bezier(.45,0,.25,1),
   left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts); rotate: a fanned card's tilt */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
    so the only thing left to remove here is the space that was separating the title from a body that
@@ -800,7 +800,9 @@ body.fan-closing #fanScrim { opacity:0; }
 .node.fanned, .node.image-card.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
   --fan-shadow:drop-shadow(0 2px 3px rgba(0,0,0,.12)) drop-shadow(0 8px 18px rgba(0,0,0,.18)); }
 body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); }
-@keyframes fan-lift { from { filter:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); } }
+/* …and it starts turned and nudged the way it lay on the pile (syncFan), so nothing snaps as the pile gives way */
+@keyframes fan-lift { from { filter:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0));
+  rotate:var(--pile-tilt, 0deg); translate:var(--pile-nudge, 0 0); } }
 /* dragging a fanned card within the fan: a line down the gap it would drop into (features/stacks.ts
    showFanInsert) — over the fanned cards, under the one in hand */
 #fanInsert { position:absolute; width:4px; margin-left:-2px; border-radius:2px; background:var(--node-sel);

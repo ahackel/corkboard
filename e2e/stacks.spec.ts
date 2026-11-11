@@ -162,6 +162,35 @@ test('the cards keep the pile\'s z order while the fan glides out and back', asy
   await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
 });
 
+test('the fan turns each card to the angle it lies at on the pile, so the pile does not snap it', async ({ page }) => {
+  await openBoard(page, { motion: true });
+  await seedBoard(page, BOARD);
+  const lie = (loc: Locator): Promise<string> => loc.evaluate(e => {
+    const cs = getComputedStyle(e);
+    return `${cs.rotate}|${cs.translate}`;
+  });
+  const onPile = async (t: string): Promise<string> => lie(stack(page).locator('.pile-card', { hasText: t }));
+  const pile = [await onPile('Middle card'), await onPile('Top card')];
+  expect(pile[0]).not.toBe(pile[1]);
+  await stack(page).click();
+  await settled(page);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(30);
+
+  // the glide's destination: the pile's own angle and nudge for that card
+  const target = async (t: string): Promise<string> => page.locator('#world .node.fanned', { hasText: t }).evaluate(e => {
+    const el = e as HTMLElement;
+    return `${parseFloat(el.style.getPropertyValue('--tilt'))}deg|${el.style.translate}`;
+  });
+  for (const [i, t] of ['Middle card', 'Top card'].entries()) {
+    const [rot, nudge] = pile[i].split('|');
+    const [tilt, shift] = (await target(t)).split('|');
+    expect(parseFloat(tilt)).toBeCloseTo(parseFloat(rot), 1);
+    expect(shift).toBe(nudge);
+  }
+  await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
+});
+
 test('Unstack spreads the cards out; Turn into section keeps them in a box', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

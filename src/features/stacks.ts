@@ -262,7 +262,10 @@ export function closeFan(): void {
   const done = (): void => {
     closing = null;
     document.body.classList.remove('fan-closing');
-    kids.forEach(k => k.el?.classList.remove('lt-anim'));   // or a later drag of the card would glide too
+    kids.forEach((k) => {
+      k.el?.classList.remove('lt-anim');   // or a later drag of the card would glide too
+      k.el?.style.removeProperty('translate');
+    });
     if (ui.fan === id) {
       ui.fan = null;
       relayout();
@@ -274,9 +277,15 @@ export function closeFan(): void {
   }
   closing = id;
   document.body.classList.add('fan-closing');   // the dimming and the shadows fade as the cards go home
+
+  // Each card turns to the angle and nudge it lies at on the pile (messAt), so the pile that replaces it at the
+  // end of the glide is where the card already is.
+  const place = new Map(pileKids(s).map((k, i) => [k.id, i]));
   for (const k of kids) {
+    const lie = messAt(place.get(k.id) ?? 0);
     k.el!.classList.add('lt-anim');
-    k.el!.style.setProperty('--tilt', '0deg');
+    k.el!.style.setProperty('--tilt', lie.tilt + 'deg');
+    k.el!.style.translate = `${lie.dx}px ${lie.dy}px`;
     placeSelf(k, pileX(s, k), s.y);
   }
   setTimeout(done, LAYOUT_ANIM_MS);
@@ -287,7 +296,8 @@ export function closeFan(): void {
 // set here and only here — after the layout that decided it, which for openFan's animateLayout comes AFTER
 // its paint; a custom property, so the glide's own left/top transition keeps running. A card that leaves the
 // fan keeps a stale `--tilt`, which nothing reads once it isn't `.fanned`. `--fan-z` is its place in the pile
-// (bottom 0), so the cards stack as the pile does while they glide out and back.
+// (bottom 0), so the cards stack as the pile does while they glide out and back. `--pile-tilt`/`--pile-nudge`
+// are how it lay on the pile, so the glide out starts from there and the glide home ends there (closeFan).
 export function syncFan(): void {
   const on = !!ui.fan;
   document.body.classList.toggle('fan-open', on);
@@ -302,6 +312,11 @@ export function syncFan(): void {
   kids.forEach((k, i) => {
     k.el?.style.setProperty('--tilt', (fanTilt(k.id) ?? 0).toFixed(2) + 'deg');
     k.el?.style.setProperty('--fan-z', String(i));
+
+    // where the card lay on the pile, for the glide out to start from (fan-lift in styles.css)
+    const lie = messAt(i);
+    k.el?.style.setProperty('--pile-tilt', lie.tilt + 'deg');
+    k.el?.style.setProperty('--pile-nudge', `${lie.dx}px ${lie.dy}px`);
   });
 }
 
