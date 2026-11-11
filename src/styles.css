@@ -792,10 +792,12 @@ body.fan-closing #fanScrim { opacity:0; }
 @keyframes fan-fade { from { opacity:0; } }
 /* A fanned card keeps its place in the PILE (syncFan sets --fan-z, bottom card 0): they all start a glide out
    on one spot, and end one back on it, so the top card has to be on top of the others the whole way. The range
-   (1000 + one per card) sits between the scrim and the insert line / the hand's layer below. */
+   (1000 + one per card) sits between the scrim and the insert line / the hand's layer below. The image-card
+   selector is there for specificity alone: `.node.image-card { z-index:2 }` comes later and would otherwise put a
+   picture UNDER the scrim, out of reach (a press went to the scrim, which closed the fan). */
 /* Held up over the board, a fanned card casts a shadow on it — a `filter`, so it never fights the selection
    ring's box-shadow. The flat value keeps the same two shadows, so the change between them interpolates. */
-.node.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
+.node.fanned, .node.image-card.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
   --fan-shadow:drop-shadow(0 2px 3px rgba(0,0,0,.12)) drop-shadow(0 8px 18px rgba(0,0,0,.18)); }
 body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); }
 @keyframes fan-lift { from { filter:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); } }

@@ -273,3 +273,24 @@ test('a pile stands on its BOTTOM card: a wider card on it is centred over it, a
   await page.mouse.click(box.x - 40, box.y + 150);
   await expect(page.locator('body')).toHaveClass(/fan-open/);
 });
+
+test('an image card can be dragged out of the fan like any card', async ({ page }) => {
+  const errors = watchErrors(page);
+  await openBoard(page);
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="red"/></svg>');
+  await seedBoard(page, {
+    ...BOARD,
+    'Pile/Pic.md': note(`![pic](data:image/svg+xml;base64,${svg.toString('base64')})`),
+    'board.json': board({ ...NODES, 'Pile/_index.md': { ...NODES['Pile/_index.md'], order: [...NODES['Pile/_index.md'].order, 'Pile/Pic.md'] },
+      'Pile/Pic.md': { x: 0, y: 0, w: 200, h: 150 } }),
+  });
+  await stack(page).click();
+  await settled(page);
+  const pic = page.locator('#world .node.fanned.image-card');
+  await expect(pic).toBeVisible();
+  await dragTo(page, await centre(pic), { x: 1100, y: 700 });
+  await expect(page.locator('#fanScrim')).toBeVisible();   // the fan stayed open
+  await expect(page.locator('#world .node.fanned:visible')).toHaveCount(3);
+  await expect(stack(page)).toHaveAttribute('data-cards', '3');
+  expect(errors).toEqual([]);
+});
