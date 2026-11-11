@@ -117,3 +117,21 @@ test('triple-click on a heading selects its section', async ({ page }) => {
   expect(sel.startsWith('## B — Interaction')).toBe(true);
   expect(sel.endsWith('B60 line of the second section')).toBe(true);
 });
+
+test('a divider and a table run edge to edge of the card, while the text keeps its padding', async ({ page }) => {
+  await openBoard(page);
+  await seedBoard(page, { 'Rules.md': '# Rules\n\nabove\n\n---\n\n| a | b |\n|---|---|\n| 1 | 2 |\n', 'board.json': JSON.stringify({ version: 1, model: 2,
+    settings: {}, edges: [], nodes: { 'Rules.md': { x: 0, y: 0, w: 300 } } }) });
+  const c = card(page, 'Rules');
+  const edges = (sel: string) => c.evaluate((el: HTMLElement, s: string) => {
+    const r = el.getBoundingClientRect(), t = el.querySelector(s)!.getBoundingClientRect();
+    return [t.left - r.left, r.right - t.right];
+  }, sel);
+  for (const sel of ['hr', 'table']) {
+    for (const d of await edges(sel)) {
+      expect(Math.abs(d)).toBeLessThan(1);
+    }
+  }
+  const p = await c.evaluate((el: HTMLElement) => el.querySelector('p')!.getBoundingClientRect().left - el.getBoundingClientRect().left);
+  expect(p).toBeGreaterThan(10);   // a paragraph still sits inside the padding
+});

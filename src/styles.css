@@ -1232,6 +1232,21 @@ body.layout-anim #selFrame { display:none; }
   padding-left:8px; margin-left:0; opacity:.85; }
 .node .body hr { border:none; border-top:1px solid color-mix(in srgb, var(--ink) 35%, transparent);
   margin:.7em 0; }
+/* A rule or a table runs EDGE TO EDGE of the card, past its padding. The body clips at its box
+   (overflow:hidden), so a negative margin on the rule alone would be cut off: the body itself spans the
+   card's full width and pads its text back in (the text column does not move), and only a body-level
+   `hr`/`table` pulls its margins back out. Not while editing (the textarea is the text column), nor on a
+   folded chip or an image card, whose bodies own their box. */
+.node:not(.collapsed):not(.image-card) > .body:not(.editing), .pile-card:not(.image-card) > .body {
+  margin-inline:calc(-1 * var(--pad-x)); padding-inline:var(--pad-x); }
+.node:not(.collapsed):not(.image-card) > .body:not(.editing) > hr, .pile-card:not(.image-card) > .body > hr {
+  margin-inline:calc(-1 * var(--pad-x)); }
+.node:not(.collapsed):not(.image-card) > .body:not(.editing) > table, .pile-card:not(.image-card) > .body > table {
+  margin-inline:calc(-1 * var(--pad-x)); width:calc(100% + 2 * var(--pad-x)); }
+.node:not(.collapsed):not(.image-card) > .body:not(.editing) > table :is(th, td):first-child,
+.pile-card:not(.image-card) > .body > table :is(th, td):first-child { padding-left:var(--pad-x); }
+.node:not(.collapsed):not(.image-card) > .body:not(.editing) > table :is(th, td):last-child,
+.pile-card:not(.image-card) > .body > table :is(th, td):last-child { padding-right:var(--pad-x); }
 /* ==highlight== (Obsidian's): a band of the SCRIM behind the text, for the same reason as the checkbox —
    a highlighter's yellow vanishes on the yellow sticky, the colour on the far side of the ink never does. */
 .node .body mark { background:var(--scrim, rgba(255,255,255,.62)); color:inherit; padding:0 2px; border-radius:3px; }
