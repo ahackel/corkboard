@@ -790,17 +790,20 @@ body.grabbing .stack-pin { cursor:grabbing; }
 #fanScrim.grid { background:rgba(40,40,46,.28); }
 body.fan-closing #fanScrim { opacity:0; }
 @keyframes fan-fade { from { opacity:0; } }
+/* A fanned card keeps its place in the PILE (syncFan sets --fan-z, bottom card 0): they all start a glide out
+   on one spot, and end one back on it, so the top card has to be on top of the others the whole way. The range
+   (1000 + one per card) sits between the scrim and the insert line / the hand's layer below. */
 /* Held up over the board, a fanned card casts a shadow on it — a `filter`, so it never fights the selection
    ring's box-shadow. The flat value keeps the same two shadows, so the change between them interpolates. */
-.node.fanned { z-index:61; rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
+.node.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
   --fan-shadow:drop-shadow(0 2px 3px rgba(0,0,0,.12)) drop-shadow(0 8px 18px rgba(0,0,0,.18)); }
 body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); }
 @keyframes fan-lift { from { filter:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); } }
 /* dragging a fanned card within the fan: a line down the gap it would drop into (features/stacks.ts
    showFanInsert) — over the fanned cards, under the one in hand */
 #fanInsert { position:absolute; width:4px; margin-left:-2px; border-radius:2px; background:var(--node-sel);
-  z-index:62; pointer-events:none; }
-body.fan-open #dragLayer { z-index:63; }
+  z-index:8999; pointer-events:none; }
+body.fan-open #dragLayer { z-index:9000; }
 /* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (section / image card) gets all 8: 4 edge bands inset from the corners, plus 4

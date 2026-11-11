@@ -145,6 +145,23 @@ test('the fan glides out of the pile and back onto it, even with Reduce motion o
   await expect(page.locator('#fanScrim')).toHaveCount(0);
 });
 
+test('the cards keep the pile\'s z order while the fan glides out and back', async ({ page }) => {
+  await openBoard(page, { motion: true });
+  await seedBoard(page, BOARD);
+  const zs = async (): Promise<number[]> => Promise.all(['Bottom card', 'Middle card', 'Top card'].map(async t =>
+    Number(await page.locator('#world .node.fanned', { hasText: t }).evaluate(e => getComputedStyle(e).zIndex))));
+  const inOrder = (z: number[]): boolean => z[0] < z[1] && z[1] < z[2];
+  await stack(page).click();
+  await page.waitForTimeout(120);
+  expect(inOrder(await zs())).toBe(true);       // gliding out: the top card still on top
+  await settled(page);
+  expect(inOrder(await zs())).toBe(true);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  expect(inOrder(await zs())).toBe(true);       // gliding home: likewise
+  await expect(page.locator('#world .node.fanned:visible')).toHaveCount(0);
+});
+
 test('Unstack spreads the cards out; Turn into section keeps them in a box', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

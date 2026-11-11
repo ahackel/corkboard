@@ -286,7 +286,8 @@ export function closeFan(): void {
 // an open fan (view/pile.ts layStacks). Run by every paintAll. The tilt each fanned card wears (`--tilt`) is
 // set here and only here — after the layout that decided it, which for openFan's animateLayout comes AFTER
 // its paint; a custom property, so the glide's own left/top transition keeps running. A card that leaves the
-// fan keeps a stale `--tilt`, which nothing reads once it isn't `.fanned`.
+// fan keeps a stale `--tilt`, which nothing reads once it isn't `.fanned`. `--fan-z` is its place in the pile
+// (bottom 0), so the cards stack as the pile does while they glide out and back.
 export function syncFan(): void {
   const on = !!ui.fan;
   document.body.classList.toggle('fan-open', on);
@@ -295,11 +296,13 @@ export function syncFan(): void {
   } else if (!on && scrim.isConnected) {
     scrim.remove();
   }
-  const kids = on ? childrenOf(ui.fan!) : [];
+  const stack = on ? state.nodes.get(ui.fan!) : null;
+  const kids = stack ? pileKids(stack) : [];
   scrim.classList.toggle('grid', kids.length > FAN_ARC_MAX);
-  for (const k of kids) {
+  kids.forEach((k, i) => {
     k.el?.style.setProperty('--tilt', (fanTilt(k.id) ?? 0).toFixed(2) + 'deg');
-  }
+    k.el?.style.setProperty('--fan-z', String(i));
+  });
 }
 
 // ---------- dropping on a pile ----------
