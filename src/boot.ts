@@ -43,7 +43,7 @@ async function openFolderMap(key: string): Promise<boolean> {
   if (r === 'gone') {
     await forgetRecent(key);
     renderMapList();
-    setStatus('That folder is no longer available — removed from the list.');
+    setStatus('Corkboard can’t reach that folder any more — removed from the list. Open it again with + or drop it here.');
     return false;
   }
   if (r === 'denied') {
@@ -63,7 +63,7 @@ async function openNoteMap(key: string): Promise<boolean> {
   if (r === 'gone') {
     await noteStore.forget(key);
     renderMapList();
-    setStatus('That note is no longer available — removed from the list.');
+    setStatus('Corkboard can’t reach that note any more — removed from the list. Open it again with + or drop it here.');
     return false;
   }
   if (r === 'denied') {
@@ -86,7 +86,7 @@ export async function pickNote(): Promise<void> {
     return;
   }
   if (r !== 'ok') {
-    if (r === 'error') {
+    if (r === 'error' || r === 'gone') {
       setStatus('That note couldn’t be opened. Try choosing it again.');
     }
     return;
@@ -104,6 +104,10 @@ export async function openDropped(handle: FileSystemHandle): Promise<'ok' | 'nee
     : await fsaStore.adopt(handle as FileSystemDirectoryHandle);
   if (r === 'needs-click') {
     return r;
+  }
+  if (r === 'gone') {
+    setStatus(`That ${isNote ? 'note' : 'folder'} couldn’t be read. Try dropping it again.`);
+    return 'failed';
   }
   if (r !== 'ok') {
     setStatus(`Corkboard can’t write to that ${isNote ? 'note' : 'folder'}. Drop it again and choose “Allow”.`);
@@ -123,7 +127,7 @@ async function pickFolder(): Promise<void> {
     return;
   }
   if (r !== 'ok') {
-    if (r === 'error') {
+    if (r === 'error' || r === 'gone') {
       setStatus('That folder couldn’t be opened. Try choosing it again.');
     }
     return;

@@ -7,7 +7,7 @@ import type { FoldTest } from './tree.js';
 import { rememberFolder, notifyRecentsChanged } from './recents.js';
 import { installWatch } from './watch.js';
 import type { Store, PickResult } from './types.js';
-import { ensureWrite, hasWrite } from './permission.js';
+import { ensureWrite, hasWrite, reachable } from './permission.js';
 
 // window.showDirectoryPicker isn't in lib.dom.
 type DirectoryPicker = (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle>;
@@ -74,7 +74,7 @@ export const fsaStore = {
     if (!handle) {
       return false;
     }
-    if (!(await hasWrite(handle))) {
+    if (!(await hasWrite(handle)) || !(await reachable(handle))) {
       return false;
     }
     this._dir = handle; this._key = key; return true;

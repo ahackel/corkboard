@@ -12,7 +12,7 @@ import { installWatch } from './watch.js';
 import { stampOf } from './handle-store.js';
 import type { FoldTest } from './tree.js';
 import type { Store, PickResult, TreeListing } from './types.js';
-import { ensureWrite, hasWrite, sameEntry } from './permission.js';
+import { ensureWrite, hasWrite, sameEntry, reachable } from './permission.js';
 
 // window.showOpenFilePicker isn't in lib.dom.
 type FilePicker = (opts?: {
@@ -99,7 +99,7 @@ export const noteStore = {
     if (!handle) {
       return false;
     }
-    if (!(await hasWrite(handle))) {
+    if (!(await hasWrite(handle)) || !(await reachable(handle))) {
       return false;
     }
     this._file = handle; this._key = key; this._stamp = null;

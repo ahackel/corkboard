@@ -15,16 +15,40 @@ export async function hasWrite(handle: FileSystemHandle): Promise<boolean> {
   } catch { return false; }
 }
 
-// Granted, or asked for. Asking needs a fresh click (user activation), and a file dropped in from the OS
-// doesn't bring one: Chrome then refuses to ask at all, which this reports as 'needs-click'.
+// Granted, or asked for, and the file or folder is really there. Asking needs a fresh click (user
+// activation), and a file dropped in from the OS doesn't bring one: Chrome then refuses to ask at all, which
+// this reports as 'needs-click'. A REMEMBERED handle can be dead — its folder moved or deleted, or Chrome
+// updated and no longer honours handles it stored before — and then asking or reading throws something
+// else (an AbortError, a NotFoundError): that is 'gone', so the caller drops it from the recents and says so,
+// instead of reporting a permission the user never refused.
 export async function ensureWrite(handle: FileSystemHandle): Promise<PickResult> {
-  if (await hasWrite(handle)) {
-    return 'ok';
+  if (!(await hasWrite(handle))) {
+    try {
+      if ((await (handle as unknown as Permable).requestPermission(RW)) !== 'granted') {
+        return 'denied';
+      }
+    } catch (e) {
+      const name = (e as DOMException).name;
+      if (name === 'SecurityError') {
+        return 'needs-click';
+      }
+      return name === 'NotAllowedError' ? 'denied' : 'gone';
+    }
   }
+  return (await reachable(handle)) ? 'ok' : 'gone';
+}
+
+// Can the handle actually be read? Permission alone doesn't say: a stale handle can report 'granted'.
+export async function reachable(handle: FileSystemHandle): Promise<boolean> {
   try {
-    return (await (handle as unknown as Permable).requestPermission(RW)) === 'granted' ? 'ok' : 'denied';
-  } catch (e) {
-    return (e as DOMException).name === 'SecurityError' ? 'needs-click' : 'denied';
+    if (handle.kind === 'file') {
+      await (handle as FileSystemFileHandle).getFile();
+    } else {
+      await (handle as FileSystemDirectoryHandle).entries().next();
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 
