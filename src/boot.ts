@@ -386,7 +386,26 @@ function orientForPhone(): void {
   }
 }
 
+// Settles once boot has put the last map on the canvas: what arrives at launch (features/launch.ts) waits
+// for it, so the map boot opens can't land on top of the one asked for.
+let bootDone: () => void = () => {};
+export const booted = new Promise<void>(resolve => { bootDone = resolve; });
+
 export async function boot(): Promise<void> {
+  try {
+    await bootMap();
+  } finally {
+    bootDone();
+  }
+}
+
+// Show the sidebar on one tab's list — a home-screen shortcut's way in (features/launch.ts).
+export function showStartOn(tab: MapKind): void {
+  showStart();
+  selectTab(HAS_FSA || tab === 'device' ? tab : 'device');
+}
+
+async function bootMap(): Promise<void> {
   applyView();
   hideStart();
   // one-time legacy migration / rebuild — the store probe is skipped once the registry exists

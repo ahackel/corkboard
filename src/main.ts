@@ -24,6 +24,8 @@ import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
 import './features/attachments.js';   // registers the OS image drag/drop listeners
 import './features/open-drop.js';   // registers the drag-a-note-in-to-open-it drop target
+import './features/launch.js';   // what the installed app is launched with: a note from the OS, a shortcut
+import './features/update.js';   // the Update button, once a newer version is deployed
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-ghost gesture

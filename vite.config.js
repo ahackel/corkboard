@@ -42,6 +42,18 @@ function contentSecurityPolicy() {
 // bumps on actual deploys. Local/dev builds are marked as such instead of counting.
 const appVersion = process.env.APP_VERSION || `${pkg.version}-dev`;
 
+// The version this build is, as a file beside the page: a window left open asks it whether a newer one
+// has been deployed since it loaded (src/features/update.ts).
+function versionFile() {
+  return {
+    name: 'corkboard-version',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: appVersion }) + '\n' });
+    },
+  };
+}
+
 // The build emits ONE self-contained dist/index.html (JS + CSS inlined), so the
 // deployed app stays a single file; public/sw.js keeps the last copy of it for when there is no network.
 export default defineConfig({
@@ -50,7 +62,7 @@ export default defineConfig({
   base: './',
   publicDir: 'public',
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
-  plugins: [viteSingleFile(), contentSecurityPolicy()],
+  plugins: [viteSingleFile(), contentSecurityPolicy(), versionFile()],
   // `npm test` (tests/): the modules under test import core/state.ts, which looks up the DOM shell.
   // e2e/ is Playwright's (`npm run e2e`), not vitest's.
   test: { environment: 'happy-dom', include: ['tests/**/*.test.ts'] },

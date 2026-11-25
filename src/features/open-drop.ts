@@ -52,7 +52,8 @@ function offerClick(handle: FileSystemHandle): void {
   askTimer = window.setTimeout(hide, ASK_MS);
 }
 
-async function open(handle: FileSystemHandle | null): Promise<void> {
+// Also how a note opened from the OS with the installed app arrives (features/launch.ts).
+export async function open(handle: FileSystemHandle | null): Promise<void> {
   if (!handle || (handle.kind === 'file' && !NOTE_RE.test(handle.name))) {
     setStatus('Only a Markdown note or a folder can be opened');
     return;

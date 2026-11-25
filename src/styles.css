@@ -186,6 +186,12 @@ body.empty-map #emptyHint { display:block; }
 }
 body.save-failing #status { display:none; }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
+/* A newer version is out (features/update.ts): one accent pill in the top-right corner, nothing else there. */
+#updateBtn { position:fixed; top:calc(16px + var(--sa-t)); right:calc(16px + var(--sa-r)); z-index:55;
+  padding:8px 16px; border:0; border-radius:var(--r-full); font:inherit; font-size:13px; font-weight:600;
+  background:var(--accent); color:#fff; box-shadow:var(--shadow-ui); }
+#updateBtn[hidden] { display:none; }
+#updateBtn:hover { filter:brightness(1.08); }
 /* Open-in-place drop target (features/open-drop.ts): a dark pill at the top centre while a note is dragged in,
    which lights up in the accent when the drag is over it (.hot) — a drop anywhere else adds a card. */
 #openDrop { position:fixed; top:calc(16px + var(--sa-t)); left:50%; z-index:55; transform:translateX(-50%);

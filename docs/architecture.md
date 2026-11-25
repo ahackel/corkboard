@@ -713,6 +713,22 @@ tab, a blob would run the SVG's script with the app's storage in reach. On-devic
 to keep it on the first write (`keepStorage`, `store/persist.ts`); without that it is "best effort" and may
 be cleared when the disk runs low.
 
+**A window left open is told when a newer version is out.** A page only picks up a deploy when it loads,
+and a window — the installed app above all — can stay open for days. The build writes `version.json`
+(`versionFile`, `vite.config.js`) beside the page; the app asks it on focus and every half hour
+(`features/update.ts`, at most every five minutes) and, when it names another version, shows the Update
+button. Its click settles the pending saves (`settleSave`), then reloads — network first, so the reload is
+the new build. A local `-dev` build never asks.
+
+**The INSTALLED app opens notes from the OS and has shortcuts.** `public/manifest.webmanifest` declares
+Corkboard a handler for `.md`/`.markdown` (`file_handlers`), three icon shortcuts (`?do=new|folders|notes`),
+and `launch_handler` `focus-existing`, so a launch reaches the window already open through `launchQueue`
+(`features/launch.ts`), never as a fresh page load. It waits for boot (`booted`, `boot.ts`) so the last map
+can't land on top. A note opens in place through the SAME path as one dropped on the pill (`open`,
+`features/open-drop.ts`), including its "click to let Corkboard edit it" when asking for write access needs
+a click. Folders can't be OS file handlers: they still come by picker or drop. A web page can't reveal a
+file in Finder or read its path, so there is no "Show in Finder".
+
 ## Interaction
 
 **There is no toolbar; the ⌘P PALETTE is the one list of every action** (`features/palette.ts`, button

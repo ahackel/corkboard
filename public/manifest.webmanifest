@@ -8,9 +8,81 @@
   "background_color": "#C3743B",
   "theme_color": "#C3743B",
   "icons": [
-    { "src": "icon.svg", "type": "image/svg+xml", "sizes": "any" },
-    { "src": "icon-192.png", "type": "image/png", "sizes": "192x192" },
-    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512" },
-    { "src": "icon-maskable-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "icon-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "launch_handler": {
+    "client_mode": [
+      "focus-existing",
+      "auto"
+    ]
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "text/markdown": [
+          ".md",
+          ".markdown"
+        ]
+      },
+      "launch_type": "single-client"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New map",
+      "url": "./?do=new",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Folders",
+      "description": "Open one of your folders",
+      "url": "./?do=folders",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Notes",
+      "description": "Open one of your notes",
+      "url": "./?do=notes",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

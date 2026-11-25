@@ -45,6 +45,8 @@
   <div id="status" role="status" aria-live="polite"></div>
   <!-- shown while ONE note or folder is dragged in from the OS: dropped here it opens to be edited in place,
        dropped on the board it's added as a card (features/open-drop.ts) -->
+  <!-- a newer version has been deployed since this window loaded (features/update.ts): a click saves, then reloads -->
+  <button id="updateBtn" type="button" title="A new version of Corkboard is available" hidden>Update</button>
   <button id="openDrop" type="button" hidden><span class="ic" data-icon="document"></span>
     <span class="od-text"><b id="openDropTitle"></b><span id="openDropSub"></span></span></button>
   <div id="palette" hidden>
