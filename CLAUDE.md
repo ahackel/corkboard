@@ -31,7 +31,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys and the Format/Edit table menus), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`, …
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
-  `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`.
+  `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`; `desktop-*.ts` (the desktop app's, by path).
 - `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
   (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts` (the banner; `writesHeld`), `save-flag.ts` (`data-saving`, for e2e).
 - `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,

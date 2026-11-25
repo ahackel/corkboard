@@ -17,7 +17,7 @@ import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChi
 import { exportSelection, shareSelection, canShareFiles, copySelection, copyFormatted, cutSelection } from './clipboard.js';
 import { pasteFromClipboard } from './attachments.js';
 import { canTidy, tidyMenuEntries, canTidySection, tidySection } from './tidy.js';
-import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
+import { openMenu, copyFilePath, canReveal, revealInFinder, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter } from '../nav/scope.js';
 import { labelEl, animateLayout } from '../main.js';
@@ -359,6 +359,9 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   }
   entries.push('sep');
   entries.push({ label:'Copy file path', run: () => copyFilePath(n), disabled: multi || !n.file });
+  if (canReveal(n)) {
+    entries.push({ label:'Show in Finder', run: () => revealInFinder(n), disabled: multi });
+  }
   entries.push({ label:'Download as Markdown', run: () => { selectTargetFirst(); exportSelection(); } });
   if (canShareFiles) {
     entries.push({ label:'Share…', run: () => { selectTargetFirst(); void shareSelection(); } });

@@ -5,17 +5,28 @@
 //   fsaStore  — File System Access API (Chrome/Edge): a real local folder.
 //   idbStore  — IndexedDB fallback for Safari < 17.2 (no OPFS createWritable).
 //   noteStore — ONE .md file opened on its own (FSA file handle): a map that is a single card.
+//   desktopFolderStore / desktopNoteStore — the same two by PATH, in the desktop app (src-tauri/).
 // Retargeting the app (Obsidian vault, Tauri, …) means replacing only this folder. This
 // barrel re-exports the adapters + recents helpers and resolves which on-device store to use.
 // ============================================================
 import { opfsStore } from './opfs.js';
 import { idbStore } from './idb-store.js';
+import { fsaStore as webFolderStore } from './fsa.js';
+import { noteStore as webNoteStore } from './note.js';
+import { desktopFolderStore } from './desktop-folder.js';
+import { desktopNoteStore } from './desktop-note.js';
+import { DESKTOP_BUILD } from '../utils/desktop.js';
 import type { DeviceStore } from './types.js';
 
 export type { Store, DeviceStore, NoteFile, PickResult } from './types.js';
 export { opfsStore } from './opfs.js';
-export { fsaStore } from './fsa.js';
-export { noteStore } from './note.js';
+export { desktopFolderStore } from './desktop-folder.js';
+export { desktopNoteStore } from './desktop-note.js';
+
+// A real folder and a single note: by permission handle in Chrome/Edge, by path in the desktop app. The
+// build picks one (DESKTOP_BUILD); everything above the store layer uses these two names either way.
+export const fsaStore = DESKTOP_BUILD ? desktopFolderStore : webFolderStore;
+export const noteStore = DESKTOP_BUILD ? desktopNoteStore : webNoteStore;
 export { forgetRecent, setOnRecentsChanged } from './recents.js';
 export {
   readMaps, touchMap, getLastMap, setLastMap,

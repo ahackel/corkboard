@@ -741,8 +741,18 @@ on the dev server, `tauri:debug` as "Corkboard Debug" with its own bundle id (it
 installed app's untouched), `tauri:build` makes `Corkboard.app` and the `.dmg`; on a Mac only, needing Rust
 and the Xcode command-line tools. The Desktop app workflow builds the Apple Silicon `.dmg` by hand or on a
 `v*` tag (then a GitHub Release), signed AD HOC (`signingIdentity: "-"`; unsigned, macOS calls a downloaded app "damaged") until there is a Developer ID, and runs the specs in WebKit — the engine of the app's
-window on a Mac — reporting only. On a Mac the window is WebKit, so FSA is absent: until the path-based
-store lands, the app has on-device maps only (OPFS).
+window on a Mac — reporting only. On a Mac the window is WebKit, with no FSA: the app reaches folders and notes by PATH instead.
+`store/index.ts` picks `desktopFolderStore`/`desktopNoteStore` for `fsaStore`/`noteStore` in this build, the
+same shape, so nothing above the store layer knows; their calls go to `src-tauri/src/files.rs` (list a
+folder's files with size + mtime, read many notes in one call, write whole — to a dot-named file renamed
+over the old one — and the Open dialogs, Show in Finder) through `store/desktop-bridge.ts`. A remembered map's
+key IS its path (`path:/Users/…`): nothing to grant again, nothing to go stale; a folder that moved is
+`'gone'` and found again with the dialog (`relink`). Finder's Open With, a `.md` double-click
+(`fileAssociations`) or a drop on the Dock icon reach the page as `RunEvent::Opened`, kept by the native side
+until `features/desktop-open.ts` takes them after boot; command-line paths do the same (Windows/Linux).
+The window's own drop handling is off (`dragDropEnabled: false`) so a drop on the board still adds cards and
+pictures as in a browser. Copy file path copies the whole path there, and Show in Finder joins the card
+menu and ⌘P (`store.absolutePath`).
 
 ## Interaction
 

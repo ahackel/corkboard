@@ -26,6 +26,7 @@ import './features/attachments.js';   // registers the OS image drag/drop listen
 import './features/open-drop.js';   // registers the drag-a-note-in-to-open-it drop target
 import './features/launch.js';   // what the installed app is launched with: a note from the OS, a shortcut
 import './features/update.js';   // the Update button, once a newer version is deployed
+import './features/desktop-open.js';   // the desktop app: notes and folders Finder opens with it
 import { DESKTOP_BUILD } from './utils/desktop.js';
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas

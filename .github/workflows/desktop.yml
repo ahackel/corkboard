@@ -54,6 +54,7 @@ jobs:
           restore-keys: cargo-${{ runner.os }}-
       - run: rustup update stable --no-self-update
       - run: npm ci
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: npm run tauri:build
       # ad-hoc signed (tauri.conf.json signingIdentity "-"): a whole, valid signature, only not one Apple
       # knows. Without it macOS calls the downloaded app "damaged".

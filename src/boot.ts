@@ -27,10 +27,14 @@ import { byId } from './utils/dom.js';
 import { settleSave } from './data/save.js';
 import { exportZip, openImportPicker } from './data/zip-io.js';
 import { loadFromDir } from './data/load.js';
+import { DESKTOP_BUILD } from './utils/desktop.js';
+import { native } from './store/desktop-bridge.js';
+import { desktopFolderStore, desktopNoteStore } from './store/index.js';
 
 // Chrome/Edge offer opening a real local folder (FSA); iPad/Firefox/Safari use on-device +
 // import/export. ?nofsa hides the folder option for testing the no-FSA layout on desktop.
-const HAS_FSA = !location.search.includes('nofsa') && 'showDirectoryPicker' in window;
+// The desktop app opens both by path instead (store/desktop-folder.ts).
+const HAS_FSA = DESKTOP_BUILD || (!location.search.includes('nofsa') && 'showDirectoryPicker' in window);
 
 // ---- opening maps (each path ends on the canvas with the panel closed) ----
 async function openDeviceMap(ref: MapRef): Promise<void> {
@@ -130,8 +134,27 @@ export async function openDropped(handle: FileSystemHandle): Promise<'ok' | 'nee
   hideStart();
   return 'ok';
 }
-// Pick a NEW local folder (Chrome/Edge only) and open it right away.
-async function pickFolder(): Promise<void> {
+// A folder or note Finder handed the desktop app (features/desktop-open.ts): opened in place, like a pick.
+export async function openLocalPath(path: string): Promise<void> {
+  const kind = await native.kindOf(path);
+  const isNote = kind === 'file' && /\.(md|markdown)$/i.test(path);
+  if (kind !== 'dir' && !isNote) {
+    setStatus('Only a Markdown note or a folder can be opened');
+    return;
+  }
+  await settleSave();   // the old map's pending writes must not land in the one opened
+  if (isNote) {
+    if (await desktopNoteStore.openPath(path) === 'ok') {
+      await loadNote(desktopNoteStore.currentKey!);
+      hideStart();
+    }
+  } else if (await desktopFolderStore.openPath(path) === 'ok') {
+    await loadFolder(desktopFolderStore.currentKey!);
+    hideStart();
+  }
+}
+// Pick a NEW local folder (Chrome/Edge, or the desktop app) and open it right away.
+export async function pickFolder(): Promise<void> {
   await settleSave();   // the old map's pending writes must not land in the picked folder
   const r = await fsaStore.pick();   // the picker needs this click as its user gesture
   if (r === 'unsupported') { setStatus('This browser can’t open a local folder — use Chrome or Edge.'); return; }

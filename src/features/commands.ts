@@ -13,7 +13,7 @@ import { openPalette, type Command, setPaletteSource, paletteOpen, closePalette 
 import { undo, redo } from './history.js';
 import { clearEdgeSelection, deleteSelectedEdge, connectSelection } from './edge-tools.js';
 import { pasteFromClipboard, pickImagesAt } from './attachments.js';
-import { copyFilePath } from './context-menu.js';
+import { copyFilePath, canReveal, revealInFinder } from './context-menu.js';
 import { tidyShortcut, TIDY_ACTIONS, canTidySection, tidySection } from './tidy.js';
 import { openTagPicker } from './tag-picker.js';
 import { toggleTray, trayOpen } from './tag-tray.js';
@@ -27,7 +27,8 @@ import { canEnter, canOpen, scopeActive } from '../nav/scope.js';
 import { hasStackSelected, unstackSelection, stackToSection } from './stacks.js';
 import { openSettings } from './canvas-color.js';
 import { byId, keys } from '../utils/dom.js';
-import { showStart, pickNote, newDeviceMap } from '../boot.js';
+import { showStart, pickNote, pickFolder, newDeviceMap } from '../boot.js';
+import { DESKTOP_BUILD } from '../utils/desktop.js';
 import { flushSave } from '../data/save.js';
 import { nodesOf } from '../utils/model.js';
 import { exportZip, openImportPicker } from '../data/zip-io.js';
@@ -332,6 +333,7 @@ function paletteCommands(): Command[] {
     { label: 'Delete', shortcut: '⌫', keywords: 'remove', when: growSel, run: deleteSelection },
     { label: 'Delete the line', shortcut: '⌫', keywords: 'remove edge arrow', when: () => editable() && state.selEdges.size > 0, run: () => { deleteSelectedEdge(); } },
     { label: 'Copy file path', keywords: 'location folder finder', when: () => !!oneSel()?.file, run: () => copyFilePath(oneSel()!) },
+    { label: 'Show in Finder', keywords: 'reveal file folder location', when: () => canReveal(oneSel()), run: () => revealInFinder(oneSel()) },
     { label: 'Download as Markdown', keywords: 'export save file md', when: () => state.sel.size > 0, run: exportSelection },
     { label: 'Share…', keywords: 'send airdrop', when: () => canShareFiles && state.sel.size > 0, run: () => { void shareSelection(); } },
     { label: 'Map settings…', keywords: 'canvas colour color background grid dots lines mesh snap', run: openSettings },
@@ -339,7 +341,8 @@ function paletteCommands(): Command[] {
     { label: 'New map', keywords: 'board create blank', run: () => { void newDeviceMap(); } },
     { label: 'Import .zip…', keywords: 'restore backup upload', run: openImportPicker },
     { label: 'Save now', shortcut: '⌘S', keywords: 'write disk', when: () => store.isOpen && !state.sel.size, run: () => { void flushSave(); } },
-    { label: 'Open a note…', keywords: 'file markdown md single card', when: () => 'showOpenFilePicker' in window, run: () => { void pickNote(); } },
+    { label: 'Open a note…', keywords: 'file markdown md single card', when: () => DESKTOP_BUILD || 'showOpenFilePicker' in window, run: () => { void pickNote(); } },
+    { label: 'Open a folder…', keywords: 'directory board map local disk', when: () => DESKTOP_BUILD || 'showDirectoryPicker' in window, run: () => { void pickFolder(); } },
     { label: 'Export the map as .zip', keywords: 'backup download', when: () => store.isOpen, run: () => { void exportZip(); } },
     ...(['png', 'pdf'] as ImageFormat[]).map(f => ({
       label: `Export ${state.sel.size ? 'the selection' : 'the map'} as ${f.toUpperCase()}`, keywords: 'picture image download save print share',

@@ -5,6 +5,8 @@
 // let through inside a section's label editor; inside a card's text it lists the editor's commands instead.
 // Menu items only call the existing crud / camera / main kernels — no logic of its own.
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
+import { store } from '../data/persistence.js';
+import { native } from '../store/desktop-bridge.js';
 import { ui } from '../core/ui-state.js';
 import { screenToWorld, fit } from '../view/camera.js';
 import { createNode, centredAt } from './crud.js';
@@ -137,11 +139,30 @@ function addSep(p: HTMLElement): void {
 // Copy the card's on-disk relative path (its .md file). The closest a browser app can get to
 // "reveal in Finder" — neither FSA handles nor OPFS expose absolute paths. Exported for
 // buildCardMenu (float-bar.ts), shared by the kebab menu and this file's own right-click menu.
+// In the desktop app the whole path, as Finder would give it (store/desktop-folder.ts absolutePath); in a
+// browser, which never learns where a folder is, the path inside the map.
+// Show in Finder: only the desktop app knows where a note is. Nothing given: the map's own folder or note.
+function finderPath(n?: MindNode): string | null {
+  if (n && !n.file) {
+    return null;   // not saved yet: there is nothing on disk to show
+  }
+  return store.absolutePath?.(n?.file ?? '') ?? null;
+}
+
+export function canReveal(n?: MindNode): boolean { return !!finderPath(n); }
+
+export function revealInFinder(n?: MindNode): void {
+  const path = finderPath(n);
+  if (path) {
+    native.reveal(path).catch(() => setStatus('Couldn’t show it in Finder'));
+  }
+}
+
 export function copyFilePath(n: MindNode): void {
-  const path = n.file;
-  if (!path) {
+  if (!n.file) {
     return;
   }
+  const path = store.absolutePath?.(n.file) ?? n.file;
   navigator.clipboard.writeText(path)
     .then(() => setStatus(`Copied “${path}”`))
     .catch(() => setStatus('Couldn’t copy path'));

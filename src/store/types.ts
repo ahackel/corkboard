@@ -26,6 +26,8 @@ export interface Store {
   watch(cb: () => void): void;
   // Only stores that are re-read on focus need it: false when nothing outside the app touched the files.
   changed?(): Promise<boolean>;
+  // Only the desktop app's stores know where a note really is on disk ('' = the map itself).
+  absolutePath?(path: string): string | null;
 }
 
 // On-device backends (OPFS / the IndexedDB fallback) additionally host MULTIPLE maps and

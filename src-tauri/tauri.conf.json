@@ -19,11 +19,14 @@
         "width": 1280,
         "height": 820,
         "minWidth": 480,
-        "minHeight": 360
+        "minHeight": 360,
+        "dragDropEnabled": false
       }
     ],
     "security": {
-      "dangerousDisableAssetCspModification": ["style-src"],
+      "dangerousDisableAssetCspModification": [
+        "style-src"
+      ],
       "csp": {
         "default-src": "'none'",
         "script-src": "'self'",
@@ -38,7 +41,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
     "category": "Productivity",
     "shortDescription": "A sticky-note wall over a folder of Markdown notes",
     "icon": [
@@ -51,6 +57,18 @@
     "macOS": {
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Markdown note",
+        "description": "A Markdown note",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      }
+    ]
   }
 }
