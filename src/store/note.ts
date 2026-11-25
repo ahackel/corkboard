@@ -12,7 +12,7 @@ import { installWatch } from './watch.js';
 import { stampOf } from './handle-store.js';
 import type { FoldTest } from './tree.js';
 import type { Store, PickResult, TreeListing } from './types.js';
-import { ensureWrite, hasWrite } from './permission.js';
+import { ensureWrite, hasWrite, sameEntry } from './permission.js';
 
 // window.showOpenFilePicker isn't in lib.dom.
 type FilePicker = (opts?: {
@@ -40,7 +40,7 @@ async function keyFor(handle: FileSystemFileHandle): Promise<string> {
       continue;
     }
     const prior = await rememberedHandle(m.id);
-    if (prior && await handle.isSameEntry(prior)) {
+    if (prior && await sameEntry(handle, prior)) {
       return m.id;
     }
   }

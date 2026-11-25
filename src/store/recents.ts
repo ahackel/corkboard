@@ -4,6 +4,7 @@
 // never fires twice).
 import { idbDel, idbGet } from '../utils/idb.js';
 import { readMaps, upsertMap, removeMapRef } from './maps.js';
+import { sameEntry } from './permission.js';
 
 // A picker returns a new key every time. Collapse only entries for the same directory; names are
 // not identities, so two folders called "notes" must both remain reopenable.
@@ -13,7 +14,7 @@ export async function rememberFolder(key: string, name: string, handle: FileSyst
       continue;
     }
     const prior = await idbGet<FileSystemDirectoryHandle>(m.id).catch(() => undefined);
-    if (!prior || !(await handle.isSameEntry(prior))) {
+    if (!prior || !(await sameEntry(handle, prior))) {
       continue;
     }
     removeMapRef(m.id);

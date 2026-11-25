@@ -27,3 +27,14 @@ export async function ensureWrite(handle: FileSystemHandle): Promise<PickResult>
     return (e as DOMException).name === 'SecurityError' ? 'needs-click' : 'denied';
   }
 }
+
+// Do two handles name the same file or folder? A remembered handle can be stale — its folder moved,
+// deleted, or no longer reachable — and Chrome then REJECTS the comparison (an AbortError) instead of
+// answering no. Stale is not the same: one dead entry in the recents must not stop a new one opening.
+export async function sameEntry(a: FileSystemHandle, b: FileSystemHandle): Promise<boolean> {
+  try {
+    return await a.isSameEntry(b);
+  } catch {
+    return false;
+  }
+}

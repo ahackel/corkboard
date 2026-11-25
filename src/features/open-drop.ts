@@ -57,7 +57,15 @@ async function open(handle: FileSystemHandle | null): Promise<void> {
     setStatus('Only a Markdown note or a folder can be opened');
     return;
   }
-  if (await openDropped(handle) === 'needs-click') {
+  let r: Awaited<ReturnType<typeof openDropped>>;
+  try {
+    r = await openDropped(handle);
+  } catch (e) {
+    console.error(e);
+    setStatus(`“${handle.name}” couldn’t be opened. Try dropping it again.`);
+    return;
+  }
+  if (r === 'needs-click') {
     offerClick(handle);
   }
 }
