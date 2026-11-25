@@ -733,7 +733,8 @@ file in Finder or read its path, so there is no "Show in Finder".
 in-house MCP Manager): a small Rust program that opens one window on `dist/index.html` built with
 `npm run build:desktop` (`--mode desktop`). That build leaves out what only a web page needs — the page's own
 CSP (Tauri writes the window's from `tauri.conf.json`, hashing the inline script and allowing its `ipc:`
-calls), `version.json`, the offline copy and the Update button (`DESKTOP_BUILD`, `utils/desktop.ts`), and
+calls — but NOT hashing styles (`dangerousDisableAssetCspModification: ["style-src"]`): a hash in
+`style-src` voids its `'unsafe-inline'`, and every `style="--sw:…"` written as markup is then dropped), `version.json`, the offline copy and the Update button (`DESKTOP_BUILD`, `utils/desktop.ts`), and
 `public/`. The page reaches Tauri through its injected global (`withGlobalTauri`), never an npm package, so
 the no-runtime-dependency rule holds; only `@tauri-apps/cli` is a dev dependency. `npm run tauri:dev` runs it
 on the dev server, `tauri:debug` as "Corkboard Debug" with its own bundle id (its own storage, the

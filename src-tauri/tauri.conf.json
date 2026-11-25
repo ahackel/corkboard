@@ -23,6 +23,7 @@
       }
     ],
     "security": {
+      "dangerousDisableAssetCspModification": ["style-src"],
       "csp": {
         "default-src": "'none'",
         "script-src": "'self'",
