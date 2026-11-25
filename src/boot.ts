@@ -16,6 +16,7 @@ import {
   readMaps, getLastMap, ensureMapRegistry, createDeviceMap, deleteDeviceMap, renameDeviceMap,
   type MapRef, type MapKind,
 } from './store/index.js';
+import type { PickResult } from './store/types.js';
 import { esc } from './utils/markdown.js';
 import { applyUrlFromHash } from './nav/url-state.js';
 import { openMenu } from './features/context-menu.js';
@@ -36,19 +37,36 @@ async function openDeviceMap(ref: MapRef): Promise<void> {
   await switchToDeviceMap(ref);
   await loadFromDir();
 }
+// Recents whose stored handle Chrome no longer honours (permission.ts ensureWrite 'gone'): their next click
+// goes straight to the picker, since asking about them again would only fail again.
+const dead = new Set<string>();
+
+// A dead entry is found AGAIN with the picker, opened where it was; the pick takes the entry's place. The
+// picker needs the click still fresh, and the failed ask may have used it: then the NEXT click opens it.
+async function relink(kind: 'folder' | 'note', key: string): Promise<PickResult> {
+  dead.add(key);
+  const r = await (kind === 'note' ? noteStore.relink(key) : fsaStore.relink(key));
+  if (r === 'ok') {
+    dead.delete(key);
+  } else if (r === 'needs-click') {
+    setStatus(`Corkboard lost its access to that ${kind} — click it again to find it.`);
+  } else if (r === 'cancel') {
+    setStatus(`Corkboard lost its access to that ${kind}. Click it to find it again, or remove it from the list.`);
+  } else if (r === 'denied') {
+    setStatus(`Corkboard can’t write to that ${kind}. Open it again and choose “Allow”.`);
+  }
+  renderMapList();
+  return r;
+}
+
 // Reopen a remembered FSA folder (the row click is the gesture for the permission prompt).
 async function openFolderMap(key: string): Promise<boolean> {
   await settleSave();   // the old map's pending writes must not land in the folder
-  const r = await fsaStore.openRecent(key);
+  let r = dead.has(key) ? 'gone' : await fsaStore.openRecent(key);
   if (r === 'gone') {
-    await forgetRecent(key);
-    renderMapList();
-    setStatus('Corkboard can’t reach that folder any more — removed from the list. Open it again with + or drop it here.');
-    return false;
-  }
-  if (r === 'denied') {
+    r = await relink('folder', key);
+  } else if (r === 'denied') {
     setStatus('Corkboard can’t write to that folder. Open it again and choose “Allow”.');
-    return false;
   }
   if (r !== 'ok') {
     return false;
@@ -59,16 +77,11 @@ async function openFolderMap(key: string): Promise<boolean> {
 // Reopen a remembered single note (the row click is the gesture for the permission prompt).
 async function openNoteMap(key: string): Promise<boolean> {
   await settleSave();
-  const r = await noteStore.openRecent(key);
+  let r = dead.has(key) ? 'gone' : await noteStore.openRecent(key);
   if (r === 'gone') {
-    await noteStore.forget(key);
-    renderMapList();
-    setStatus('Corkboard can’t reach that note any more — removed from the list. Open it again with + or drop it here.');
-    return false;
-  }
-  if (r === 'denied') {
+    r = await relink('note', key);
+  } else if (r === 'denied') {
     setStatus('Corkboard can’t write to that note. Open it again and choose “Allow”.');
-    return false;
   }
   if (r !== 'ok') {
     return false;

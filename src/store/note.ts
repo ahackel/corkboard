@@ -16,6 +16,7 @@ import { ensureWrite, hasWrite, sameEntry, reachable } from './permission.js';
 
 // window.showOpenFilePicker isn't in lib.dom.
 type FilePicker = (opts?: {
+  startIn?: FileSystemHandle;
   types?: Array<{ description: string; accept: Record<string, string[]> }>;
   excludeAcceptAllOption?: boolean; multiple?: boolean;
 }) => Promise<FileSystemFileHandle[]>;
@@ -23,6 +24,10 @@ const showOpenFilePicker = (window as Window & { showOpenFilePicker?: FilePicker
 
 // The board's stand-in for the board.json a folder would hold — the only other path this store answers.
 const BOARD_PATH = 'board.json';
+const PICK_NOTE = {
+  types: [{ description: 'Markdown note', accept: { 'text/markdown': ['.md', '.markdown'] } }],
+  multiple: false,
+};
 const boardKey = (key: string): string => 'note-board:' + key;
 
 async function rememberedHandle(key: string): Promise<FileSystemFileHandle | undefined> {
@@ -59,12 +64,13 @@ export const noteStore = {
   get currentKey(){ return this._key; },
 
   // Adopt a picked, remembered or DROPPED note as the open map, once read-write access is confirmed.
-  async adopt(handle: FileSystemFileHandle): Promise<PickResult> {
+  // `key`: the entry it takes the place of (relink), so the note keeps that entry's board.
+  async adopt(handle: FileSystemFileHandle, key?: string): Promise<PickResult> {
     const r = await ensureWrite(handle);
     if (r !== 'ok') {
       return r;
     }
-    const key = await keyFor(handle);
+    key ??= await keyFor(handle);
     await idbPut(key, handle);
     upsertMap({ id: key, kind: 'note', name: handle.name, when: Date.now() });
     notifyRecentsChanged();
@@ -79,12 +85,35 @@ export const noteStore = {
     }
     let handle: FileSystemFileHandle | undefined;
     try {
-      [handle] = await showOpenFilePicker({
-        types: [{ description: 'Markdown note', accept: { 'text/markdown': ['.md', '.markdown'] } }],
-        multiple: false,
-      });
+      [handle] = await showOpenFilePicker(PICK_NOTE);
     } catch (e) { return (e as DOMException).name === 'AbortError' ? 'cancel' : 'error'; }
     return handle ? this.adopt(handle) : 'cancel';
+  },
+
+  // Find a remembered note AGAIN (its handle is dead: permission.ts ensureWrite 'gone'): the picker, opened
+  // beside the old file when Chrome still knows where that is, and the note chosen takes the old entry's
+  // key — and so its board.
+  async relink(key: string): Promise<PickResult> {
+    if (!showOpenFilePicker) {
+      return 'unsupported';
+    }
+    const old = await rememberedHandle(key);
+    let handle: FileSystemFileHandle | undefined;
+    for (const startIn of old ? [old, undefined] : [undefined]) {
+      try {
+        [handle] = await showOpenFilePicker({ ...PICK_NOTE, ...(startIn ? { startIn } : {}) });
+        break;
+      } catch (e) {
+        const name = (e as DOMException).name;
+        if (name === 'AbortError') {
+          return 'cancel';
+        }
+        if (name === 'SecurityError') {
+          return 'needs-click';
+        }
+      }
+    }
+    return handle ? this.adopt(handle, key) : 'needs-click';
   },
 
   // Reopen a remembered note by its key (the click is the gesture for the permission prompt).

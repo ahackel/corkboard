@@ -4,14 +4,37 @@
 import { idbGet, idbPut } from '../utils/idb.js';
 import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob, folderStamp, stampOf } from './handle-store.js';
 import type { FoldTest } from './tree.js';
-import { rememberFolder, notifyRecentsChanged } from './recents.js';
+import { rememberFolder, notifyRecentsChanged, forgetRecent } from './recents.js';
 import { installWatch } from './watch.js';
 import type { Store, PickResult } from './types.js';
 import { ensureWrite, hasWrite, reachable } from './permission.js';
 
 // window.showDirectoryPicker isn't in lib.dom.
-type DirectoryPicker = (opts?: { mode?: string }) => Promise<FileSystemDirectoryHandle>;
+type DirectoryPicker = (opts?: { mode?: string; startIn?: FileSystemHandle }) => Promise<FileSystemDirectoryHandle>;
 const showDirectoryPicker = (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
+
+// The folder picker, opened at `near` if it still resolves (a dead handle can make `startIn` itself throw;
+// then it opens where Chrome likes). A string is the outcome when nothing was picked.
+async function pickAgain(near: FileSystemDirectoryHandle | undefined): Promise<FileSystemDirectoryHandle | PickResult> {
+  const pick = (startIn?: FileSystemHandle): Promise<FileSystemDirectoryHandle> =>
+    showDirectoryPicker!({ mode: 'readwrite', ...(startIn ? { startIn } : {}) });
+  try {
+    return await pick(near);
+  } catch (e) {
+    const name = (e as DOMException).name;
+    if (name === 'AbortError') {
+      return 'cancel';
+    }
+    if (name === 'SecurityError' || !near) {
+      return 'needs-click';
+    }
+  }
+  try {
+    return await pick();
+  } catch (e) {
+    return (e as DOMException).name === 'AbortError' ? 'cancel' : 'needs-click';
+  }
+}
 
 async function rememberedHandle(key: string): Promise<FileSystemDirectoryHandle | undefined> {
   try {
@@ -57,6 +80,26 @@ export const fsaStore = {
     try { handle = await showDirectoryPicker({ mode: 'readwrite' }); }
     catch (e){ return (e as DOMException).name === 'AbortError' ? 'cancel' : 'error'; }
     return this.adopt(handle);
+  },
+
+  // Find a remembered folder AGAIN: the picker, opened where the old handle points when Chrome still knows
+  // where that is, and the folder chosen takes the old entry's place. What a dead handle (permission.ts
+  // ensureWrite 'gone') needs — Chrome won't ask about it, but a fresh pick is a fresh grant.
+  async relink(key: string): Promise<PickResult> {
+    if (!showDirectoryPicker) {
+      return 'unsupported';
+    }
+    const old = await rememberedHandle(key);
+    const r = await pickAgain(old);
+    if (typeof r === 'string') {
+      return r;
+    }
+    const adopted = await this.adopt(r);
+    if (adopted === 'ok') {
+      await forgetRecent(key);
+      notifyRecentsChanged();
+    }
+    return adopted;
   },
 
   // Reopen a REMEMBERED source by its recents key (the click is the gesture).
