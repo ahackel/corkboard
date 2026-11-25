@@ -26,6 +26,7 @@ import './features/attachments.js';   // registers the OS image drag/drop listen
 import './features/open-drop.js';   // registers the drag-a-note-in-to-open-it drop target
 import './features/launch.js';   // what the installed app is launched with: a note from the OS, a shortcut
 import './features/update.js';   // the Update button, once a newer version is deployed
+import { DESKTOP_BUILD } from './utils/desktop.js';
 import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
 import './features/context-menu.js';   // registers the custom right-click menu on the canvas
 import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-ghost gesture
@@ -1093,6 +1094,6 @@ boot();   // local-first: open straight into the last map
 
 // Keep the last copy of the page for when there is no network (public/sw.js). The built app only: the
 // dev server's modules are not something to keep.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+if (import.meta.env.PROD && !DESKTOP_BUILD && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* file://, or a browser that refuses: the app works without */ });
 }

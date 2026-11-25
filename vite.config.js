@@ -56,13 +56,17 @@ function versionFile() {
 
 // The build emits ONE self-contained dist/index.html (JS + CSS inlined), so the
 // deployed app stays a single file; public/sw.js keeps the last copy of it for when there is no network.
-export default defineConfig({
+// `--mode desktop` (npm run build:desktop) builds the page the desktop app wraps (src-tauri/): Tauri sets that
+// window's CSP itself (tauri.conf.json, with hashes for this script and room for its own calls), and the app
+// updates as a whole, so neither the page's CSP nor version.json goes in.
+export default defineConfig(({ mode }) => ({
   // GitHub Pages serves this project under a subpath. Relative base keeps asset URLs
   // resolving correctly under that subpath.
   base: './',
-  publicDir: 'public',
+  // the about page, the offline copy and the install manifest are the web page's; the app needs none of them
+  publicDir: mode === 'desktop' ? false : 'public',
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
-  plugins: [viteSingleFile(), contentSecurityPolicy(), versionFile()],
+  plugins: mode === 'desktop' ? [viteSingleFile()] : [viteSingleFile(), contentSecurityPolicy(), versionFile()],
   // `npm test` (tests/): the modules under test import core/state.ts, which looks up the DOM shell.
   // e2e/ is Playwright's (`npm run e2e`), not vitest's.
   test: { environment: 'happy-dom', include: ['tests/**/*.test.ts'] },
@@ -71,4 +75,4 @@ export default defineConfig({
     // viteSingleFile inlines everything; no separate asset dir needed.
     assetsInlineLimit: Infinity,
   },
-});
+}));

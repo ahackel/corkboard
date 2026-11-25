@@ -1,0 +1,54 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Corkboard",
+  "mainBinaryName": "Corkboard",
+  "version": "../package.json",
+  "identifier": "io.github.ahackel.corkboard",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev -- --mode desktop",
+    "beforeBuildCommand": "npm run build:desktop"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Corkboard",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 480,
+        "minHeight": 360
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'none'",
+        "script-src": "'self'",
+        "style-src": "'unsafe-inline'",
+        "img-src": "'self' data: blob: https: http:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' data: blob: https: ipc: http://ipc.localhost",
+        "base-uri": "'none'",
+        "form-action": "'none'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Productivity",
+    "shortDescription": "A sticky-note wall over a folder of Markdown notes",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

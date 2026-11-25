@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint';
 import importX from 'eslint-plugin-import-x';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/'] },
+  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/', 'src-tauri/target/', 'src-tauri/gen/'] },
   js.configs.recommended,
   tseslint.configs.recommended,
   {

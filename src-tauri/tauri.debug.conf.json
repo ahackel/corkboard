@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Corkboard Debug",
+  "mainBinaryName": "Corkboard Debug",
+  "identifier": "io.github.ahackel.corkboard.debug",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Corkboard (debug)",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 480,
+        "minHeight": 360
+      }
+    ]
+  }
+}

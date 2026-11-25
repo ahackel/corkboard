@@ -1,0 +1,70 @@
+name: Desktop app
+
+# Builds the desktop app (src-tauri/) for Apple Silicon Macs: Corkboard.app in a .dmg, kept as the run's
+# artifact. A version tag (v1.2.0) also publishes it as a GitHub Release. The app is NOT signed yet: the
+# first time, open it with right-click ▸ Open, or clear the quarantine flag once:
+#   xattr -dr com.apple.quarantine /Applications/Corkboard.app
+#
+# Beside it, the end-to-end specs run in WebKit, the engine the app's window uses on a Mac. They are
+# written against Chromium, so this job only reports for now: it does not stop the build.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  webkit:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install webkit
+      - run: npm run e2e:webkit -- --trace off
+
+  build:
+    runs-on: macos-latest   # Apple Silicon
+    permissions:
+      contents: write   # the release, on a tag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: cargo-${{ runner.os }}-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - run: rustup update stable --no-self-update
+      - run: npm ci
+      - run: npm run tauri:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Corkboard-macos-arm64
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" \
+            --title "Corkboard $GITHUB_REF_NAME" \
+            --notes "Corkboard for Apple Silicon Macs. Not signed yet: the first time, open it with right-click ▸ Open."
+          gh release upload "$GITHUB_REF_NAME" src-tauri/target/release/bundle/dmg/*.dmg --clobber

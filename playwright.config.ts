@@ -18,7 +18,12 @@ export default defineConfig({
     viewport: { width: 1200, height: 800 },
     locale: 'en-US',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1200, height: 800 } } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1200, height: 800 } } },
+    // the engine of the desktop app's window on a Mac (src-tauri/): `npm run e2e:webkit`, run by the
+    // Desktop app workflow. Only on request, since the specs are written against Chromium.
+    ...(process.env.E2E_WEBKIT ? [{ name: 'webkit', use: { ...devices['Desktop Safari'], viewport: { width: 1200, height: 800 } } }] : []),
+  ],
   webServer: {
     command: `npx vite build && npx vite preview --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}/`,

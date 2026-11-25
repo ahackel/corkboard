@@ -5,6 +5,7 @@
 // service worker (public/sw.js) asks the network first, so the reload is the new version.
 import { byId } from '../utils/dom.js';
 import { settleSave } from '../data/save.js';
+import { DESKTOP_BUILD } from '../utils/desktop.js';
 
 const EVERY_MS = 30 * 60 * 1000;
 const AT_MOST_MS = 5 * 60 * 1000;
@@ -26,8 +27,8 @@ async function check(): Promise<void> {
   }
 }
 
-// A local build (`-dev`) has no deploy to compare with.
-if (import.meta.env.PROD && !__APP_VERSION__.endsWith('-dev')) {
+// A local build (`-dev`) has no deploy to compare with, and the desktop app updates as a whole.
+if (import.meta.env.PROD && !DESKTOP_BUILD && !__APP_VERSION__.endsWith('-dev')) {
   void check();
   window.setInterval(() => { void check(); }, EVERY_MS);
   document.addEventListener('visibilitychange', () => {

@@ -729,6 +729,20 @@ can't land on top. A note opens in place through the SAME path as one dropped on
 a click. Folders can't be OS file handlers: they still come by picker or drop. A web page can't reveal a
 file in Finder or read its path, so there is no "Show in Finder".
 
+**The DESKTOP app is a Tauri window round the same page.** `src-tauri/` is a Tauri 2 app (the stack of the
+in-house MCP Manager): a small Rust program that opens one window on `dist/index.html` built with
+`npm run build:desktop` (`--mode desktop`). That build leaves out what only a web page needs — the page's own
+CSP (Tauri writes the window's from `tauri.conf.json`, hashing the inline script and allowing its `ipc:`
+calls), `version.json`, the offline copy and the Update button (`DESKTOP_BUILD`, `utils/desktop.ts`), and
+`public/`. The page reaches Tauri through its injected global (`withGlobalTauri`), never an npm package, so
+the no-runtime-dependency rule holds; only `@tauri-apps/cli` is a dev dependency. `npm run tauri:dev` runs it
+on the dev server, `tauri:debug` as "Corkboard Debug" with its own bundle id (its own storage, the
+installed app's untouched), `tauri:build` makes `Corkboard.app` and the `.dmg`; on a Mac only, needing Rust
+and the Xcode command-line tools. The Desktop app workflow builds the Apple Silicon `.dmg` by hand or on a
+`v*` tag (then a GitHub Release), unsigned for now, and runs the specs in WebKit — the engine of the app's
+window on a Mac — reporting only. On a Mac the window is WebKit, so FSA is absent: until the path-based
+store lands, the app has on-device maps only (OPFS).
+
 ## Interaction
 
 **There is no toolbar; the ⌘P PALETTE is the one list of every action** (`features/palette.ts`, button
