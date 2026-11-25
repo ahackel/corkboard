@@ -1,8 +1,9 @@
 name: Desktop app
 
 # Builds the desktop app (src-tauri/) for Apple Silicon Macs: Corkboard.app in a .dmg, kept as the run's
-# artifact. A version tag (v1.2.0) also publishes it as a GitHub Release. The app is NOT signed yet: the
-# first time, open it with right-click ▸ Open, or clear the quarantine flag once:
+# artifact. A version tag (v1.2.0) also publishes it as a GitHub Release. The app is signed ad hoc, not
+# with an Apple Developer ID: the first time, allow it under System Settings ▸ Privacy & Security ▸ Open
+# Anyway, or clear the quarantine flag once:
 #   xattr -dr com.apple.quarantine /Applications/Corkboard.app
 #
 # Beside it, the end-to-end specs run in WebKit, the engine the app's window uses on a Mac. They are
@@ -54,6 +55,9 @@ jobs:
       - run: rustup update stable --no-self-update
       - run: npm ci
       - run: npm run tauri:build
+      # ad-hoc signed (tauri.conf.json signingIdentity "-"): a whole, valid signature, only not one Apple
+      # knows. Without it macOS calls the downloaded app "damaged".
+      - run: codesign --verify --deep --strict --verbose=2 src-tauri/target/release/bundle/macos/Corkboard.app
       - uses: actions/upload-artifact@v4
         with:
           name: Corkboard-macos-arm64
@@ -66,5 +70,5 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" \
             --title "Corkboard $GITHUB_REF_NAME" \
-            --notes "Corkboard for Apple Silicon Macs. Not signed yet: the first time, open it with right-click ▸ Open."
+            --notes "Corkboard for Apple Silicon Macs. Not signed with an Apple Developer ID: the first time, allow it under System Settings ▸ Privacy & Security ▸ Open Anyway."
           gh release upload "$GITHUB_REF_NAME" src-tauri/target/release/bundle/dmg/*.dmg --clobber

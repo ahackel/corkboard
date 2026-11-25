@@ -739,7 +739,7 @@ the no-runtime-dependency rule holds; only `@tauri-apps/cli` is a dev dependency
 on the dev server, `tauri:debug` as "Corkboard Debug" with its own bundle id (its own storage, the
 installed app's untouched), `tauri:build` makes `Corkboard.app` and the `.dmg`; on a Mac only, needing Rust
 and the Xcode command-line tools. The Desktop app workflow builds the Apple Silicon `.dmg` by hand or on a
-`v*` tag (then a GitHub Release), unsigned for now, and runs the specs in WebKit — the engine of the app's
+`v*` tag (then a GitHub Release), signed AD HOC (`signingIdentity: "-"`; unsigned, macOS calls a downloaded app "damaged") until there is a Developer ID, and runs the specs in WebKit — the engine of the app's
 window on a Mac — reporting only. On a Mac the window is WebKit, so FSA is absent: until the path-based
 store lands, the app has on-device maps only (OPFS).
 
