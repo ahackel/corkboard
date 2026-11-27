@@ -1372,6 +1372,8 @@ before `boot()`; until then each hook does nothing, which is all a test of `data
 one layer down: `view/` takes what it needs from a feature by being told (`onViewApplied` in `view/camera.ts`,
 `useCanvasSurface` in `view/free-edges.ts`, `onGridChanged` in `view/grid.ts`), not by importing it. Without this, every module that touched
 storage sat inside one import cycle with `main.ts` and half of `features/`. Add a hook rather than an import.
+`npm run lint` enforces it (`eslint.config.js`): `core/`, `utils/`, `view/`, `store/`, `data/` and `nav/scope.ts` may
+not import `features/`, the rest of `nav/` or the render core, and may form no import cycle.
 Inside `data/` the imports run one way too, bottom up: `active-store.ts` (the open `store`) and
 `note-names.ts`; `images`, `board`; `arrange` (lays out what arrived unplaced); `read` (a listing → nodes,
 `readFolder`); `lazy`; `save`; `migrate`, `load`; and `persistence` (switching maps, the reload) on top.
