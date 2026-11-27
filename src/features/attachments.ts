@@ -164,7 +164,7 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
 // Bound per-textarea in startBodyEdit.
 export function onBodyPaste(e: ClipboardEvent): void {
   const imgs = imageFiles(e.clipboardData?.files);
-  if (imgs.length){ e.preventDefault(); insertImagesAtCursor(imgs); }
+  if (imgs.length){ e.preventDefault(); void insertImagesAtCursor(imgs); }
 }
 
 // The one attach mechanism every mobile browser supports (iOS has no OS drag-drop, and image paste is flaky).

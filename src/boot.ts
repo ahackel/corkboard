@@ -179,11 +179,11 @@ function renderMapList(): void {
       if ((e.target as HTMLElement).closest('.mi-more, .mi-name-input')) {
         return;
       }
-      openRow(m);
+      void openRow(m);
     };
     row.onkeydown = e => {
       if (e.key === 'Enter' && e.target === row) {
-        openRow(m);
+        void openRow(m);
       }
     };
     const more = row.querySelector<HTMLButtonElement>('.mi-more');
@@ -233,7 +233,7 @@ function openMapMenu(m: MapRef, x: number, y: number): void {
   openMenu([
     ...(m.kind === 'device' ? [{ label: 'Rename', run: () => { renaming = m.id; renderMapList(); } }] : []),
     // Export packs what's loaded on the canvas.
-    { label: 'Export .zip', run: () => { exportZip(); }, disabled: !cur },
+    { label: 'Export .zip', run: () => { void exportZip(); }, disabled: !cur },
     'sep',
     m.kind === 'device'
       ? { label: 'Delete…', run: () => { void deleteMap(m); }, danger: true }
@@ -243,11 +243,16 @@ function openMapMenu(m: MapRef, x: number, y: number): void {
 
 async function openRow(m: MapRef): Promise<void> {
   if (isCurrent(m)) { hideStart(); return; }
-  if (m.kind === 'device') {
-    await openDeviceMap(m);
-    hideStart();
-  } else if (await (m.kind === 'note' ? openNoteMap(m.id) : openFolderMap(m.id))) {
-    hideStart();
+  try {
+    if (m.kind === 'device') {
+      await openDeviceMap(m);
+      hideStart();
+    } else if (await (m.kind === 'note' ? openNoteMap(m.id) : openFolderMap(m.id))) {
+      hideStart();
+    }
+  } catch (err) {
+    console.error(err);
+    setStatus(`⚠ Could not open “${m.name}”: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -371,6 +376,11 @@ export const booted = new Promise<void>(resolve => { bootDone = resolve; });
 export async function boot(): Promise<void> {
   try {
     await bootMap();
+  } catch (err) {
+    // Not a blank canvas: say so, and offer the maps.
+    console.error(err);
+    setStatus(`⚠ Could not open the map: ${err instanceof Error ? err.message : String(err)}`);
+    showStart();
   } finally {
     bootDone();
   }

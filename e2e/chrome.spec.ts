@@ -63,3 +63,14 @@ test('the closed sidebar takes no keyboard focus; New map is named on the spot',
   await expect(page.locator('#startScreen')).toHaveClass(/hidden/);
   await expect(page.locator('#folderName .sc-name')).toHaveText('Ideas');
 });
+
+test('a map that cannot be opened at launch says so and shows the maps, not a blank canvas', async ({ page }) => {
+  await page.addInitScript(() => {
+    const fail = (): never => { throw new Error('storage unavailable'); };
+    navigator.storage.getDirectory = () => Promise.reject(new Error('storage unavailable'));
+    indexedDB.open = fail;
+  });
+  await page.goto('/');
+  await expect(page.locator('#status')).toContainText('Could not open the map');
+  await expect(page.locator('#startScreen')).not.toHaveClass(/hidden/);
+});

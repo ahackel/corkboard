@@ -107,7 +107,7 @@ installEdgeTools();   // its grabs are claimed ahead of card-drag and canvas-pan
 installPeek();
 restoreTray();
 
-boot();
+void boot();
 
 // The offline copy (public/sw.js), for the built app only.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

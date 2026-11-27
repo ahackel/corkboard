@@ -37,6 +37,6 @@ export function hydrateImages(el: ParentNode, noteFile?: string | null): void {
       img.addEventListener('load',  scheduleImgRelayout, { once:true });
       img.addEventListener('error', () => img.classList.add('md-img-missing'), { once:true });
       img.src = url;
-    });
+    }).catch(() => img.classList.add('md-img-missing'));
   });
 }

@@ -56,4 +56,10 @@ export default tseslint.config(
     },
   },
   { files: ['src/{core,utils,store,data}/**/*.ts', 'src/nav/scope.ts'], rules: { 'import-x/no-cycle': 'error' } },
+  // A promise nobody handles fails in silence: await it, `void` it on purpose, or `.catch` it.
+  {
+    files: ['src/**/*.ts'],
+    languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } },
+    rules: { '@typescript-eslint/no-floating-promises': 'error' },
+  },
 );

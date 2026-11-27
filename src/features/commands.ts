@@ -85,7 +85,7 @@ function onShortcutKey(e: KeyboardEvent): void {
       if (state.sel.size && !isTypingInField()) {
         groupSelectionIntoSection();
       } else {
-        flushSave();
+        void flushSave();
       }
       return;
     }
