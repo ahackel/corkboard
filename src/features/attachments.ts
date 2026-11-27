@@ -5,7 +5,7 @@
 import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
 import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
 import { relayout } from '../render.js';

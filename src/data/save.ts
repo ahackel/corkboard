@@ -1,16 +1,17 @@
 // ---------- saving: the autosave, and the write of every changed note ----------
-import { state, setStatus, type MindNode } from '../core/state.js';
-import { retargetLinks, desiredFileFor, folderOf, dirOf, prunableDirs, pathKey, slugStem, ownStem } from '../utils/filenames.js';
+import { state, setStatus } from '../core/state.js';
+import { retargetLinks, desiredFileFor, folderOf, dirOf, prunableDirs, pathKey, slugStem } from '../utils/filenames.js';
 import { ancestorDepth, commitRel } from '../view/layout.js';
 import { ui, frozenFileNodeId } from '../core/ui-state.js';
 import { parentOf, childrenOf } from '../utils/model.js';
-import { store } from './persistence.js';
+import { store } from './active-store.js';
 import { serializeMd } from '../utils/frontmatter.js';
 import { flushBoard, scheduleSaveBoard, boardSavePending, boardPathMoved } from './board.js';
 import { releaseFolded } from './lazy.js';
 import { saveSucceeded, saveFailed, writesHeld } from './save-alert.js';
 import { setSaving } from './save-flag.js';
-import { foreignDirs, readFolder } from './load.js';
+import { foreignDirs, readFolder } from './read.js';
+import { noteNamed, forgetNoteName, forgetNoteNames, keepsName } from './note-names.js';
 
 // The pathKey -> node index the collision test reads. Built ONCE per save rather than
 // re-derived per candidate name: saveAll asks for every node's desired name, so a per-call
@@ -28,28 +29,6 @@ function filesInUse(): Map<string, string> {
     }
   }
   return m;
-}
-
-// What each note's filename was last SETTLED against: the slug its text gave it then. A name that says
-// something else than the text — `2026-11-11.md` in someone's Obsidian vault, a file named in Finder —
-// is left alone until that text changes: opening a folder must not rename what is in it.
-const namedFor = new Map<string, string>();
-
-export function noteNamed(path: string, slug: string): void { namedFor.set(path, slug); }
-
-// Does the file already carry the name its text gives it (or that name with a ` 2` suffix)? Then it is
-// the app's own name, and is re-derived as before — a suffix goes once the plain name is free.
-function tracksText(n: MindNode, slug: string): boolean {
-  const own = pathKey(ownStem(n.file!, n.type === 'section')), want = pathKey(slug);
-  return own === want || (own.startsWith(want + ' ') && /^\d+$/.test(own.slice(want.length + 1)));
-}
-
-function keepsName(n: MindNode): boolean {
-  if (!n.file) {
-    return false;
-  }
-  const slug = slugStem(n);
-  return namedFor.get(n.file) === slug && !tracksText(n, slug);
 }
 
 // Names that turned out to be on disk although no node holds them: a note another app (or another tab)
@@ -182,13 +161,13 @@ async function saveAll(): Promise<void> {
       }
       pendingRemovals.set(n.file, target);         // old file to delete once the rename is written
       renames.set(n.file, target);
-      namedFor.delete(n.file);
+      forgetNoteName(n.file);
       boardPathMoved(n.file, target);
     }
     if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }   // brand-new node, or a rename
     n.file = target;                               // adopt the final name
     if (frozenFileNodeId() !== n.id && !keepsName(n)) {
-      namedFor.set(target, slugStem(n));
+      noteNamed(target, slugStem(n));
     }
   }
 
@@ -268,7 +247,7 @@ const emptied = new Set<string>();
 export function resetSaveState(): void {
   pendingRemovals.clear();
   emptied.clear();
-  namedFor.clear();
+  forgetNoteNames();
   diskTaken.clear();
 }
 
@@ -346,22 +325,21 @@ export function hasUnsavedChanges(): boolean {
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();
 }
 
-// ---------- never lose the last edit to a closing tab ----------
-// The autosave waits 400ms for a burst to settle, so an edit made just before the tab is hidden,
-// closed or reloaded would otherwise die with it. Hiding is the dependable signal (it fires before
-// unload, and is the LAST one iOS gives a backgrounded page); beforeunload also asks the browser to
-// hold the page while anything is still unwritten.
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
+// The autosave debounce would lose an edit made just before the tab closes. Hiding is the dependable
+// signal: it is the last one iOS gives a backgrounded page.
+export function installSaveOnLeave(): void {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      void settleSave();
+    }
+  });
+  window.addEventListener('pagehide', () => { void settleSave(); });
+  window.addEventListener('beforeunload', e => {
+    if (!hasUnsavedChanges()) {
+      return;
+    }
     void settleSave();
-  }
-});
-window.addEventListener('pagehide', () => { void settleSave(); });
-window.addEventListener('beforeunload', e => {
-  if (!hasUnsavedChanges()) {
-    return;
-  }
-  void settleSave();
-  e.preventDefault();
-});
+    e.preventDefault();
+  });
+}
 

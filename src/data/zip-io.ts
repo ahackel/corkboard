@@ -3,7 +3,8 @@ import { IMAGE_ACCEPT, IMAGE_FILE_RE } from '../utils/image-types.js';
 import { unzip, zipBlob, entryPath } from '../utils/zip.js';
 import { setStatus, state } from '../core/state.js';
 import { createDeviceMap, resolveOnDeviceStore } from '../store/index.js';
-import { switchToDeviceMap, store } from './persistence.js';
+import { switchToDeviceMap } from './persistence.js';
+import { store } from './active-store.js';
 import { BOARD_FILE, boardJSON } from './board.js';
 import { dataHooks } from './hooks.js';
 import { readAll } from './lazy.js';
@@ -15,24 +16,28 @@ import { downloadBlob } from '../utils/download.js';
 import { readImage } from './images.js';
 import { loadFromDir } from './load.js';
 
-const importInput = document.createElement('input');
-importInput.type = 'file';
-importInput.accept = '.zip,.md,.markdown,' + IMAGE_ACCEPT;
-importInput.multiple = true;
-importInput.style.display = 'none';
-document.body.appendChild(importInput);
-importInput.addEventListener('change', async () => {
-  const files = [...(importInput.files || [])];
-  importInput.value = '';
-  if (files.length) {
-    await importFiles(files);
-  }
+const importInput = Object.assign(document.createElement('input'), {
+  type: 'file',
+  accept: '.zip,.md,.markdown,' + IMAGE_ACCEPT,
+  multiple: true,
 });
-export function openImportPicker(): void { importInput.click(); }
 
-// The image formats this app takes, BY FILENAME — the one list, shared with features/attachments.ts,
-// which needs it for the files an OS drop hands over with no MIME type at all (an .svg dragged out of
-// a file manager is the common one).
+export function installImportPicker(): void {
+  importInput.style.display = 'none';
+  document.body.appendChild(importInput);
+  importInput.addEventListener('change', async () => {
+    const files = [...(importInput.files || [])];
+    importInput.value = '';
+    if (files.length) {
+      await importFiles(files);
+    }
+  });
+}
+
+export function openImportPicker(): void {
+  importInput.click();
+}
+
 interface ImportEntry { name: string; text?: string; bytes?: Uint8Array }
 async function importFiles(files: File[]): Promise<void> {
   let entries: ImportEntry[] = [];

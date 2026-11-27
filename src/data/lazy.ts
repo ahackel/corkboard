@@ -8,10 +8,10 @@
 //   · and when a folded section LETS GO of what it read again (releaseFolded): once every note under it
 //     is safely on disk and nothing — the selection, the undo history, a search result, the section
 //     you are standing in — can still reach one of them; and not at all while a search is up.
-// The mechanism (turning a listing into nodes) is data/load.ts readFolder's.
+// The mechanism (turning a listing into nodes) is data/read.ts readFolder's.
 // ============================================================
 import { state, type MindNode } from '../core/state.js';
-import { store } from './persistence.js';
+import { store } from './active-store.js';
 import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
 import { dataHooks } from './hooks.js';
@@ -20,7 +20,7 @@ import { bodyImages } from '../utils/markdown.js';
 import { forgetImages } from './images.js';
 import { scope } from '../nav/scope.js';
 import { dirOf } from '../utils/filenames.js';
-import { readFolder } from './load.js';
+import { readFolder } from './read.js';
 
 // The folded sections still holding unread notes among `ids` and everything inside them.
 function unreadIn(ids: Iterable<string>): MindNode[] {

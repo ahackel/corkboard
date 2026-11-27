@@ -10,7 +10,8 @@ import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
 import { phoneMode } from './core/ui-state.js';
 import { isRoot, descendantCount, subtreeIds } from './utils/model.js';
-import { store, currentMap, loadFolder, loadNote, switchToDeviceMap, updateMapTitle } from './data/persistence.js';
+import { loadFolder, loadNote, switchToDeviceMap, updateMapTitle } from './data/persistence.js';
+import { store, currentMap } from './data/active-store.js';
 import {
   fsaStore, noteStore, resolveOnDeviceStore, forgetRecent, setOnRecentsChanged,
   readMaps, getLastMap, ensureMapRegistry, createDeviceMap, deleteDeviceMap, renameDeviceMap,

@@ -113,7 +113,7 @@ folder tree in Finder or Obsidian IS the board's grouping. What follows from tha
 — and every folder the board has never seen, which arrives as a folded pill. Only the section's own `_index.md`
 is read; the rest is counted (`MindNode.lazy`, the pill's number). `data/lazy.ts` holds the policy:
 - **Reading:** unfolding, opening, Expand all, delete, duplicate, copy/cut, export and a link into the folder
-  read it first (`afterReading` / `readAll` / `revealPath`; data/load.ts `readFolder` is the mechanism). A save
+  read it first (`afterReading` / `readAll` / `revealPath`; data/read.ts `readFolder` is the mechanism). A save
   that would MOVE a folded section reads its whole folder first (`saveAll` phase 0) — it can't move notes it
   hasn't got. A section that is open on the canvas with its notes unread (an undo unfolded it) reads them on the
   next paint (`readOpenUnread`, the safety net).
@@ -200,7 +200,7 @@ of the open-section path and they go up to that level (the map crumb: the top le
 section they came out of. The pointer decides, not the card's centre: both are small targets you aim at. Either
 way the cards leave the canvas you're looking at, so a toast says where they went. One undo step.
 
-**A file keeps the name it CAME with until the text that names it changes (`keepsName`, `data/save.ts`).**
+**A file keeps the name it CAME with until the text that names it changes (`keepsName`, `data/note-names.ts`).**
 The slug tracks the text for names the app gave. A name that says something else than the note —
 `2026-11-11.md` in an Obsidian vault holding "Meeting notes", a file named in Finder — is somebody's, and
 opening a folder must not rename what is in it: the first save after a load used to rename every such file
@@ -614,7 +614,7 @@ deleted elsewhere shifts them, and the old id would select a neighbour.
 guide is [inbox.md](inbox.md): iCloud Drive plus an iOS Shortcut that saves a dated `.md` there). Nothing
 about it is special-cased in the model; three small pieces make it work. (1) A note that arrives with no
 position in a section that was already placed is stacked in a column inside its box from the top-left, over
-its cards if need be, and the section keeps its size (`arrangeSections` with `fresh`, `data/persistence.ts`) — the old rule
+its cards if need be, and the section keeps its size (`arrangeSections` with `fresh`, `data/arrange.ts`) — the old rule
 arranged a section only when ALL its notes were new, so one new note fell to the top-level grid fallback and
 landed on whatever was there. Placed cards never move (principle 2). (2) `reloadFromDisk` diffs PATHS (ids
 are minted per load) and each folded section's unread count before and after, and `flashArrived` (`render.ts`)
@@ -1370,8 +1370,11 @@ read, measure it, clear the undo history, ask whether a search is holding folded
 restore the selection after a reload — it calls `dataHooks` (`data/hooks.ts`), which `main.ts` fills in
 before `boot()`; until then each hook does nothing, which is all a test of `data/` alone needs. The same goes
 one layer down: `view/` takes what it needs from a feature by being told (`onViewApplied` in `view/camera.ts`,
-`useCanvasSurface` in `view/free-edges.ts`), not by importing it. Without this, every module that touched
+`useCanvasSurface` in `view/free-edges.ts`, `onGridChanged` in `view/grid.ts`), not by importing it. Without this, every module that touched
 storage sat inside one import cycle with `main.ts` and half of `features/`. Add a hook rather than an import.
+Inside `data/` the imports run one way too, bottom up: `active-store.ts` (the open `store`) and
+`note-names.ts`; `images`, `board`; `arrange` (lays out what arrived unplaced); `read` (a listing → nodes,
+`readFolder`); `lazy`; `save`; `migrate`, `load`; and `persistence` (switching maps, the reload) on top.
 
 **An edit RUNS through `mutate()` (`features/mutate.ts`).** A one-shot edit — a command, a menu or bar
 button, a paste — is `mutate(ids, fn, { reflow, status?, edges?, canvas? })`, and the runner applies the rules

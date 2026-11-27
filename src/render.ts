@@ -19,7 +19,7 @@ import { noteTags, wearsTags } from './utils/tags.js';
 import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
 import { readOpenUnread } from './data/lazy.js';
-import { store } from './data/persistence.js';
+import { store } from './data/active-store.js';
 import { peekCard } from './features/peek.js';
 import { ui, inPlaceEditActive, type Pt } from './core/ui-state.js';
 import { applyColorVars, colorClass } from './view/color.js';

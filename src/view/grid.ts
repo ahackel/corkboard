@@ -38,7 +38,6 @@ import gridDotIcon from '../assets/icons/grid-dot.svg?raw';
 import gridMeshIcon from '../assets/icons/grid-mesh.svg?raw';
 import gridLineIcon from '../assets/icons/grid-line.svg?raw';
 import { state, GRID_STYLES, GRID_SIZES, type GridStyle, type GridSize } from '../core/state.js';
-import { scheduleSaveBoard } from '../data/board.js';
 import { clamp } from '../utils/num.js';
 
 const GRID_ICONS: Record<GridStyle, string> = { none: gridOffIcon, dot: gridDotIcon, mesh: gridMeshIcon, line: gridLineIcon };
@@ -179,15 +178,22 @@ export function renderGridControls(): void {
   }).join('');
 }
 
+// Told when the style or snap step is changed here; the board saves it (data/board.ts, wired in main.ts).
+let gridChanged: () => void = () => {};
+
+export function onGridChanged(listener: () => void): void {
+  gridChanged = listener;
+}
+
 function set(patch: { gridStyle?: GridStyle; gridSize?: GridSize }): void {
   Object.assign(state, patch);
   refreshGrid();
-  scheduleSaveBoard();
+  gridChanged();
 }
 
 // Wires the grid rows. Called once at startup; the initial paint happens once the first map's
 // settings.json has loaded (loadFromDir calls refreshGrid()).
-export function setupGrid(): void {
+export function installGrid(): void {
   document.getElementById('gridStyles')?.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-style]');
     if (b) {

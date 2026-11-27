@@ -5,11 +5,15 @@ import './styles.css';   // app styles (Vite bundles + singlefile inlines into d
 import { migrateLegacyKeys } from './utils/legacy-keys.js';
 import { installMotionSwitch } from './utils/motion.js';
 import { keys, installSafeInsets } from './utils/dom.js';
-import { setupGrid } from './view/grid.js';
+import { installGrid, onGridChanged } from './view/grid.js';
 import { installInk } from './view/color.js';
 import { mountIcons } from './view/icons.js';
 import { onViewApplied } from './view/camera.js';
 import { installDataHooks } from './data/hooks.js';
+import { scheduleSaveBoard } from './data/board.js';
+import { installSaveOnLeave } from './data/save.js';
+import { installSaveAlert } from './data/save-alert.js';
+import { installImportPicker } from './data/zip-io.js';
 import { paintNode, remeasure, flashArrived } from './render.js';
 import { installClickCount } from './features/activate.js';
 import { installGestures } from './features/gestures.js';
@@ -42,6 +46,9 @@ import { installScopeResize } from './nav/sections.js';
 import { hideStart, boot, installStartScreen } from './boot.js';
 
 migrateLegacyKeys();   // FIRST: before anything reads a setting
+installSaveOnLeave();
+installSaveAlert();
+installImportPicker();
 installMotionSwitch();
 installSafeInsets();
 installInk();
@@ -72,10 +79,11 @@ installCommands();
 // After every install above: their markup's titles get the platform's shortcut spelling and icons too.
 document.querySelectorAll<HTMLElement>('[title]').forEach(el => { el.title = keys(el.title); });
 mountIcons();
-setupGrid();
+installGrid();
 installCanvasColor();
 
 onViewApplied(scheduleUrlSync);
+onGridChanged(scheduleSaveBoard);
 
 // What data/ calls back up into the UI (data/hooks.ts). Function declarations only: hoisted, so no TDZ.
 installDataHooks({

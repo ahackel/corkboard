@@ -5,7 +5,7 @@ import { relayout } from '../render.js';
 import { ancestors, subtreeIds, resolveWikilink, linkName } from '../utils/model.js';
 import { record } from '../features/history.js';
 import { frameBox } from '../view/camera.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { snapPt, nodeW } from '../view/geometry.js';
 import { createNode } from '../features/crud.js';
 import { popScopeFor } from './sections.js';

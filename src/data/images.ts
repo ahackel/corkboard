@@ -4,7 +4,7 @@
 // from the active store, remote/data URLs map to themselves. A card that grows when an image
 // finally loads triggers a single debounced relayout so siblings/edges re-settle (features/images.ts,
 // which puts these URLs into the cards).
-import { store } from './persistence.js';
+import { store } from './active-store.js';
 import { imageMimeFor } from '../utils/image-types.js';
 import { decodePath } from '../utils/markdown.js';
 import { dirOf } from '../utils/filenames.js';
@@ -41,7 +41,7 @@ export function forgetImages(paths: Iterable<string>): void {
 
 // ---------- where a picture a note names actually is ----------
 // Every file in the map that isn't a note, by lowercased NAME (a load and each unfold add theirs —
-// data/load.ts), so a bare `![[Pasted image.png]]` — Obsidian's "shortest path" — finds its file wherever
+// data/read.ts), so a bare `![[Pasted image.png]]` — Obsidian's "shortest path" — finds its file wherever
 // Obsidian put it.
 const byName = new Map<string, string[]>();
 export function knowAssets(paths: Iterable<string>): void {

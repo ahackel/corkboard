@@ -1,10 +1,11 @@
 // ============================================================
-// Which map is open: the active `store` adapter (reassigned by useStore), switching maps, and the
+// Switching which map is open (the active `store` itself is data/active-store.ts), and the
 // reload when the folder changed underneath us. Reading a map is data/load.ts, saving it
 // data/save.ts (every mutation calls scheduleSave()), the .zip import/export data/zip-io.ts.
 // ============================================================
 import { state } from '../core/state.js';
-import { opfsStore, fsaStore, noteStore, resolveOnDeviceStore, setLastMap, touchMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import { fsaStore, noteStore, resolveOnDeviceStore, setLastMap, touchMap, type Store, type MapKind, type MapRef } from '../store/index.js';
+import { store, currentMap, setActiveStore } from './active-store.js';
 import { dataHooks } from './hooks.js';
 import { isTypingInField, inPlaceEditActive } from '../core/ui-state.js';
 import { settleSave, hasUnsavedChanges } from './save.js';
@@ -16,18 +17,12 @@ import { nodeByFile } from '../utils/model.js';
 // I/O and its own debounce. Only the .md walk in the store filters by extension, so that file is
 // invisible to the node model.
 
-// Active backend. Local-first: default to on-device; "Open folder" swaps in fsaStore.
+// Make `s` the active backend (data/active-store.ts) and reload when its folder changes underneath us.
 // `ref` identifies WHICH map is now open (registry entry + what boot() reopens); omit it
 // for stores that aren't registry-backed.
-// eslint-disable-next-line import-x/no-mutable-exports -- a live binding, reassigned only by useStore (follow-up: a getter)
-export let store: Store = opfsStore;
-// Which map is on the canvas RIGHT NOW — in-memory runtime state, unlike the persisted
-// last-map key (which another tab may rewrite). null for non-registry stores.
-// eslint-disable-next-line import-x/no-mutable-exports -- a live binding, reassigned only by useStore (follow-up: a getter)
-export let currentMap: { kind: MapKind; id: string } | null = null;
 export function useStore(s: Store, ref?: { kind: MapKind; id: string }): void {
-  store = s; store.watch(reloadFromDisk);
-  currentMap = ref ?? null;
+  setActiveStore(s, ref ?? null);
+  s.watch(reloadFromDisk);
   // A single note (store/note.ts) is a map of one card: the dock's new-card sticky goes (styles.css).
   state.singleNote = !!s.singleNote;
   document.body.classList.toggle('single-note', state.singleNote);

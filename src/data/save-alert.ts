@@ -83,10 +83,15 @@ export function saveSucceeded(src: Source): void {
   paint();
 }
 
-byId('saveAlertRetry').addEventListener('click', () => {
-  if (held) {
-    location.reload();
-    return;
-  }
-  for (const f of failing.values()) { clearTimeout(f.timer); f.retry(); }
-});
+export function installSaveAlert(): void {
+  byId('saveAlertRetry').addEventListener('click', () => {
+    if (held) {
+      location.reload();
+      return;
+    }
+    for (const f of failing.values()) {
+      clearTimeout(f.timer);
+      f.retry();
+    }
+  });
+}
