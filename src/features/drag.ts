@@ -4,7 +4,7 @@
 // belongs to the section its centre is in, and a multi-selection ALL to the section under the POINTER —
 // or the top level. That is the whole drop rule (view/layout.ts sectionAt, dropSection below). Edge
 // auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
-// drag state lives in `ui.drag`. Importing this module registers the global Alt/Shift modifier
+// drag state lives in `ui.drag`. `installDragModifiers` registers the global Alt/Shift modifier
 // listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
 import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds, withKids, takesDrop } from '../utils/model.js';
@@ -32,7 +32,6 @@ import { scheduleSave } from '../data/save.js';
 import type { FanInsert } from '../view/pile.js';
 import { beginPileGesture, pileTarget, pileInto, fanSlot, showFanInsert, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
 import { syncSelFrame } from './sel-frame.js';
-
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
 // with it (it's already carried as part of that ancestor's subtree), so only the outermost
@@ -712,22 +711,6 @@ function paintDetachPreview(): void {
   }
   dragFollow();
 }
-window.addEventListener('keydown', (e) => {
-  const drag = ui.drag;
-  if (!drag) {
-    return;
-  }
-  if (e.key === 'Alt'){ drag.alt = true;  paintDetachPreview(); }
-  if (e.key === 'Shift'){ drag.shift = true;  applyDragClone(); dragFollow(); }
-});
-window.addEventListener('keyup',   (e) => {
-  const drag = ui.drag;
-  if (!drag) {
-    return;
-  }
-  if (e.key === 'Alt'){ drag.alt = false; paintDetachPreview(); }
-  if (e.key === 'Shift'){ drag.shift = false; applyDragClone(); dragFollow(); }
-});
 
 // The section a drop lands in: for a MULTI-selection the one under the pointer, so the whole group goes
 // where you aim it; for one card the one its centre is in. Null = the top level (or the open section).
@@ -976,4 +959,23 @@ function reparentOnly(childId: string, newParentId: string | null): boolean {
   // The parent is the note's FOLDER, so a reparent moves the file (the save works out where); the offset is the board's.
   child.dirty = true;
   return true;
+}
+
+export function installDragModifiers(): void {
+  window.addEventListener('keydown', (e) => {
+    const drag = ui.drag;
+    if (!drag) {
+      return;
+    }
+    if (e.key === 'Alt'){ drag.alt = true;  paintDetachPreview(); }
+    if (e.key === 'Shift'){ drag.shift = true;  applyDragClone(); dragFollow(); }
+  });
+  window.addEventListener('keyup',   (e) => {
+    const drag = ui.drag;
+    if (!drag) {
+      return;
+    }
+    if (e.key === 'Alt'){ drag.alt = false; paintDetachPreview(); }
+    if (e.key === 'Shift'){ drag.shift = false; applyDragClone(); dragFollow(); }
+  });
 }

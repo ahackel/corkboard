@@ -82,27 +82,30 @@ function run(i: number): void {
   c.run();
 }
 
-input.addEventListener('input', () => { active = 0; render(); });
-input.addEventListener('keydown', (e) => {
-  e.stopPropagation();     // the canvas shortcuts must not see what is typed here
-  if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % Math.max(1, shown.length); render(); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + shown.length) % Math.max(1, shown.length); render(); }
-  else if (e.key === 'Enter') { e.preventDefault(); run(active); }
-  else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
-});
-list.addEventListener('pointermove', (e) => {
-  const item = (e.target as Element).closest('.pal-item') as HTMLElement | null;
-  if (item && +item.dataset.i! !== active) { active = +item.dataset.i!; render(); }
-});
-list.addEventListener('click', (e) => {
-  const item = (e.target as Element).closest('.pal-item') as HTMLElement | null;
-  if (item) {
-    run(+item.dataset.i!);
-  }
-});
-// A press on the dimmed backdrop (not the box) closes it.
-root.addEventListener('pointerdown', (e) => {
-  if (e.target === root) {
-    closePalette();
-  }
-});
+export function installPalette(): void {
+  input.addEventListener('input', () => { active = 0; render(); });
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();     // the canvas shortcuts must not see what is typed here
+    if (e.key === 'ArrowDown') { e.preventDefault(); active = (active + 1) % Math.max(1, shown.length); render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); active = (active - 1 + shown.length) % Math.max(1, shown.length); render(); }
+    else if (e.key === 'Enter') { e.preventDefault(); run(active); }
+    else if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+  });
+  list.addEventListener('pointermove', (e) => {
+    const item = (e.target as Element).closest('.pal-item') as HTMLElement | null;
+    if (item && +item.dataset.i! !== active) { active = +item.dataset.i!; render(); }
+  });
+  list.addEventListener('click', (e) => {
+    const item = (e.target as Element).closest('.pal-item') as HTMLElement | null;
+    if (item) {
+      run(+item.dataset.i!);
+    }
+  });
+
+  // A press on the dimmed backdrop (not the box) closes it.
+  root.addEventListener('pointerdown', (e) => {
+    if (e.target === root) {
+      closePalette();
+    }
+  });
+}

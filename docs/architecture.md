@@ -1399,8 +1399,8 @@ reaches frontmatter, is mirrored only into the hash, and its camera stack is ses
 **The app is called Corkboard; the old "mindmap" name survives in exactly three places on purpose.** Everything
 persisted outside the vault is prefixed `corkboard.` (localStorage) or named `corkboard`/`corkboard-vault`
 (IndexedDB), and neither kind of name can be renamed in place — so both are carried over ONCE:
-`utils/legacy-keys.ts` sweeps the `mindmap.*` keys on import (imported FIRST in `main.ts`, since
-other modules read settings while `main.ts`'s own body evaluates), and `openRenamed`
+`utils/legacy-keys.ts` sweeps the `mindmap.*` keys (`migrateLegacyKeys`, the FIRST call in `main.ts`, ahead of
+every `install…` that may read a setting), and `openRenamed`
 (`utils/idb.ts`) copies a legacy database into the new one on first open, guarded on the new store being EMPTY so
 it can run only once and can't overwrite fresher data. What must NOT be renamed: the notes' **`mm_*` frontmatter
 keys** — that's the file format, not the product, and a vault has to keep opening in Obsidian and in older

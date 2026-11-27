@@ -189,4 +189,6 @@ export async function applyUrlFromHash(): Promise<void> {
   lastHash = hash;
 }
 
-window.addEventListener('popstate', () => { void applyUrlFromHash(); });
+export function installUrlState(): void {
+  window.addEventListener('popstate', () => { void applyUrlFromHash(); });
+}

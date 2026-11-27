@@ -49,11 +49,11 @@ type Act = 'add' | 'remove';
 interface Row { act: Act | null; tag: string; name: string; meta: string; ticked: boolean; }
 interface Section { title: string; rows: Row[]; }
 
-const pop = document.createElement('div');
-pop.id = 'tagPop';
-pop.innerHTML = `<label class="tp-field"><span class="tp-hash">#</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Tag"></label>
-  <div class="tp-list" role="listbox"></div><div class="tp-hint"></div>`;
-document.body.appendChild(pop);
+const pop = Object.assign(document.createElement('div'), {
+  id: 'tagPop',
+  innerHTML: `<label class="tp-field"><span class="tp-hash">#</span><input type="text" autocomplete="off" spellcheck="false" aria-label="Tag"></label>
+    <div class="tp-list" role="listbox"></div><div class="tp-hint"></div>`,
+});
 const input = pop.querySelector('input')!;
 const list = pop.querySelector<HTMLElement>('.tp-list')!;
 const hint = pop.querySelector<HTMLElement>('.tp-hint')!;
@@ -153,22 +153,7 @@ function run(r: Row | undefined): void {
   input.focus();
 }
 
-input.addEventListener('input', () => { active = 0; render(); });
-input.addEventListener('keydown', (e) => {
-  e.stopPropagation();   // the canvas shortcuts stay out of it
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-    e.preventDefault();
-    if (rows.length) { active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length; markActive(); }
-  } else if (e.key === 'Enter') { e.preventDefault(); run(rows[active]); }
-  else if (e.key === 'Escape') { e.preventDefault(); closeTagPicker(); }
-});
-list.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus in the field
-list.addEventListener('click', (e) => {
-  const b = (e.target as Element).closest<HTMLElement>('.tp-row[data-i]');
-  if (b) {
-    run(rows[+b.dataset.i!]);
-  }
-});
+   // keep the focus in the field
 function onOutside(e: PointerEvent): void {
   if (!pop.contains(e.target as Node)) {
     closeTagPicker();
@@ -206,5 +191,25 @@ export function openTagPicker(): void {
     if (!r) { placeInViewport(pop, (window.innerWidth - pop.offsetWidth) / 2, 80); return; }
     const right = r.right + 14 + pop.offsetWidth <= window.innerWidth;
     placeInViewport(pop, right ? r.right + 14 : r.left - 14 - pop.offsetWidth, r.top - 8);
+  });
+}
+
+export function installTagPicker(): void {
+  document.body.appendChild(pop);
+  input.addEventListener('input', () => { active = 0; render(); });
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();   // the canvas shortcuts stay out of it
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (rows.length) { active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length; markActive(); }
+    } else if (e.key === 'Enter') { e.preventDefault(); run(rows[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeTagPicker(); }
+  });
+  list.addEventListener('pointerdown', (e) => e.preventDefault());
+  list.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('.tp-row[data-i]');
+    if (b) {
+      run(rows[+b.dataset.i!]);
+    }
   });
 }

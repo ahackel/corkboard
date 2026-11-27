@@ -36,7 +36,6 @@ export const THEME_BG = themeBg();
 // colour in both themes. Injecting a <style> (not a per-node inline style) keeps this off the paint
 // path entirely — it's 11 rules written twice per session, not per card per section.
 const inkStyle = document.createElement('style');
-document.head.appendChild(inkStyle);
 // …and the `.c-<key>` class each key is worn by, generated here beside its ink rather than listed by
 // hand in styles.css, so adding a key to PALETTE (and its --pal-* hex) is the whole job.
 function deriveInk(): void {
@@ -46,7 +45,11 @@ function deriveInk(): void {
   }).join('') + '}' + PALETTE.map(c =>
     `.c-${c}{--card:var(--pal-${c});--ink:var(--pal-ink-${c});--scrim:var(--pal-scrim-${c})}`).join('');
 }
-deriveInk();
+
+export function installInk(): void {
+  document.head.appendChild(inkStyle);
+  deriveInk();
+}
 // ---------- a colour VALUE: a palette key, or an authored hex ----------
 // `n.color` (and so effectiveColor's result) is one of: '' (inherit), 'none', a PALETTE KEY, or a
 // custom '#rrggbb' picked from the colour popover. These three resolve any of them, and every

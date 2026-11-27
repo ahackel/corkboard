@@ -49,18 +49,21 @@ function onCancel(): void {
   if (n) { abortDrag(); deleteNode(n.id); commitStep(); }   // nets null→null, discarded
 }
 
-ghost.addEventListener('pointerdown', (e: PointerEvent) => {
-  e.preventDefault();
-  endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
-  // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
-  // world space), then drive it with the real drag so it rides the cursor at that same offset
-  const r = ghost.getBoundingClientRect();
-  const w = screenToWorld(r.left, r.top);
-  newNode = createDetachedNode(w.x, w.y) ?? null;
-  if (!newNode) {
-    return;
-  }
-  try { ghost.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
-  startNodeDrag(newNode, e.clientX, e.clientY);
-  stopGhostDrag = trackPointer({ move: onMove, up: onUp, cancel: onCancel });
-});
+export function installGhostCard(): void {
+  ghost.addEventListener('pointerdown', (e: PointerEvent) => {
+    e.preventDefault();
+    endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
+
+    // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
+    // world space), then drive it with the real drag so it rides the cursor at that same offset
+    const r = ghost.getBoundingClientRect();
+    const w = screenToWorld(r.left, r.top);
+    newNode = createDetachedNode(w.x, w.y) ?? null;
+    if (!newNode) {
+      return;
+    }
+    try { ghost.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
+    startNodeDrag(newNode, e.clientX, e.clientY);
+    stopGhostDrag = trackPointer({ move: onMove, up: onUp, cancel: onCancel });
+  });
+}

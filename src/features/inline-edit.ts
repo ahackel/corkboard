@@ -74,13 +74,6 @@ const flushNow = (): void => {
     void flushSave();
   }
 };
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') {
-    flushNow();
-  }
-});
-window.addEventListener('pagehide', flushNow);
-window.addEventListener('beforeunload', flushNow);
 
 // ---------- the view follows the caret ----------
 // Where the caret's line sits, in the textarea's own CSS px from its top: a hidden copy of the textarea
@@ -148,16 +141,6 @@ function scrollCaretIntoCard(ta: HTMLTextAreaElement): void {
     box.scrollTop = y + c.line - box.clientHeight;
   }
 }
-
-// The browser scrolls a focused field into view by scrolling its nearest scrollable box — #stage, which is
-// `overflow:hidden` and must never scroll (it would shift the canvas under every hit test). followCaret
-// does that job with the camera instead.
-stage.addEventListener('scroll', () => {
-  if (stage.scrollTop || stage.scrollLeft) {
-    stage.scrollTop = 0;
-    stage.scrollLeft = 0;
-  }
-});
 
 // ---------- leaving the editor keeps your place ----------
 // The rendered note is shorter than its raw markdown, so on a TALL card the line you were editing would
@@ -822,4 +805,24 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     }
   }
   commitStep();                                         // no-op sessions (cancel/unchanged) are discarded
+}
+
+export function installInlineEdit(): void {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      flushNow();
+    }
+  });
+  window.addEventListener('pagehide', flushNow);
+  window.addEventListener('beforeunload', flushNow);
+
+  // The browser scrolls a focused field into view by scrolling its nearest scrollable box — #stage, which is
+  // `overflow:hidden` and must never scroll (it would shift the canvas under every hit test). followCaret
+  // does that job with the camera instead.
+  stage.addEventListener('scroll', () => {
+    if (stage.scrollTop || stage.scrollLeft) {
+      stage.scrollTop = 0;
+      stage.scrollLeft = 0;
+    }
+  });
 }

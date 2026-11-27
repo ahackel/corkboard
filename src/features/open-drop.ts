@@ -71,56 +71,56 @@ export async function open(handle: FileSystemHandle | null): Promise<void> {
   }
 }
 
-document.addEventListener('dragover', e => {
-  if (!openable(e)) {
-    return;
-  }
-  if (pill.hidden || asking) {
+export function installOpenDrop(): void {
+  document.addEventListener('dragover', e => {
+    if (!openable(e)) {
+      return;
+    }
+    if (pill.hidden || asking) {
+      hide();
+      show(state.singleNote ? 'Drop to open it' : 'Drop here to edit it in place',
+        state.singleNote ? `in place of “${store.name}”` : 'or on the board to add it as a card', DOCUMENT_SVG);
+    }
+    const over = state.singleNote || pill.contains(e.target as Node);
+    pill.classList.toggle('hot', over);
+    if (over) {
+      e.preventDefault();
+      e.dataTransfer!.dropEffect = 'copy';
+    }
+  }, true);
+  document.addEventListener('dragleave', e => {
+    if (e.relatedTarget == null && !asking) {
+      hide();
+    }
+  }, true);
+
+  // Capture, so a drop meant to open never reaches the board's own drop handlers (attachments.ts).
+  document.addEventListener('drop', e => {
+    if (pill.hidden || asking) {
+      return;
+    }
+    const hot = pill.classList.contains('hot');
     hide();
-    show(state.singleNote ? 'Drop to open it' : 'Drop here to edit it in place',
-      state.singleNote ? `in place of “${store.name}”` : 'or on the board to add it as a card', DOCUMENT_SVG);
-  }
-  const over = state.singleNote || pill.contains(e.target as Node);
-  pill.classList.toggle('hot', over);
-  if (over) {
+    if (!hot || !openable(e)) {
+      return;
+    }
     e.preventDefault();
-    e.dataTransfer!.dropEffect = 'copy';
-  }
-}, true);
+    e.stopPropagation();
 
-document.addEventListener('dragleave', e => {
-  if (e.relatedTarget == null && !asking) {
+    // The handle must be asked for now: the dropped items are gone once this handler returns.
+    const pending = (e.dataTransfer!.items[0] as HandleItem).getAsFileSystemHandle!();
+    void pending.then(open, () => open(null));
+  }, true);
+  pill.addEventListener('click', () => {
+    const handle = asking;
     hide();
-  }
-}, true);
-
-// Capture, so a drop meant to open never reaches the board's own drop handlers (attachments.ts).
-document.addEventListener('drop', e => {
-  if (pill.hidden || asking) {
-    return;
-  }
-  const hot = pill.classList.contains('hot');
-  hide();
-  if (!hot || !openable(e)) {
-    return;
-  }
-  e.preventDefault();
-  e.stopPropagation();
-  // The handle must be asked for now: the dropped items are gone once this handler returns.
-  const pending = (e.dataTransfer!.items[0] as HandleItem).getAsFileSystemHandle!();
-  void pending.then(open, () => open(null));
-}, true);
-
-pill.addEventListener('click', () => {
-  const handle = asking;
-  hide();
-  if (handle) {
-    void open(handle);
-  }
-});
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && asking) {
-    hide();
-  }
-});
+    if (handle) {
+      void open(handle);
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && asking) {
+      hide();
+    }
+  });
+}

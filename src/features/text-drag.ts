@@ -14,7 +14,6 @@
 // keeps it out of that file's gesture vocabulary entirely. The cost is that it's a desktop gesture:
 // dragging a selection isn't a thing on iPad Safari, where ⌘⇧E (extract to a child) stays the way to
 // break a note apart.
-// Registers its listeners on import, like features/attachments.ts and features/gestures.ts.
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
@@ -131,51 +130,55 @@ function buildGhost(source: MindNode, text: string): HTMLElement {
   document.body.appendChild(el);
   return el;
 }
-// The drag DATA is left to the browser: a textarea selection already carries its text/plain (which is
-// what lets the same gesture drop into another app), and touching the store here could only disturb
-// the one drop we DON'T handle — the selection dragged back into its own note.
-document.addEventListener('dragstart', (e) => {
-  pending = cardTextDrag(e.target);
-  if (!pending) {
-    return;
-  }
-  const source = state.nodes.get(pending.id);
-  const text = cardText(pending);
-  if (!e.dataTransfer || !source || !text) {
-    return;
-  }
-  const ghost = buildGhost(source, text);
-  e.dataTransfer.setDragImage(ghost, 28, 22);   // cursor near the ghost's title, as if held by it
-  setTimeout(() => ghost.remove(), 0);
-});
-document.addEventListener('dragover', (e) => {
-  if (!pending) {
-    return;
-  }
-  const dest = destAt(e.target, pending.id);
-  showHint(dest);
-  if (!dest) {
-    return;              // no preventDefault → the browser keeps the drop (or refuses it)
-  }
-  e.preventDefault();
-  if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = 'move';
-  }
-});
-document.addEventListener('drop', (e) => {
-  const p = pending;
-  if (!p) {
-    return;
-  }
-  pending = null;
-  const dest = destAt(e.target, p.id);
-  showHint(null);
-  if (!dest) {
-    return;
-  }
-  e.preventDefault();
-  dropCardText(p,
-    'into' in dest ? dest : { container: dest.container, at: centredAt(screenToWorld(e.clientX, e.clientY)) });
-});
-// Cancelled (Esc, released outside the window) or finished: nothing to clean up but the hint.
-document.addEventListener('dragend', () => { pending = null; showHint(null); });
+
+export function installTextDrag(): void {
+  // The drag DATA is left to the browser: a textarea selection already carries its text/plain (which is
+  // what lets the same gesture drop into another app), and touching the store here could only disturb
+  // the one drop we DON'T handle — the selection dragged back into its own note.
+  document.addEventListener('dragstart', (e) => {
+    pending = cardTextDrag(e.target);
+    if (!pending) {
+      return;
+    }
+    const source = state.nodes.get(pending.id);
+    const text = cardText(pending);
+    if (!e.dataTransfer || !source || !text) {
+      return;
+    }
+    const ghost = buildGhost(source, text);
+    e.dataTransfer.setDragImage(ghost, 28, 22);   // cursor near the ghost's title, as if held by it
+    setTimeout(() => ghost.remove(), 0);
+  });
+  document.addEventListener('dragover', (e) => {
+    if (!pending) {
+      return;
+    }
+    const dest = destAt(e.target, pending.id);
+    showHint(dest);
+    if (!dest) {
+      return;              // no preventDefault → the browser keeps the drop (or refuses it)
+    }
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+  });
+  document.addEventListener('drop', (e) => {
+    const p = pending;
+    if (!p) {
+      return;
+    }
+    pending = null;
+    const dest = destAt(e.target, p.id);
+    showHint(null);
+    if (!dest) {
+      return;
+    }
+    e.preventDefault();
+    dropCardText(p,
+      'into' in dest ? dest : { container: dest.container, at: centredAt(screenToWorld(e.clientX, e.clientY)) });
+  });
+
+  // Cancelled (Esc, released outside the window) or finished: nothing to clean up but the hint.
+  document.addEventListener('dragend', () => { pending = null; showHint(null); });
+}

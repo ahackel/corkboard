@@ -338,18 +338,21 @@ function endLabelEdit(commitIt: boolean): void {
   paintFreeEdges();
   commitStep();                       // a cancelled edit nets no change, so the step discards itself
 }
-labelEdit.addEventListener('input', () => {
-  const e = editingId ? state.edges.find(x => x.id === editingId) : null;
-  if (!e) {
-    return;
-  }
-  e.label = labelEdit.value;          // live on the line, like a card's inline edit
-  paintFreeEdges();
-  placeLabelEdit();
-});
-labelEdit.addEventListener('keydown', (ev) => {
-  ev.stopPropagation();               // canvas shortcuts stay out of a text field
-  if (ev.key === 'Enter') { ev.preventDefault(); endLabelEdit(true); }
-  else if (ev.key === 'Escape') { ev.preventDefault(); endLabelEdit(false); }
-});
-labelEdit.addEventListener('blur', () => endLabelEdit(true));
+
+export function installEdgeBar(): void {
+  labelEdit.addEventListener('input', () => {
+    const e = editingId ? state.edges.find(x => x.id === editingId) : null;
+    if (!e) {
+      return;
+    }
+    e.label = labelEdit.value;          // live on the line, like a card's inline edit
+    paintFreeEdges();
+    placeLabelEdit();
+  });
+  labelEdit.addEventListener('keydown', (ev) => {
+    ev.stopPropagation();               // canvas shortcuts stay out of a text field
+    if (ev.key === 'Enter') { ev.preventDefault(); endLabelEdit(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); endLabelEdit(false); }
+  });
+  labelEdit.addEventListener('blur', () => endLabelEdit(true));
+}

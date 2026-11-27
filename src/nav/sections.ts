@@ -218,10 +218,13 @@ export function syncScopeChrome(): void {
 // where they were put; what still reads the rect is the drop test (sectionAt / containerBox), which a
 // stale rect would confine to the old window. Debounced, and a no-op when the size didn't really change.
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
-window.addEventListener('resize', () => {
-  if (!scopeActive()) {
-    return;
-  }
-  clearTimeout(scopeResizeTimer);
-  scopeResizeTimer = setTimeout(refreshScopeRect, 200);
-});
+
+export function installScopeResize(): void {
+  window.addEventListener('resize', () => {
+    if (!scopeActive()) {
+      return;
+    }
+    clearTimeout(scopeResizeTimer);
+    scopeResizeTimer = setTimeout(refreshScopeRect, 200);
+  });
+}

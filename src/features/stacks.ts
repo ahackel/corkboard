@@ -214,16 +214,8 @@ export function beginPileGesture(n: MindNode, e: PointerEvent): void {
 // FANNED OUT, a stack's cards are real cards again, held up over a dimmed board (view/pile.ts places them):
 // read them, drag one out, drag one to another place in the pile. A click on the board, Esc or a click on the
 // pile again puts them back. Nothing is saved by it — it's a way of looking.
-const scrim = document.createElement('div');
-scrim.id = 'fanScrim';
-scrim.addEventListener('pointerdown', (e) => { e.stopPropagation(); closeFan(); });
-scrim.addEventListener('dblclick', (e) => { e.stopPropagation(); e.preventDefault(); });   // not a new card
-window.addEventListener('keydown', (e) => {
-  if (ui.fan && e.key === 'Escape') {
-    e.stopPropagation();
-    closeFan();
-  }
-}, true);
+const scrim = Object.assign(document.createElement('div'), { id: 'fanScrim' });
+   // not a new card
 
 export function toggleFan(id: string): void {
   if (ui.fan === id) {
@@ -393,8 +385,7 @@ export function fanSlot(drag: Drag, cx: number, cy: number): FanInsert | null {
 }
 
 // …shown as a LINE in the gap the card would drop into (styles.css #fanInsert); null hides it.
-const insertLine = document.createElement('div');
-insertLine.id = 'fanInsert';
+const insertLine = Object.assign(document.createElement('div'), { id: 'fanInsert' });
 export function showFanInsert(at: FanInsert | null): void {
   if (!at) {
     insertLine.remove();
@@ -557,4 +548,15 @@ export function stackToSection(): void {
   setSelectionSet(stacks.map(s => s.id));
   scheduleSave();
   setStatus(stacks.length > 1 ? `${stacks.length} stacks are sections now` : `“${nodeLabel(stacks[0])}” is a section now`);
+}
+
+export function installStacks(): void {
+  scrim.addEventListener('pointerdown', (e) => { e.stopPropagation(); closeFan(); });
+  scrim.addEventListener('dblclick', (e) => { e.stopPropagation(); e.preventDefault(); });
+  window.addEventListener('keydown', (e) => {
+    if (ui.fan && e.key === 'Escape') {
+      e.stopPropagation();
+      closeFan();
+    }
+  }, true);
 }

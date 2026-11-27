@@ -9,37 +9,43 @@
    The path IS the node's identity; in-memory ids are ephemeral, minted per load.
    ============================================================ */
 
-import './utils/legacy-keys.js';   // FIRST: renames the pre-Corkboard localStorage keys on import
+import { migrateLegacyKeys } from './utils/legacy-keys.js';
 import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
 import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
-import { MOTION } from './utils/motion.js';
+import { MOTION, installMotionSwitch } from './utils/motion.js';
 import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary, withKids } from './utils/model.js';
 import { state, world, dragLayer, isStack, isImageCard } from './core/state.js';
 import { setupGrid } from './view/grid.js';
+import { installInk } from './view/color.js';
 import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
 import { screenToWorld, labelScale, onViewApplied } from './view/camera.js';
 import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionName } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
-import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
-import './features/attachments.js';   // registers the OS image drag/drop listeners
-import './features/open-drop.js';   // registers the drag-a-note-in-to-open-it drop target
-import './features/launch.js';   // what the installed app is launched with: a note from the OS, a shortcut
-import './features/update.js';   // the Update button, once a newer version is deployed
-import './features/text-drag.js';   // registers the drag-body-text-out-of-a-card listeners
-import './features/context-menu.js';   // registers the custom right-click menu on the canvas
-import './features/ghost-card.js';   // registers the drag-a-new-card-off-the-ghost gesture
-import './features/commands.js';   // the keyboard shortcuts and the ⌘P palette's list of every action
-import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor, selectAllInEditor } from './features/inline-edit.js';
+import { installGestures } from './features/gestures.js';
+import { installAttachments } from './features/attachments.js';
+import { installOpenDrop } from './features/open-drop.js';
+import { installLaunch } from './features/launch.js';
+import { installUpdateCheck } from './features/update.js';
+import { installTextDrag } from './features/text-drag.js';
+import { installContextMenu } from './features/context-menu.js';
+import { installGhostCard } from './features/ghost-card.js';
+import { installCommands } from './features/commands.js';
+import { installEdgeBar } from './features/edge-bar.js';
+import { installComplete } from './features/complete.js';
+import { installTagPicker } from './features/tag-picker.js';
+import { installPalette } from './features/palette.js';
+import { installBreadcrumbs, paintMapCrumb } from './features/breadcrumbs.js';
+import { installInlineEdit, startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor, selectAllInEditor } from './features/inline-edit.js';
 import { addCardInside } from './features/crud.js';
-import { bindNodeDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
-import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
-import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag, searchHolds } from './features/search.js';
-import { syncFloatBar } from './features/float-bar.js';   // also registers the float bar's own listeners
-import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
+import { bindNodeDrag, installDragModifiers } from './features/drag.js';
+import { paintPile, syncFan, STACK_DEFAULT_COLOR, installStacks } from './features/stacks.js';
+import { installSearch, refreshSearch, searchHitsIn, searchTags, toggleSearchTag, searchHolds } from './features/search.js';
+import { syncFloatBar, installFloatBar } from './features/float-bar.js';
+import { installCanvasColor } from './features/canvas-color.js';
 import { bindCardFileDrag } from './features/clipboard.js';
 import { bindCardTags, tagChipHTML } from './features/tags.js';
-import { refreshTray, restoreTray } from './features/tag-tray.js';
+import { refreshTray, restoreTray, installTagTray } from './features/tag-tray.js';
 import { noteTags, wearsTags } from './utils/tags.js';
 import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
@@ -47,52 +53,23 @@ import { openImageViewer } from './features/image-viewer.js';
 import { readOpenUnread } from './data/lazy.js';
 import { installDataHooks } from './data/hooks.js';
 import { clearHistory, historyRefs } from './features/history.js';
-import { paintMapCrumb } from './features/breadcrumbs.js';
 import { selectNode } from './features/selection.js';
-import { updateDocumentTitle, scheduleUrlSync } from './nav/url-state.js';
+import { updateDocumentTitle, scheduleUrlSync, installUrlState } from './nav/url-state.js';
 import { store } from './data/persistence.js';
-import { showStart, hideStart, boot } from './boot.js';
+import { hideStart, boot, installStartScreen } from './boot.js';
 import { isScopeRoot, canOpen } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
 import { installEdgeTools } from './features/edge-tools.js';
 import { ui, inPlaceEditOn, inPlaceEditActive, type Pt } from './core/ui-state.js';
-import { byId, keys } from './utils/dom.js';
+import { keys, installSafeInsets } from './utils/dom.js';
 import { applyColorVars, colorClass } from './view/color.js';
 import { canFold, isSectionFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
 import { ensureResizeHandles, clearResizeHandles } from './features/resize.js';
 import { syncSelFrame } from './features/sel-frame.js';
 import { toggleCollapse } from './features/fold.js';
-import { openSection, syncScopeChrome } from './nav/sections.js';
+import { openSection, syncScopeChrome, installScopeResize } from './nav/sections.js';
 import { focusByTitle } from './nav/focus.js';
-
-document.querySelectorAll<HTMLElement>('[title]').forEach(el => { el.title = keys(el.title); });
-mountIcons();                         // fill [data-icon] placeholders with their SVG assets
-setupGrid();
-// Wiring only — it must not READ anything back out of main. Everything down here runs while main's
-// own body is still evaluating, so main's top-level consts below are still in their temporal dead
-// zone; touching one from a feature's setup is a TDZ crash that takes the whole boot with it.
-setupCanvasColor();
-
-onViewApplied(scheduleUrlSync);
-
-// What data/ calls back up into the UI (data/hooks.ts). Function declarations only: hoisted, so no TDZ.
-installDataHooks({
-  paintNode,
-  remeasure,
-  forgetHistory: clearHistory,
-  historyRefs,
-  searchHolds,
-  showMapName() {
-    paintMapCrumb();
-    updateDocumentTitle();
-  },
-  leaveHome: hideStart,
-  reloaded(selId, arrived) {
-    selectNode(selId);
-    flashArrived(arrived);
-  },
-});
 
 // ---------- rendering ----------
 function nodeEl(n: MindNode): HTMLElement {
@@ -274,12 +251,15 @@ export const openedSince = (id: string, t: number): boolean => opened?.id === id
 
 // The latest press's click count, and when the latest double-click began: its first press, `detail` 1.
 let downDetail = 0, firstDownAt = 0;
-window.addEventListener('mousedown', (e) => {
-  downDetail = e.detail;
-  if (e.detail === 1) {
-    firstDownAt = performance.now();
-  }
-}, true);
+
+function installClickCount(): void {
+  window.addEventListener('mousedown', (e) => {
+    downDetail = e.detail;
+    if (e.detail === 1) {
+      firstDownAt = performance.now();
+    }
+  }, true);
+}
 
 // ---------- double-click / double-tap = OPEN this node ----------
 // Folding lives on the float bar and X, which leaves the gesture free for
@@ -1102,14 +1082,60 @@ function toggleTask(n: MindNode, idx: number): void {
   }, { reflow: 'none' });
 }
 
+migrateLegacyKeys();
+installMotionSwitch();
+installSafeInsets();
+installInk();
+installEdgeBar();
+installStacks();
+installDragModifiers();
+installTextDrag();
+installContextMenu();
+installFloatBar();
+installTagPicker();
+installSearch();
+installUrlState();
+installBreadcrumbs();
+installScopeResize();
+installAttachments();
+installComplete();
+installInlineEdit();
+installGestures();
+installStartScreen();
+installOpenDrop();
+installLaunch();
+installUpdateCheck();
+installGhostCard();
+installPalette();
+installTagTray();
+installCommands();
+document.querySelectorAll<HTMLElement>('[title]').forEach(el => { el.title = keys(el.title); });
+mountIcons();                         // fill [data-icon] placeholders with their SVG assets
+setupGrid();
+installCanvasColor();
+
+onViewApplied(scheduleUrlSync);
+
+// What data/ calls back up into the UI (data/hooks.ts). Function declarations only: hoisted, so no TDZ.
+installDataHooks({
+  paintNode,
+  remeasure,
+  forgetHistory: clearHistory,
+  historyRefs,
+  searchHolds,
+  showMapName() {
+    paintMapCrumb();
+    updateDocumentTitle();
+  },
+  leaveHome: hideStart,
+  reloaded(selId, arrived) {
+    selectNode(selId);
+    flashArrived(arrived);
+  },
+});
+
+installClickCount();
 syncFloatBar();
-
-
-
-byId('homeBtn').onclick = showStart;   // icon + folder name → home screen
-
-
-
 installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan
 installPeek();        // hover a folded card to read it (features/peek.ts)
 restoreTray();        // the tag tray, if it was out last time (features/tag-tray.ts)

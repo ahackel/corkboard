@@ -120,23 +120,27 @@ export function renderCrumbs(): void {
   paintCrumbColors();
 }
 
-// One listener for the whole pill, so the map segment (#folderName, a sibling of #scopeBar) and the
-// section segments share it.
-homeBar.addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest<HTMLElement>('.sc-crumb');
-  if (!btn) {
-    return;
-  }
-  // `…` → a menu of the levels it swallowed, reusing the canvas/card menu's own chrome.
-  if (btn.dataset.more) {
-    const r = btn.getBoundingClientRect();
-    const entries: MenuEntry[] = foldedLevels().map(i => ({ label: levelTitle(i), run: () => goToScopeDepth(i + 1) }));
-    if (entries.length) {
-      openMenu(entries, r.left, r.bottom + 4);
+export function installBreadcrumbs(): void {
+  // One listener for the whole pill, so the map segment (#folderName, a sibling of #scopeBar) and the
+  // section segments share it.
+  homeBar.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest<HTMLElement>('.sc-crumb');
+    if (!btn) {
+      return;
     }
-    return;
-  }
-  // …and the CURRENT level can't get here at all: it's inert (styles.css takes its pointer-events),
-  // because you're already standing in it. F re-frames if that's what you wanted.
-  goToScopeDepth(Number(btn.dataset.depth));
-});
+
+    // `…` → a menu of the levels it swallowed, reusing the canvas/card menu's own chrome.
+    if (btn.dataset.more) {
+      const r = btn.getBoundingClientRect();
+      const entries: MenuEntry[] = foldedLevels().map(i => ({ label: levelTitle(i), run: () => goToScopeDepth(i + 1) }));
+      if (entries.length) {
+        openMenu(entries, r.left, r.bottom + 4);
+      }
+      return;
+    }
+
+    // …and the CURRENT level can't get here at all: it's inert (styles.css takes its pointer-events),
+    // because you're already standing in it. F re-frames if that's what you wanted.
+    goToScopeDepth(Number(btn.dataset.depth));
+  });
+}

@@ -41,7 +41,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
   resize, sel-frame (the multi-selection frame), stacks, text-drag, attachments, clipboard, search, guides, float-bar, edge-tools/edge-bar (lines), palette, context-menu, tags, history, …
   `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `boot.ts` — local-first boot onto the last map, the home/storage screen.
-- `main.ts` — entry + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`); its `main`↔feature cycles are runtime-only.
+- `main.ts` — entry: calls each module's `install…()` in a deliberate order (NO module wires itself up on import) + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`).
 
 ## Non-negotiable invariants
 

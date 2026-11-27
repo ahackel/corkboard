@@ -26,20 +26,21 @@ async function check(): Promise<void> {
   }
 }
 
-// A local build (`-dev`) has no deploy to compare with.
-if (import.meta.env.PROD && !__APP_VERSION__.endsWith('-dev')) {
-  void check();
-  window.setInterval(() => { void check(); }, EVERY_MS);
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      void check();
-    }
+export function installUpdateCheck(): void {
+  // A local build (`-dev`) has no deploy to compare with.
+  if (import.meta.env.PROD && !__APP_VERSION__.endsWith('-dev')) {
+    void check();
+    window.setInterval(() => { void check(); }, EVERY_MS);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        void check();
+      }
+    });
+    window.addEventListener('focus', () => { void check(); });
+  }
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    await settleSave();
+    location.reload();
   });
-  window.addEventListener('focus', () => { void check(); });
 }
-
-button.addEventListener('click', async () => {
-  button.disabled = true;
-  await settleSave();
-  location.reload();
-});

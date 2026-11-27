@@ -98,7 +98,7 @@ function navArrow(key: string): void {
 //  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
 // A focused field (a card's editor, a section's label, the search box) counts as "typing",
 // so these card shortcuts stay out of the way while you're naming something.
-window.addEventListener('keydown', (e) => {
+function onShortcutKey(e: KeyboardEvent): void {
   // The letter shortcuts below are case-INSENSITIVE (Caps Lock, or a held ⇧ that means something of
   // its own like ⇧D), so a single printable character is folded down once here rather than tested
   // twice per line. Named keys keep their own spelling — 'F2' must not become 'f2', nor 'ArrowUp'
@@ -251,14 +251,9 @@ window.addEventListener('keydown', (e) => {
       deleteSelection();
     }
   }
-});
-// Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.
-window.addEventListener('pointermove', (e) => {
-  if (e.pointerType === 'mouse') {
-    ui.lastMouse = { x: e.clientX, y: e.clientY };
-  }
-});
-window.addEventListener('keyup', (e) => {
+}
+
+function onSpaceUp(e: KeyboardEvent): void {
   if (e.key !== ' ') {
     return;
   }
@@ -274,7 +269,8 @@ window.addEventListener('keyup', (e) => {
   if (sole && isImageCard(sole)) {
     openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
   }
-});
+}
+
 // ---------- the ⌘P command palette's list ----------
 // Every action the app has, with the shortcut that does the same — built here because every action
 // function is in scope here. `when` hides what can't apply right now (features/palette.ts).
@@ -351,14 +347,25 @@ function paletteCommands(): Command[] {
       } })),
   ];
 }
-setPaletteSource(paletteCommands);
-byId('paletteBtn').title = `Actions (${keys('⌘P')})`;
-byId('emptyHintKey').textContent = keys('⌘P');
-byId('paletteBtn').onclick = (e) => {
-  e.stopPropagation();
-  if (paletteOpen()) {
-    closePalette();
-  } else {
-    openPalette();
-  }
-};
+export function installCommands(): void {
+  window.addEventListener('keydown', onShortcutKey);
+
+  // Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.
+  window.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') {
+      ui.lastMouse = { x: e.clientX, y: e.clientY };
+    }
+  });
+  window.addEventListener('keyup', onSpaceUp);
+  setPaletteSource(paletteCommands);
+  byId('paletteBtn').title = `Actions (${keys('⌘P')})`;
+  byId('emptyHintKey').textContent = keys('⌘P');
+  byId('paletteBtn').onclick = (e) => {
+    e.stopPropagation();
+    if (paletteOpen()) {
+      closePalette();
+    } else {
+      openPalette();
+    }
+  };
+}

@@ -4,6 +4,8 @@
 // the motion is how a fold or a fan reads, so the app itself always plays it.
 export const MOTION = (window as Window & { corkboardMotion?: boolean }).corkboardMotion !== false;
 
-if (!MOTION) {
-  document.documentElement.dataset.motion = 'off';
+export function installMotionSwitch(): void {
+  if (!MOTION) {
+    document.documentElement.dataset.motion = 'off';
+  }
 }

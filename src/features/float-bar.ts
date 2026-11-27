@@ -10,7 +10,7 @@ import { NARROW_MQ, ui, canvasMoving } from '../core/ui-state.js';
 import { touch } from './history.js';
 import { mutate } from './mutate.js';
 import { subtreesBox, isSection } from '../view/layout.js';
-import { createProperties } from './properties.js';
+import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
 import { settleSections } from './drag.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode, nextSectionTitle } from './crud.js';
@@ -31,7 +31,6 @@ import { selectedIds, selectNode } from './selection.js';
 import { setLockedSelection, anyLocked } from './lock.js';
 import { hasStackSelected, stackToSection } from './stacks.js';
 
-
 const bar = byId('floatBar');
 const fbColor = byId<HTMLButtonElement>('fbColor');
 const fbColorDot = byId('fbColorDot');
@@ -49,7 +48,7 @@ const colorPop = byId('fbColorPop');
 const edColors = byId('edColors');
 
 // colour wiring lives in features/properties.ts. Tags are omitted: no room in the bar.
-const props = createProperties({ colors: edColors }, () => selectedIds());
+let props: PropertyControls;
 
 // Fit a section's box snugly around its children: the same margin on every side, snapped to the grid
 // and clamped to the min size. Children keep their positions (the box moves to enclose them). With
@@ -199,20 +198,6 @@ function markOpen(): void {
   fbUngroup.setAttribute('aria-label', onlyStacks ? 'Unstack' : 'Ungroup');
   fbToSection.style.display = stacks ? '' : 'none';
 }
-fbWrap.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); groupSelectionIntoSection(); });
-fbUngroup.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); deleteSelectionKeepChildren(); });
-fbToSection.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); stackToSection(); });
-// T — a section's TITLE. An untitled section shows no label at all (its text was deleted, FigJam-style),
-// so this is how one comes back: it seeds a name and selects it, ready to type over. A named section just
-// opens its label with the name selected — the same editor F2 and a double-click on the label open.
-fbTitle.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closePopovers();
-  const n = anchorNode();
-  if (n?.type === 'section') {
-    editSectionTitle(n);
-  }
-});
 
 // The pastel row, left to right without silver: what the number keys 1–9 colour the selection with.
 export const KEY_COLORS = ['grey', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'violet', 'pink'];
@@ -252,11 +237,6 @@ function markLock(): void {
   fbLock.title = locked ? 'Unlock (L)' : 'Lock (L) — freeze this card in place';
   fbLock.setAttribute('aria-label', locked ? 'Unlock' : 'Lock');
 }
-fbLock.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closePopovers();
-  setLockedSelection(state.sel, !anyLocked(state.sel));
-});
 
 function syncControls(): void {
   props.sync();
@@ -276,30 +256,6 @@ function togglePopover(pop: HTMLElement, anchor: HTMLElement): void {
   closePopovers();
   if (willOpen){ pop.classList.add('open'); activePopover = { pop, anchor }; placePopover(pop, anchor, bar); }
 }
-fbColor.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(colorPop, fbColor); });
-// a colour pick updates the trigger's own swatch look and closes the popover. Runs after properties.ts's own listener has already
-// set the new .active swatch (bubble phase fires the target's listener before this ancestor one).
-colorPop.addEventListener('click', (e) => {
-  const sw = (e.target as HTMLElement).closest('.swatch');
-  if (!sw) {
-    return;
-  }
-  markColorTrigger();
-  // …except the custom chip, whose click OPENS the native colour sheet rather than picking anything:
-  // closing here would tear the swatch row down while the user is still choosing, and the trigger
-  // has nothing to mirror yet. It closes the ordinary way — a tap outside, or Esc.
-  if (sw.classList.contains('custom')) {
-    return;
-  }
-  closePopovers();
-});
-// …and while that sheet is open, keep the trigger's swatch in step with the live preview.
-colorPop.addEventListener('input', (e) => {
-  if ((e.target as HTMLElement).closest('.swatch.custom')) {
-    markColorTrigger();
-  }
-});
-closeOnOutside(colorPop, fbColor, closePopovers);
 
 // ---------- card actions menu: rename / edit note / duplicate / export / delete / … ----------
 // Shared by the kebab button here AND the right-click context menu (features/context-menu.ts) —
@@ -368,32 +324,10 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   entries.push({ label: lockedNow ? 'Unlock' : 'Lock', shortcut:'L', run: () => setLockedSelection(targetIds, !lockedNow) });
   return entries;
 }
-// ▦ — several selected: Tidy up, align, distribute, same width (features/tidy.ts)
-fbTidy.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closePopovers();
-  const r = fbTidy.getBoundingClientRect();
-  openMenu(tidyMenuEntries(), r.left, r.bottom + 8);
-});
 
 // ---------- anchoring: float the bar right above/below the selected card ----------
 const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
 
-// Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
-// desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (features/commands.ts navArrow): you can only stand
-// in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
-// kinds with no interior and for the card you are already inside, both of which openSection would refuse.
-fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openSection(anchorNode()); });
-fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
-fbTidySection.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closePopovers();
-  const n = anchorNode();
-  if (canTidySection(n)) {
-    tidySection(n);
-  }
-});
-fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;
@@ -481,9 +415,6 @@ function markWheelBusy(): void {
   }
   wheelIdleTimer = window.setTimeout(() => { ui.wheeling = false; wheelIdleTimer = null; }, 150);
 }
-stage.addEventListener('wheel', markWheelBusy, { passive: true });
-stage.addEventListener('gesturestart', () => { ui.wheeling = true; });
-stage.addEventListener('gestureend', () => { ui.wheeling = false; });
 // ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
 // here, so it can never paint a section sitting in the screen corner with nothing behind it. Reports
 // whether it's anchored, for the popovers that hang off it (they'd float alone otherwise).
@@ -523,7 +454,6 @@ function followLoop(): void {
   }
   raf = bar.classList.contains('open') ? requestAnimationFrame(followLoop) : null;
 }
-window.addEventListener('resize', () => { closePopovers(); placeBar(); });
 
 // ---------- visibility ----------
 // Showing the bar is debounced a touch (SHOW_DELAY) — hiding is not. A double-click both selects
@@ -567,5 +497,85 @@ export function syncFloatBar(): void {
     }
   }, SHOW_DELAY);
 }
-// Crossing the narrow breakpoint (resize/rotate) docks or undocks the bar — re-place it directly.
-NARROW_MQ.addEventListener('change', syncFloatBar);
+
+export function installFloatBar(): void {
+  props = createProperties({ colors: edColors }, () => selectedIds());
+  fbWrap.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); groupSelectionIntoSection(); });
+  fbUngroup.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); deleteSelectionKeepChildren(); });
+  fbToSection.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); stackToSection(); });
+
+  // T — a section's TITLE. An untitled section shows no label at all (its text was deleted, FigJam-style),
+  // so this is how one comes back: it seeds a name and selects it, ready to type over. A named section just
+  // opens its label with the name selected — the same editor F2 and a double-click on the label open.
+  fbTitle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePopovers();
+    const n = anchorNode();
+    if (n?.type === 'section') {
+      editSectionTitle(n);
+    }
+  });
+  fbLock.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePopovers();
+    setLockedSelection(state.sel, !anyLocked(state.sel));
+  });
+  fbColor.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(colorPop, fbColor); });
+
+  // a colour pick updates the trigger's own swatch look and closes the popover. Runs after properties.ts's own listener has already
+  // set the new .active swatch (bubble phase fires the target's listener before this ancestor one).
+  colorPop.addEventListener('click', (e) => {
+    const sw = (e.target as HTMLElement).closest('.swatch');
+    if (!sw) {
+      return;
+    }
+    markColorTrigger();
+
+    // …except the custom chip, whose click OPENS the native colour sheet rather than picking anything:
+    // closing here would tear the swatch row down while the user is still choosing, and the trigger
+    // has nothing to mirror yet. It closes the ordinary way — a tap outside, or Esc.
+    if (sw.classList.contains('custom')) {
+      return;
+    }
+    closePopovers();
+  });
+
+  // …and while that sheet is open, keep the trigger's swatch in step with the live preview.
+  colorPop.addEventListener('input', (e) => {
+    if ((e.target as HTMLElement).closest('.swatch.custom')) {
+      markColorTrigger();
+    }
+  });
+  closeOnOutside(colorPop, fbColor, closePopovers);
+
+  // ▦ — several selected: Tidy up, align, distribute, same width (features/tidy.ts)
+  fbTidy.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePopovers();
+    const r = fbTidy.getBoundingClientRect();
+    openMenu(tidyMenuEntries(), r.left, r.bottom + 8);
+  });
+
+  // Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
+  // desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (features/commands.ts navArrow): you can only stand
+  // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
+  // kinds with no interior and for the card you are already inside, both of which openSection would refuse.
+  fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openSection(anchorNode()); });
+  fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
+  fbTidySection.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePopovers();
+    const n = anchorNode();
+    if (canTidySection(n)) {
+      tidySection(n);
+    }
+  });
+  fbFit.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); autoSizeSelection(); syncFloatBar(); });
+  stage.addEventListener('wheel', markWheelBusy, { passive: true });
+  stage.addEventListener('gesturestart', () => { ui.wheeling = true; });
+  stage.addEventListener('gestureend', () => { ui.wheeling = false; });
+  window.addEventListener('resize', () => { closePopovers(); placeBar(); });
+
+  // Crossing the narrow breakpoint (resize/rotate) docks or undocks the bar — re-place it directly.
+  NARROW_MQ.addEventListener('change', syncFloatBar);
+}

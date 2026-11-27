@@ -40,9 +40,7 @@ const searchClear = byId<HTMLButtonElement>('searchClear');
 const searchCount = byId('searchCount');
 const searchPrev = byId<HTMLButtonElement>('searchPrev');
 const searchNext = byId<HTMLButtonElement>('searchNext');
-const chipsEl = document.createElement('span');
-chipsEl.id = 'searchChips';
-searchWrap.insertBefore(chipsEl, searchBox);
+const chipsEl = Object.assign(document.createElement('span'), { id: 'searchChips' });
 
 let chips: string[] = [];                 // the tags of the query
 let cardHits: MindNode[] = [];            // every matching card, in the dropdown's order (it shows the first few)
@@ -102,13 +100,7 @@ function renderChips(): void {
   searchWrap.classList.toggle('has-chips', chips.length > 0);
   searchBox.placeholder = chips.length ? 'and text…' : 'Find a card, or #tag…';
 }
-chipsEl.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus where it is
-chipsEl.addEventListener('click', (e) => {
-  const b = (e.target as Element).closest<HTMLElement>('.sc-tag');
-  if (b) {
-    toggleSearchTag(b.dataset.tag!);
-  }
-});
+   // keep the focus where it is
 
 // The text part of the query, and a `#word` being typed at its end (null when there isn't one).
 function parts(): { text: string; typing: string | null } {
@@ -300,103 +292,120 @@ function gotoHit(id: string): void {
   goTo(n, true);
 }
 
-searchBox.addEventListener('input', () => {
-  // a space right after a `#word` makes it a chip, the way a tag field does
-  if (/(?:^|\s)#\S+\s$/.test(searchBox.value)) {
-    searchBox.value = searchBox.value.trimEnd();
-    if (chipFromTyping()) {
+   // keep the focus in the field
+
+export function installSearch(): void {
+  searchWrap.insertBefore(chipsEl, searchBox);
+  chipsEl.addEventListener('pointerdown', (e) => e.preventDefault());
+  chipsEl.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('.sc-tag');
+    if (b) {
+      toggleSearchTag(b.dataset.tag!);
+    }
+  });
+  searchBox.addEventListener('input', () => {
+    // a space right after a `#word` makes it a chip, the way a tag field does
+    if (/(?:^|\s)#\S+\s$/.test(searchBox.value)) {
+      searchBox.value = searchBox.value.trimEnd();
+      if (chipFromTyping()) {
+        return;
+      }
+    }
+    runSoon();
+  });
+
+  // Searching starts from a clean board: whatever was selected lets go, so its ring, its ports and the float
+  // bar don't sit over the hits being looked for. On focus, so every way in — ⌘F, the palette, a click in the
+  // field, a tag clicked — does it.
+  searchBox.addEventListener('focus', () => {
+    if (state.sel.size || state.selEdges.size) {
+      clearEdgeSelection();
+      setSelectionSet([]);
+    }
+    if (searchActive()) {
+      runSearch();
+    }
+  });
+  searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+      runPending();
+    }
+    const rows = tagRows.length || parts().typing != null ? tagRows.length : cardHits.length;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
+      e.preventDefault();
+      if (!rows) {
+        return;
+      }
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows) % rows;
+      markActive();
+
+      // a card row: the camera goes to it as you go down the list (a tag row is just a word to pick)
+      const hit = tagRows.length || parts().typing != null ? undefined : cardHits[active];
+      if (hit) {
+        goTo(hit, false);
+      }
+    } else if (e.key === 'Enter'){
+      e.preventDefault();
+      e.stopPropagation();   // don't let Enter reach the window handler (it would create a sibling)
+      if (parts().typing != null) { chipFromTyping(tagRows[active]); return; }
+      const hit = cardHits[active];
+      if (hit) {
+        gotoHit(hit.id);
+      }
+    } else if (e.key === 'Backspace' && !searchBox.value && chips.length){
+      e.preventDefault();
+      chips = chips.slice(0, -1); renderChips(); runSearch();
+    } else if (e.key === 'Escape'){
+      e.preventDefault();
+      e.stopPropagation();
+
+      // one step at a time: the text, then the chips, then the field
+      if (searchBox.value) {
+        searchBox.value = '';
+        runSearch();
+      } else if (chips.length) {
+        chips = [];
+        renderChips();
+        runSearch();
+      } else {
+        closeSearch();
+      }
+    }
+  });
+  searchResults.addEventListener('pointerdown', (e) => e.preventDefault());
+  byId('searchNav').addEventListener('pointerdown', (e) => e.preventDefault());
+  searchResults.addEventListener('click', (e: MouseEvent) => {
+    const item = (e.target as Element).closest<HTMLElement>('.sr-item');
+    if (!item) {
       return;
     }
-  }
-  runSoon();
-});
-// Searching starts from a clean board: whatever was selected lets go, so its ring, its ports and the float
-// bar don't sit over the hits being looked for. On focus, so every way in — ⌘F, the palette, a click in the
-// field, a tag clicked — does it.
-searchBox.addEventListener('focus', () => {
-  if (state.sel.size || state.selEdges.size) {
-    clearEdgeSelection();
-    setSelectionSet([]);
-  }
-  if (searchActive()) {
-    runSearch();
-  }
-});
-searchBox.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
-    runPending();
-  }
-  const rows = tagRows.length || parts().typing != null ? tagRows.length : cardHits.length;
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){
-    e.preventDefault();
-    if (!rows) {
-      return;
-    }
-    active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows) % rows;
-    markActive();
-    // a card row: the camera goes to it as you go down the list (a tag row is just a word to pick)
-    const hit = tagRows.length || parts().typing != null ? undefined : cardHits[active];
-    if (hit) {
-      goTo(hit, false);
-    }
-  } else if (e.key === 'Enter'){
-    e.preventDefault();
-    e.stopPropagation();   // don't let Enter reach the window handler (it would create a sibling)
-    if (parts().typing != null) { chipFromTyping(tagRows[active]); return; }
-    const hit = cardHits[active];
-    if (hit) {
-      gotoHit(hit.id);
-    }
-  } else if (e.key === 'Backspace' && !searchBox.value && chips.length){
-    e.preventDefault();
-    chips = chips.slice(0, -1); renderChips(); runSearch();
-  } else if (e.key === 'Escape'){
-    e.preventDefault();
-    e.stopPropagation();
-    // one step at a time: the text, then the chips, then the field
-    if (searchBox.value) {
-      searchBox.value = '';
-      runSearch();
-    } else if (chips.length) {
-      chips = [];
-      renderChips();
-      runSearch();
+    if (item.dataset.tag) {
+      chipFromTyping(item.dataset.tag);
     } else {
-      closeSearch();
+      gotoHit(item.dataset.id!);
     }
-  }
-});
-searchResults.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus in the field
-byId('searchNav').addEventListener('pointerdown', (e) => e.preventDefault());
-searchResults.addEventListener('click', (e: MouseEvent) => {
-  const item = (e.target as Element).closest<HTMLElement>('.sr-item');
-  if (!item) {
-    return;
-  }
-  if (item.dataset.tag) {
-    chipFromTyping(item.dataset.tag);
-  } else {
-    gotoHit(item.dataset.id!);
-  }
-});
-searchPrev.addEventListener('click', () => stepHit(-1));
-searchNext.addEventListener('click', () => stepHit(1));
-// clear-or-close, exactly like Escape — but all at once: the × means "done searching".
-searchClear.addEventListener('click', () => closeSearch());
-// A click elsewhere: an EMPTY field closes; one with a query in it stays, its list folded away, so the
-// board can be worked on under the filter.
-document.addEventListener('pointerdown', (e: PointerEvent) => {
-  if (!searchWrap.classList.contains('open')) {
-    return;
-  }
-  if ((e.target as Element).closest('#searchWrap')) {
-    return;
-  }
-  if (!searchActive()) {
-    closeSearch();
-  } else {
-    searchResults.classList.remove('open');
-    searchBox.blur();
-  }
-});
-renderChips();
+  });
+  searchPrev.addEventListener('click', () => stepHit(-1));
+  searchNext.addEventListener('click', () => stepHit(1));
+
+  // clear-or-close, exactly like Escape — but all at once: the × means "done searching".
+  searchClear.addEventListener('click', () => closeSearch());
+
+  // A click elsewhere: an EMPTY field closes; one with a query in it stays, its list folded away, so the
+  // board can be worked on under the filter.
+  document.addEventListener('pointerdown', (e: PointerEvent) => {
+    if (!searchWrap.classList.contains('open')) {
+      return;
+    }
+    if ((e.target as Element).closest('#searchWrap')) {
+      return;
+    }
+    if (!searchActive()) {
+      closeSearch();
+    } else {
+      searchResults.classList.remove('open');
+      searchBox.blur();
+    }
+  });
+  renderChips();
+}

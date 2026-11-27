@@ -215,7 +215,7 @@ function toggle(): void {
   }
 }
 
-export function setupCanvasColor(): void {
+export function installCanvasColor(): void {
   useCanvasSurface(canvasSurface);
   if (!btn || !pop) {
     return;

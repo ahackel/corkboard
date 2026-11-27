@@ -50,19 +50,7 @@ function ranked(all: Option[], query: string): Option[] {
     .slice(0, MAX).map(x => x.o);
 }
 
-const pop = document.createElement('div');
-pop.className = 'md-complete';
-pop.id = 'mdComplete';
-pop.setAttribute('role', 'listbox');
-document.body.appendChild(pop);
-// A press on the list must not take focus from the textarea: a blur ends the edit.
-pop.addEventListener('pointerdown', (e) => e.preventDefault());
-pop.addEventListener('click', (e) => {
-  const row = (e.target as HTMLElement).closest<HTMLElement>('.mc-row');
-  if (row) {
-    pick(+(row.dataset.i ?? 0));
-  }
-});
+const pop = Object.assign(document.createElement('div'), { className: 'md-complete', id: 'mdComplete', role: 'listbox' });
 
 interface Open { ta: HTMLTextAreaElement; at: Completing; options: Option[]; active: number; apply: (r: TextEdit) => void }
 let open: Open | null = null;
@@ -151,4 +139,17 @@ export function completionKey(e: KeyboardEvent): boolean {
   }
   e.preventDefault();
   return true;
+}
+
+export function installComplete(): void {
+  document.body.appendChild(pop);
+
+  // A press on the list must not take focus from the textarea: a blur ends the edit.
+  pop.addEventListener('pointerdown', (e) => e.preventDefault());
+  pop.addEventListener('click', (e) => {
+    const row = (e.target as HTMLElement).closest<HTMLElement>('.mc-row');
+    if (row) {
+      pick(+(row.dataset.i ?? 0));
+    }
+  });
 }

@@ -16,11 +16,7 @@ import { hydrateImages } from './images.js';
 const PEEK_DELAY = 450;   // long enough that sweeping the pointer across the board never flashes one
 const GAP = 10;
 
-const panel = document.createElement('div');
-panel.id = 'peek';
-panel.className = 'node';
-panel.innerHTML = '<div class="body"></div>';
-document.body.appendChild(panel);
+const panel = Object.assign(document.createElement('div'), { id: 'peek', className: 'node', innerHTML: '<div class="body"></div>' });
 const panelBody = panel.querySelector('.body') as HTMLElement;
 
 let showing: string | null = null;   // the card id the panel is for
@@ -68,6 +64,7 @@ function show(cardEl: HTMLElement): void {
 }
 
 export function installPeek(): void {
+  document.body.appendChild(panel);
   world.addEventListener('pointerover', (e: PointerEvent) => {
     if (e.pointerType !== 'mouse') {
       return;

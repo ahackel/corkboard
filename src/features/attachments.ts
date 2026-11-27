@@ -1,7 +1,7 @@
 // ---------- image attachments ----------
 // Images are real files in the vault's attachments/ folder; the note just gets ![alt](attachments/…).
 // Added by pasting into the in-card body editor, dropping a file on a card (or the editor), or by
-// typing the markdown. Importing this module registers the document-level drag/drop listeners.
+// typing the markdown. `installAttachments` registers the document-level drag/drop listeners.
 import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
@@ -183,19 +183,7 @@ export function onBodyPaste(e: ClipboardEvent): void {
 // pipeline as paste and drop; the canvas menu's Insert image… (context-menu.ts) triggers it.
 interface PickTarget { sx: number | null; sy: number | null; parent: string | null }
 let pickTarget: PickTarget | null = null;
-const filePicker = document.createElement('input');
-filePicker.type = 'file'; filePicker.accept = 'image/*'; filePicker.multiple = true;
-filePicker.style.display = 'none';
-document.body.appendChild(filePicker);
-filePicker.addEventListener('change', () => {
-  const files = imageFiles(filePicker.files);
-  filePicker.value = '';                              // allow re-picking the same file next time
-  const req = pickTarget; pickTarget = null;
-  if (!req || !files.length) {
-    return;
-  }
-  void createImageCards(files, req.sx, req.sy, req.parent);
-});
+const filePicker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', multiple: true });
 // Drop a new image card at a canvas point.
 export function pickImagesAt(sx: number | null, sy: number | null, parent: string | null): void {
   if (!canAttach()) {
@@ -269,30 +257,6 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
   const { title, body } = splitHeading(text);
   createNode({ ...opts, title, body });
 }
-document.addEventListener('paste', (e) => {
-  if (isTypingInField()) {
-    return;                 // field/editor pastes keep their native behaviour
-  }
-  const cd = e.clipboardData;
-  if (!cd) {
-    return;
-  }
-  const imgs = imageFiles(cd.files);
-  const text = cd.getData('text/plain').trim();
-  if (!imgs.length && !text) {
-    return;
-  }
-  e.preventDefault();
-  // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card. Either
-  // way it lands where the pointer is — in the section under it, like a drop (view/layout.ts sectionAt).
-  const mx = ui.lastMouse?.x ?? null, my = ui.lastMouse?.y ?? null;
-  const w = mx != null && my != null ? screenToWorld(mx, my) : null;
-  const into = w ? sectionAt(w.x, w.y, new Set())?.id ?? null : null;
-  if (text && tryPasteCards(text, { sx: mx, sy: my, parent: into })) {
-    return;
-  }
-  createCardFromClipboard(imgs, text, mx, my, cardOptsAt(mx, my, into));
-});
 // Context-menu Paste: no ClipboardEvent to read from, so ask the async clipboard API (may prompt
 // for permission; Safari requires it be called directly in the user gesture — a menu click is one).
 export async function pasteFromClipboard(sx: number, sy: number, parent: string | null): Promise<void> {
@@ -322,101 +286,144 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
 // Drag an image file from the OS onto a card (or the body editor). We handle this at the document
 // level so we can both highlight the target and stop the browser from navigating to the dropped file.
 const setImgDropTarget = classMarker('img-drop');
-document.addEventListener('dragover', (e) => {
-  if (!dragHasFiles(e)) {
-    return;
-  }
-  e.preventDefault();
-  // a single note takes nothing dropped into it (core/state.ts singleNoteRefuses)
-  if (state.singleNote){ setImgDropTarget(null); return; }
-  const t = e.target as HTMLElement;
-  const cardNode = nodeAtTarget(t);
-  if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint
-  setImgDropTarget(t.closest?.('.body-edit') || cardNode?.el || null);
-});
-document.addEventListener('dragleave', (e) => {
-  if (e.relatedTarget == null) {
-    setImgDropTarget(null);
-  }
-});
-document.addEventListener('drop', async (e) => {
-  if (!dragHasFiles(e)) {
-    return;
-  }
-  e.preventDefault();
-  const t = e.target as HTMLElement;
-  const onEditor = !!t.closest?.('.body-edit');
-  const cardNode = nodeAtTarget(t);
-  const cardEl   = cardNode?.el ?? null;
-  const cardId   = cardNode?.id ?? null;
-  // an image card is a card that IS its picture (core/state.ts isImageCard): dropping notes or a
-  // second image ONTO it would end that — so those land beside it, on the canvas, instead
-  const cardIsImage = !!cardNode && isImageCard(cardNode);
-  const cardIsSection = !!cardNode && isSection(cardNode);
-  const cardIsLocked = !!cardNode && isLockedEffective(cardNode);
-  setImgDropTarget(null);
-  // dropped .md notes reconstruct as cards (parent links WITHIN the dropped set are kept);
-  // dropped on a section (or a card in one) they go in that section, on the canvas at the drop point — never
-  // into a locked one (createNode itself also refuses a locked parent, this just skips the attempt).
-  const mds = [...e.dataTransfer!.files].filter(f => /\.md$/i.test(f.name));
-  if (mds.length){
-    const cards = await Promise.all(mds.map(async f => ({ name: f.name, text: await f.text() })));
-    tryPasteCards(cardsToPayload(cards), { sx: e.clientX, sy: e.clientY, parent: (cardIsImage || cardIsLocked) ? null : cardId });
-  }
-  const imgs = imageFiles(e.dataTransfer!.files);
-  if (!imgs.length) {
-    return;
-  }
-  if (onEditor && ui.bodyEdit) {
-    await insertImagesAtCursor(imgs);
-  }   // drop on the open editor → at the caret
-  // a section is a container, not a text card — its body never renders, so dropped images become
-  // new image-card CHILDREN of the section instead of (invisibly) appending to its hidden body
-  else if (cardEl && cardIsSection && !cardIsLocked) {
-    selectNode(cardId);
-    await createImageCards(imgs, e.clientX, e.clientY, cardId);
-  } else if (cardEl && takesDrop(cardNode)) {
-    selectNode(cardId);
-    await appendImagesToNode(cardId!, imgs);
-  } else if (!cardEl || !cardIsLocked) {
-    await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
-  }
-});
 
 // ---------- text and links dragged in from OTHER apps ----------
 // A selection from a web page, Mail or Notes, or a link off a page, dropped on the board becomes a card the
 // way pasting it would (a list becomes one card per item), in the section under the pointer. A drag that
 // began in THIS page — a card's text, a card ⌥-dragged out — is someone else's (text-drag.ts, clipboard.ts).
 let ownDrag = false;
-document.addEventListener('dragstart', () => { ownDrag = true; });
-document.addEventListener('dragend', () => { ownDrag = false; });
 
 function isTextDrop(e: DragEvent): boolean {
   const types = e.dataTransfer ? [...e.dataTransfer.types] : [];
   const inField = !!(e.target as HTMLElement).closest?.('input, textarea, [contenteditable]');
   return !ownDrag && !inField && !types.includes('Files') && (types.includes('text/plain') || types.includes('text/uri-list'));
 }
-document.addEventListener('dragover', (e) => {
-  if (!isTextDrop(e)) {
-    return;
-  }
-  e.preventDefault();
-  e.dataTransfer!.dropEffect = 'copy';
-});
-document.addEventListener('drop', (e) => {
-  if (!isTextDrop(e)) {
-    return;
-  }
-  e.preventDefault();
-  const dt = e.dataTransfer!;
-  const uri = dt.getData('text/uri-list').split('\n').find(l => l.trim() && !l.startsWith('#'));
-  const text = (dt.getData('text/plain') || uri || '').trim();
-  if (!text) {
-    return;
-  }
-  const w = screenToWorld(e.clientX, e.clientY);
-  const into = sectionAt(w.x, w.y, new Set())?.id ?? null;
-  if (!tryPasteCards(text, { sx: e.clientX, sy: e.clientY, parent: into })) {
-    createCardFromClipboard([], text, e.clientX, e.clientY, cardOptsAt(e.clientX, e.clientY, into));
-  }
-});
+
+export function installAttachments(): void {
+  filePicker.style.display = 'none';
+  document.body.appendChild(filePicker);
+  filePicker.addEventListener('change', () => {
+    const files = imageFiles(filePicker.files);
+    filePicker.value = '';                              // allow re-picking the same file next time
+    const req = pickTarget; pickTarget = null;
+    if (!req || !files.length) {
+      return;
+    }
+    void createImageCards(files, req.sx, req.sy, req.parent);
+  });
+  document.addEventListener('paste', (e) => {
+    if (isTypingInField()) {
+      return;                 // field/editor pastes keep their native behaviour
+    }
+    const cd = e.clipboardData;
+    if (!cd) {
+      return;
+    }
+    const imgs = imageFiles(cd.files);
+    const text = cd.getData('text/plain').trim();
+    if (!imgs.length && !text) {
+      return;
+    }
+    e.preventDefault();
+
+    // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card. Either
+    // way it lands where the pointer is — in the section under it, like a drop (view/layout.ts sectionAt).
+    const mx = ui.lastMouse?.x ?? null, my = ui.lastMouse?.y ?? null;
+    const w = mx != null && my != null ? screenToWorld(mx, my) : null;
+    const into = w ? sectionAt(w.x, w.y, new Set())?.id ?? null : null;
+    if (text && tryPasteCards(text, { sx: mx, sy: my, parent: into })) {
+      return;
+    }
+    createCardFromClipboard(imgs, text, mx, my, cardOptsAt(mx, my, into));
+  });
+  document.addEventListener('dragover', (e) => {
+    if (!dragHasFiles(e)) {
+      return;
+    }
+    e.preventDefault();
+
+    // a single note takes nothing dropped into it (core/state.ts singleNoteRefuses)
+    if (state.singleNote){ setImgDropTarget(null); return; }
+    const t = e.target as HTMLElement;
+    const cardNode = nodeAtTarget(t);
+    if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint
+    setImgDropTarget(t.closest?.('.body-edit') || cardNode?.el || null);
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (e.relatedTarget == null) {
+      setImgDropTarget(null);
+    }
+  });
+  document.addEventListener('drop', async (e) => {
+    if (!dragHasFiles(e)) {
+      return;
+    }
+    e.preventDefault();
+    const t = e.target as HTMLElement;
+    const onEditor = !!t.closest?.('.body-edit');
+    const cardNode = nodeAtTarget(t);
+    const cardEl   = cardNode?.el ?? null;
+    const cardId   = cardNode?.id ?? null;
+
+    // an image card is a card that IS its picture (core/state.ts isImageCard): dropping notes or a
+    // second image ONTO it would end that — so those land beside it, on the canvas, instead
+    const cardIsImage = !!cardNode && isImageCard(cardNode);
+    const cardIsSection = !!cardNode && isSection(cardNode);
+    const cardIsLocked = !!cardNode && isLockedEffective(cardNode);
+    setImgDropTarget(null);
+
+    // dropped .md notes reconstruct as cards (parent links WITHIN the dropped set are kept);
+    // dropped on a section (or a card in one) they go in that section, on the canvas at the drop point — never
+    // into a locked one (createNode itself also refuses a locked parent, this just skips the attempt).
+    const mds = [...e.dataTransfer!.files].filter(f => /\.md$/i.test(f.name));
+    if (mds.length){
+      const cards = await Promise.all(mds.map(async f => ({ name: f.name, text: await f.text() })));
+      tryPasteCards(cardsToPayload(cards), { sx: e.clientX, sy: e.clientY, parent: (cardIsImage || cardIsLocked) ? null : cardId });
+    }
+    const imgs = imageFiles(e.dataTransfer!.files);
+    if (!imgs.length) {
+      return;
+    }
+    if (onEditor && ui.bodyEdit) {
+      await insertImagesAtCursor(imgs);
+    }   // drop on the open editor → at the caret
+
+    // a section is a container, not a text card — its body never renders, so dropped images become
+    // new image-card CHILDREN of the section instead of (invisibly) appending to its hidden body
+    else if (cardEl && cardIsSection && !cardIsLocked) {
+      selectNode(cardId);
+      await createImageCards(imgs, e.clientX, e.clientY, cardId);
+    } else if (cardEl && takesDrop(cardNode)) {
+      selectNode(cardId);
+      await appendImagesToNode(cardId!, imgs);
+    } else if (!cardEl || !cardIsLocked) {
+      await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
+    }
+  });
+  document.addEventListener('dragstart', () => { ownDrag = true; });
+  document.addEventListener('dragend', () => { ownDrag = false; });
+  document.addEventListener('dragover', (e) => {
+    if (!isTextDrop(e)) {
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer!.dropEffect = 'copy';
+  });
+  document.addEventListener('drop', (e) => {
+    if (!isTextDrop(e)) {
+      return;
+    }
+    e.preventDefault();
+    const dt = e.dataTransfer!;
+    const uri = dt.getData('text/uri-list').split('\n').find(l => l.trim() && !l.startsWith('#'));
+    const text = (dt.getData('text/plain') || uri || '').trim();
+    if (!text) {
+      return;
+    }
+    const w = screenToWorld(e.clientX, e.clientY);
+    const into = sectionAt(w.x, w.y, new Set())?.id ?? null;
+    if (!tryPasteCards(text, { sx: e.clientX, sy: e.clientY, parent: into })) {
+      createCardFromClipboard([], text, e.clientX, e.clientY, cardOptsAt(e.clientX, e.clientY, into));
+    }
+  });
+}

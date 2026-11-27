@@ -50,8 +50,10 @@ async function launched(params: LaunchParams): Promise<void> {
   await runAction(params.targetURL);
 }
 
-if (launchQueue) {
-  launchQueue.setConsumer(params => { void launched(params); });
-} else if (new URLSearchParams(location.search).has('do')) {
-  void launched({ targetURL: location.href, files: [] });
+export function installLaunch(): void {
+  if (launchQueue) {
+    launchQueue.setConsumer(params => { void launched(params); });
+  } else if (new URLSearchParams(location.search).has('do')) {
+    void launched({ targetURL: location.href, files: [] });
+  }
 }

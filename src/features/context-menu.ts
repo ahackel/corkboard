@@ -29,17 +29,15 @@ import { selectAll } from './selection.js';
 
 // The menu and its submenus are PANELS, each a fixed island of its own: a submenu can't live inside its
 // parent, whose overflow (it scrolls when it's taller than the window) would clip it.
-function newPanel(): HTMLDivElement {
-  const p = document.createElement('div');
-  p.className = 'cm-panel';
-
+function mountPanel(p: HTMLDivElement): HTMLDivElement {
   // A press on the menu takes no focus, so an open card editor keeps its caret and selection for the entry to act on.
   p.addEventListener('pointerdown', (e) => e.preventDefault());
   document.body.appendChild(p);
   return p;
 }
-const menu = newPanel();
-menu.id = 'ctxMenu';
+
+const newPanel = (): HTMLDivElement => mountPanel(Object.assign(document.createElement('div'), { className: 'cm-panel' }));
+const menu = Object.assign(document.createElement('div'), { className: 'cm-panel', id: 'ctxMenu' });
 
 // panels[0] is the menu, panels[d] the submenu opened from an entry of panels[d - 1].
 const panels: HTMLDivElement[] = [menu];
@@ -255,63 +253,68 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
 // contextmenu on the canvas is unreliable). New cards/images land at the current view's centre
 // since there's no click point to anchor them to; the menu itself opens under the button.
 const canvasMenuBtn = byId<HTMLButtonElement>('canvasMenuBtn');
-canvasMenuBtn.addEventListener('click', (e) => {
-  e.stopPropagation();
-  closeMenu();
-  const r = stage.getBoundingClientRect();
-  const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-  const br = canvasMenuBtn.getBoundingClientRect();
-  openMenu(canvasMenuEntries(cx, cy), br.left, br.bottom + 4);
-});
 
-document.addEventListener('contextmenu', (e: MouseEvent) => {
-  const t = e.target as Element | null;
-  closeMenu();
-  if (!t || !t.closest('#stage')) {
-    return;                 // toolbar / sidebar / dialogs: native menu
-  }
-  // Inside the card's text: the editor's own commands (inline-edit.ts editorMenuEntries). ⇧-right-click
-  // keeps the browser's menu there, for spelling suggestions.
-  if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) {
-    if (!e.shiftKey) {
-      e.preventDefault();
-      openMenu(editorMenuEntries(), e.clientX, e.clientY);
-    }
-    return;
-  }
-  if (ui.titleEdit && t.closest('.title.editing')) {
-    return;
-  }
-  e.preventDefault();
-  const nodeEl = t.closest('.node[data-id]') as HTMLElement | null;
-  const id = nodeEl?.dataset.id;
-  const n = id ? state.nodes.get(id) : undefined;
-  let entries: MenuEntry[];
-  if (t.closest('[data-edge]') && state.selEdges.size) {
-
-    // a LINE: the press before this already selected it (edge-tools.ts), so Delete acts on the selection
-    entries = [{ label: 'Delete', shortcut: '⌫', run: () => { deleteSelectedEdge(); } }];
-  } else if (n){
-    const img = bodyImageAt(nodeEl!, e.clientX, e.clientY);
-    // image entries above the card's own; same list the kebab menu shows for this card
-    entries = [...(img ? imageMenuEntries(n, img) : []), ...buildCardMenu(n, e.clientX, e.clientY)];
-  } else {
-    entries = canvasMenuEntries(e.clientX, e.clientY);
-  }
-  openMenu(entries, e.clientX, e.clientY);
-});
-
-// dismiss: click/tap anywhere outside, Escape (before the global deselect handler), scroll/zoom, blur
-document.addEventListener('pointerdown', (e) => {
-  if (menu.classList.contains('open') && !inMenu(e.target as Node)) {
+export function installContextMenu(): void {
+  mountPanel(menu);
+  canvasMenuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
     closeMenu();
-  }
-}, true);
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && menu.classList.contains('open')){
-    e.preventDefault(); e.stopPropagation(); closeMenu();
-  }
-}, true);
-stage.addEventListener('wheel', closeMenu, { passive: true });
-window.addEventListener('blur', closeMenu);
-window.addEventListener('resize', closeMenu);
+    const r = stage.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const br = canvasMenuBtn.getBoundingClientRect();
+    openMenu(canvasMenuEntries(cx, cy), br.left, br.bottom + 4);
+  });
+  document.addEventListener('contextmenu', (e: MouseEvent) => {
+    const t = e.target as Element | null;
+    closeMenu();
+    if (!t || !t.closest('#stage')) {
+      return;                 // toolbar / sidebar / dialogs: native menu
+    }
+
+    // Inside the card's text: the editor's own commands (inline-edit.ts editorMenuEntries). ⇧-right-click
+    // keeps the browser's menu there, for spelling suggestions.
+    if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) {
+      if (!e.shiftKey) {
+        e.preventDefault();
+        openMenu(editorMenuEntries(), e.clientX, e.clientY);
+      }
+      return;
+    }
+    if (ui.titleEdit && t.closest('.title.editing')) {
+      return;
+    }
+    e.preventDefault();
+    const nodeEl = t.closest('.node[data-id]') as HTMLElement | null;
+    const id = nodeEl?.dataset.id;
+    const n = id ? state.nodes.get(id) : undefined;
+    let entries: MenuEntry[];
+    if (t.closest('[data-edge]') && state.selEdges.size) {
+
+      // a LINE: the press before this already selected it (edge-tools.ts), so Delete acts on the selection
+      entries = [{ label: 'Delete', shortcut: '⌫', run: () => { deleteSelectedEdge(); } }];
+    } else if (n){
+      const img = bodyImageAt(nodeEl!, e.clientX, e.clientY);
+
+      // image entries above the card's own; same list the kebab menu shows for this card
+      entries = [...(img ? imageMenuEntries(n, img) : []), ...buildCardMenu(n, e.clientX, e.clientY)];
+    } else {
+      entries = canvasMenuEntries(e.clientX, e.clientY);
+    }
+    openMenu(entries, e.clientX, e.clientY);
+  });
+
+  // dismiss: click/tap anywhere outside, Escape (before the global deselect handler), scroll/zoom, blur
+  document.addEventListener('pointerdown', (e) => {
+    if (menu.classList.contains('open') && !inMenu(e.target as Node)) {
+      closeMenu();
+    }
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && menu.classList.contains('open')){
+      e.preventDefault(); e.stopPropagation(); closeMenu();
+    }
+  }, true);
+  stage.addEventListener('wheel', closeMenu, { passive: true });
+  window.addEventListener('blur', closeMenu);
+  window.addEventListener('resize', closeMenu);
+}

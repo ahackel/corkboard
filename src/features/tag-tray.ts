@@ -21,13 +21,13 @@ import { beginTagDrag, puff } from './tag-drag.js';
 
 const KEY = 'corkboard.tagTray';
 const btn = byId<HTMLButtonElement>('trayBtn');
-const tray = document.createElement('div');
-tray.id = 'tagTray';
-tray.setAttribute('role', 'toolbar');
-tray.setAttribute('aria-label', 'Tags');
-tray.innerHTML = `<div class="tray-tags"></div><span class="tray-make"><input class="tray-new" type="text" placeholder="+ tag or emoji"` +
-  ` aria-label="New tag: a word, or an emoji’s name" autocomplete="off" spellcheck="false"><span class="tray-suggest" role="listbox"></span></span>`;
-document.body.appendChild(tray);
+const tray = Object.assign(document.createElement('div'), {
+  id: 'tagTray',
+  role: 'toolbar',
+  ariaLabel: 'Tags',
+  innerHTML: `<div class="tray-tags"></div><span class="tray-make"><input class="tray-new" type="text" placeholder="+ tag or emoji"` +
+    ` aria-label="New tag: a word, or an emoji’s name" autocomplete="off" spellcheck="false"><span class="tray-suggest" role="listbox"></span></span>`,
+});
 const list = tray.querySelector<HTMLElement>('.tray-tags')!;
 const input = tray.querySelector<HTMLInputElement>('.tray-new')!;
 const suggest = tray.querySelector<HTMLElement>('.tray-suggest')!;
@@ -97,24 +97,7 @@ function make(t: string | undefined): void {
   input.value = ''; options = []; renderSuggest();
   paintAll();
 }
-input.addEventListener('input', makeOptions);
-input.addEventListener('keydown', (e) => {
-  e.stopPropagation();   // the canvas shortcuts stay out of it
-  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && options.length) {
-    e.preventDefault();
-    active = (active + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
-    renderSuggest();
-  } else if (e.key === 'Enter') { e.preventDefault(); make(options[active]); }
-  else if (e.key === 'Escape') { e.preventDefault(); input.value = ''; options = []; renderSuggest(); input.blur(); }
-});
-input.addEventListener('blur', () => { options = []; renderSuggest(); });
-suggest.addEventListener('pointerdown', (e) => e.preventDefault());   // keep the focus in the slot
-suggest.addEventListener('click', (e) => {
-  const b = (e.target as Element).closest<HTMLElement>('.tp-row');
-  if (b) {
-    make(options[+b.dataset.i!]);
-  }
-});
+   // keep the focus in the slot
 
 // ---- a sticker dragged off onto the board: the tag is DELETED — off the tray, and off every card whose
 // frontmatter carries it, after asking when any does. Tags written in a note's text stay: they're the
@@ -147,8 +130,7 @@ function deleteTag(tag: string, x: number, y: number): void {
   paintAll();
 }
 
-tray.addEventListener('pointerdown', (e) => e.stopPropagation());   // not a canvas pan or marquee
-btn.addEventListener('click', () => toggleTray());
+   // not a canvas pan or marquee
 
 // Back out if it was out last time. Called from main.ts once every module has loaded: the tray reads
 // the search and the board.
@@ -158,4 +140,28 @@ export function restoreTray(): void {
       toggleTray(true);
     }
   } catch { /* closed, then */ }
+}
+
+export function installTagTray(): void {
+  document.body.appendChild(tray);
+  input.addEventListener('input', makeOptions);
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();   // the canvas shortcuts stay out of it
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && options.length) {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+      renderSuggest();
+    } else if (e.key === 'Enter') { e.preventDefault(); make(options[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); input.value = ''; options = []; renderSuggest(); input.blur(); }
+  });
+  input.addEventListener('blur', () => { options = []; renderSuggest(); });
+  suggest.addEventListener('pointerdown', (e) => e.preventDefault());
+  suggest.addEventListener('click', (e) => {
+    const b = (e.target as Element).closest<HTMLElement>('.tp-row');
+    if (b) {
+      make(options[+b.dataset.i!]);
+    }
+  });
+  tray.addEventListener('pointerdown', (e) => e.stopPropagation());
+  btn.addEventListener('click', () => toggleTray());
 }

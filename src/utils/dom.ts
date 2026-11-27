@@ -87,8 +87,11 @@ export function safeInsets(): Insets {
              bottom: parseFloat(cs.paddingBottom) || 0, left: parseFloat(cs.paddingLeft) || 0 };
   return insets;
 }
-window.addEventListener('resize', () => { insets = null; });
-window.addEventListener('orientationchange', () => { insets = null; });
+
+export function installSafeInsets(): void {
+  window.addEventListener('resize', () => { insets = null; });
+  window.addEventListener('orientationchange', () => { insets = null; });
+}
 
 // Park a floating panel at (left, top) in VIEWPORT coords, slid back inside the window if it would
 // hang off an edge — the last step EVERY floating thing in the app takes, and it was written out

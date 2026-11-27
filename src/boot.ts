@@ -320,10 +320,6 @@ export function hideStart(): void {
   startScreen.inert = true;
 }
 
-byId('tabDevice').onclick = () => selectTab('device');
-byId('tabFolder').onclick = () => selectTab('folder');
-byId('tabNote').onclick = () => selectTab('note');
-// the "+" action: a new on-device map, the FSA folder picker or the note picker — per the active tab
 // A fresh on-device map, opened, with its name selected in the sidebar to type over; Enter goes to the board.
 export async function newDeviceMap(): Promise<void> {
   showStart();
@@ -334,25 +330,34 @@ export async function newDeviceMap(): Promise<void> {
   renderMapList();
 }
 
-byId('newBtn').onclick = async () => {
-  if (activeTab === 'device'){
-    await newDeviceMap();
-  } else if (activeTab === 'note') {
-    await pickNote();
-  } else {
-    await pickFolder();
-  }
-};
-byId('importBtn').onclick = () => openImportPicker();
-byId('startClose').onclick = () => hideStart();
-// clicking the canvas area beside the sidebar closes it
-startScreen.addEventListener('click', e => {
-  if (e.target === startScreen) {
-    hideStart();
-  }
-});
-setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
-byId('appVersion').textContent = `v${__APP_VERSION__}`;
+export function installStartScreen(): void {
+  byId('homeBtn').onclick = showStart;
+  byId('tabDevice').onclick = () => selectTab('device');
+  byId('tabFolder').onclick = () => selectTab('folder');
+  byId('tabNote').onclick = () => selectTab('note');
+
+  // the "+" action: a new on-device map, the FSA folder picker or the note picker — per the active tab
+  byId('newBtn').onclick = async () => {
+    if (activeTab === 'device'){
+      await newDeviceMap();
+    } else if (activeTab === 'note') {
+      await pickNote();
+    } else {
+      await pickFolder();
+    }
+  };
+  byId('importBtn').onclick = () => openImportPicker();
+  byId('startClose').onclick = () => hideStart();
+
+  // clicking the canvas area beside the sidebar closes it
+  startScreen.addEventListener('click', e => {
+    if (e.target === startScreen) {
+      hideStart();
+    }
+  });
+  setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
+  byId('appVersion').textContent = `v${__APP_VERSION__}`;
+}
 
 // ---------- boot: local-first — open straight into the last map, no gate ----------
 // Open the last-used on-device map; else the most recent one; else create a fresh "My map".
