@@ -12,7 +12,7 @@
 // ============================================================
 import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { dirOf } from '../utils/filenames.js';
-import { store } from './persistence.js';
+import { store } from './active-store.js';
 import { commitRel } from '../view/layout.js';
 import { flattenJunctions } from '../utils/edge-graph.js';
 import { saveFailed, saveSucceeded, holdWrites, releaseWrites, writesHeld } from './save-alert.js';

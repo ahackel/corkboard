@@ -6,7 +6,7 @@
 // Opening needs write access, and asking for it needs a click, which a drop from the OS may not count as:
 // then the pill stays as a button naming the file, and its click finishes the job.
 import { state, setStatus } from '../core/state.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { byId } from '../utils/dom.js';
 import { DOCUMENT_SVG, FOLDER_SVG } from '../view/icons.js';
 import { openDropped } from '../boot.js';

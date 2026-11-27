@@ -26,7 +26,7 @@ import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { selectNode, setSelectionSet, toggleSel } from './selection.js';
 import { afterReading } from '../data/lazy.js';
-import { arrangeSections } from '../data/load.js';
+import { arrangeSections } from '../data/arrange.js';
 import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
 import type { FanInsert } from '../view/pile.js';
@@ -872,7 +872,7 @@ function chuteAt(cx: number, cy: number, sub: Set<string>): (Chute & { el: HTMLE
   return null;
 }
 // File the dragged roots into a chute's section (or the top level). Into a folded section they join its
-// cards in a column of their own beside them (load.ts arrangeSections, the inbox's rule) — reading its
+// cards in a column of their own beside them (arrange.ts arrangeSections, the inbox's rule) — reading its
 // folder first if it was never read; out through a crumb they land in a column right of the section they
 // came out of. Either way they leave the canvas you're looking at, so the toast says where they went.
 function fileAway(roots: string[], chute: Chute): void {

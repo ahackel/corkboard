@@ -8,7 +8,7 @@ import { setCollapsedSelection, toggleCollapseSelection, foldScope, expandAll } 
 import { selectedIds, selectAll, selectNode, taggableSelection } from './selection.js';
 import { focusOrFit } from '../nav/focus.js';
 import { openSearch, searchActive, closeSearch } from './search.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { openPalette, type Command, setPaletteSource, paletteOpen, closePalette } from './palette.js';
 import { undo, redo } from './history.js';
 import { clearEdgeSelection, deleteSelectedEdge, connectSelection } from './edge-tools.js';

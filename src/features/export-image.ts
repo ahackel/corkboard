@@ -8,7 +8,7 @@
 // where a JPEG can't be and the page is white paper.
 import { state, world, stage, setStatus, type MindNode } from '../core/state.js';
 import { ancestors, isHidden } from '../utils/model.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { downloadBlob } from '../utils/download.js';
 import { safeName } from '../utils/filenames.js';
 import { jpegPdf } from '../utils/pdf.js';

@@ -5,7 +5,7 @@ import { isLockedEffective } from '../utils/model.js';
 import { afterReading } from '../data/lazy.js';
 import { popScopeFor, exitScope } from '../nav/sections.js';
 import { focusNode } from '../nav/focus.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { scopeActive } from '../nav/scope.js';
 import { snapPt, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { centredAt, createNode } from './crud.js';

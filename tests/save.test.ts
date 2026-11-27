@@ -4,7 +4,8 @@ import './page-shell.js';
 
 const { state } = await import('../src/core/state.js');
 const { useStore } = await import('../src/data/persistence.js');
-const { flushSave, noteNamed, resetSaveState } = await import('../src/data/save.js');
+const { flushSave, resetSaveState } = await import('../src/data/save.js');
+const { noteNamed } = await import('../src/data/note-names.js');
 const { nodeFrom, fakeStore } = await import('./helpers.js');
 
 // A folder the way macOS and Windows see one: `Notes.md` and `notes.md` are the same file.

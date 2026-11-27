@@ -16,7 +16,7 @@ import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from '.
 import { MOTION } from './utils/motion.js';
 import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary, withKids } from './utils/model.js';
 import { state, world, dragLayer, isStack, isImageCard } from './core/state.js';
-import { setupGrid } from './view/grid.js';
+import { setupGrid, onGridChanged } from './view/grid.js';
 import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
 import { screenToWorld, labelScale, onViewApplied } from './view/camera.js';
 import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionName } from './view/layout.js';
@@ -45,12 +45,13 @@ import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { readOpenUnread } from './data/lazy.js';
+import { scheduleSaveBoard } from './data/board.js';
 import { installDataHooks } from './data/hooks.js';
 import { clearHistory, historyRefs } from './features/history.js';
 import { paintMapCrumb } from './features/breadcrumbs.js';
 import { selectNode } from './features/selection.js';
 import { updateDocumentTitle, scheduleUrlSync } from './nav/url-state.js';
-import { store } from './data/persistence.js';
+import { store } from './data/active-store.js';
 import { showStart, hideStart, boot } from './boot.js';
 import { isScopeRoot, canOpen } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
@@ -75,6 +76,7 @@ setupGrid();
 setupCanvasColor();
 
 onViewApplied(scheduleUrlSync);
+onGridChanged(scheduleSaveBoard);
 
 // What data/ calls back up into the UI (data/hooks.ts). Function declarations only: hoisted, so no TDZ.
 installDataHooks({

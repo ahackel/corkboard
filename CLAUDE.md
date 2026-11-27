@@ -32,8 +32,8 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`, …
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`.
-- `data/` — `persistence.ts` (the active `store`, `useStore`, switching maps), `load.ts` (`loadFromDir`/`readFolder`), `save.ts`
-  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts` (the banner; `writesHeld`), `save-flag.ts` (`data-saving`, for e2e), `images.ts` (the picture cache), `hooks.ts` ("`data/` never imports the UI").
+- `data/` (acyclic, see "`data/` never imports the UI") — `active-store.ts` (the open `store`), `persistence.ts` (`useStore`, switching maps), `load.ts` (`loadFromDir`), `read.ts` (listing → nodes, `readFolder`), `arrange.ts`, `note-names.ts` (`keepsName`), `save.ts`
+  (debounced `scheduleSave`/`flushSave`), `migrate.ts`, `zip-io.ts`, `board.ts` (the ONE sidecar), `lazy.ts` (folded sections), `save-alert.ts` (the banner; `writesHeld`), `save-flag.ts` (`data-saving`, for e2e), `images.ts` (the picture cache), `hooks.ts` (the UI it calls).
 - `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
   grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.

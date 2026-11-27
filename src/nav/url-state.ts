@@ -21,7 +21,8 @@
 // ============================================================
 import { revealPath } from '../data/lazy.js';
 import { state, setStatus } from '../core/state.js';
-import { store, currentMap, openMapRef } from '../data/persistence.js';
+import { openMapRef } from '../data/persistence.js';
+import { store, currentMap } from '../data/active-store.js';
 import { readMaps, type MapKind } from '../store/index.js';
 import { scopeRootFile } from './scope.js';
 import { applyView } from '../view/camera.js';

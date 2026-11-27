@@ -17,7 +17,7 @@
 // simply overflow it. Same behaviour as Explorer's and Notion's paths.
 import { state } from '../core/state.js';
 import { nodeLabel } from '../utils/model.js';
-import { store } from '../data/persistence.js';
+import { store } from '../data/active-store.js';
 import { scope, scopeActive } from '../nav/scope.js';
 import { openMenu, type MenuEntry } from './context-menu.js';
 import { esc } from '../utils/markdown.js';

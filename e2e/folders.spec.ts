@@ -181,7 +181,7 @@ test('a folded section is a folder and its name; what it holds is in its tooltip
 });
 
 // Opening a folder renames nothing in it: a file keeps the name it came with until the text that names
-// it is edited (data/save.ts keepsName).
+// it is edited (data/note-names.ts keepsName).
 test('a note keeps its filename until its first line is edited, then is named after it', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

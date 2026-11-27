@@ -2,7 +2,7 @@
 import { state, type MindNode } from '../core/state.js';
 import { childrenOf, ancestors, parentOf } from '../utils/model.js';
 import { makeEdge } from './board.js';
-import { arrangeSections } from './load.js';
+import { arrangeSections } from './arrange.js';
 
 // ---------- cards that hold cards become sections (runs on every load; a no-op once done) ----------
 // A card used to OUTLINE its children inside its own box — rows, indented by depth, with checklist
