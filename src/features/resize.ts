@@ -1,5 +1,5 @@
 // ---------- resize: the handles on a selected card or section, and dragging them ----------
-import { NODE_W, imageLook, IMAGE_FOLD, IMAGE_W, IMAGE_H, isBoxNode, nodeW, nodeH, gridSnap } from '../view/geometry.js';
+import { NODE_W, MIN_SECTION_H, imageLook, IMAGE_FOLD, IMAGE_W, IMAGE_H, isBoxNode, nodeW, nodeH, gridSnap } from '../view/geometry.js';
 import { type MindNode, state } from '../core/state.js';
 import { isLockedEffective, subtreeIds } from '../utils/model.js';
 import { ui } from '../core/ui-state.js';
@@ -14,8 +14,6 @@ import { syncSelFrame, memberEdgeResize } from './sel-frame.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
 
-// a section is never narrower than a normal card
-export const MIN_SECTION_W = NODE_W, MIN_SECTION_H = 120;
 // An image card's floor is the ICON it becomes: drag either axis to IMAGE_FOLD and the card folds
 // (startNodeResize below), so there is no smaller expanded size to clamp at.
 // A width-only kind can only ever get WIDER than the width it has by default — the whole point is

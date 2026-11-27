@@ -14,12 +14,10 @@ import { state, type MindNode } from '../core/state.js';
 import { store } from './persistence.js';
 import { rememberGeom, parkEdges } from './board.js';
 import { ancestorDepth } from '../view/layout.js';
-import { remeasure } from '../main.js';
+import { dataHooks } from './hooks.js';
 import { isHidden, nodeByFile, subtreeIds, ancestors } from '../utils/model.js';
 import { bodyImages } from '../utils/markdown.js';
-import { historyRefs } from '../features/history.js';
-import { searchHolds } from '../features/search.js';
-import { forgetImages } from '../features/images.js';
+import { forgetImages } from './images.js';
 import { scope } from '../nav/scope.js';
 import { dirOf } from '../utils/filenames.js';
 import { readFolder } from './load.js';
@@ -118,14 +116,14 @@ export function readOpenUnread(): void {
       }
     }
     finally { readingOpen = false; }
-    remeasure();
+    dataHooks.remeasure();
   })();
 }
 
 // ---------- letting go ----------
 // Called after every successful save. Demo mode never lets go: its notes live ONLY in memory.
 export function releaseFolded(): void {
-  if (!store.isOpen || searchHolds()) {
+  if (!store.isOpen || dataHooks.searchHolds()) {
     return;
   }
   let held: Set<string> | null = null;   // built lazily: most saves have nothing folded to let go of
@@ -139,7 +137,7 @@ export function releaseFolded(): void {
     if (!kids.length) {
       continue;
     }
-    held ??= historyRefs();
+    held ??= dataHooks.historyRefs();
     const h = held;
     const busy = (n: MindNode): boolean => n.dirty || !n.file || h.has(n.id) || state.sel.has(n.id)
       || scoped.has(n.id);

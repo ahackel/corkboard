@@ -1364,6 +1364,15 @@ world geometry that guides, drops and lines measure, and a visual scale would co
 
 ## State and naming
 
+**`data/` never imports the UI.** Reading and writing notes (`data/`) sits below the canvas: `features/`,
+`nav/` and `main.ts` import it, never the reverse. Where a load or a save has to touch the UI — paint what it
+read, measure it, clear the undo history, ask whether a search is holding folded notes, show the map's name,
+restore the selection after a reload — it calls `dataHooks` (`data/hooks.ts`), which `main.ts` fills in
+before `boot()`; until then each hook does nothing, which is all a test of `data/` alone needs. The same goes
+one layer down: `view/` takes what it needs from a feature by being told (`onViewApplied` in `view/camera.ts`,
+`useCanvasSurface` in `view/free-edges.ts`), not by importing it. Without this, every module that touched
+storage sat inside one import cycle with `main.ts` and half of `features/`. Add a hook rather than an import.
+
 **An edit RUNS through `mutate()` (`features/mutate.ts`).** A one-shot edit — a command, a menu or bar
 button, a paste — is `mutate(ids, fn, { reflow, status?, edges?, canvas? })`, and the runner applies the rules
 each call site used to spell out: it is ONE undo

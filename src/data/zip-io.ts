@@ -5,14 +5,14 @@ import { setStatus, state } from '../core/state.js';
 import { createDeviceMap, resolveOnDeviceStore } from '../store/index.js';
 import { switchToDeviceMap, store } from './persistence.js';
 import { BOARD_FILE, boardJSON } from './board.js';
-import { hideStart } from '../boot.js';
+import { dataHooks } from './hooks.js';
 import { readAll } from './lazy.js';
 import { commitRel } from '../view/layout.js';
 import { slugStem, safeName, dirOf } from '../utils/filenames.js';
 import { serializeMd } from '../utils/frontmatter.js';
 import { bodyImages } from '../utils/markdown.js';
 import { downloadBlob } from '../utils/download.js';
-import { readImage } from '../features/images.js';
+import { readImage } from './images.js';
 import { loadFromDir } from './load.js';
 
 const importInput = document.createElement('input');
@@ -89,7 +89,7 @@ async function importFiles(files: File[]): Promise<void> {
   if (board?.text != null) {
     await put(BOARD_FILE, board.text);
   }
-  hideStart();
+  dataHooks.leaveHome();
   await loadFromDir();
   setStatus(`Imported ${md.length} note${md.length===1?'':'s'}${img.length ? ` + ${img.length} image${img.length===1?'':'s'}` : ''}`
     + (skipped ? ` — ${skipped} file${skipped === 1 ? '' : 's'} could not be written.` : '.'));

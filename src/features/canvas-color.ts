@@ -19,7 +19,7 @@ import { nodeLabel, isLockedEffective, ancestors } from '../utils/model.js';
 import { mutate } from './mutate.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
-import { paintFreeEdges } from '../view/free-edges.js';
+import { paintFreeEdges, useCanvasSurface } from '../view/free-edges.js';
 import { paintAll, effectiveColor } from '../main.js';
 import { placePopover, placeInViewport, closeOnOutside } from '../utils/dom.js';
 import { renderGridControls } from '../view/grid.js';
@@ -216,6 +216,7 @@ function toggle(): void {
 }
 
 export function setupCanvasColor(): void {
+  useCanvasSurface(canvasSurface);
   if (!btn || !pop) {
     return;
   }

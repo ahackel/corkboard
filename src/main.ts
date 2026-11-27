@@ -18,7 +18,7 @@ import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummar
 import { state, world, dragLayer, isStack, isImageCard } from './core/state.js';
 import { setupGrid } from './view/grid.js';
 import { mountIcons, LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
-import { screenToWorld, labelScale } from './view/camera.js';
+import { screenToWorld, labelScale, onViewApplied } from './view/camera.js';
 import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionName } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import './features/gestures.js';   // registers the canvas pan/zoom/marquee gesture listeners
@@ -34,7 +34,7 @@ import { startInlineEdit, startBodyEdit, endTitleEdit, onTitleInput, onTitleKeyd
 import { addCardInside } from './features/crud.js';
 import { bindNodeDrag } from './features/drag.js';   // also registers the Alt/Shift drag-modifier listeners
 import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
-import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
+import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag, searchHolds } from './features/search.js';
 import { syncFloatBar } from './features/float-bar.js';   // also registers the float bar's own listeners
 import { setupCanvasColor } from './features/canvas-color.js';   // canvas colour button — imported HERE, see the note in setupCanvasColor's call below
 import { bindCardFileDrag } from './features/clipboard.js';
@@ -45,8 +45,13 @@ import { mutate } from './features/mutate.js';
 import { hydrateImages } from './features/images.js';
 import { openImageViewer } from './features/image-viewer.js';
 import { readOpenUnread } from './data/lazy.js';
+import { installDataHooks } from './data/hooks.js';
+import { clearHistory, historyRefs } from './features/history.js';
+import { paintMapCrumb } from './features/breadcrumbs.js';
+import { selectNode } from './features/selection.js';
+import { updateDocumentTitle, scheduleUrlSync } from './nav/url-state.js';
 import { store } from './data/persistence.js';
-import { showStart, boot } from './boot.js';
+import { showStart, hideStart, boot } from './boot.js';
 import { isScopeRoot, canOpen } from './nav/scope.js';
 import type { MindNode } from './core/state.js';
 import { installPeek, peekCard } from './features/peek.js';
@@ -68,6 +73,26 @@ setupGrid();
 // own body is still evaluating, so main's top-level consts below are still in their temporal dead
 // zone; touching one from a feature's setup is a TDZ crash that takes the whole boot with it.
 setupCanvasColor();
+
+onViewApplied(scheduleUrlSync);
+
+// What data/ calls back up into the UI (data/hooks.ts). Function declarations only: hoisted, so no TDZ.
+installDataHooks({
+  paintNode,
+  remeasure,
+  forgetHistory: clearHistory,
+  historyRefs,
+  searchHolds,
+  showMapName() {
+    paintMapCrumb();
+    updateDocumentTitle();
+  },
+  leaveHome: hideStart,
+  reloaded(selId, arrived) {
+    selectNode(selId);
+    flashArrived(arrived);
+  },
+});
 
 // ---------- rendering ----------
 function nodeEl(n: MindNode): HTMLElement {

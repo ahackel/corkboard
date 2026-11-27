@@ -24,7 +24,7 @@ import { nodesOf, outermost, isLockedEffective, subtreeIds, childrenOf, nodeLabe
 import { outlineText, type OutlineItem } from '../utils/outline.js';
 import { esc, mdInline, renderBodyHTML } from '../utils/markdown.js';
 import { portableHtml } from '../utils/rich-html.js';
-import { portableImageUrl } from './images.js';
+import { portableImageUrl } from '../data/images.js';
 import { readJSON, writeJSON } from '../utils/local-json.js';
 import { detachParentId } from '../nav/scope.js';
 import { holderOf, isSection } from '../view/layout.js';

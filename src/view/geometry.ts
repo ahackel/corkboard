@@ -9,6 +9,9 @@ import { isSection } from './layout.js';
 import { pileW } from './pile.js';
 
 export const NODE_W = 200;
+
+// a section is never narrower than a normal card
+export const MIN_SECTION_W = NODE_W, MIN_SECTION_H = 120;
 // world-px grid dragged positions AND section/image-card sizes snap to — tracks the visible grid's
 // own cell size (state.gridSize, view/grid.ts); 0 (grid off) disables snapping rather than
 // collapsing every position to the origin.

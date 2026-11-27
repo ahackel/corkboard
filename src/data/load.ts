@@ -1,6 +1,6 @@
 // ---------- reading notes into nodes ----------
 import { type MindNode, isBoxType, state, world, setStatus } from '../core/state.js';
-import { NODE_W, nodeW, SECTION_BORDER, nodeH, snapPt } from '../view/geometry.js';
+import { NODE_W, MIN_SECTION_W, nodeW, SECTION_BORDER, nodeH, snapPt } from '../view/geometry.js';
 import { parseMd, fileStem } from '../utils/frontmatter.js';
 import { soleImage } from '../utils/markdown.js';
 import { isSectionNote, parentFileOf, dirOf, SECTION_NOTE, slugStem, pathKey } from '../utils/filenames.js';
@@ -10,17 +10,15 @@ import { parentOf, childrenOf, ancestors } from '../utils/model.js';
 import { unreadSectionHolding } from './lazy.js';
 import { type FoldTest } from '../store/tree.js';
 import { scope, resolveScopeAfterLoad } from '../nav/scope.js';
-import { clearHistory } from '../features/history.js';
+import { dataHooks } from './hooks.js';
 import { resetSaveState, scheduleSave, noteNamed } from './save.js';
-import { resetImageCache, knowAssets } from '../features/images.js';
+import { resetImageCache, knowAssets } from './images.js';
 import { refreshGrid } from '../view/grid.js';
 import { store, updateMapTitle } from './persistence.js';
 import { flattenLegacyBranches, foldCardsIntoSections } from './migrate.js';
-import { remeasure, paintNode } from '../main.js';
 import { fit } from '../view/camera.js';
 import { ancestorDepth, orderedKids, sectionLabelH, moveSubtreeTo } from '../view/layout.js';
 import { SPACING } from '../utils/guides.js';
-import { MIN_SECTION_W } from '../features/resize.js';
 
 // Shared by the load of the whole map and the read of ONE folded section's folder (readFolder, below):
 // both turn listed notes into nodes, take each node's parent off its FOLDER, and settle positions.
@@ -216,7 +214,7 @@ export const foreignDirs = new Set<string>();
 const scopeFiles = (): string[] => scope.stack.map(l => l.file).filter((f): f is string => !!f);
 
 export async function loadFromDir({ keepView = false }: { keepView?: boolean } = {}): Promise<void> {
-  clearHistory();   // ids are minted fresh per load, so no snapshot survives a (re)load / map switch
+  dataHooks.forgetHistory();   // ids are minted fresh per load, so no snapshot survives a (re)load / map switch
   // …including the container wrappers, which carry no data-id: a section's clipping wrapper
   // hangs off the NODE object (sectionContentEl), so once state.nodes is
   // cleared nothing can reach the old ones to remove them and they'd pile up in #world on every load.
@@ -256,7 +254,7 @@ export async function loadFromDir({ keepView = false }: { keepView?: boolean } =
   // reload that happens while you're inside a section lays out scoped straight away — no flash of the
   // whole map (nav/scope.ts).
   resolveScopeAfterLoad();
-  remeasure();   // paint so every card has a real measured height, settle, and paint again
+  dataHooks.remeasure();   // paint so every card has a real measured height, settle, and paint again
   if (!keepView) {
     fit();
   }
@@ -314,7 +312,7 @@ async function readFolderNow(f: MindNode, deep: boolean): Promise<void> {
   // Paint what was read, so the arrangement below can measure it (it is hidden under its folded section
   // anyway until the caller unfolds that).
   for (const n of added) {
-    paintNode(n);
+    dataHooks.paintNode(n);
   }
   arrangeSections(unplacedSections([f, ...added], seeds), seeds.unplaced);
 }
@@ -346,7 +344,7 @@ export function arrangeSections(sections: MindNode[], fresh?: Set<string>): void
   }
   const keepScope = scope.rootId; scope.rootId = null;
   for (const n of state.nodes.values()) {
-    paintNode(n);
+    dataHooks.paintNode(n);
   }
   for (const f of sections.sort((a, b) => ancestorDepth(b) - ancestorDepth(a))) {
     // A section that was already placed (an Inbox you made) is never resized: what arrives in it stacks
@@ -366,7 +364,7 @@ export function arrangeSections(sections: MindNode[], fresh?: Set<string>): void
       const end = snapPt({ x: x + w + SPACING + SECTION_BORDER, y: y + SECTION_BORDER });
       f.w = Math.max(MIN_SECTION_W, end.x - f.x);
       f.h = end.y - f.y;
-      paintNode(f);
+      dataHooks.paintNode(f);
     }
   }
   scope.rootId = keepScope;

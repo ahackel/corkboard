@@ -23,7 +23,7 @@ import { canOpen, canEnter } from '../nav/scope.js';
 import { labelEl, animateLayout } from '../main.js';
 import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets, keys } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, SECTION_W, SECTION_H } from '../view/geometry.js';
-import { MIN_SECTION_W, MIN_SECTION_H } from './resize.js';
+import { MIN_SECTION_W, MIN_SECTION_H } from '../view/geometry.js';
 import { toggleCollapse, toggleCollapseSelection } from './fold.js';
 import { openSection } from '../nav/sections.js';
 import { LOCK_BADGE_SVG, ICON_LOCK_OPEN } from '../view/icons.js';

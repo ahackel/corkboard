@@ -19,9 +19,8 @@ import { ui, type Pt } from '../core/ui-state.js';
 import { screenToWorld } from './camera.js';
 import { inkFor } from '../utils/ink.js';
 import { esc } from '../utils/markdown.js';
-import { colorFill } from './color.js';
+import { colorFill, THEME_BG } from './color.js';
 import { nodeW, nodeH } from './geometry.js';
-import { canvasSurface } from '../features/canvas-color.js';
 import { centre, rimPoint, polyline, routeFor, facePoint, OPPOSITE, type Rect, type Geometry } from '../utils/edge-route.js';
 
 // Width of the invisible stroke that takes the clicks. Wider than the visible line because a thin
@@ -200,6 +199,14 @@ function linkEdges(n: MindNode): string {
          + endCap('arrow', s.b, s.tipTan, LINK_INK) + capDot(s.a, LINK_INK);
   }
   return out;
+}
+
+// The fill the canvas wears under the lines. Which colour that is depends on the open section and the
+// map (features/canvas-color.ts, which sets this up); the theme's own until it does.
+let canvasSurface: () => string = () => THEME_BG;
+
+export function useCanvasSurface(surface: () => string): void {
+  canvasSurface = surface;
 }
 
 export function paintFreeEdges(): void {

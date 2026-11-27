@@ -4,7 +4,6 @@
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { NARROW_MQ } from '../core/ui-state.js';
-import { scheduleUrlSync } from '../nav/url-state.js';
 import { paintGrid } from './grid.js';
 import { byId } from '../utils/dom.js';
 import { clamp } from '../utils/num.js';
@@ -77,13 +76,20 @@ function applyLabelScale(): void {
     }
   }
 }
+// Told after every change of view; the URL keeps the camera in it (nav/url-state.ts, wired in main.ts).
+let viewApplied: () => void = () => {};
+
+export function onViewApplied(listener: () => void): void {
+  viewApplied = listener;
+}
+
 export function applyView(): void {
   world.style.transform = `translate(${snapPx(state.view.x)}px,${snapPx(state.view.y)}px) scale(${state.view.k})`;
   document.body.classList.toggle('zoom-far', state.view.k < FAR_ZOOM);
   applyLabelScale();
   refreshRaster();
   paintGrid();
-  scheduleUrlSync();
+  viewApplied();
 }
 // Smoothly glide the view to (tx,ty) instead of snapping. Any direct pan/zoom cancels it
 // (cancelViewAnim) so the animation never fights the user's own input.

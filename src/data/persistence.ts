@@ -5,11 +5,8 @@
 // ============================================================
 import { state } from '../core/state.js';
 import { opfsStore, fsaStore, noteStore, resolveOnDeviceStore, setLastMap, touchMap, type Store, type MapKind, type MapRef } from '../store/index.js';
-import { flashArrived } from '../main.js';
-import { updateDocumentTitle } from '../nav/url-state.js';
+import { dataHooks } from './hooks.js';
 import { isTypingInField, inPlaceEditActive } from '../core/ui-state.js';
-import { paintMapCrumb } from '../features/breadcrumbs.js';
-import { selectNode } from '../features/selection.js';
 import { settleSave, hasUnsavedChanges } from './save.js';
 import { loadFromDir } from './load.js';
 import { nodeByFile } from '../utils/model.js';
@@ -87,8 +84,7 @@ export async function loadNote(id: string): Promise<void> {
 
 // Show the open map's name as the path's first folder (:empty hides it until loaded) + the tab title.
 export function updateMapTitle(): void {
-  paintMapCrumb();
-  updateDocumentTitle();
+  dataHooks.showMapName();
 }
 // ---------- reload on focus ----------
 let reloading = false;
@@ -152,8 +148,7 @@ async function reloadFromDisk(): Promise<void> {
       }
     }
     await loadFromDir({ keepView:true });
-    selectNode((selBefore && nodeByFile(selBefore)?.id) || null);
-    flashArrived([...state.nodes.values()]
+    dataHooks.reloaded((selBefore && nodeByFile(selBefore)?.id) || null, [...state.nodes.values()]
       .filter(n => n.file && (!known.has(n.file) || (n.lazy ?? 0) > (unread.get(n.file) ?? n.lazy ?? 0)))
       .map(n => n.id));
   } finally {
