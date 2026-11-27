@@ -62,7 +62,7 @@ export function setTagOnNodes(ids: string[], tag: string, on: boolean): void {
   retag(ids.map(id => ({ id, tag, on })));
 }
 
-// ---- a card's chips (main.ts paintNode calls this after rebuilding the row). Clicking searches by the
+// ---- a card's chips (render.ts paintNode calls this after rebuilding the row). Clicking searches by the
 // tag — allowed on a locked card, since the search changes nothing on disk; a drag
 // moves or removes it (features/tag-drag.ts), which a click that went nowhere doesn't. ----
 export function bindCardTags(rowEl: HTMLElement, cardId: string): void {

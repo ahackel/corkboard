@@ -1,5 +1,5 @@
 // ---------- full-screen image viewer ----------
-// Opened by the magnifier button shown over each image on a selected card (see main.ts nodeEl /
+// Opened by the magnifier button shown over each image on a selected card (see render.ts nodeEl /
 // utils/markdown.ts imgTag). Shows the already-resolved image (its blob/remote URL) centred on a
 // dark backdrop; closes on the × button, Escape, or a click on the backdrop outside the image.
 //
@@ -66,7 +66,7 @@ function build(): void {
 // Space would fall through to the hand-pan/new-card gesture.
 // Space is split across the two events on purpose: the KEYDOWN is swallowed (so features/commands.ts can't latch
 // `spaceHeld` and leave the canvas in hand-pan mode) and the KEYUP does the closing — which also keeps
-// main.ts's own Space keyup, the one that would re-open the viewer on the still-selected card, from
+// features/commands.ts's own Space keyup, the one that would re-open the viewer on the still-selected card, from
 // ever running.
 function onKey(e: KeyboardEvent): void {
   if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); return; }

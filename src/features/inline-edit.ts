@@ -19,10 +19,12 @@ import { cardMarkdown, setNoteText, caretIn, firstTextLine } from '../utils/fron
 import { linkPaste } from '../utils/markdown.js';
 import { highlightMarkdown } from '../utils/md-highlight.js';
 import { htmlToMarkdown } from '../utils/html-md.js';
-import { listEnter, listBackspace, renumber, renumbered, pasteTable, sourceOffset, tableEnter, tableTab, headingSection,
-         startCompletion, EDIT_COMMANDS, editCommandFor, type TextEdit } from '../utils/md-edit.js';
+import { listEnter, listBackspace, renumber, renumbered, sourceOffset, headingSection,
+         startCompletion, EDIT_COMMANDS, editCommandFor } from '../utils/md-edit.js';
+import { pasteTable, tableEnter, tableTab } from '../utils/md-table.js';
+import type { TextEdit } from '../utils/text-edit.js';
 import { onBodyPaste } from './attachments.js';
-import { relayout, remeasure, paintNode } from '../main.js';
+import { relayout, remeasure, paintNode } from '../render.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { heightIsDeclared } from '../view/geometry.js';
 import { sectionName } from '../view/layout.js';
@@ -128,7 +130,7 @@ function followCaret(ta: HTMLTextAreaElement): void {
   });
 }
 
-// A note longer than its card scrolls inside it while edited (main.ts paintNode): keep the caret's line in that box.
+// A note longer than its card scrolls inside it while edited (render.ts paintNode): keep the caret's line in that box.
 function scrollCaretIntoCard(ta: HTMLTextAreaElement): void {
   const box = ta.parentElement!;
   if (box.scrollHeight <= box.clientHeight) {
@@ -254,7 +256,7 @@ function selectTitle(titleEl: HTMLElement, at: number | null): void {
 }
 
 // ALL of the open editor's text selected: the double-click (or double-tap) whose first click opened it
-// (main.ts editOnClick), as FigJam's double-click on a sticky does.
+// (features/activate.ts editOnClick), as FigJam's double-click on a sticky does.
 export function selectAllInEditor(): void {
   if (ui.bodyEdit) {
     const ta = ui.bodyEdit.ta;
@@ -292,7 +294,7 @@ export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
 // Commit (or cancel) a section rename. The text is the NAME, written back as the note's `# ` heading — and an
-// EMPTY commit is accepted: a section may have no name, in which case it shows no label at all (main.ts
+// EMPTY commit is accepted: a section may have no name, in which case it shows no label at all (view/layout.ts
 // sectionLabelled), like an untitled FigJam section. The label hangs outside the box, so neither moves
 // the box. The toolbar's title button (features/float-bar.ts) brings a label back.
 // Nothing restores the element's text here: `ui.titleEdit` is nulled first, which lets the paintAll below

@@ -4,7 +4,7 @@ import { stageSize, cancelViewAnim, jumpViewTo } from '../view/camera.js';
 import { scope, type ScopeBack, type ScopeLevel, openPathTo, isScopeRoot, outOfScope, canOpen, scopeActive, scopeRootNode } from './scope.js';
 import { nodeLabel, nodeByFile } from '../utils/model.js';
 import { endInPlaceEdit } from '../features/inline-edit.js';
-import { remeasure } from '../main.js';
+import { remeasure } from '../render.js';
 import { syncUrl } from './url-state.js';
 import { afterReading } from '../data/lazy.js';
 import { renderCrumbs } from '../features/breadcrumbs.js';

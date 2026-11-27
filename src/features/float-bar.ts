@@ -20,7 +20,8 @@ import { canTidy, tidyMenuEntries, canTidySection, tidySection } from './tidy.js
 import { openMenu, copyFilePath, type MenuEntry } from './context-menu.js';
 import { childrenOf, isLockedEffective, subtreeHasLocked, nodesOf } from '../utils/model.js';
 import { canOpen, canEnter } from '../nav/scope.js';
-import { labelEl, animateLayout } from '../main.js';
+import { labelEl } from '../render.js';
+import { animateLayout } from '../layout-anim.js';
 import { byId, placeInViewport, placePopover, closeOnOutside, safeInsets, keys } from '../utils/dom.js';
 import { canFold, canToggleFold, gridSnap, SECTION_W, SECTION_H } from '../view/geometry.js';
 import { MIN_SECTION_W, MIN_SECTION_H } from '../view/geometry.js';
@@ -108,7 +109,7 @@ export function autoSizeSelection(): void {
   if (!ids.length) {
     return;
   }
-  // animated, like a fold: the box glides to its new size (main.ts animateLayout)
+  // animated, like a fold: the box glides to its new size (layout-anim.ts animateLayout)
   mutate(ids, () => animateLayout(() => {
     for (const id of ids){
       const n = state.nodes.get(id);
@@ -229,7 +230,7 @@ function markColorTrigger(): void {
 // Replaces the old Lock/Unlock context-menu entry. A locked card can't be moved, folded, renamed,
 // re-coloured or deleted (isLockedEffective), so every OTHER control in the bar would be
 // a no-op — hence `.locked-sel`, which collapses the bar down to this one button (styles.css). A
-// mixed selection counts as locked — anyLocked (main.ts) owns that rule, shared with the L shortcut.
+// mixed selection counts as locked — anyLocked (features/lock.ts) owns that rule, shared with the L shortcut.
 function markLock(): void {
   const locked = anyLocked(state.sel);
   bar.classList.toggle('locked-sel', locked);
@@ -333,7 +334,7 @@ function anchorNode(): MindNode | undefined {
   return n?.el ? n : undefined;
 }
 // A node's TITLE: the bar stays clear of it (a section's label hangs above its box), but centres on the box.
-// labelEl (main.ts) owns WHICH element that is, so the folded case needs no second spelling here; an image
+// labelEl (render.ts) owns WHICH element that is, so the folded case needs no second spelling here; an image
 // card renders its title row empty, hence the width guard falling back to the whole box.
 function labelRect(n: MindNode): DOMRect {
   const el = n.el!;

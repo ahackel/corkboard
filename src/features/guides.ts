@@ -1,5 +1,5 @@
 // Smart guides while dragging: the pull (utils/guides.ts snapBox) and the pink lines that show it.
-// drag.ts asks `guidePull` for the correction on every move, a resize (main.ts) asks `guideResize`,
+// drag.ts asks `guidePull` for the correction on every move, a resize (features/resize.ts) asks `guideResize`,
 // and both call `hideGuides` when the gesture ends. The lines live in #world, so they pan and zoom with the cards; their thickness is divided by
 // the zoom so they stay one screen pixel.
 import { state, world, type MindNode } from '../core/state.js';

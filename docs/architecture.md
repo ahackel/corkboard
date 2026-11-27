@@ -479,7 +479,7 @@ dragged size and nothing else — never a value a layout pass computed. What the
   `canFit` says which selections offer it.
 
 **A table wraps between WORDS, and is SQUEEZED only when even that won't fit** (styles.css, `squeezeTables`
-in `main.ts`). Cells wrap with `overflow-wrap:break-word`, so a column is never narrower than its longest
+in `render.ts`). Cells wrap with `overflow-wrap:break-word`, so a column is never narrower than its longest
 word: with `anywhere` on every cell, the short columns gave way first and `A1` / `Cost` broke between letters.
 But then a narrow card can be narrower than the table's words, which would clip its last columns, so a table
 wider than its box gets `.squeezed` and its cells may break anywhere again. Checked only when a card's note or
@@ -617,7 +617,7 @@ position in a section that was already placed is stacked in a column inside its 
 its cards if need be, and the section keeps its size (`arrangeSections` with `fresh`, `data/persistence.ts`) — the old rule
 arranged a section only when ALL its notes were new, so one new note fell to the top-level grid fallback and
 landed on whatever was there. Placed cards never move (principle 2). (2) `reloadFromDisk` diffs PATHS (ids
-are minted per load) and each folded section's unread count before and after, and `flashArrived` (`main.ts`)
+are minted per load) and each folded section's unread count before and after, and `flashArrived` (`render.ts`)
 pulses what is new — itself, or the outermost folded pill it hides in (`.arrived`, a class paintNode owns).
 (3) The palette's **Inbox** (`goToInbox`) goes to the top-level section whose file is `Inbox/_index.md`
 (any case), reading and unfolding it; with none it makes one, left of the top-level content, at the top
@@ -874,7 +874,7 @@ Web Animations on width/height with the content clipped, a section's content wra
   that walks the canvas sees it. Tapping a folded card's badge (`peekCard`) opens it on any device — the touch
   way in, since touch has no hover. Cards only: a folded section's pill is a count, not a note.
 
-**A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `main.ts`)** — the one plain
+**A plain double-click MAKES OR EDITS; ⌥-double-click OPENS (`activateNode` in `features/activate.ts`)** — the one plain
 double-click that navigates is on a FOLDED section's pill, which goes in the way a folder icon in Finder does;
 otherwise it is one rule in place of a per-kind table. Editing is what the
 gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
@@ -900,13 +900,13 @@ that section (`detachParentId`). Four things hold it together:
   double-click on itself, opening the HOST's editor and sending the rest of the typing into the parent's note.
   On touch it's worse, since each ancestor keeps its OWN tap counter. A container's children are exempt by
   construction — they live in its sibling `.section-content` wrapper, not inside its element.
-- **`NODE_CONTROLS`** (`main.ts`) is the one list of things that act on a SINGLE click — chip, checkboxes,
+- **`NODE_CONTROLS`** (`features/activate.ts`) is the one list of things that act on a SINGLE click — chip, checkboxes,
   links and `#tags`, resize handles `.fh`. Both the `dblclick` handler and the touch double-tap
   counter bail on it, or the second click would fire the button AND open the card.
 - **A folded node is nothing but its chip or pill** (`.node.collapsed .body { display:none }`), so a double-click
   on it never edits — it would open an editor inside a hidden `.body`: a folded card UNFOLDS, a folded section opens.
 
-**A click on the SELECTED node writes on it** (`editOnClick` in `main.ts`) — FigJam's two steps: the first click
+**A click on the SELECTED node writes on it** (`editOnClick` in `features/activate.ts`) — FigJam's two steps: the first click
 selects, a click on what is ALREADY the only selection opens its text with the caret where it landed (a card's
 note, title line included; a section's or stack's name, on its tab only — its interior and rim stay the drag and
 the double-click's). It is decided at the RELEASE from the selection as it stood at the PRESS (`Drag.reclick`),
@@ -949,7 +949,7 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
 - **Every helper is pure text → `{text, start, end}`** (`linkPaste`'s shape) and goes through ONE writer,
   `applyTextEdit`, which replaces only the changed span with `execCommand('insertText')`: assigning
   `ta.value` wipes the textarea's own undo stack, so ⌘Z inside the editor would undo nothing.
-- **In a pipe TABLE, Tab walks the cells and Enter adds rows** (`tableTab`/`tableEnter`, tried before the list
+- **In a pipe TABLE, Tab walks the cells and Enter adds rows** (`utils/md-table.ts` `tableTab`/`tableEnter`, tried before the list
   keys): Tab selects the next cell's text — a ONE-WORD cell's; in a longer one the caret goes to its end, since a
   keystroke must not wipe out a sentence — stepping over the delimiter row, and adds a row past the last cell;
   Enter adds a row under the caret's, an empty LAST row ends the table, and Enter at the end of a lone
@@ -1156,7 +1156,7 @@ been on screen loads once and paging back is free. Two details: the arrows are h
 registered in CAPTURE and stops what it handles, so ←/→ never reach `navArrow` underneath and Escape closes
 the viewer WITHOUT also clearing the canvas selection. **SPACE opens and closes it**: on a lone selected
 image card the picture IS the card, so "look at this properly" is what the key can mean there (`openImageAt`,
-`main.ts`, shared with the magnifier button), and it sits ahead of the new-card branch, which only ever ran
+`features/activate.ts`, shared with the magnifier button), and it sits ahead of the new-card branch, which only ever ran
 with nothing selected. Space is split across the two key events on purpose — the keydown is swallowed so
 `spaceHeld` can't latch the canvas into hand-pan, and the keyup does the closing, which also stops features/commands.ts's
 own Space keyup from re-opening the viewer on the card that is still selected. **Closing lands you on the
@@ -1365,7 +1365,7 @@ world geometry that guides, drops and lines measure, and a visual scale would co
 ## State and naming
 
 **`data/` never imports the UI.** Reading and writing notes (`data/`) sits below the canvas: `features/`,
-`nav/` and `main.ts` import it, never the reverse. Where a load or a save has to touch the UI — paint what it
+`nav/` and the render core import it, never the reverse. Where a load or a save has to touch the UI — paint what it
 read, measure it, clear the undo history, ask whether a search is holding folded notes, show the map's name,
 restore the selection after a reload — it calls `dataHooks` (`data/hooks.ts`), which `main.ts` fills in
 before `boot()`; until then each hook does nothing, which is all a test of `data/` alone needs. The same goes

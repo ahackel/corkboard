@@ -1,6 +1,6 @@
 // Ink: the text colour a card's own fill demands, computed from that fill.
 // Pure — a colour in, a colour out — so nothing here knows which colours the app offers; the
-// palette wiring in main.ts (deriveInk) is the only place that enumerates them, which is what
+// palette wiring in view/color.ts (deriveInk) is the only place that enumerates them, which is what
 // makes an off-palette colour work the same as a palette one.
 //
 // Two fixed inks, deliberately NOT theme-dependent: what a title has to be legible against is the

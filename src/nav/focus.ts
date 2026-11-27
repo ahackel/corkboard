@@ -1,6 +1,7 @@
 // ---------- focus: bring a card (or everything on the canvas) into view ----------
 import { type MindNode, state, setStatus } from '../core/state.js';
-import { layoutSnapshot, relayout, animateReflow } from '../main.js';
+import { layoutSnapshot, animateReflow } from '../layout-anim.js';
+import { relayout } from '../render.js';
 import { ancestors, subtreeIds, resolveWikilink, linkName } from '../utils/model.js';
 import { record } from '../features/history.js';
 import { frameBox } from '../view/camera.js';

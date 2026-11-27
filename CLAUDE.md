@@ -28,7 +28,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `core/state.ts` — the mutable `state` (the MAP: nodes, view, selection, flags) + types + DOM handles.
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch), `paintTick`, and the ONE spelling of "busy" (`canvasMoving`/`isBusy`). Mutate in place, never reassign.
-- `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys and the Format/Edit table menus), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
+- `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys, the Format menu, `EDIT_COMMANDS`), `md-table.ts` (table keys, paste, Edit Table), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
   (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`, …
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`.
@@ -40,8 +40,8 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
   resize, sel-frame (the multi-selection frame), stacks, text-drag, attachments, clipboard, search, guides, float-bar, edge-tools/edge-bar (lines), palette, context-menu, tags, history, …
   `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
-- `boot.ts` — local-first boot onto the last map, the home/storage screen.
-- `main.ts` — entry: calls each module's `install…()` in a deliberate order (NO module wires itself up on import) + render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`).
+- `main.ts` — the entry ONLY: each module's `install…()` in a deliberate order (NO module wires itself up on import), the data hooks, `boot()` (`boot.ts`: local-first boot, the home screen). Nothing imports it.
+- `render.ts` — the render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`/`relayout`/`remeasure`); `layout-anim.ts` the animated relayout; `features/activate.ts` what a click/double-click on a node does.
 
 ## Non-negotiable invariants
 
@@ -69,7 +69,7 @@ Each has a longer "why" in `docs/architecture.md`; read it before changing the c
   (ephemeral) and a STACK not fanned out. Add new terms IN it, never beside it. Nothing writes through it.
 - **A one-shot edit goes through `mutate()`** ("An edit RUNS through mutate"); every mutation ends in `scheduleSave()` (flushed on tab-hide; a failure shows a banner and retries); `store.isOpen === false` (demo mode) and a map from a
   NEWER build (`writesHeld`) make writes no-ops. A save never writes over a file it has not read (`planFreePaths`).
-- **Mutation paths end in `relayout()` or `remeasure()`** (`main.ts`), never a hand-written
+- **Mutation paths end in `relayout()` or `remeasure()`** (`render.ts`), never a hand-written
   `applyLayouts(); paintAll();`. Use `remeasure` whenever a card's own measured height can change: the
   layout pass reads `offsetHeight`, so it needs current DOM (the paint-before-measure rule).
 - **Anything writing a node's `left`/`top` goes through `placeSelf`**, never bare `place()`.

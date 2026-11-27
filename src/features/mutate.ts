@@ -6,7 +6,7 @@
 // with commitStep() at their own boundary — a step there lasts longer than one function call.
 import { setStatus } from '../core/state.js';
 import { record, touchEdges, touchCanvas } from './history.js';
-import { paintAll, relayout, remeasure } from '../main.js';
+import { paintAll, relayout, remeasure } from '../render.js';
 import { scheduleSave } from '../data/save.js';
 
 // What the edit can have changed, cheapest last: a card's measured height (remeasure), positions or

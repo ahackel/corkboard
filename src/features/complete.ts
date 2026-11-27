@@ -7,7 +7,8 @@
 import { state } from '../core/state.js';
 import { nodeLabel, parentOf } from '../utils/model.js';
 import { esc } from '../utils/markdown.js';
-import { completingAt, completeAt, type Completing, type TextEdit } from '../utils/md-edit.js';
+import { completingAt, completeAt, type Completing } from '../utils/md-edit.js';
+import type { TextEdit } from '../utils/text-edit.js';
 import { boardTags } from './tag-picker.js';
 
 interface Option { insert: string; label: string; hint: string }

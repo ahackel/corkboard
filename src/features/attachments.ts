@@ -8,7 +8,7 @@ import { ui, isTypingInField } from '../core/ui-state.js';
 import { store } from '../data/persistence.js';
 import { IMAGE_FILE_RE, IMAGE_URL_RE, imageExtFor } from '../utils/image-types.js';
 import { screenToWorld, worldAtOrCentre } from '../view/camera.js';
-import { relayout } from '../main.js';
+import { relayout } from '../render.js';
 import { createNode, createCards, centredAt } from './crud.js';
 import { splitPastedList } from '../utils/paste-list.js';
 import { splitHeading } from '../utils/frontmatter.js';
@@ -144,7 +144,7 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
 }
 
 // Make one IMAGE CARD per file — a resizable leaf that shows nothing but that image (see
-// isImageBox in main.ts). No title/body UI, no rename prompt; its title exists purely so it has a
+// isImageBox in view/geometry.ts). No title/body UI, no rename prompt; its title exists purely so it has a
 // readable, stable filename on disk (desiredFileFor suffixes a collision) — the name itself is
 // never shown or editable. Shared by a canvas/card drop AND a clipboard paste (⌘V or the context
 // menu's Paste) — both land an image as a card of its own rather than inline body markdown.

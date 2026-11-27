@@ -3,7 +3,7 @@
 // on touch browsers that synthesize `contextmenu` from a long-press it works for free —
 // there is deliberately NO custom long-press handling). The native menu is intentionally
 // let through inside a section's label editor; inside a card's text it lists the editor's commands instead.
-// Menu items only call the existing crud / camera / main kernels — no logic of its own.
+// Menu items only call the existing crud / camera / render kernels — no logic of its own.
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { screenToWorld, fit } from '../view/camera.js';
@@ -17,7 +17,7 @@ import { esc, stripImageRef } from '../utils/markdown.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
 // buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
 // — this creates a deliberate two-way import cycle with float-bar.ts (which imports openMenu /
-// copyFilePath from here), same style as the main↔features cycle documented in CLAUDE.md; both
+// copyFilePath from here), same style as the render↔features cycle; both
 // sides only touch it inside event handlers, never at module-eval time, so it's safe.
 import { buildCardMenu } from './float-bar.js';
 import { deleteSelectedEdge } from './edge-tools.js';

@@ -11,7 +11,7 @@ import { splitHeading, setNoteText } from '../utils/frontmatter.js';
 import { sectionInterior, holderOf, sectionAt } from '../view/layout.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { detachParentId } from '../nav/scope.js';
-import { paintAll, relayout, remeasure } from '../main.js';
+import { paintAll, relayout, remeasure } from '../render.js';
 import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js';
 import { touch, touchEdges, commitStep } from './history.js';
 import { mutate } from './mutate.js';
@@ -250,7 +250,7 @@ export function leaveClone(s: MindNode, pos: Pt): MindNode {
 }
 
 // ---------- a new card inside a section / after a card / a new section ----------
-// A new card INSIDE a section — Tab, the ⋯ menu, a double-click in its interior (main.ts activateNode,
+// A new card INSIDE a section — Tab, the ⋯ menu, a double-click in its interior (features/activate.ts activateNode,
 // which passes where the user pointed as `at`). Without a point it goes under whatever the section
 // already holds, at the interior's left edge, so Tab-Tab-Tab fills a section top to bottom.
 export function addCardInside(sectionId: string, at?: Pt): void {

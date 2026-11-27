@@ -5,7 +5,6 @@
 // relative bridge every save goes through. The outliner, the flow sections, the line/fan arrangements
 // and the drop simulation that previewed them are gone with the nesting they served.
 //
-// nodeH/nodeW/subtreeIds come from main (render + tree helpers) — a runtime-only cycle.
 import { state, isStack, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
@@ -91,7 +90,7 @@ function insideSection(node: MindNode): boolean {
   return false;
 }
 // The nearest ANCESTOR section actually hosting `node` right now — the section whose content wrapper
-// `node`'s element lives inside, DOM-wise (main.ts sectionContentEl/place). Only EXPANDED sections count
+// `node`'s element lives inside, DOM-wise (render.ts sectionContentEl/place). Only EXPANDED sections count
 // (isSection): a collapsed section has no box/wrapper, so it can't host anything. Shared with the edge
 // painter so an edge between two cards inside the same section clips to it too.
 export function hostSection(node: MindNode): MindNode | null {
@@ -162,7 +161,7 @@ export function sectionAt(x: number, y: number, skip: Set<string>): MindNode | n
   return best;
 }
 // A section's INTERIOR rect (absolute world coords, inside its border — its label hangs outside, above) — the single source of truth for "where does this section's content go". Shared by
-// main.ts's sectionContentEl (the real DOM clipping wrapper) and the edge painter's clip-path, so the
+// render.ts's sectionContentEl (the real DOM clipping wrapper) and the edge painter's clip-path, so the
 // two containment mechanisms stay pixel-identical by construction.
 export function sectionInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
   // The OPEN section's interior IS the viewport, with no border and no tab to inset from.
@@ -246,9 +245,9 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
 
 // What used to re-flow the forest after every change. Nothing is flowed now, so all that's left is
 // the open-section bookkeeping, and it stays here because every structural change already ends in this
-// call (main.ts relayout/remeasure) — one call covers every path instead of each remembering.
+// call (render.ts relayout/remeasure) — one call covers every path instead of each remembering.
 // Returns whether it can have changed what is drawn — the scope was pruned, or there are stacks to lay —
-// so remeasure (main.ts) knows whether its second paint has anything to show.
+// so remeasure (render.ts) knows whether its second paint has anything to show.
 export function applyLayouts(): boolean {
   // The open section may have just been deleted / undone away / vanished on disk. (An open section keeps
   // its fold: its interior is the canvas either way.)

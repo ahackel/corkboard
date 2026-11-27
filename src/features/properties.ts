@@ -5,7 +5,7 @@
 import { state } from '../core/state.js';
 import { isLockedEffective } from '../utils/model.js';
 import { mutate } from './mutate.js';
-import { paintAll, effectiveColor } from '../main.js';
+import { paintAll, effectiveColor } from '../render.js';
 import { isHexColor } from '../utils/ink.js';
 import { recentColors, rememberColor } from './color-recents.js';
 import { SWATCH_BG, PICKER_ROWS } from '../view/color.js';

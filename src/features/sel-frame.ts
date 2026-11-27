@@ -12,7 +12,7 @@ import { isBoxNode, imageLook, isImageFold, isSectionFold, nodeW, nodeH, gridSna
 import { isSection } from '../view/layout.js';
 import { snapTo } from '../utils/num.js';
 import { touch, commitStep } from './history.js';
-import { paintNode, relayout } from '../main.js';
+import { paintNode, relayout } from '../render.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { settleSections, startSelectionDrag } from './drag.js';
 import { syncFloatBar } from './float-bar.js';

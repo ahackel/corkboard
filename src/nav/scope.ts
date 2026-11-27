@@ -55,7 +55,7 @@ export function canOpen(n: MindNode | null | undefined): boolean {
 export const canEnter = (n: MindNode | null | undefined): boolean => canOpen(n) && !isScopeRoot(n!);
 
 // The scope term of isHidden, on its own — for the few callers that must tell "folded away" from
-// "not in the section I'm standing in" (isSelectable, the cross-scope jumps in main.ts). isHidden
+// "not in the section I'm standing in" (features/selection.ts isSelectable, the cross-scope jumps). isHidden
 // fuses this with the collapse walk so the paint path only walks the ancestors once.
 export function outOfScope(n: MindNode): boolean {
   const id = scope.rootId;

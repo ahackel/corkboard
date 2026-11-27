@@ -17,7 +17,7 @@ import { touchEdges } from './history.js';
 import { mutate } from './mutate.js';
 import { isHidden } from '../utils/model.js';
 import { screenToWorld } from '../view/camera.js';
-import { paintAll } from '../main.js';
+import { paintAll } from '../render.js';
 import { createNode } from './crud.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, NODE_W } from '../view/geometry.js';

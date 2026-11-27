@@ -2,7 +2,7 @@
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { isLockedEffective, isHidden, nodesOf, subtreeIds } from '../utils/model.js';
 import { canFold, canToggleFold } from '../view/geometry.js';
-import { animateLayout } from '../main.js';
+import { animateLayout } from '../layout-anim.js';
 import { afterReading } from '../data/lazy.js';
 import { record } from './history.js';
 import { syncFloatBar } from './float-bar.js';

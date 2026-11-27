@@ -22,7 +22,7 @@ import { type MindNode, type NodeType, type FmEntry } from '../core/state.js';
 //
 // Where does this text actually START — the index of its first non-blank line, or -1 if it has none.
 // The ONE spelling of that question: splitHeading, firstLineLabel, the editor's heading probes
-// (features/inline-edit.ts) and collapsedMarkdown (main.ts) all read it, and the four hand-written
+// (features/inline-edit.ts) and collapsedMarkdown (utils/frontmatter.ts) all read it, and the four hand-written
 // copies it replaced had already drifted apart over the all-blank case.
 export function firstTextLine(lines: string[]): number {
   return lines.findIndex(l => l.trim());

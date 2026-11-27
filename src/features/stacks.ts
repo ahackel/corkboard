@@ -19,7 +19,8 @@ import { moveSubtreeTo } from '../view/layout.js';
 import { screenToWorld } from '../view/camera.js';
 import { applyColorVars, colorClass, colorFill } from '../view/color.js';
 import { SPACING } from '../utils/guides.js';
-import { effectiveColor, paintAll, paintNode, relayout, remeasure, animateLayout, placeSelf, LAYOUT_ANIM_MS } from '../main.js';
+import { effectiveColor, paintAll, paintNode, relayout, remeasure, placeSelf } from '../render.js';
+import { animateLayout, LAYOUT_ANIM_MS } from '../layout-anim.js';
 import { startNodeDrag, feedDragMove, commitDrag } from './drag.js';
 import { mkNode, deleteNodes } from './crud.js';
 import { touch, record } from './history.js';
@@ -225,7 +226,7 @@ export function toggleFan(id: string): void {
   }
 }
 
-// The cards glide out of the pile to their places (main.ts animateLayout: a card just shown starts at the
+// The cards glide out of the pile to their places (layout-anim.ts animateLayout: a card just shown starts at the
 // nearest ancestor already on screen — the pile).
 export function openFan(id: string): void {
   if (!isStack(state.nodes.get(id)) || !childrenOf(id).length) {

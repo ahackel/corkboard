@@ -7,7 +7,7 @@
 //
 // Every non-match FADES (state.searchMatch, applied in paintNode): matches stay lit, and so do the
 // sections holding them; a match tucked inside a FOLDED section lights that section, which says how many it
-// holds (searchHitsIn). The match set is DERIVED on every paint (main.ts paintAll → refreshSearch), so
+// holds (searchHitsIn). The match set is DERIVED on every paint (render.ts paintAll → refreshSearch), so
 // tagging a card while searching takes effect at once. The dropdown lists the matching cards; ↓/Enter
 // jump to one. "2/5" and its chevrons (FigJam's) step through every match, framing each on the canvas
 // without ending the search. The field stays while a query is in it — a filter you can work under — and
@@ -20,7 +20,7 @@ import { allTags, hasTag, tagKey, cleanTag, wearsTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { outOfScope, isScopeRoot } from '../nav/scope.js';
 import { openSection, popScopeFor } from '../nav/sections.js';
-import { paintAll } from '../main.js';
+import { paintAll } from '../render.js';
 import { scheduleUrlSync } from '../nav/url-state.js';
 import { byId } from '../utils/dom.js';
 import { tagText, tagChipHTML } from './tags.js';

@@ -6,7 +6,7 @@ import { ui } from '../core/ui-state.js';
 import { touch, commitStep } from './history.js';
 import { snapTo } from '../utils/num.js';
 import { guideResize, hideGuides } from './guides.js';
-import { paintNode, relayout } from '../main.js';
+import { paintNode, relayout } from '../render.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { settleSections } from './drag.js';
 import { syncFloatBar } from './float-bar.js';
@@ -207,7 +207,7 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
       }
     }
 
-    // A card being edited is held at its height (main.ts paintNode): the edge drag is what moves that.
+    // A card being edited is held at its height (render.ts paintNode): the edge drag is what moves that.
     if (!sizeH && ui.bodyEdit?.id === n.id && (north || south)) {
       ui.bodyEdit.holdH = n.h;
     }

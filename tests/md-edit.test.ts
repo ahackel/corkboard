@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { completingAt, completeAt, listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, pasteTable, sourceOffset,
-         tableTab, tableEnter, headingSection, startCompletion, editCommandFor, EDIT_COMMANDS, setBlock, codeBlock,
-         insertTable, insertLink, insertRule, clearStyles, tableEdit, type TextEdit, type TableOp } from '../src/utils/md-edit.js';
+import { completingAt, completeAt, listEnter, listBackspace, indentLines, toggleWrap, taskLines, moveLines, renumbered, sourceOffset,
+         headingSection, startCompletion, editCommandFor, EDIT_COMMANDS, setBlock, codeBlock,
+         insertLink, insertRule, clearStyles } from '../src/utils/md-edit.js';
+import { pasteTable, tableTab, tableEnter, insertTable, tableEdit, type TableOp } from '../src/utils/md-table.js';
+import type { TextEdit } from '../src/utils/text-edit.js';
 
 // Text with `|` marking the caret (or `[`…`]` a selection), so a case reads as what the editor shows.
 function at(s: string): [string, number, number] {

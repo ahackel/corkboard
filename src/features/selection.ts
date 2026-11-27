@@ -3,7 +3,7 @@ import { state, setStatus, world } from '../core/state.js';
 import { isHidden, hasLockedAncestor } from '../utils/model.js';
 import { wearsTags } from '../utils/tags.js';
 import { clearEdgeSelection } from './edge-tools.js';
-import { paintNode } from '../main.js';
+import { paintNode } from '../render.js';
 import { paintFreeEdges } from '../view/free-edges.js';
 import { syncFloatBar } from './float-bar.js';
 import { syncSelFrame } from './sel-frame.js';

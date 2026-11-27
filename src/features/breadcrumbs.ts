@@ -2,7 +2,7 @@
 // The one way back out of an open section (see nav/scope.ts), and the only thing on screen that says
 // which one you're in — an open section draws no box, no border and no tab. Owns the segments inside
 // #homeBar and its one delegated listener, the way features/search.ts owns #searchWrap; the actions
-// themselves live in main.ts.
+// themselves live in nav/sections.ts.
 //
 // ONE PILL, not a pill per level: a single --panel capsule holding borderless items that highlight
 // only on hover, which is what Finder, VS Code, Explorer and Notion all do with a path. #homeBar IS that pill (styles.css); the home button and every segment sit
@@ -24,7 +24,7 @@ import { esc } from '../utils/markdown.js';
 import { byId } from '../utils/dom.js';
 import { FOLDER_SVG, DOCUMENT_SVG } from '../view/icons.js';
 import { applyColorVars, colorClass, THEME_BG } from '../view/color.js';
-import { effectiveColor } from '../main.js';
+import { effectiveColor } from '../render.js';
 import { goToScopeDepth } from '../nav/sections.js';
 
 const homeBar = byId('homeBar');
@@ -91,7 +91,7 @@ const foldedLevels = (): number[] =>
 // Driven from paintAll — the same argument renderOutline makes there: every mutation path (a rename, a
 // delete, an undo, a reload) keeps the path in step with no extra wiring. Which is also why it needs
 // the signature guard: paintAll runs once per animation FRAME for the length of a resize drag, and
-// rebuilding this innerHTML per section would be pure waste (cf. queryKey in main.ts).
+// rebuilding this innerHTML per section would be pure waste (cf. queryKey in render.ts).
 export function renderCrumbs(): void {
   const sig = store.name + '|' + state.singleNote + '|' + state.canvasColor + (!scopeActive() ? ''
     : '|' + scope.stack.map((l, i) => l.rootId + ':' + levelTitle(i) + ':' + levelColor(i)).join('/'));

@@ -6,14 +6,14 @@
 // emoji; it becomes a sticker, ready to drag onto a card — it lives only until the page reloads, unless a
 // card takes it. Drag a sticker onto a card to tag it (features/tag-drag.ts); click one to find its cards
 // (features/search.ts); drag one off onto the bare board to DELETE the tag — from every card that carries
-// it, after asking when any does (one undo step). Repainted from main.ts paintAll, keyed so an unchanged
+// it, after asking when any does (one undo step). Repainted from render.ts paintAll, keyed so an unchanged
 // tray isn't rebuilt.
 import { esc } from '../utils/markdown.js';
 import { cleanTag, tagKey, isEmojiTag, noteTags, wearsTags, uniqueTags } from '../utils/tags.js';
 import { emojiByName } from '../utils/emoji-names.js';
 import { state, type MindNode } from '../core/state.js';
 import { byId } from '../utils/dom.js';
-import { paintAll } from '../main.js';
+import { paintAll } from '../render.js';
 import { boardTags, loadMru, pushMru, dropMru } from './tag-picker.js';
 import { tagFaceHTML, tagText, retag } from './tags.js';
 import { searchTags, toggleSearchTag } from './search.js';

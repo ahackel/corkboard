@@ -9,7 +9,7 @@ import { isSection, moveSubtreeTo, sectionLabelH } from '../view/layout.js';
 import { tidyGrid, align, distribute, type AlignEdge, type Box, type Pt } from '../utils/tidy.js';
 import { SPACING } from '../utils/guides.js';
 import { mutate } from './mutate.js';
-import { animateLayout } from '../main.js';
+import { animateLayout } from '../layout-anim.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 import { SECTION_FIT_PAD } from './float-bar.js';
 

@@ -22,7 +22,7 @@ import { screenToWorld } from '../view/camera.js';
 import { centredAt, dropCardText, cardText,
          type TextSource } from './crud.js';
 import { firstLineSplit } from '../utils/frontmatter.js';
-import { effectiveColor } from '../main.js';
+import { effectiveColor } from '../render.js';
 import { classMarker } from '../utils/dom.js';
 import { colorClass, applyColorVars } from '../view/color.js';
 import { NODE_W } from '../view/geometry.js';

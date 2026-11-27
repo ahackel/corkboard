@@ -66,7 +66,7 @@ export interface MindNode {
   w?: number;
   h?: number;
   // A plain card dragged SHORTER than its text: `h` is then its exact height and the rest of the note is
-  // clipped under a fade (main.ts paintNode), instead of a minimum the text grows past. Persisted as
+  // clipped under a fade (render.ts paintNode), instead of a minimum the text grows past. Persisted as
   // `clip` in board.json; Fit (float bar ↔) clears it.
   clip?: boolean;
 
@@ -95,7 +95,7 @@ export interface MindNode {
   sectionContentEl?: HTMLElement | null;   // this section's overflow:hidden content wrapper (sections only)
   hostSectionId?: string | null;     // which section's content wrapper el/sectionContentEl currently live
                                     // in, DOM-wise (null = directly under #world) — transient render
-                                    // bookkeeping, settled outside gestures (see main.ts settledHost)
+                                    // bookkeeping, settled outside gestures (see render.ts settledHost)
 }
 
 // An IMAGE card is a card that IS its picture: untitled, and its whole note is one `![alt](src)`.
@@ -103,7 +103,7 @@ export interface MindNode {
 // value folds to `card`, utils/frontmatter.ts foldType). So it's an ordinary card in every
 // other respect: it renames, merges, sits in sections. What it gets for being one is
 // the render (no padding, the picture flush to its corners), an authored HEIGHT as well as a width,
-// and an aspect-locked resize — see isImageBox in main.ts, which adds "…and isn't folded or open in
+// and an aspect-locked resize — see isImageBox in view/geometry.ts, which adds "…and isn't folded or open in
 // an editor", the two states where a card shows something other than its picture.
 export function isImageCard(n: MindNode | null | undefined): boolean {
   return !!n && n.type === 'card' && !n.title.trim() && !!soleImage(n.body);
@@ -209,7 +209,7 @@ export const freeEdgeHitsSvg = byId<SVGSVGElement>('freeEdgeHits');
 export const togglesSvg = byId<SVGSVGElement>('toggles');
 // Group-opacity layer for the CURRENTLY DRAGGED items: while a drag is live the dragged cards are
 // re-parented in here so the whole set composites as one translucent group
-// (see #dragLayer in styles.css / dragRoot() in main.ts).
+// (see #dragLayer in styles.css / dragRoot() in render.ts).
 export const dragLayer = byId('dragLayer');
 const statusEl = byId('status');
 // A toast is for what the canvas can't say itself — a refusal ("Locked — can't delete"), the result of

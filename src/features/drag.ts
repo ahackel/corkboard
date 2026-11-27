@@ -15,7 +15,8 @@ import { ui, inPlaceEditOn, type Pt, type Drag, type Chute } from '../core/ui-st
 import { paintFreeEdges } from '../view/free-edges.js';
 import { snapTo } from '../utils/num.js';
 import { beginMarqueeFromNode } from './gestures.js';
-import { paintAll, paintNode, activateNode, editOnClick, openedSince, isNodeControlAt, relayout, remeasure, flashArrived } from '../main.js';
+import { paintAll, paintNode, relayout, remeasure, flashArrived } from '../render.js';
+import { activateNode, editOnClick, openedSince, isNodeControlAt } from './activate.js';
 import { endBodyEdit, endTitleEdit, selectAllInEditor } from './inline-edit.js';
 import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
 import { startImageExtractDrag } from './image-extract.js';
@@ -216,7 +217,7 @@ export function bindNodeDrag(n: MindNode): void {
       lastTwoTap = performance.now();
     }
     twoDown = 0;
-    // A tap that just OPENED this card's editor (main.ts editOnClick, at the pointerup before this) keeps
+    // A tap that just OPENED this card's editor (features/activate.ts editOnClick, at the pointerup before this) keeps
     // the browser's emulated mouse events that follow a tap from landing: their mousedown, on the card
     // rather than in the new textarea, would take the focus straight back out and close it.
     if (openedSince(n.id, tapAt)) {
@@ -224,13 +225,13 @@ export function bindNodeDrag(n: MindNode): void {
     }
   });
   el.addEventListener('touchstart', (e) => {
-    // The innermost card owns the tap, exactly as it owns the dblclick (main.ts nodeEl): child cards
+    // The innermost card owns the tap, exactly as it owns the dblclick (render.ts nodeEl): child cards
     // are DOM-nested, so without this every ancestor's own counter sees the same two taps and a
     // double-tap on a child fired activateNode all the way up the chain — renaming the child, then
     // opening its parent's note editor on top of it.
     e.stopPropagation();
     // While editing this node, let the browser handle double-tap normally (word selection) — unless the
-    // first tap is what opened the editor (main.ts editOnClick): that's a double-tap on the card, which
+    // first tap is what opened the editor (features/activate.ts editOnClick): that's a double-tap on the card, which
     // selects ALL of its text, as the dblclick does.
     const now = performance.now();
     tapAt = now;
@@ -242,7 +243,7 @@ export function bindNodeDrag(n: MindNode): void {
       lastTouchTap = 0;
       return;
     }
-    // The card's own controls act on a single tap (main.ts isNodeControlAt): a tap there must not also
+    // The card's own controls act on a single tap (features/activate.ts isNodeControlAt): a tap there must not also
     // count toward a double-tap, or the second one would fire the button AND open the card.
     const t0 = e.touches[0];
     if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = 0; return; }
@@ -394,7 +395,7 @@ function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
   // THIS gesture, so the event used to vanish, leaving the (Shift-cloned or moved) card invisible. `pointercancel` (tab switch, interrupted
   // touch) commits in place too, for the same reliability reason. Listeners are added/removed per
   // gesture (not left permanently on window) so they can't double-fire alongside the ghost-card
-  // flow's own window listeners in main.ts, which drives its drag through the same dragPointerMove
+  // flow's own window listeners (features/ghost-card.ts), which drives its drag through the same dragPointerMove
   // /dragPointerUp via feedDragMove/commitDrag.
   const stop = trackPointer({ move: onMove, up: onUp, cancel: onUp });
   // Guard on `ui.drag.n === n` (not just truthiness): there's a single shared `ui.drag` slot, so
@@ -575,7 +576,7 @@ function dragPointerUp(): void {
     ui.drag = null;
     document.body.classList.remove('grabbing');
     commitStep();   // plain click / unmoved drag: nothing changed → step is discarded
-    // A plain click on the card that was ALREADY the selection writes on it (main.ts editOnClick) —
+    // A plain click on the card that was ALREADY the selection writes on it (features/activate.ts editOnClick) —
     // after the commit, since the editor opens a step of its own that the click's would swallow.
     if (drag && !drag.moved && drag.reclick) {
       editOnClick(drag.n, drag.cx, drag.cy, drag.touch);

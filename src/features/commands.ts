@@ -21,7 +21,7 @@ import { autoSizeSelection, groupSelectionIntoSection, colorSelection, KEY_COLOR
 import { copySelection, copyFormatted, cutSelection, exportSelection, shareSelection, canShareFiles } from './clipboard.js';
 import { toggleLockSelection, anyLocked } from './lock.js';
 import { startInlineEdit, startBodyEdit } from './inline-edit.js';
-import { openImageAt } from '../main.js';
+import { openImageAt } from './activate.js';
 import { inboxSection, goToInbox } from './inbox.js';
 import { canEnter, canOpen, scopeActive } from '../nav/scope.js';
 import { hasStackSelected, unstackSelection, stackToSection } from './stacks.js';

@@ -42,13 +42,13 @@
 
   /* FigJam's sticky palette (approximated) + grey + white/black. A card's ink is decided once, by the
      colour itself.
-     The SINGLE SOURCE OF TRUTH for these hexes: main.ts's SWATCH_BG reads them straight from
+     The SINGLE SOURCE OF TRUTH for these hexes: view/color.ts's SWATCH_BG reads them straight from
      here (getComputedStyle) at load, so JS (edges/backgrounds/swatch fills) and CSS (.c-*
      below, #ghostCard) never drift apart. Change a colour here only. */
   /* Pastel sticky-note fills (docs/PRODUCT.md): light enough to take DARK ink everywhere, so a board
      reads like a wall of paper notes. The KEYS are the file format (`color: amber` in a note) and never
      change; only these hexes do. `amber` is the classic sticky yellow, and the default for a card with
-     no colour of its own (main.ts effectiveColor). */
+     no colour of its own (render.ts effectiveColor). */
   --pal-slate: #c2cbff;
   --pal-red: #ffafa3;
   --pal-amber: #ffd966;
@@ -60,7 +60,7 @@
   --pal-grey: #d9d9d9;
   --pal-white: #ffffff;
   --pal-black: #1e1e1e;
-  /* the rest of FigJam's picker (main.ts PICKER_ROWS): a light orange and grey to complete the pastel
+  /* the rest of FigJam's picker (view/color.ts PICKER_ROWS): a light orange and grey to complete the pastel
      row, a mid grey, and the STRONG row — the same hues at full strength */
   --pal-orange: #ffd3a8;
   --pal-silver: #b3b3b3;
@@ -124,13 +124,13 @@
 }
 /* Each palette key hands a surface three things: its FILL (--card), the INK that fill demands
    (--ink, the text colour) and the SCRIM an in-place editor paints behind that ink (--scrim).
-   Only --card is authored. The other two are COMPUTED from it — main.ts's deriveInk measures the
+   Only --card is authored. The other two are COMPUTED from it — view/color.ts's deriveInk measures the
    fill's WCAG contrast and injects a --pal-ink-* plus --pal-scrim-* pair per key (utils/ink.ts) —
    so ink is a property of the CARD's colour, not of the theme and not of an enumerated exception
    list. That's why nothing below this line ever names a colour key to fix its text: one
    `color: var(--ink)` on each surface that wears a .c-* class (.node) replaces the four per-surface "which keys are exceptions" lists that used to have to
    agree with each other, and an off-palette colour gets legible text for free. */
-/* .c-<key> for every palette key is GENERATED (main.ts deriveInk), alongside the ink it derives. */
+/* .c-<key> for every palette key is GENERATED (view/color.ts deriveInk), alongside the ink it derives. */
 /* "none" = no colour at all: truly transparent, not just canvas-bg-coloured (border returns when
    selected). The one key whose ink can't be computed — there's no fill to measure, the CANVAS shows
    through — so it's the one that follows the theme instead, and its scrim has to be flipped by hand
@@ -138,7 +138,7 @@
 .c-none   { --card:transparent; --ink:var(--text); --scrim:rgba(255,255,255,.62); }
 
 /* A colour picked from OUTSIDE the palette (`color: "#ff8800"` in the note). Same three variables,
-   but there's no key to hang them on, so main.ts's applyColorVars writes them inline per
+   but there's no key to hang them on, so view/color.ts's applyColorVars writes them inline per
    node — an inline custom property beats any selector, so the values below are only the safety net
    for an element that got the class without them. Everything else in this file reads the variables
    and never the key, which is what lets a custom colour take every path a palette one does. */
@@ -173,7 +173,7 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
   box-shadow:0 4px 16px rgba(0,0,0,.2); opacity:0; transform:translate(-50%, 8px);
   transition:opacity .2s ease, transform .2s ease; }
 #status.show { opacity:1; transform:translate(-50%, 0); }
-/* The first-run hint: one quiet line in the middle of a map with nothing on it (main.ts paintAll). */
+/* The first-run hint: one quiet line in the middle of a map with nothing on it (render.ts paintAll). */
 #emptyHint { display:none; position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); margin:0;
   max-width:calc(100% - 48px); text-align:center; font-size:15px; color:var(--muted); pointer-events:none; }
 body.empty-map #emptyHint { display:block; }
@@ -429,7 +429,7 @@ input::placeholder { color:var(--muted); opacity:1; }
 
 /* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
 #stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
-  /* The canvas's own fill — --canvas-bg, written inline by main.ts's syncCanvasBackground from
+  /* The canvas's own fill — --canvas-bg, written inline by features/canvas-color.ts's syncCanvasBackground from
      canvasFill, the ONE resolver: the MAP's own colour at the top level, and while a section is OPEN
      that section's fill instead (the canvas IS its interior then), through the same effectiveColor its
      box used. On #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child
@@ -438,11 +438,11 @@ input::placeholder { color:var(--muted); opacity:1; }
      land together. Unset → transparent, and the theme's background shows through as before. */
   background-color: var(--canvas-bg, transparent); transition: background-color 500ms ease; }
 /* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
-   simply BE there (withoutScopeFade in main.ts). See its comment for why. */
+   simply BE there (withoutScopeFade in nav/sections.ts). See its comment for why. */
 body.scope-instant #stage { transition: none; }
 #stage.panning { cursor:grabbing; }
 /* The hand only appears while actually dragging a card; default everywhere else. It is worn by the cards
-   IN HAND (`.grabbed`, main.ts paintNode) — they are what the pointer is over — and not by a rule on
+   IN HAND (`.grabbed`, render.ts paintNode) — they are what the pointer is over — and not by a rule on
    every element under <body>: that one restyled the whole board at each pick-up and each drop. A tag or
    a picture pulled out of a card rides a ghost that takes no pointer events, so those two still ask
    everything under the pointer for the hand (rare gestures, and short ones). */
@@ -576,18 +576,18 @@ svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-
      fading in behind an already-ringed tab. `scale` is the lift a card in hand gets (.dragging). */
   transition: opacity .2s ease, scale .12s ease;
 }
-/* …and meanwhile the ports and resize handles stand down (main.ts animateReflow): they'd sit at the
+/* …and meanwhile the ports and resize handles stand down (layout-anim.ts animateReflow): they'd sit at the
    cards' stale spots and sizes until the glide ends */
 body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
 .section-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease, rotate .5s cubic-bezier(.45,0,.25,1), translate .5s cubic-bezier(.45,0,.25,1), filter .5s cubic-bezier(.45,0,.25,1),
-  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (main.ts); rotate: a fanned card's tilt */
+  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (layout-anim.ts); rotate: a fanned card's tilt */
 /* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
    so the only thing left to remove here is the space that was separating the title from a body that
    isn't there. The `min-height:0` this rule used to carry is what `.node` itself does now. */
 .node.no-body .title { margin-bottom:0; }
-/* direct-child combinator only — a child card nested inside this one (see main.ts paintNode's
+/* direct-child combinator only — a child card nested inside this one (see render.ts paintNode's
    DOM nesting) has its OWN .tag-row further down the tree and must stay unaffected by its
    ancestor's no-tags state. */
 .node.no-tags > .top-edge > .tag-row { display:none; }
@@ -623,7 +623,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
   display:flex; align-items:center; gap:4px; pointer-events:none; }
 .node > .top-edge > * { pointer-events:auto; }
 .node.resizing > .top-edge { visibility:hidden; }
-/* A note that just came in from outside — the phone inbox (main.ts flashArrived) — pulses a ring three
+/* A note that just came in from outside — the phone inbox (render.ts flashArrived) — pulses a ring three
    times, on itself or on the folded pill it landed in. */
 .node.arrived { animation:arrived .8s ease-out 3; }
 @keyframes arrived { from { box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
@@ -637,7 +637,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node > .task-bar::after { content:''; position:absolute; left:0; right:0; top:5px; height:4px; border-radius:2px;
   background:linear-gradient(#2f9e5b, #2f9e5b) 0 0 / var(--done, 0%) 100% no-repeat, color-mix(in srgb, currentColor 13%, transparent); }
 /* ---------- section: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
-/* The element is the box and nothing else: n.x/n.y/w/h are the box (main.ts), and the label hangs
+/* The element is the box and nothing else: n.x/n.y/w/h are the box (render.ts), and the label hangs
    outside it, above the top-left corner, the way a FigJam section's name does. So naming, renaming or
    un-naming a section never moves the box or the cards in it.
    z-index:auto paints the box BELOW every line and below normal cards (z-index:2) — a positioned `auto`
@@ -647,7 +647,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
    lets its own label (below) lift above the edges/cards that would otherwise cover it.
    The FILL is the section's colour (--card, from its .c-* class) washed most of the way to white, and the
    2px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
-   colour, read clearly on it. Width 2px = SECTION_BORDER (main.ts). */
+   colour, read clearly on it. Width 2px = SECTION_BORDER (view/geometry.ts). */
 .node.section { z-index:auto; min-height:0; padding:0; border-radius:var(--r-section);
   background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
   border:2px solid color-mix(in srgb, var(--card, #fff), #000 10%); }
@@ -690,7 +690,7 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.section > .title-row > .title.editing, .node.section-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 /* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
 .node.section > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
-/* real CSS containment for a section's contents: a plain overflow:hidden box (main.ts sectionContentEl)
+/* real CSS containment for a section's contents: a plain overflow:hidden box (render.ts sectionContentEl)
    sized to the section's INTERIOR (inside its border — see SECTION_BORDER), holding every card (and
    nested section) it hosts as flat DOM children — same "everyone flat under one container" model the
    app already uses for #world, just re-rooted here, so nested sections/grandchildren clip for free
@@ -714,8 +714,8 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 /* ---------- a FOLDED section: a folder, and its label ---------- */
 /* Folding hides the box: the element is a FOLDER ICON with the section's label beside it — the same pill, the
    same name, as an open section wears above its box (no .section class, so none of the box
-   rules above apply), at the box's top-left corner. It shrink-wraps, so main.ts nodeW and nodeH MEASURE it.
-   What it holds is in its tooltip (main.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
+   rules above apply), at the box's top-left corner. It shrink-wraps, so view/geometry.ts nodeW and nodeH MEASURE it.
+   What it holds is in its tooltip (render.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
    just the folder. */
 /* A section's FOLDER — folded on the canvas, or its segment of the path — is coloured like its BOX
    (.node.section): the outline is the box's rim, the section's own colour; the inside is its pale wash. */
@@ -794,7 +794,7 @@ body.grabbing .stack-pin { cursor:grabbing; }
   transform:scale(calc(var(--ls, 1) * 1.5));
   transition:transform .5s cubic-bezier(.45,0,.25,1), opacity .5s cubic-bezier(.45,0,.25,1); }
 body.fan-closing .node.stack.fan-open > .stack-face > .stack-pin { opacity:1; transform:scale(var(--ls, 1)); }
-/* The dimming and the cards' shadows come and go WITH the glide (LAYOUT_ANIM_MS, main.ts): in by a keyframe as
+/* The dimming and the cards' shadows come and go WITH the glide (LAYOUT_ANIM_MS, layout-anim.ts): in by a keyframe as
    the fan opens, out by a transition while it closes (body.fan-closing, features/stacks.ts closeFan). */
 #fanScrim { position:absolute; left:-100000px; top:-100000px; width:200000px; height:200000px; z-index:60;
   background:rgba(40,40,46,.16); animation:fan-fade .5s cubic-bezier(.45,0,.25,1);
@@ -820,7 +820,7 @@ body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) dr
 #fanInsert { position:absolute; width:4px; margin-left:-2px; border-radius:2px; background:var(--node-sel);
   z-index:8999; pointer-events:none; }
 body.fan-open #dragLayer { z-index:9000; }
-/* ---------- resize hit-zones (ensureResizeHandles in main.ts) ---------- */
+/* ---------- resize hit-zones (ensureResizeHandles in features/resize.ts) ---------- */
 /* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
    box (section / image card) gets all 8: 4 edge bands inset from the corners, plus 4
    corner squares at the very corners, which is what those insets leave un-contested. A width-only
@@ -864,7 +864,7 @@ body.fan-open #dragLayer { z-index:9000; }
 .node.title-editing > .fh,
 .node.locked > .fh { display:none; }
 /* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
-/* no title/body chrome at all — just the image filling the box (see isImageBox in main.ts).
+/* no title/body chrome at all — just the image filling the box (see isImageBox in view/geometry.ts).
    Background is the same --card variable every card's own colour swatch sets (.c-blue etc. at
    the top of this file) — an image card with no image reference in its body (e.g. freshly
    flipped from another layout type) shows as a plain colour rect instead of empty transparency;
@@ -886,7 +886,7 @@ body.fan-open #dragLayer { z-index:9000; }
    card's top edge. */
 .node.image-card > .title-row { height:0; }
 .node.image-card > .title-row > .title { display:none; }
-/* FOLDED, an image card is an icon of itself: a 40px square of the picture (main.ts IMAGE_FOLD, which
+/* FOLDED, an image card is an icon of itself: a 40px square of the picture (view/geometry.ts IMAGE_FOLD, which
    nodeW/nodeH declare and paintNode leaves un-inlined), rather than the empty shell a card with no
    title folds to. So the body stays visible here — `.node.collapsed .body { display:none }` is (0,3,0)
    and this is (0,4,0) — and object-fit:cover below crops the square out of any aspect. */
@@ -1005,7 +1005,7 @@ body.layout-anim #selFrame { display:none; }
    dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
    the rest of the canvas, because #dragLayer (below) is itself a z-index:9 stacking context. */
 .node.section.dragging { z-index:auto; }
-/* the drag layer: while dragging, main.ts moves the dragged cards in here, above everything. Opaque, as in
+/* the drag layer: while dragging, render.ts moves the dragged cards in here, above everything. Opaque, as in
    FigJam — a card in hand is held over the board, not a ghost of itself; its shadow says it's lifted. */
 #dragLayer { position:absolute; top:0; left:0; z-index:9; pointer-events:none; }
 #dragLayer > .node, #dragLayer > .section-content { pointer-events:auto; }
@@ -1133,7 +1133,7 @@ body.layout-anim #selFrame { display:none; }
    controls you can use while typing anyway. Containers never take this class; they rename on the label
    itself (.title.editing above). */
 .node.card-editing > .title-row { display:none; }
-/* An UNTITLED card shows no name at all — it IS its text (main.ts paintNode writes `no-title`), and it
+/* An UNTITLED card shows no name at all — it IS its text (render.ts paintNode writes `no-title`), and it
    must reserve NO space for the name it hasn't got: visually such a card is its body and nothing else.
    The row itself stays, because the fold chip hangs off it, but with the label gone every remaining child
    is absolutely positioned, so the row collapses to nothing — as long as it contributes no box of its
@@ -1147,7 +1147,7 @@ body.layout-anim #selFrame { display:none; }
    card's 14px rounded text, since a monospace glyph is wider: it fits more of each line on a narrow card. The line pitch is
    the TITLE's (--h1-lh, 16.8px), the shortest line a card draws: at the body's 19.6px a card holding only
    `# Title` grew 3px the moment it opened (e2e "opening a card for editing does not change its size"). */
-/* The card keeps its height while edited (main.ts paintNode caps the body), so a note longer than it SCROLLS. */
+/* The card keeps its height while edited (render.ts paintNode caps the body), so a note longer than it SCROLLS. */
 .node .body.editing { overflow:hidden auto; overscroll-behavior:contain; opacity:1; position:relative; }
 .node .body-edit, .node .body .body-hl { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:12px; line-height:var(--h1-lh); color:inherit;
@@ -1286,7 +1286,7 @@ body.layout-anim #selFrame { display:none; }
 .node .body th, .node .body td { padding:3px 8px; text-align:left; vertical-align:top;
   overflow-wrap:break-word; }
 .node .body :is(th, td) :is(.lk, code) { overflow-wrap:anywhere; }
-/* …and a table whose longest words are still wider than the card is SQUEEZED (main.ts squeezeTables):
+/* …and a table whose longest words are still wider than the card is SQUEEZED (render.ts squeezeTables):
    then any cell may break inside a word, which is what lets it fit at all. */
 .node .body table.squeezed :is(th, td) { overflow-wrap:anywhere; }
 /* flush with the body's text column at both edges */
@@ -1333,7 +1333,7 @@ body.zoom-far .node > .top-edge { display:none; }
    So the cut is CSS, never a rewrite of the text in JS: a folded card shows the same text in the same
    style it shows unfolded, just less of it — `# Heading` folds to a heading, plain text to plain text,
    and nothing is bold that wasn't already.
-   WHICH text is shown, and the `…` that says more follows, are decided in main.ts (collapsedMarkdown):
+   WHICH text is shown, and the `…` that says more follows, are decided in utils/frontmatter.ts (collapsedMarkdown):
    only the first line's markdown is rendered here at all. That is not a preference — `text-overflow` and
    `-webkit-line-clamp` can only ellipsise WITHIN one element, and what a fold hides is usually a SIBLING
    block (a heading then a paragraph, or several short lines that become separate `<p>`s), so neither ever
@@ -1386,7 +1386,7 @@ body.zoom-far .node > .top-edge { display:none; }
   position:relative; z-index:20;
   width:40px; height:32px;
   display:flex; align-items:center; justify-content:center;
-  /* a little sticky note: what it makes is what it looks like (new cards are yellow — main.ts
+  /* a little sticky note: what it makes is what it looks like (new cards are yellow — render.ts
      effectiveColor). It has no .c-* class to carry --ink, so it names the fill's computed ink directly. */
   background:var(--pal-amber); border:none; border-radius:var(--r-card); box-shadow:var(--lift);
   color:var(--pal-ink-amber); font-size:18px; font-weight:400;
@@ -1525,7 +1525,7 @@ svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text
   background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-pop);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
-/* The colour pickers are FigJam's grid: rows of ELEVEN (main.ts PICKER_ROWS). The explicit width is
+/* The colour pickers are FigJam's grid: rows of ELEVEN (view/color.ts PICKER_ROWS). The explicit width is
    what makes .swatch-break's row breaks land where they should (a shrink-to-fit flex container
    resolves a 100% basis against nothing and lays every chip out on one line instead); a break's own
    empty line would add a second gap, which its negative margin takes back. Three popovers, one rule:

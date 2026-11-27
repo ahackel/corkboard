@@ -20,7 +20,7 @@ import { mutate } from './mutate.js';
 import { rememberColor } from './color-recents.js';
 import { swatchRowHTML, markSwatchRow, renderRecentChips } from './properties.js';
 import { paintFreeEdges, useCanvasSurface } from '../view/free-edges.js';
-import { paintAll, effectiveColor } from '../main.js';
+import { paintAll, effectiveColor } from '../render.js';
 import { placePopover, placeInViewport, closeOnOutside } from '../utils/dom.js';
 import { renderGridControls } from '../view/grid.js';
 import { colorFill, THEME_BG } from '../view/color.js';

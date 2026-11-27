@@ -142,7 +142,7 @@ function mdLinks(text: string): string {
 // ---------- a note that is nothing but a picture ----------
 // There is no image KIND: a card whose whole note is one `![alt](src)` (or `![[src]]`) — and which carries no
 // title to draw — IS that image, and renders as one (no padding, both axes authored, the picture flush to
-// its corners; see isImageCard in core/state.ts and isImageBox in main.ts). The test is deliberately
+// its corners; see isImageCard in core/state.ts and isImageBox in view/geometry.ts). The test is deliberately
 // the WHOLE body, so the rule is one a user can see in the text: type a word or a heading and the
 // card is an ordinary card again, with its padding and its measured height back.
 // Returns the alt + src so the callers that name a file after the picture don't re-parse it.
@@ -314,7 +314,7 @@ export function linkPaste(text: string, start: number, end: number, url: string)
 // data-img-src is consumed (removed) by hydrateImages; data-path stays on the element so the
 // context menu can map a rendered <img> back to its markdown reference / vault file.
 // Wrapped in .img-wrap so the magnifier button (shown only on a selected card, see styles.css)
-// can position over the image; the button opens the full-screen viewer (main.ts nodeEl click).
+// can position over the image; the button opens the full-screen viewer (render.ts nodeEl click).
 // A width from Obsidian's `![[src|200]]` caps the picture at that many px, never wider than the card.
 function imgTag(src: string, alt: string, width?: number): string {
   const s = esc(src.trim()), w = width ? ` style="max-width:${width}px"` : '';
@@ -429,7 +429,7 @@ function renderTable(lines: string[], start: number, cols: number): { html: stri
 // closes back out to the level it matches. Indent is compared, never counted in fixed steps, so `  -`
 // and `    -` both nest under `-`, and a `1. ` item's three-space children do too. A change of marker
 // kind at the same level starts a sibling list (`<ul>` → `<ol>`). Bullets and numbered items both make TASKS —
-// `data-ti` numbers checkboxes in body order for write-back (main.ts toggleTask), counted by TASK_LINE above.
+// `data-ti` numbers checkboxes in body order for write-back (render.ts toggleTask), counted by TASK_LINE above.
 // A task's text is wrapped in a span because the row is a flex box (styles.css li.task): bare, the text
 // would wrap under the checkbox, and a nested list would sit BESIDE it instead of below.
 const LIST_ITEM = /^\s*(?:[-*+]|\d+\.)\s+/;

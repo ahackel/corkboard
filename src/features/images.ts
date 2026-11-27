@@ -1,7 +1,7 @@
 // ---------- images in a card's DOM ----------
 // The cache that resolves a picture to a URL is data/images.ts; this half puts those URLs into the cards,
 // and reflows once when a card grows because a picture finally loaded.
-import { relayout } from '../main.js';
+import { relayout } from '../render.js';
 import { imageUrl, knownImageUrl } from '../data/images.js';
 
 // A card's body images are `pointer-events:none` (a click or drag over one falls through to the card

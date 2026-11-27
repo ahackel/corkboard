@@ -2,7 +2,7 @@
 // Shared mutable UI state for the interactive canvas subsystem (drag, in-place editing,
 // pan/zoom gestures, image-drop). Like `state`, this is ONE object whose PROPERTIES are
 // mutated in place (never reassign `ui`) so the live interaction state is shared across the
-// render core (main.ts) and the feature modules split out of it (drag / inline-edit / gestures
+// render core (render.ts) and the feature modules split out of it (drag / inline-edit / gestures
 // / attachments). Imported `let` bindings are read-only, hence the holder-object pattern.
 // ============================================================
 import type { EdgeSide, MindNode } from './state.js';
@@ -28,7 +28,7 @@ export interface Drag {
   // click there leaves the selection as it is instead of narrowing it to the card that anchors the drag.
   fromFrame?: boolean;
   // A plain press on the card that was already the ONLY selection: released without moving, it opens the
-  // card's text (main.ts editOnClick) instead of just selecting it again.
+  // card's text (features/activate.ts editOnClick) instead of just selecting it again.
   reclick?: boolean;
   clones?: MindNode[] | null;
   // Alt-dragging CARD(s) over another card: the target card's id to fold their notes
@@ -57,7 +57,7 @@ export interface Chute { parent: string | null; beside?: string }
 // textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
 // cancels the CREATION rather than just the edit (it used to live on the title editor).
 // `holdH` is the card's height when the editor opened: held as its min-height until it closes, so a
-// card never jumps between its rendered and its raw size (main.ts paintNode).
+// card never jumps between its rendered and its raw size (render.ts paintNode).
 // `saved` is the text the NOTE holds right now: `orig` until the open editor is written through mid-edit
 // (features/inline-edit.ts flushOpenEdit), then whatever that last wrote.
 export interface BodyEdit { id: string; orig: string; saved: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
@@ -85,7 +85,7 @@ export interface Pinch { dist: number; cx: number; cy: number; }
 export interface GestureEvt extends Event { clientX: number; clientY: number; scale: number; }
 
 export const ui = {
-  // Counts every repaint and placement of a node (main.ts paintNode/placeSelf): what a follower of the
+  // Counts every repaint and placement of a node (render.ts paintNode/placeSelf): what a follower of the
   // canvas compares to know whether anything can have moved since it last looked (the float bar).
   paintTick: 0,
   // A wheel or trackpad pan/zoom is under way (no pointer is down for those; float-bar.ts times it out),
@@ -124,9 +124,9 @@ export const ui = {
 
   // ---- the stack FANNED OUT over the board (features/stacks.ts), its cards shown; null = none ----
   fan: null as string | null,
-  // ---- animated relayout (main) ----
+  // ---- animated relayout (layout-anim.ts) ----
   animToken: 0,
-  // ---- last known mouse position (window pointermove, main) ----
+  // ---- last known mouse position (window pointermove, features/commands.ts) ----
   // Lets keyboard/clipboard actions (Space-tap new card, paste) land AT the cursor; null until
   // the mouse first moves (touch never sets it) → callers fall back to the viewport centre.
   lastMouse: null as Pt | null,
