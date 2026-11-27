@@ -1,4 +1,3 @@
-// Build a MindNode from a parsed note the way data/load.ts loadFromDir does, minus geometry.
 import { parseMd } from '../src/utils/frontmatter.js';
 import { state, type MindNode } from '../src/core/state.js';
 import type { Store } from '../src/store/types.js';
@@ -18,6 +17,7 @@ export function fakeStore(over: Partial<Store> = {}): Store {
   };
 }
 
+// As data/load.ts loadFromDir builds one, minus geometry.
 export function nodeFrom(text: string, file: string | null = 'Note.md', id = 'n' + state.nodes.size): MindNode {
   const p = parseMd(text);
   const n: MindNode = {

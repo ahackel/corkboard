@@ -1,10 +1,5 @@
-// What the INSTALLED app is launched with (public/manifest.webmanifest): a Markdown note the OS opened with
-// Corkboard — "Open with", a double-click once it is the default — or one of the app icon's shortcuts.
-//
-// The manifest asks the OS to hand a launch to the window already open (launch_handler focus-existing), so
-// everything arrives here, through `launchQueue`, never as a page load. A note opens in place exactly like
-// one dropped on the pill (open-drop.ts): if asking for write access needs a click, the pill offers it.
-// Without `launchQueue` (a tab, another browser) a shortcut's `?do=` is read from the page's own URL.
+// What the INSTALLED app is launched with: a note the OS opened with it, or an icon shortcut's `?do=`.
+// See "The INSTALLED app opens notes from the OS" in docs/architecture.md.
 import { setStatus } from '../core/state.js';
 import { booted, newDeviceMap, showStartOn } from '../boot.js';
 import { open } from './open-drop.js';
@@ -15,7 +10,7 @@ interface LaunchQueue { setConsumer(consumer: (params: LaunchParams) => void): v
 const NOTE_RE = /\.(md|markdown)$/i;
 const launchQueue = (window as Window & { launchQueue?: LaunchQueue }).launchQueue;
 
-// A shortcut's action, from the URL it launched (manifest `shortcuts`): ?do=new | folders | notes.
+// manifest `shortcuts`: ?do=new | folders | notes.
 async function runAction(url: string | undefined): Promise<void> {
   const action = url ? new URL(url).searchParams.get('do') : null;
   if (action === 'new') {
@@ -27,7 +22,7 @@ async function runAction(url: string | undefined): Promise<void> {
   }
 }
 
-// The `?do=` has done its job: a reload must not do it again.
+// A reload must not run the action again.
 function forgetAction(): void {
   const url = new URL(location.href);
   if (url.searchParams.has('do')) {

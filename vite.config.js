@@ -3,11 +3,8 @@ import { defineConfig } from 'vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import pkg from './package.json' with { type: 'json' };
 
-// The built page may run its ONE inline script — named by its hash — and nothing else: no inline event
-// handler, no script from anywhere. A note's text is turned into HTML by hand (utils/markdown.ts); if a
-// mistake there ever let markup through, this is what keeps it from running. Styles stay inline (the
-// single file), pictures may come from the map (blob:, data:) or the web, and nothing is framed or posted.
-// After viteSingleFile, which is what puts the script inline. Build only: the dev server injects its own.
+// Only the one inline script (by hash) may run, so markup slipping through utils/markdown.ts stays inert.
+// Must run after viteSingleFile, which inlines the script; build only, as the dev server injects its own.
 function contentSecurityPolicy() {
   return {
     name: 'corkboard-csp',
@@ -38,12 +35,10 @@ function contentSecurityPolicy() {
   };
 }
 
-// The deploy workflow injects APP_VERSION (1.0.<deploys since 1.0.0>), so the version only
-// bumps on actual deploys. Local/dev builds are marked as such instead of counting.
+// APP_VERSION is set by the deploy workflow only.
 const appVersion = process.env.APP_VERSION || `${pkg.version}-dev`;
 
-// The version this build is, as a file beside the page: a window left open asks it whether a newer one
-// has been deployed since it loaded (src/features/update.ts).
+// version.json is polled by a window left open to spot a newer deploy (src/features/update.ts).
 function versionFile() {
   return {
     name: 'corkboard-version',
@@ -54,21 +49,16 @@ function versionFile() {
   };
 }
 
-// The build emits ONE self-contained dist/index.html (JS + CSS inlined), so the
-// deployed app stays a single file; public/sw.js keeps the last copy of it for when there is no network.
 export default defineConfig({
-  // GitHub Pages serves this project under a subpath. Relative base keeps asset URLs
-  // resolving correctly under that subpath.
+  // GitHub Pages serves the app under a subpath.
   base: './',
   publicDir: 'public',
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   plugins: [viteSingleFile(), contentSecurityPolicy(), versionFile()],
-  // `npm test` (tests/): the modules under test import core/state.ts, which looks up the DOM shell.
-  // e2e/ is Playwright's (`npm run e2e`), not vitest's.
+  // happy-dom: core/state.ts looks up the DOM shell on import.
   test: { environment: 'happy-dom', include: ['tests/**/*.test.ts'] },
   build: {
     target: 'es2020',
-    // viteSingleFile inlines everything; no separate asset dir needed.
     assetsInlineLimit: Infinity,
   },
 });

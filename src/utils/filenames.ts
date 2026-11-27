@@ -1,27 +1,18 @@
-// ============================================================
-// A note's FILENAME: the slug its text gives it, the collision rule, and the [[wikilink]] fixup a
-// rename drags along. Pure — no state, no store — so data/save.ts saveAll can lean on it and
-// the tests (tests/filenames.test.ts) can pin it down without a DOM.
-// ============================================================
+// A note's FILENAME: the slug its text gives it, collisions, and the link fixup a rename drags along.
 import type { MindNode } from '../core/state.js';
 import { firstLineLabel, fileStem } from './frontmatter.js';
 import { soleImage } from './markdown.js';
 
-// How two paths are COMPARED: the way the least particular disk does it. macOS and Windows fold case, and
-// macOS also folds the two spellings of an accented letter (`é` as one character, or as `e` plus an
-// accent — how Finder and iCloud write it). Two paths with one key are one file there, so writing one and
-// removing "the other" removes the note.
+// macOS and Windows fold case, and macOS also folds the two Unicode spellings of an accented letter.
 export function pathKey(path: string): string { return path.normalize('NFC').toLowerCase(); }
 
-// A filename may be 255 BYTES on every common disk; this leaves room for `.md` and a ` 12` suffix.
+// A filename may be 255 BYTES; this leaves room for `.md` and a ` 12` suffix.
 const MAX_STEM_BYTES = 200, MAX_STEM_CHARS = 120;
 
-// Whole characters from the start of `s`, up to both limits. Counted per CODE POINT: cutting between the
-// two halves of an emoji leaves half a character, which a disk stores as something else — and the name
-// the note is then loaded under no longer matches the one its text asks for.
-function clip(s: string): string {
+// Cut per CODE POINT: half an emoji is stored as something else, and the name would stop matching.
+function clipStem(s: string): string {
   if (s.length * 3 <= MAX_STEM_BYTES) {
-    return s;   // no UTF-16 unit takes more than three bytes: short enough either way
+    return s;   // no UTF-16 unit takes more than three bytes
   }
   let out = '', bytes = 0, chars = 0;
   for (const ch of s) {
@@ -35,46 +26,25 @@ function clip(s: string): string {
   return out;
 }
 
-// Names Windows keeps for devices, whatever the extension.
-const DEVICE_NAME = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
+const WINDOWS_DEVICE_NAME = /^(con|prn|aux|nul|com\d|lpt\d)$/i;
 
-// title -> safe filename component: no path separators or illegal chars — and no leading or trailing
-// dot or space, and no `..`. A leading dot makes a HIDDEN file (Finder, Obsidian and `ls` all skip it),
-// and a first line that is a sentence ended its filename in `move..md`. No control characters and no
-// half characters either (a disk drops or replaces them), and one spelling of each accented letter.
+// No leading/trailing dot or space (a leading dot HIDES the file) and no `..` (`move..md`).
 export function safeName(title: string): string {
-  const s = clip(title.normalize('NFC')
-    // eslint-disable-next-line no-control-regex -- control characters are exactly what is being removed
+  const s = clipStem(title.normalize('NFC')
+
+    // eslint-disable-next-line no-control-regex -- removing control characters is the point
     .replace(/[\u0000-\u001f\u007f-\u009f\ufffd]/g, ' ')
     .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '')
     .trim().replace(/[/\\:*?"<>|]/g, '-').replace(/\s+/g, ' ').replace(/\.{2,}/g, '.'))
     .replace(/^[.\s]+|[.\s]+$/g, '');
-  if (DEVICE_NAME.test(s)) {
+  if (WINDOWS_DEVICE_NAME.test(s)) {
     return s + '_';
   }
   return s || 'Untitled';
 }
-// The filename a node SHOULD have, given its title, keeping its current directory.
-//
-// The filename is a SLUG, not the node's identity any more — the title lives in the note itself (the
-// body's leading heading, utils/frontmatter.ts splitHeading), so this is free to suffix a colliding
-// name without that suffix ever being read back as part of the title. Which is what lets two cards
-// share a title: `Notes.md` and `Notes 2.md`, both titled "Notes".
-//
-// The slug TRACKS the text: it is re-derived on every save, so a card's filename always reads as the
-// name the card shows — its heading, else its first line. It used to be minted once and left to go
-// stale, which meant an ordinary card (untitled, its text edited into shape after it was created) kept
-// whatever name it had at its very first autosave — `Untitled 12.md` for life. Tracking costs a rename
-// per edit that changes the first line, and what records a path follows it: a section's folder takes its
-// notes along (saveAll phase 1) and the inbound [[wikilinks]] are re-pointed (phase 1b). Not a rename PER
-// KEYSTROKE, though: while any editor holds the note's text the name is frozen (ui-state.ts
-// frozenFileNodeId), so the rename lands once, when the edit session commits.
-// The bare slug a node's own text gives it, with no directory and no `.md` — the ONE spelling of that
-// rule, shared with exportZip, which has to name never-saved nodes the same way.
-// An IMAGE card (a card holding nothing but one `![alt](src)`) is named after the PICTURE: its alt
-// text, else the image file's own stem. firstLineLabel would hand back the raw `![](attachments/…)`
-// markup, which slugifies into something no one can read in a folder listing — and the note has no
-// other text to be named from, so this is the one kind of body worth reading structurally.
+
+// The slug TRACKS the text (renamed on edit-commit, see `keepsName`). An image card is named after its
+// picture: its alt text, else the file's stem, never the raw `![](…)` markup.
 export function slugStem(n: Pick<MindNode, 'title' | 'body'>): string {
   const img = soleImage(n.body);
   if (!n.title.trim() && img) {
@@ -82,22 +52,21 @@ export function slugStem(n: Pick<MindNode, 'title' | 'body'>): string {
   }
   return safeName(n.title.trim() || firstLineLabel(n.body));
 }
-// ---------- a SECTION is a FOLDER ----------
-// The tree is the folder tree: a card is `<folder>/<slug>.md`, a section is the folder `<folder>/<slug>/`
-// holding its own note as SECTION_NOTE plus everything inside it. So a node's parent is never written
-// down — it is read off the path (parentFileOf), and moving a card into a section MOVES its file.
+
+// A SECTION is a FOLDER holding its own note as SECTION_NOTE; a parent is read off the path, never written.
 export const SECTION_NOTE = '_index.md';
-// Is this path a section's own note? Case-insensitive, like every other path test here.
+
 export function isSectionNote(path: string): boolean {
   return path.slice(path.lastIndexOf('/') + 1).toLowerCase() === SECTION_NOTE;
 }
-// The directory a path sits in, with its trailing slash ('' at the top level).
+
+// With its trailing slash ('' at the top level).
 export function dirOf(path: string): string { return path.slice(0, path.lastIndexOf('/') + 1); }
-// The folder a node's CHILDREN live in: a section's own folder; for anything else, the folder it sits in
-// (a card holds no cards, so that is only ever asked of a card by a legacy, not-yet-migrated tree).
+
+// Where a node's CHILDREN live (asked of a card only by a not-yet-migrated tree).
 export function folderOf(path: string): string { return dirOf(path); }
-// The section note a path belongs to, or null for the top level. A section's parent is the section of the
-// folder ABOVE its own; anything else's is the section of the folder it sits in.
+
+// A section's parent is the section of the folder ABOVE its own.
 export function parentFileOf(path: string): string | null {
   let dir = dirOf(path);
   if (isSectionNote(path)) {
@@ -105,40 +74,31 @@ export function parentFileOf(path: string): string | null {
   }
   return dir ? dir + SECTION_NOTE : null;
 }
-// The name a node goes by in its folder, without the folder: a section's folder name, a card's stem.
+
+// A section's folder name, a card's stem.
 export function ownStem(path: string, section: boolean): string {
   if (section && isSectionNote(path)) { const d = dirOf(path).slice(0, -1); return d.slice(d.lastIndexOf('/') + 1); }
   return fileStem(path);
 }
 
-// `inUse` is the pathKey -> node id index the collision test reads (persistence.ts
-// filesInUse), built ONCE per save rather than re-derived per candidate name.
-// `dir` is the folder the node belongs in — its parent section's folder, '' at the top level. Left out,
-// the node stays in the folder it is in. `reserved` holds lowercased folders on disk that are NOT
-// sections (`attachments/`, a dot-folder): a section must not move into one of those and adopt its files.
-// `keepName` leaves the name the file already has and only settles its folder: the text that names it
-// hasn't changed since the name was last settled, so there is nothing to track (data/save.ts namedFor).
+// `inUse`: pathKey -> node id, built once per save. `dir`: the target folder (default: where it is).
+// `reserved`: non-section folders a section must not adopt. `keepName`: only settle the folder.
 export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body'> & { type?: MindNode['type']; stack?: boolean },
                                inUse: Map<string, string>, dir?: string, reserved?: Set<string>, keepName = false): string {
   const section = n.type === 'section';
   const at = dir ?? (n.file ? (section && isSectionNote(n.file) ? dirOf(dirOf(n.file).slice(0, -1)) : dirOf(n.file)) : '');
   let stem = slugStem(n);
-  // Nothing in the note to be named off — `Untitled` is safeName's fallback for an empty string, so
-  // this is a card with no heading, no text and no picture. Keep the name it already has: there is
-  // nothing to track, and renaming it would only renumber it as its neighbours come and go. A card the
-  // user just CLEARED therefore keeps the slug it was named under, which utils/model.ts namelessLabel
-  // leans on — the stem is the name they deleted, so nothing shows it to them again.
+
+  // Nothing to name it off: keep the name it has, so a cleared card keeps its slug.
   if ((stem === 'Untitled' || keepName) && n.file) {
     stem = ownStem(n.file, section);
   } else if (stem === 'Untitled' && n.stack) {
-    stem = 'Stack';   // a new pile's folder: `Stack`, `Stack 2`, …
+    stem = 'Stack';
   }
   const pathFor = (s: string): string => section ? at + s + '/' + SECTION_NOTE : at + s + '.md';
-  // Avoid clobbering a DIFFERENT node that already uses this filename — case-INSENSITIVELY, since
-  // that's how the filesystem collides on macOS/Windows: "Notes" and "notes" are one file there, so
-  // an exact-match test would hand both nodes "their own" name and let the second write eat the first.
-  // A card may not be called `_index` (it would BE its folder's section note), and a section may not take
-  // a folder that is already something else's.
+
+  // Collide case-INSENSITIVELY, as macOS/Windows do. A card may not be `_index` (it would BE the section
+  // note), and a section may not take a folder that is something else's.
   const taken = (s: string): boolean => {
     if (!section && s.toLowerCase() === SECTION_NOTE.slice(0, -3)) {
       return true;
@@ -154,28 +114,21 @@ export function desiredFileFor(n: Pick<MindNode, 'id' | 'file' | 'title' | 'body
     s = stem + ' ' + (i++);
   }
 
-  // A rename that only changes CASE (or the spelling of an accent) keeps the old name: on macOS/Windows
-  // `Notes.md` and `notes.md` are one file, so saveAll would write the new name and then delete the old
-  // one, which is the same file.
+  // A case-only rename keeps the old name: on macOS/Windows the old and new are one file, and saveAll
+  // would delete it after writing it.
   const path = pathFor(s);
   return n.file && pathKey(path) === pathKey(n.file) ? n.file : path;
 }
 
-// Re-point the links in one body that name a file a save just renamed, so a link written before the rename
-// still resolves after it (utils/model.ts resolveWikilink). Two forms move:
-//   - a WHOLE path, `[[Ideas/Old]]` (`.md` optional), and a markdown link to the note, `[x](Ideas/Old.md)`;
-//   - the END of one, `[[Old]]` — Obsidian's "shortest path" link to a note in a folder — rewritten to the
-//     same number of segments, but only when nothing else in the map (`existing`: every path after the
-//     rename, lowercased, without `.md`) answers to that name, so a link that meant another note stays.
-// A `[[Title]]` that matched by title is never touched: re-slugging a file doesn't change a title. The alias,
-// a `#heading` and a link's `<…>`/`%20` spelling are carried through verbatim.
-// `renames` maps old path -> new path; returns the body unchanged (the same string) if nothing moved.
+// Re-points links to renamed files: a whole path (`[[Ideas/Old]]`, `[x](Ideas/Old.md)`), or a path's
+// END (`[[Old]]`) when nothing in `existing` answers to it. Title matches are left alone. Returns the
+// same string if nothing moved.
 export function retargetLinks(body: string, renames: Map<string, string>, existing: Set<string> = new Set()): string {
   if (!renames.size) {
     return body;
   }
   const dropMd = (path: string): string => path.replace(/\.md$/i, '');
-  const to = new Map<string, string>();   // old path, no `.md`, lowercased -> new path, no `.md`
+  const to = new Map<string, string>();   // old path, lowercased -> new path, both without `.md`
   for (const [from, into] of renames) {
     to.set(dropMd(from).toLowerCase(), dropMd(into));
   }
@@ -191,7 +144,8 @@ export function retargetLinks(body: string, renames: Map<string, string>, existi
     const hits = [...to].filter(([from]) => from.endsWith('/' + key));
     return hits.length === 1 ? hits[0][1].split('/').slice(-key.split('/').length).join('/') : null;
   };
-  // Same shapes as the renderer's (utils/markdown.ts mdLinks).
+
+  // Same shapes as mdLinks.
   return body
     .replace(/\[\[([^\]|#^]+)([#^][^\]|]*)?(\|[^\]]*)?\]\]/g, (m, target: string, place?: string, alias?: string) => {
       const into = retarget(target);
@@ -216,8 +170,7 @@ export function retargetLinks(body: string, renames: Map<string, string>, existi
     });
 }
 
-// The folders to try removing after notes left `emptied` folders: each of those and every folder above
-// it, deepest first (emptying `A/B/` can empty `A/`), but never one that still holds a note in `held`.
+// Each emptied folder and every one above it, deepest first, unless it still holds a note.
 export function prunableDirs(emptied: Iterable<string>, held: Iterable<string | null>): string[] {
   const live = new Set<string>();
   for (const f of held) {

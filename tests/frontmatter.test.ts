@@ -1,5 +1,4 @@
-// The file format: a note must survive load → save unchanged, and a save may rewrite ONLY the
-// app-owned keys (tags, color, mm_*). These are the guarantees that keep a user's vault safe.
+// The file format: a note survives load → save unchanged; a save rewrites ONLY tags, color and mm_*.
 import { beforeEach, describe, expect, it } from 'vitest';
 import { parseMd, serializeMd, splitHeading, joinHeading } from '../src/utils/frontmatter.js';
 import { state } from '../src/core/state.js';

@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { openBoard, seedBoard, note, card, watchErrors, settled, diskFiles, reload } from './helpers';
 
-// A note written in Obsidian: a picture embedded by NAME (it lives in a section's folder, not beside the
-// note), and a short link to a note in that folder, pointing at a heading in it.
+// The picture lives in a section's folder, not beside the note that embeds it by name.
 const PIC = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="red"/></svg>';
 const BOARD = {
   'Start.md': note('# Start\nSee [[Plan#Goals]]\n\n![[pic.svg|30]]'),

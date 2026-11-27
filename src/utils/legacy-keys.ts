@@ -1,14 +1,5 @@
-// ============================================================
-// One-time rename migration (mindmap → Corkboard) for localStorage.
-// Everything the app persists OUTSIDE the vault used to be prefixed `mindmap.` — the theme,
-// the edge style, the map registry, the MRU lists. A localStorage key can't be renamed in
-// place, so each is copied to its `corkboard.` twin once and the old one dropped.
-// What is deliberately NOT renamed: the notes' `mm_*` frontmatter keys. Those are the FILE
-// FORMAT — a vault has to keep opening in Obsidian and in any older build — not the product
-// name. The IndexedDB half of the same rename lives in utils/idb.ts (`openRenamed`).
-//
-// main.ts calls it FIRST, before anything reads a setting.
-// ============================================================
+// One-time localStorage rename `mindmap.` → `corkboard.`; main.ts runs it before anything reads a setting.
+// The `mm_*` frontmatter keys are the FILE FORMAT and are never renamed.
 const LEGACY_PREFIX = 'mindmap.', PREFIX = 'corkboard.';
 
 export function migrateLegacyKeys(): void {
@@ -19,7 +10,8 @@ export function migrateLegacyKeys(): void {
       }
       const val = localStorage.getItem(key);
       const next = PREFIX + key.slice(LEGACY_PREFIX.length);
-      // Never clobber a value the renamed build already wrote (an upgrade/downgrade round-trip).
+
+      // Never clobber a value the renamed build already wrote.
       if (val !== null && localStorage.getItem(next) === null) {
         localStorage.setItem(next, val);
       }

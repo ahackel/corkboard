@@ -1,4 +1,4 @@
-// ---------- the ghost card: drag a new card off the corner of the canvas ----------
+// The ghost card: drag a new card off the corner of the canvas, through the ordinary drag machinery.
 import { byId, trackPointer } from '../utils/dom.js';
 import { type MindNode } from '../core/state.js';
 import { feedDragMove, abortDrag, commitDrag, startNodeDrag } from './drag.js';
@@ -7,18 +7,12 @@ import { commitStep } from './history.js';
 import { startInlineEdit, endInPlaceEdit } from './inline-edit.js';
 import { screenToWorld } from '../view/camera.js';
 
-// Ghost-card drag: grab the corner card to spawn a new note that rides the cursor through the same
-// move/drop machinery as dragging an existing card — so the guides and the drop-into-a-section rule
-// behave identically. Releasing back on the ghost cancels.
 const ghost = byId('ghostCard');
 let newNode: MindNode | null = null;
 
-// Move/up are handled on `window`, not the ghost, so the drop commits no matter where the pointer
-// is released or whether pointer-capture survived the mid-drag re-renders (a lost capture used to
-// deliver pointerup to the card underneath, whose handler ignores it — leaving the ghost stuck and
-// nothing created). setPointerCapture is still requested (best-effort) so the dragged card's own
-// handlers stay quiet; capture events bubble to window regardless.
+// Move/up listen on `window`: pointer capture can be lost in mid-drag re-renders.
 let stopGhostDrag: (() => void) | null = null;
+
 function endGhostDrag(): MindNode | null {
   const n = newNode;
   newNode = null;
@@ -26,39 +20,50 @@ function endGhostDrag(): MindNode | null {
   stopGhostDrag = null;
   return n;
 }
+
 function onMove(e: PointerEvent): void {
   if (newNode) {
     feedDragMove(e.clientX, e.clientY);
   }
 }
+
+// Deleting inside the open step nets null→null, so the step is discarded.
+function discardNewCard(n: MindNode): void {
+  abortDrag();
+  deleteNode(n.id);
+  commitStep();
+}
+
 function onUp(e: PointerEvent): void {
   const n = endGhostDrag();
   if (!n) {
     return;
   }
-  // released back on the ghost card itself -> cancel: discard the new card, create nothing
   const r = ghost.getBoundingClientRect();
-  const onGhost = e.clientX >= r.left && e.clientX <= r.right &&
-                  e.clientY >= r.top  && e.clientY <= r.bottom;
-  if (onGhost) { abortDrag(); deleteNode(n.id); commitStep(); return; }   // nets null→null, discarded
-  commitDrag();                          // land / reparent exactly where the preview showed
-  startInlineEdit(n, { isNew: true });   // drop straight into renaming; Esc cancels creation
+  const releasedOnGhost = e.clientX >= r.left && e.clientX <= r.right &&
+                          e.clientY >= r.top  && e.clientY <= r.bottom;
+  if (releasedOnGhost) {
+    discardNewCard(n);
+    return;
+  }
+  commitDrag();
+  startInlineEdit(n, { isNew: true });
 }
+
 function onCancel(): void {
   const n = endGhostDrag();
-  if (n) { abortDrag(); deleteNode(n.id); commitStep(); }   // nets null→null, discarded
+  if (n) {
+    discardNewCard(n);
+  }
 }
 
 export function installGhostCard(): void {
   ghost.addEventListener('pointerdown', (e: PointerEvent) => {
     e.preventDefault();
-    endInPlaceEdit();                       // grabbing the ghost commits any in-progress edit
-
-    // anchor the new card at the grab offset within the ghost (i.e. the ghost's own top-left in
-    // world space), then drive it with the real drag so it rides the cursor at that same offset
+    endInPlaceEdit();
     const r = ghost.getBoundingClientRect();
-    const w = screenToWorld(r.left, r.top);
-    newNode = createDetachedNode(w.x, w.y) ?? null;
+    const ghostTopLeft = screenToWorld(r.left, r.top);
+    newNode = createDetachedNode(ghostTopLeft.x, ghostTopLeft.y) ?? null;
     if (!newNode) {
       return;
     }

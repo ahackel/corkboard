@@ -1,8 +1,4 @@
-// IndexedDB fallback store — identical interface to opfsStore, used on Safari < 17.2 where
-// OPFS lacks createWritable(). A flat key/value object store keyed by relative path.
-// Multi-map: each map's files share one object store, namespaced by an `<id>::` key prefix;
-// the legacy pre-multi-map notes live unprefixed and simply ARE the map with id 'vault'
-// (mirroring the OPFS adapter's legacy vault/ dir). `<id>::map.json` carries the display name.
+// The IndexedDB fallback for Safari < 17.2: flat keys `<id>::<path>`; unprefixed keys are the legacy 'vault'.
 import type { DeviceStore, PickResult, TreeListing } from './types.js';
 import { planTree, type FoldTest } from './tree.js';
 import { openRenamed, dbPut, dbGet, dbDel, dbEach } from '../utils/idb.js';
@@ -13,11 +9,9 @@ export const idbStore = (() => {
   let _db: IDBDatabase | null = null, _opened = false;
   let _mapId = 'vault', _mapName = 'On-device storage';
   async function db(): Promise<IDBDatabase> {
-    // openRenamed carries the vault over from the pre-rename database name (utils/idb.ts).
     return _db ??= await openRenamed('corkboard-vault', 'mindmap-vault', 'files');
   }
   const prefixOf = (id: string): string => id === 'vault' ? '' : id + '::';
-  // does this raw key belong to the map `id`? (vault owns every unprefixed key)
   const ownedBy = (key: string, id: string): boolean =>
     id === 'vault' ? !key.includes('::') : key.startsWith(prefixOf(id));
 
@@ -40,7 +34,7 @@ export const idbStore = (() => {
     },
     async createMap(id: string, name: string){ await put(prefixOf(id) + MAP_META_FILE, serializeMapMeta(name)); },
     async renameMap(id: string, name: string){
-      await this.createMap(id, name);   // rename IS a meta rewrite
+      await this.createMap(id, name);
       if (id === _mapId) {
         _mapName = name;
       }
@@ -53,7 +47,6 @@ export const idbStore = (() => {
       });
     },
     async listMaps(){
-      // every distinct key prefix is a map; any unprefixed key means the legacy vault exists
       const ids = new Set<string>(); const names = new Map<string, string>();
       await eachKey((k, v) => {
         const sep = k.indexOf('::');
@@ -71,7 +64,6 @@ export const idbStore = (() => {
 
     async pick(): Promise<PickResult> { try { await db(); _opened = true; return 'ok'; } catch { return 'error'; } },
     async listTree(under: string, fold: FoldTest): Promise<TreeListing> {
-      // A flat key space: every file is already in hand, so the plan simply picks which texts to keep.
       const p = prefixOf(_mapId), all = new Map<string, unknown>();
       await eachKey((k, v) => {
         if (!ownedBy(k, _mapId)) {
@@ -85,7 +77,7 @@ export const idbStore = (() => {
       const plan = planTree([...all.keys()], under, fold);
       return { files: plan.read.map(path => ({ path, text: all.get(path) as string })), lazy: plan.lazy, foreign: plan.foreign, assets: plan.assets };
     },
-    async removeDir(): Promise<void> { /* a flat key space has no folders to leave behind */ },
+    async removeDir(): Promise<void> { /* no folders in a flat key space */ },
     async write(path: string, data: string | Blob): Promise<void> { await put(prefixOf(_mapId) + path, data); keepStorage(); },
     async remove(path: string): Promise<void> { try { await del(prefixOf(_mapId) + path); } catch {} },
     async readBlob(path: string): Promise<Blob | null> {
@@ -100,4 +92,4 @@ export const idbStore = (() => {
     watch(){ },
   };
 })();
-idbStore satisfies DeviceStore;   // compile-time contract check
+idbStore satisfies DeviceStore;

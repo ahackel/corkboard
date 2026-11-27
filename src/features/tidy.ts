@@ -1,8 +1,5 @@
-// ---------- tidy-up of a selection: only when asked (docs/PRODUCT.md, principle 2) ----------
-// Tidy up (FigJam's grid), the six aligns, the two distributes and "same width", applied to the
-// selected cards and sections. The geometry is utils/tidy.ts; this module turns the selection into boxes,
-// applies the answer as ONE undo step with the reflow glide, and lets sections grow to show the result.
-// Nothing here runs on its own: the float bar's tidy menu, ⌘P and the ⌥ shortcuts are the only ways in.
+// Tidy up, align, distribute and same width over the selection, as ONE undo step; only when asked.
+// The geometry is utils/tidy.ts.
 import { state, setStatus, isImageCard, type MindNode } from '../core/state.js';
 import { childrenOf, isLockedEffective, nodesOf, outermost, subtreeIds } from '../utils/model.js';
 import { isSection, moveSubtreeTo, sectionLabelH } from '../view/layout.js';
@@ -13,12 +10,11 @@ import { animateLayout } from '../layout-anim.js';
 import { nodeW, nodeH, snapPt } from '../view/geometry.js';
 import { SECTION_FIT_PAD } from './float-bar.js';
 
-// What a tidy acts on: the selected nodes that aren't inside another selected one (a section carries its
-// own cards along) and aren't locked.
 function targets(): MindNode[] {
   return outermost(nodesOf(state.sel)).filter(n => !isLockedEffective(n));
 }
-// A node's footprint: a section's label hangs above its box, and it belongs to the section's room.
+
+// A section's label hangs above its box and belongs to its footprint.
 function boxOf(n: MindNode): Box {
   const lh = n.type === 'section' ? sectionLabelH(n) : 0;
   return { id: n.id, x: n.x, y: n.y - lh, w: nodeW(n), h: nodeH(n) + lh };
@@ -44,13 +40,10 @@ function apply(what: string, place: (boxes: Box[]) => Map<string, Pt>, min = 2, 
 }
 
 function tidyUp(): void {
-  // from the selection's top-left, on the grid, with the house spacing — the same one guides pull to
   apply('Tidied up', boxes => tidyGrid(boxes, SPACING,
     snapPt({ x: Math.min(...boxes.map(b => b.x)), y: Math.min(...boxes.map(b => b.y)) })));
 }
 
-// A section's own tidy, the tidy button on its bar: its cards, laid out as Tidy up lays out a selection, from the
-// box's corner inside the margin Resize to fit leaves. The box keeps its size: only you resize a section.
 function sectionKids(s: MindNode): MindNode[] {
   return childrenOf(s.id).filter(n => !isLockedEffective(n));
 }
@@ -59,6 +52,7 @@ export function canTidySection(s: MindNode | undefined): s is MindNode {
   return !!s && isSection(s) && !isLockedEffective(s) && sectionKids(s).length >= 2;
 }
 
+// The box keeps its size: only you resize a section.
 export function tidySection(s: MindNode): void {
   apply('Tidied up', boxes => tidyGrid(boxes, SPACING, snapPt({ x: s.x + SECTION_FIT_PAD, y: s.y + SECTION_FIT_PAD })),
     2, sectionKids(s));
@@ -66,11 +60,12 @@ export function tidySection(s: MindNode): void {
 
 const ALIGN_NAME: Record<AlignEdge, string> = { left: 'left', center: 'centres', right: 'right', top: 'top', middle: 'middles', bottom: 'bottom' };
 function alignSelection(edge: AlignEdge): void { apply(`Aligned ${ALIGN_NAME[edge]}`, boxes => align(boxes, edge)); }
+
 function distributeSelection(axis: 'x' | 'y'): void {
   apply(axis === 'x' ? 'Spaced evenly across' : 'Spaced evenly down', boxes => distribute(boxes, axis), 3);
 }
-// Same width: every selected plain CARD takes the widest one's width (sections and pictures size
-// themselves; a card's text re-wraps, so its height is re-measured).
+
+// Every selected plain CARD takes the widest one's width (sections and pictures size themselves).
 function sameWidth(): void {
   const cards = targets().filter(n => n.type !== 'section' && !isImageCard(n));
   if (cards.length < 2) { setStatus('Select two or more cards'); return; }
@@ -79,7 +74,7 @@ function sameWidth(): void {
     { reflow: 'remeasure', status: 'Same width' });
 }
 
-// The float bar's tidy menu (and ⌘P's entries): FigJam's shortcuts, ⌥ for the aligns, ⌃⌥ for the rest.
+// FigJam's shortcuts.
 export const TIDY_ACTIONS: Array<{ label: string; shortcut: string; run: () => void; min?: number }> = [
   { label: 'Tidy up', shortcut: '⌃⌥T', run: tidyUp },
   { label: 'Align left', shortcut: '⌥A', run: () => alignSelection('left') },
@@ -92,16 +87,18 @@ export const TIDY_ACTIONS: Array<{ label: string; shortcut: string; run: () => v
   { label: 'Space evenly down', shortcut: '⌃⌥V', run: () => distributeSelection('y'), min: 3 },
   { label: 'Same width', shortcut: '', run: sameWidth },
 ];
-// The menu, grouped: tidy · align across · align down · space · size.
+
+// Grouped: tidy · align across · align down · space · size.
 export function tidyMenuEntries(): Array<'sep' | { label: string; shortcut?: string; run: () => void; disabled?: boolean }> {
   const n = targets().length;
   const e = (i: number) => ({ ...TIDY_ACTIONS[i], disabled: n < (TIDY_ACTIONS[i].min ?? 2) });
   return [e(0), 'sep', e(1), e(2), e(3), 'sep', e(4), e(5), e(6), 'sep', e(7), e(8), 'sep', e(9)];
 }
-// ⌥ / ⌃⌥ + letter, by KEY CODE: ⌥ turns letters into other characters on a Mac, and on Windows/Linux
-// Alt+D still reports `d` — which would otherwise fall through to Duplicate.
+
+// By KEY CODE: ⌥ changes the character on a Mac, and elsewhere Alt+D reports `d` (Duplicate).
 const ALT_KEYS: Record<string, number> = { KeyA: 1, KeyH: 2, KeyD: 3, KeyW: 4, KeyV: 5, KeyS: 6 };
 const CTRL_ALT_KEYS: Record<string, number> = { KeyT: 0, KeyH: 7, KeyV: 8 };
+
 export function tidyShortcut(e: KeyboardEvent): boolean {
   if (!e.altKey || e.metaKey || state.sel.size < 2) {
     return false;

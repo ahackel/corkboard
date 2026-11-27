@@ -1,10 +1,5 @@
-// ---------- node layout ----------
-// Nothing here PLACES cards any more. A card sits where it was put, and a section's children sit where
-// they were dropped inside it (docs/PRODUCT.md: "you arrange; the app assists"). What's left is the
-// geometry of a section — its box, its interior, which section a point falls in — and the absolute <->
-// relative bridge every save goes through. The outliner, the flow sections, the line/fan arrangements
-// and the drop simulation that previewed them are gone with the nesting they served.
-//
+// Section geometry (box, interior, which section a point falls in) and the absolute ↔ relative position
+// bridge. Nothing here places cards: they sit where they were put.
 import { state, isStack, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
@@ -13,18 +8,8 @@ import { centreOf, contains, deepestAt } from '../utils/rect.js';
 import { layStacks } from './pile.js';
 import { firstLineLabel } from '../utils/frontmatter.js';
 
-// ---------- absolute <-> relative position ----------
-// Two forms of a node's position: the WORKING form x/y (absolute world coords, what the drag engine
-// reads and mutates) and the PERSISTED form rx/ry (offset from the parent, world origin for a root —
-// what board.json stores). commitRel() derives the persisted form from the working form; it's the
-// only bridge, called just before every save (saveAll / exportZip). Load does the reverse — see
-// data/load.ts loadFromDir.
-// A node's persisted position is an OFFSET from its parent, so moving the PARENT restales every
-// child's stored position even though nothing about the child moved on screen — dragging a section's
-// west edge (which shifts the section's own x), or undoing such a resize, leaves each child's saved
-// offset describing the OLD one. Refreshing it here, in the one bridge every save goes through, covers
-// every mover (resize, undo/redo, drag) instead of asking each of them to remember. It marks nothing
-// dirty: a position is board.json's business (data/board.ts), which is rewritten whole.
+// x/y (absolute) → rx/ry (offset from the parent, what board.json stores). Run before every save, so any
+// mover of a parent restales its children's offsets without having to remember to.
 export function commitRel(): void {
   for (const n of state.nodes.values()) {
     const p = parentOf(n);
@@ -32,9 +17,7 @@ export function commitRel(): void {
   }
 }
 
-// Bounding box over a node + its VISIBLE descendants. A SECTION is bounded by its OWN box (mm_w/mm_h):
-// its children live INSIDE it, so we count the section's box and don't descend into its content — plus
-// the label hanging above it (sectionLabelH), so a section fitted around one leaves its name room.
+// A section's children are inside its box, so it isn't descended into; its label above it counts.
 function subtreeBox(node: MindNode){
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   const walk = (n: MindNode): void => {
@@ -53,7 +36,7 @@ function subtreeBox(node: MindNode){
   walk(node);
   return { x0, y0, x1, y1 };
 }
-// …and the box around SEVERAL subtrees (infinite when none of them shows).
+// Infinite when none of them shows.
 export function subtreesBox(nodes: Iterable<MindNode>): { x0: number; y0: number; x1: number; y1: number } {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const n of nodes) {
@@ -62,26 +45,18 @@ export function subtreesBox(nodes: Iterable<MindNode>): { x0: number; y0: number
   }
   return { x0, y0, x1, y1 };
 }
-// An EXPANDED section: a box that holds the cards dropped inside it. A COLLAPSED section folds to its bare
-// title tab (children hidden), so it isn't a box while folded — its footprint is the tab.
-// A STACK isn't one either: it's a section drawn as a PILE (features/stacks.ts), with no box to hold anything.
+// An expanded section box: not folded to its pill, not drawn as a stack.
 export function isSection(node: MindNode): boolean {
   return node.type === 'section' && !node.collapsed && !isStack(node);
 }
-// The box a section actually holds its children in: its own bounds. The single spelling, shared by
-// sectionInterior, the in-section test and the open section's canvas.
+// The open section's box is the viewport, derived without touching its authored f.w/f.h.
 export function containerBox(f: MindNode): { x: number; y: number; w: number; h: number } {
-  // …or, for the OPEN one (nav/scope.ts), the VIEWPORT — that's what gives its contents the whole
-  // window instead of a rectangle on the canvas. A DERIVED override: f.w/f.h are neither read nor
-  // written here, which is what lets the section come back out at its authored size.
   if (isScopeRoot(f)) {
     return scopeRect();
   }
   return { x: f.x, y: f.y, w: nodeW(f), h: nodeH(f) };
 }
-// Does this node live inside a section (any section ancestor)? Such nodes track their section even while
-// HIDDEN, so a folded section that moves doesn't leave its contents behind. Uses `type` (not isSection)
-// so a COLLAPSED section still counts.
+// A folded section counts too: its hidden contents must move with it.
 function insideSection(node: MindNode): boolean {
   for (const p of ancestors(node)) {
     if (p.type === 'section') {
@@ -90,21 +65,13 @@ function insideSection(node: MindNode): boolean {
   }
   return false;
 }
-// The nearest ANCESTOR section actually hosting `node` right now — the section whose content wrapper
-// `node`'s element lives inside, DOM-wise (render.ts sectionContentEl/place). Only EXPANDED sections count
-// (isSection): a collapsed section has no box/wrapper, so it can't host anything. Shared with the edge
-// painter so an edge between two cards inside the same section clips to it too.
+// The section whose content wrapper holds `node`'s element. The open section hosts nothing: its children
+// are the top level.
 export function hostSection(node: MindNode): MindNode | null {
   const h = containerHost(node);
-  // The OPEN section hosts NOTHING: its children are the top level now, so they go straight under
-  // #world, unclipped, and the wrapper it would otherwise own is dropped by paintNode.
   return h && isScopeRoot(h) ? null : h;
 }
-// …and the same walk WITHOUT that exception: the nearest expanded section ancestor by TREE, wherever the
-// node's element actually ended up.
-// The OPEN section counts even FOLDED: it is the canvas, and its fold must not hand its cards to a section
-// further up. A STACK ends the walk with no host: its cards are only on screen FANNED OUT, held up over the
-// board — never clipped by a box below.
+// The open section counts even folded (it is the canvas). A stack's cards show only fanned out, unclipped.
 function containerHost(node: MindNode): MindNode | null {
   for (let p = parentOf(node); p; p = parentOf(p)) {
     if (isStack(p)) {
@@ -116,8 +83,7 @@ function containerHost(node: MindNode): MindNode | null {
   }
   return null;
 }
-// How many ancestors `node` has (0 for a root). Picks the INNERMOST of several nested, overlapping
-// sections — "deepest wins" in every section hit-test (sectionAt below, drag.ts innermostSectionAt).
+// "Deepest wins" in every section hit-test.
 export function ancestorDepth(node: MindNode): number {
   let d = 0;
   for (let p = parentOf(node); p; p = parentOf(p)) {
@@ -125,9 +91,7 @@ export function ancestorDepth(node: MindNode): number {
   }
   return d;
 }
-// What would HOLD a new card asked to go "in" `id`: that node if it's a section, else the section the node
-// sits in — or null (the top level). Cards never hold cards; every create/paste path asks this, so a
-// card can't end up with children however the request was phrased.
+// Where a new card asked to go "in" `id` lands: cards never hold cards, so the nearest section or the top level.
 export function holderOf(id: string | null | undefined): string | null {
   for (let n = id ? state.nodes.get(id) : undefined; n; n = parentOf(n) ?? undefined) {
     if (n.type === 'section') {
@@ -136,25 +100,16 @@ export function holderOf(id: string | null | undefined): string | null {
   }
   return null;
 }
-// The innermost expanded, visible, UNLOCKED section whose box contains the world point (x,y), skipping
-// `skip` (the cards being dragged — a section can't be dropped into itself). A locked section takes no
-// cards, so a drop over one falls through to the section around it. THE drop
-// rule (docs/PRODUCT.md): a card belongs to the section its centre is in, else the top level. Shared by
-// the drag preview and the commit, so what lights up is where the card goes.
-// A section that takes cards in: expanded, on the canvas, not the open section itself, not locked. Asked by
-// the drop test below and by a section settling over what it covers (features/drag.ts settleSections).
 export function collectsCards(m: MindNode): boolean {
   return isSection(m) && !isHidden(m) && !isScopeRoot(m) && !isLockedEffective(m);
 }
 
+// THE drop rule, shared by the drag preview and the commit. `skip`: the dragged cards.
 export function sectionAt(x: number, y: number, skip: Set<string>): MindNode | null {
   return deepestAt(state.nodes.values(), { x, y }, m => skip.has(m.id) || !collectsCards(m) ? null : containerBox(m), ancestorDepth);
 }
-// A section's INTERIOR rect (absolute world coords, inside its border — its label hangs outside, above) — the single source of truth for "where does this section's content go". Shared by
-// render.ts's sectionContentEl (the real DOM clipping wrapper) and the edge painter's clip-path, so the
-// two containment mechanisms stay pixel-identical by construction.
+// Inside the border. The single source for the DOM clipping wrapper and the edge clip-path alike.
 export function sectionInterior(f: MindNode): { x: number; y: number; w: number; h: number } {
-  // The OPEN section's interior IS the viewport, with no border and no tab to inset from.
   if (isScopeRoot(f)) {
     return scopeRect();
   }
@@ -164,36 +119,29 @@ export function sectionInterior(f: MindNode): { x: number; y: number; w: number;
     h: Math.max(0, nodeH(f) - SECTION_BORDER * 2),
   };
 }
-// Does this section have anything to put on its label — its own text? A section that hasn't been named
-// shows NO label (FigJam's untitled section): its text was deleted, or never written.
 export function sectionLabelled(f: MindNode): boolean { return !!(f.title.trim() || f.body.trim()); }
-// How far an expanded section's label reaches ABOVE its box (0 for anything else): the pill's measured
-// height plus its 7px gap (styles.css `.node.section > .title-row`), or a one-line pill's before paint.
-const SECTION_LABEL_GAP = 7;
+// How far an expanded section's label reaches above its box.
+const SECTION_LABEL_GAP = 7;   // styles.css `.node.section > .title-row`
+const ONE_LINE_LABEL_H = 28;
 export function sectionLabelH(f: MindNode): number {
   if (!isSection(f) || !sectionLabelled(f)) {
     return 0;
   }
   const row = f.el?.querySelector(':scope > .title-row') as HTMLElement | null;
-  return (row?.offsetHeight || 28) + SECTION_LABEL_GAP;
+  return (row?.offsetHeight || ONE_LINE_LABEL_H) + SECTION_LABEL_GAP;
 }
-// A section's NAME, the one thing its label shows: the `# ` title, or for a note written without one, its
-// first line. Anything else in the note stays in the file, untouched and unshown.
+// The `# ` title, else the first line; the rest of the note is kept but unshown.
 export function sectionName(f: MindNode): string { return f.title.trim() || firstLineLabel(f.body); }
-// Is `child`'s centre inside `section`'s OUTER box? The test for "a section child is still in its section",
-// the same centre sectionAt is asked about on drop.
 export function centreInSection(child: MindNode, section: MindNode): boolean {
-  // The OPEN section's interior is the whole canvas, so its children can never leave it.
   if (isScopeRoot(section)) {
     return true;
   }
   return contains(containerBox(section), centreOf(nodeRect(child)));
 }
-// Move a node so its bounds top-left lands at (x,y), carrying its whole subtree with it — what a bare
-// `n.x = …` assignment can't do (it would leave a section's children behind, outside the box).
+// A bare `n.x = …` would leave a section's children behind.
 export function moveSubtreeTo(node: MindNode, x: number, y: number): void {
   const dx = x - node.x, dy = y - node.y;
-  // Saved positions are integers; ignore sub-pixel nudges so nothing is rewritten for nothing.
+  // Saved positions are integers: a sub-pixel nudge would rewrite for nothing.
   if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
     return;
   }
@@ -208,10 +156,8 @@ export function moveSubtreeTo(node: MindNode, x: number, y: number): void {
     n.x += dx; n.y += dy;
   }
 }
-// A parent's child ORDER: STORED (board.json), seeded from reading order (top to bottom, then left to
-// right) the first time it's needed, and kept from then on. Nothing on the canvas depends on it — the
-// children sit where they were put — but the arrow keys walk siblings in it and the load migration
-// lays a former outline out in it (data/migrate.ts foldCardsIntoSections).
+// Children not yet in the stored order join it top-to-bottom, then left-to-right. Only the arrow keys and
+// the load migration read the order; nothing on the canvas does.
 function readingOrder(kids: MindNode[]): string[] {
   const tie = (n: MindNode) => n.file || n.title || n.id;
   return kids.slice()
@@ -220,9 +166,9 @@ function readingOrder(kids: MindNode[]): string[] {
 }
 export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
   const have = new Set(kids.map(k => k.id));
-  let order = (node.kidOrder || []).filter(id => have.has(id));   // drop removed children
+  let order = (node.kidOrder || []).filter(id => have.has(id));
   const known = new Set(order);
-  const fresh = kids.filter(k => !known.has(k.id));                // new children → append in reading order
+  const fresh = kids.filter(k => !known.has(k.id));
   if (fresh.length) {
     order = order.concat(readingOrder(fresh));
   }
@@ -231,16 +177,11 @@ export function orderedKids(node: MindNode, kids: MindNode[]): MindNode[] {
   return kids.slice().sort((a,b)=>rank.get(a.id)! - rank.get(b.id)!);
 }
 
-// What used to re-flow the forest after every change. Nothing is flowed now, so all that's left is
-// the open-section bookkeeping, and it stays here because every structural change already ends in this
-// call (render.ts relayout/remeasure) — one call covers every path instead of each remembering.
-// Returns whether it can have changed what is drawn — the scope was pruned, or there are stacks to lay —
-// so remeasure (render.ts) knows whether its second paint has anything to show.
+// Bookkeeping every structural change ends in. Returns whether it can have changed what is drawn, so
+// remeasure knows whether its second paint is needed.
 export function applyLayouts(): boolean {
-  // The open section may have just been deleted / undone away / vanished on disk. (An open section keeps
-  // its fold: its interior is the canvas either way.)
-  const pruned = pruneScope();
-  const stacks = layStacks();   // a stack's cards lie in its pile, or in the fan (view/pile.ts)
+  const pruned = pruneScope();   // the open section may have just gone
+  const stacks = layStacks();
   return pruned || stacks;
 }
 

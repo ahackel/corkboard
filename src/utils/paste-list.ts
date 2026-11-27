@@ -1,14 +1,6 @@
-// Is pasted text a LIST — one thought per line — rather than one note? Then it becomes one card per
-// item (features/attachments.ts), which is how a pile of ideas gets onto the board in one go.
-// Pure, so tests/paste-list.test.ts pins the rule down.
-//
-// Two shapes count:
-//  - a Markdown list: every top-level line is an item (`-`, `*`, `+`, `•`, `1.`, `1)`, with or
-//    without a `[ ]` box). Blank lines between items are fine; an indented line belongs to the item
-//    above and rides along as its body, dedented — so a nested list stays inside its card.
-//  - bare lines: two or more short lines, no blank line between them, no Markdown structure.
-// Anything else — a heading, prose with blank-line paragraphs, a line of lead-in text before a list —
-// is a NOTE, and stays one card. Returns the items' texts, or null for "not a list".
+// Is pasted text a LIST (one card per item) rather than one note? A Markdown list whose every top-level
+// line is an item (indented lines ride along as that item's body), or two-plus short bare lines.
+// Anything else is a note. Null for "not a list".
 const ITEM = /^([-*+•]|\d+[.)])\s+(\[[ xX]\]\s+)?/;
 const MAX_LINE = 200;   // a bare line longer than this is a paragraph, not an item
 

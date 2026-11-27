@@ -1,10 +1,5 @@
-// ---------- rich text pasted in becomes markdown ----------
-// Text copied from a web page, Google Docs, Word or Notion carries its links, bold, lists and tables only in
-// the clipboard's `text/html`; its `text/plain` has dropped them. This writes that HTML as the little markdown
-// the card draws (utils/markdown.ts renderBodyHTML) — and nothing it doesn't draw: colours, fonts and layout
-// go. Pure (the browser's own DOMParser does the reading), pinned by tests/html-md.test.ts.
-// Null when the HTML holds nothing plain text would lose — a code editor's coloured spans, a lone word — so
-// the paste stays the plain one.
+// Pasted rich text (`text/html`) becomes the little markdown the card draws, and nothing it doesn't draw.
+// Null when the HTML holds nothing plain text would lose, so the paste stays plain.
 
 // Elements whose presence makes the HTML worth reading.
 const STRUCTURE = 'a[href], b, strong, i, em, del, s, strike, mark, code, pre, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, table, hr, img[src]';
@@ -20,12 +15,15 @@ export function htmlToMarkdown(html: string): string | null {
   const md = blocks(body).join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
   return md || null;
 }
+
 // Google Docs wraps a whole copy in `<b style="font-weight:normal">`, so a bold tag alone isn't structure.
 function meaningful(body: HTMLElement): boolean {
   return [...body.querySelectorAll<HTMLElement>(STRUCTURE)].some(el => !(isTag(el, 'B') && !bold(el)));
 }
+
 const isTag = (el: Element, tag: string): boolean => el.tagName.toUpperCase() === tag;
 const weight = (el: HTMLElement): string => el.style?.fontWeight ?? '';
+
 function bold(el: HTMLElement): boolean {
   const w = weight(el);
   if (isTag(el, 'B') || isTag(el, 'STRONG')) {
@@ -37,8 +35,7 @@ const italic = (el: HTMLElement): boolean => isTag(el, 'I') || isTag(el, 'EM') |
 const struck = (el: HTMLElement): boolean =>
   isTag(el, 'DEL') || isTag(el, 'S') || isTag(el, 'STRIKE') || (el.style?.textDecoration ?? '').includes('line-through');
 
-// ---- blocks ----
-// A node's children as markdown blocks: runs of inline content become paragraphs, block elements their own.
+// Runs of inline content become paragraphs; block elements their own blocks.
 function blocks(node: Node): string[] {
   const out: string[] = [];
   let run = '';
@@ -59,14 +56,17 @@ function blocks(node: Node): string[] {
       continue;
     }
     flush();
+
     // An inline element wrapping whole blocks (Google Docs puts a copy in one `<b>`) is only a wrapper.
     out.push(...(BLOCK.has(el.tagName.toUpperCase()) ? block(el) : blocks(el)));
   }
   flush();
   return out;
 }
+
 const BLOCK_SELECTOR = [...BLOCK].join(',');
 const holdsBlocks = (el: HTMLElement): boolean => !isTag(el, 'A') && !!el.querySelector(BLOCK_SELECTOR);
+
 function block(el: HTMLElement): string[] {
   const tag = el.tagName.toUpperCase();
   const h = tag.match(/^H([1-6])$/);
@@ -95,9 +95,9 @@ function block(el: HTMLElement): string[] {
   }
   return blocks(el);
 }
-// A list, its items at `indent`; a nested list goes under its item, indented to the item's text (where
-// CommonMark and Obsidian read it as nested). A checkbox in an item makes it a task. Google Docs writes a
-// nested item as a flat one with `aria-level`, which is read as its depth.
+
+// A nested list is indented to its item's text, where CommonMark reads it as nested. Google Docs writes
+// nesting as flat items with `aria-level`.
 function list(el: HTMLElement, indent: string): string[] {
   const ordered = isTag(el, 'OL');
   let n = ordered ? parseInt(el.getAttribute('start') ?? '1', 10) || 1 : 0;
@@ -129,6 +129,7 @@ function list(el: HTMLElement, indent: string): string[] {
   }
   return lines;
 }
+
 function table(el: HTMLElement): string {
   const rows = [...el.querySelectorAll('tr')].filter(r => r.closest('table') === el)
     .map(r => [...r.children].filter(c => isTag(c, 'TD') || isTag(c, 'TH'))
@@ -141,7 +142,6 @@ function table(el: HTMLElement): string {
   return [line(rows[0]), '| ' + Array(cols).fill('---').join(' | ') + ' |', ...rows.slice(1).map(line)].join('\n');
 }
 
-// ---- inline ----
 function inline(node: Node): string {
   if (node.nodeType === 3) {
     return escapeText((node.textContent ?? '').replace(/\s+/g, ' '));
@@ -193,20 +193,22 @@ function inline(node: Node): string {
   }
   return inner;
 }
-// Emphasis hugs the words: a space the selection caught stays outside the marks, or they wouldn't read.
+
+// A space the selection caught stays outside the marks, or they wouldn't read.
 function wrap(s: string, mark: string): string {
   const m = s.match(/^(\s*)([\s\S]*?)(\s*)$/)!;
   return m[2] ? m[1] + mark + m[2] + mark + m[3] : s;
 }
-// A link or picture address, in the `<…>` form when it holds a space or an angle bracket.
+
 const dest = (u: string): string => /[\s<>]/.test(u) ? `<${u}>` : u;
-// Characters that would turn plain words into markup are escaped (utils/markdown.ts prints `\*` as `*`) — only
-// those: an underscore only where it could start or end emphasis, so `snake_case` stays as it is, and a bracket
-// only as the start of a `[[link`, so a footnote's `[1]` reads as written.
+
+// Only what would turn words into markup: `_` only where it could start/end emphasis (`snake_case` stays),
+// `[` only as the start of a `[[link` (a footnote's `[1]` stays).
 const escapeText = (s: string): string => s
   .replace(/([*`])/g, '\\$1').replace(/(^|\W)_|_(?=\W|$)/g, m => m.replace('_', '\\_'))
   .replace(/\[\[/g, '\\[[').replace(/==/g, '\\==').replace(/~~/g, '\\~~');
-// …and a paragraph line that would read as a heading, a list item or a quote.
+
+// A paragraph line that would read as a heading, a list item or a quote.
 const escapeLead = (l: string): string => l.replace(/^(#{1,6}\s|[-+]\s|>)/, '\\$1').replace(/^(\d+)\.(\s)/, '$1\\.$2');
 const oneLine = (s: string): string => s.replace(/\s*\n\s*/g, ' ').replace(/ {2,}/g, ' ').trim();
 const tidyLines = (s: string): string => s.split('\n').map(l => l.replace(/ {2,}/g, ' ').trim()).join('\n').replace(/\n{2,}/g, '\n').trim();

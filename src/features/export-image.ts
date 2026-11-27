@@ -1,11 +1,5 @@
-// Export the board, or the selection, as a picture: PNG or PDF.
-// The canvas DOM is cloned into an SVG <foreignObject> together with the page's own CSS, so the picture is
-// drawn by the very rules that draw the screen: no second renderer to drift. PNG draws that SVG into a
-// canvas; PDF wraps the canvas as a JPEG page (utils/pdf.ts), so its text is pixels, not type.
-// No SVG export: that SVG renders differently in every viewer (WebKit blows up emoji, design tools show
-// nothing), and a true vector one would need a second renderer.
-// The picture is cropped tight to what it shows, with no canvas behind it: transparent, except in the PDF,
-// where a JPEG can't be and the page is white paper.
+// The board or selection as a PNG or PDF: its DOM cloned into an SVG <foreignObject> with the page's own
+// CSS, so no second renderer can drift. No SVG export: that SVG renders differently in every viewer.
 import { state, world, stage, setStatus, type MindNode } from '../core/state.js';
 import { ancestors, isHidden } from '../utils/model.js';
 import { store } from '../data/active-store.js';
@@ -19,10 +13,16 @@ export type ImageFormat = 'png' | 'pdf';
 
 interface Picture { svg: string; w: number; h: number; }
 
-const SCALE = 2;                             // a retina-sharp PNG
-const MAX_SIDE = 16384, MAX_AREA = 1.6e8;    // past these, browsers hand back a blank canvas
+const SCALE = 2;
+
+// Past these, browsers hand back a blank canvas.
+const MAX_SIDE = 16384, MAX_AREA = 1.6e8;
 const XHTML = 'http://www.w3.org/1999/xhtml';
-const GRIPS = '.fh';                        // a card's invisible resize grips, which reach past its edge
+
+// A card's invisible resize grips, which reach past its edge.
+const GRIPS = '.fh';
+const JPEG_QUALITY = 0.92;
+const PT_PER_CSS_PX = 0.75;
 
 export async function exportImage(format: ImageFormat): Promise<void> {
   const pic = await picture();
@@ -35,9 +35,11 @@ export async function exportImage(format: ImageFormat): Promise<void> {
     downloadBlob(await toBlob(await rasterize(pic), 'image/png'), name);
     return;
   }
+
+  // A JPEG can't be transparent, so the PDF page is white paper.
   const canvas = await rasterize(pic, '#fff');
-  const jpeg = new Uint8Array(await (await toBlob(canvas, 'image/jpeg', 0.92)).arrayBuffer());
-  const pdf = jpegPdf(jpeg, canvas.width, canvas.height, pic.w * 0.75, pic.h * 0.75);   // CSS px → pt
+  const jpeg = new Uint8Array(await (await toBlob(canvas, 'image/jpeg', JPEG_QUALITY)).arrayBuffer());
+  const pdf = jpegPdf(jpeg, canvas.width, canvas.height, pic.w * PT_PER_CSS_PX, pic.h * PT_PER_CSS_PX);
   downloadBlob(new Blob([pdf as BlobPart], { type: 'application/pdf' }), name);
 }
 
@@ -66,7 +68,7 @@ async function picture(): Promise<Picture | null> {
   clone.querySelectorAll('.sel, .solo, .search-dim').forEach(e => e.classList.remove('sel', 'solo', 'search-dim'));
   if (sel.size) {
 
-    // visibility, not removal: a selected card inside an unselected section must still show
+    // Not removal: a selected card inside an unselected section must still show.
     clone.querySelectorAll<HTMLElement>('[data-id]').forEach(e => { e.style.visibility = ids.has(e.dataset.id ?? '') ? 'visible' : 'hidden'; });
     clone.querySelectorAll<SVGGElement>('g[data-edge]').forEach(g => {
       if (!keepLine(g)) {
@@ -78,7 +80,9 @@ async function picture(): Promise<Picture | null> {
 
   const root = document.createElementNS(XHTML, 'div') as HTMLElement;
   const body = getComputedStyle(document.body);
-  root.style.cssText = stage.style.cssText;   // the canvas colour's custom properties live on #stage
+
+  // The canvas colour's custom properties live on #stage.
+  root.style.cssText = stage.style.cssText;
   Object.assign(root.style, { position: 'relative', width: `${w}px`, height: `${h}px`, overflow: 'hidden',
     fontFamily: body.fontFamily, color: body.color });
   const style = document.createElementNS(XHTML, 'style');
@@ -106,8 +110,7 @@ function worldBox(els: Element[]): { x0: number; y0: number; x1: number; y1: num
   return { x0, y0, x1, y1 };
 }
 
-// Does this part of a card draw anything? An empty slot (a card's tag strip with no tags) still has a box,
-// and that box reaching past the card's edge would pad the crop.
+// An empty slot (a tag strip with no tags) still has a box, which would pad the crop.
 function paints(el: Element): boolean {
   return el instanceof SVGElement || !!el.textContent?.trim() || !!el.querySelector('img, svg');
 }
@@ -127,7 +130,7 @@ async function inlineImage(img: HTMLImageElement): Promise<void> {
     });
   } catch {
 
-    // a cross-origin picture without CORS can't be read: it exports as an empty frame
+    // A cross-origin picture without CORS can't be read: it exports as an empty frame.
   }
 }
 
@@ -140,7 +143,7 @@ function pageCss(): string {
       }
     } catch {
 
-      // a cross-origin stylesheet can't be read; the app has none of its own
+      // A cross-origin stylesheet can't be read; the app has none of its own.
     }
   }
   return css;

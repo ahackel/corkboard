@@ -1,9 +1,5 @@
-// ---------- custom right-click context menu ----------
-// Replaces the browser menu on the canvas with node / canvas actions (desktop right-click;
-// on touch browsers that synthesize `contextmenu` from a long-press it works for free —
-// there is deliberately NO custom long-press handling). The native menu is intentionally
-// let through inside a section's label editor; inside a card's text it lists the editor's commands instead.
-// Menu items only call the existing crud / camera / render kernels — no logic of its own.
+// The right-click menu on the canvas, also reused by other UI. Touch browsers synthesize `contextmenu`
+// from a long-press, so there is deliberately no long-press handling of our own.
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { screenToWorld, fit } from '../view/camera.js';
@@ -15,10 +11,7 @@ import { bodyImageAt } from './images.js';
 import { syncOpenEditor, editorMenuEntries } from './inline-edit.js';
 import { esc, stripImageRef } from '../utils/markdown.js';
 import { scope, scopeRootNode } from '../nav/scope.js';
-// buildCardMenu lives in float-bar.ts (it also owns the kebab button that shares this same menu)
-// — this creates a deliberate two-way import cycle with float-bar.ts (which imports openMenu /
-// copyFilePath from here), same style as the render↔features cycle; both
-// sides only touch it inside event handlers, never at module-eval time, so it's safe.
+// A two-way import cycle with float-bar.ts, safe because both sides use it only in event handlers.
 import { buildCardMenu } from './float-bar.js';
 import { deleteSelectedEdge } from './edge-tools.js';
 import { nodeLabel } from '../utils/model.js';
@@ -27,10 +20,9 @@ import { subChevron } from '../view/icons.js';
 import { exitScope, goToScopeDepth } from '../nav/sections.js';
 import { selectAll } from './selection.js';
 
-// The menu and its submenus are PANELS, each a fixed island of its own: a submenu can't live inside its
-// parent, whose overflow (it scrolls when it's taller than the window) would clip it.
+// Each panel is its own fixed island: a submenu inside its parent would be clipped by the parent's scroll.
 function mountPanel(p: HTMLDivElement): HTMLDivElement {
-  // A press on the menu takes no focus, so an open card editor keeps its caret and selection for the entry to act on.
+  // Takes no focus, so an open card editor keeps its caret and selection for the entry to act on.
   p.addEventListener('pointerdown', (e) => e.preventDefault());
   document.body.appendChild(p);
   return p;
@@ -43,7 +35,6 @@ const menu = Object.assign(document.createElement('div'), { className: 'cm-panel
 const panels: HTMLDivElement[] = [menu];
 const inMenu = (t: Node): boolean => panels.some(p => p.contains(t));
 
-// Close the submenus from depth `d` down, and unmark the entry that had opened the first of them.
 function closeFrom(d: number): void {
   for (let k = Math.max(1, d); k < panels.length; k++) {
     panels[k].classList.remove('open');
@@ -56,7 +47,8 @@ function closeMenu(): void {
   menu.classList.remove('open');
 }
 
-// A submenu opens beside its entry — to the right, or to the left where the window has no room.
+const SUB_GAP = 4, SUB_RISE = 8;
+
 function openSub(d: number, item: HTMLElement, entries: MenuEntry[]): void {
   closeFrom(d);
   const p = panels[d] ??= newPanel();
@@ -64,23 +56,25 @@ function openSub(d: number, item: HTMLElement, entries: MenuEntry[]): void {
   p.classList.add('open');
   item.classList.add('cm-open');
   const r = item.getBoundingClientRect();
-  const right = r.right + 4 + p.offsetWidth <= window.innerWidth;
-  placeInViewport(p, right ? r.right + 4 : r.left - 4 - p.offsetWidth, r.top - 8);
+  const fitsRight = r.right + SUB_GAP + p.offsetWidth <= window.innerWidth;
+  placeInViewport(p, fitsRight ? r.right + SUB_GAP : r.left - SUB_GAP - p.offsetWidth, r.top - SUB_RISE);
 }
 
-// Hovering an entry opens its submenu, or closes the one an entry beside it had open — after a beat when
-// one IS open, so a diagonal move from an entry into its submenu can cross its neighbours on the way.
+// With a submenu open, wait a beat, so a diagonal move into it can cross its neighbours on the way.
+const SUBMENU_HOVER_DELAY_MS = 200;
 let hoverTimer = 0;
+
 function hover(d: number, act: () => void): void {
   clearTimeout(hoverTimer);
   if (panels[d + 1]?.classList.contains('open')) {
-    hoverTimer = window.setTimeout(act, 200);
+    hoverTimer = window.setTimeout(act, SUBMENU_HOVER_DELAY_MS);
   } else {
     act();
   }
 }
 
 interface ItemOpts { disabled?: boolean; danger?: boolean }
+
 function addItem(p: HTMLElement, d: number, label: string, shortcut: string, run: () => void, opts: ItemOpts = {}, sub?: MenuEntry[]): void {
   const b = document.createElement('button');
   b.className = 'cm-item' + (opts.danger ? ' cm-danger' : ''); b.type = 'button';
@@ -103,9 +97,9 @@ function addItem(p: HTMLElement, d: number, label: string, shortcut: string, run
   p.appendChild(b);
 }
 
-// ---- generic API: other UI (the home sidebar's ⋮ / right-click) reuses this menu ----
-// An entry with `sub` opens a submenu of its own entries instead of running anything.
+// An entry with `sub` opens a submenu instead of running anything.
 export type MenuEntry = 'sep' | { label: string; shortcut?: string; run?: () => void; disabled?: boolean; danger?: boolean; sub?: MenuEntry[] };
+
 export function openMenu(entries: MenuEntry[], x: number, y: number): void {
   closeMenu();
   fill(menu, entries, 0);
@@ -113,6 +107,7 @@ export function openMenu(entries: MenuEntry[], x: number, y: number): void {
     openMenuAt(x, y);
   }
 }
+
 function fill(p: HTMLElement, entries: MenuEntry[], d: number): void {
   p.innerHTML = '';
   for (const e of entries){
@@ -126,6 +121,7 @@ function fill(p: HTMLElement, entries: MenuEntry[], d: number): void {
     p.lastElementChild.remove();
   }
 }
+
 function addSep(p: HTMLElement): void {
   if (!p.lastElementChild || p.lastElementChild.className === 'cm-sep') {
     return;
@@ -133,9 +129,7 @@ function addSep(p: HTMLElement): void {
   const s = document.createElement('div'); s.className = 'cm-sep'; p.appendChild(s);
 }
 
-// Copy the card's on-disk relative path (its .md file). The closest a browser app can get to
-// "reveal in Finder" — neither FSA handles nor OPFS expose absolute paths. Exported for
-// buildCardMenu (float-bar.ts), shared by the kebab menu and this file's own right-click menu.
+// The closest a browser gets to "reveal in Finder": neither FSA nor OPFS exposes absolute paths.
 export function copyFilePath(n: MindNode): void {
   const path = n.file;
   if (!path) {
@@ -146,13 +140,7 @@ export function copyFilePath(n: MindNode): void {
     .catch(() => setStatus('Couldn’t copy path'));
 }
 
-// The right-click itself never changes the selection or opens an editor — the clicked card is
-// only the menu's TARGET; buildCardMenu (float-bar.ts) handles single-vs-multi itself
-// and is shared verbatim with the kebab menu so the two never drift apart.
-
-// ---------- image entries (right-click on an <img> inside a card body) ----------
-// Remove the image's markdown reference from the card body. The file itself stays: a note inside a
-// folded section (not in memory) may still show it, and an undo has to find it there.
+// The file itself stays: a note in a folded (unread) section may still show it, and an undo needs it.
 function removeImage(n: MindNode, path: string): void {
   if (!path) {
     return;
@@ -163,8 +151,8 @@ function removeImage(n: MindNode, path: string): void {
     syncOpenEditor(n);
   }, { reflow: 'relayout' });
 }
-// Copy the bitmap to the clipboard. Browsers only accept PNG ClipboardItems, so anything else is
-// re-encoded via a canvas first. Remote CORS-tainted images fail → status message.
+
+// Browsers only accept PNG ClipboardItems, so anything else is re-encoded first.
 async function copyImage(img: HTMLImageElement): Promise<void> {
   try {
     let blob = await (await fetch(img.src)).blob();
@@ -178,10 +166,9 @@ async function copyImage(img: HTMLImageElement): Promise<void> {
     setStatus('Image copied');
   } catch { setStatus('Couldn’t copy image'); }
 }
-// Open the image in its own tab. Navigating straight to the blob URL shows raw bytes when the
-// page runs in a null-origin context (blob:null), so instead we open a blank tab and embed the
-// image as a data: URL — data URLs render in an <img> regardless of origin. The tab must be
-// opened SYNCHRONOUSLY in the click (pop-up blockers), the data URL streams in afterwards.
+
+// A blob URL shows raw bytes from a null origin, so the image goes in as a data: URL. The tab opens
+// synchronously in the click, for pop-up blockers.
 function showImageInTab(img: HTMLImageElement): void {
   const w = window.open('', '_blank');
   if (!w){ setStatus('Pop-up blocked'); return; }
@@ -198,16 +185,9 @@ function showImageInTab(img: HTMLImageElement): void {
     w.document.close();
   })().catch(() => { w.close(); setStatus('Couldn’t open image'); });
 }
+
 function openMenuAt(sx: number, sy: number): void {
   menu.classList.add('open');
-  // Reposition (flip) inside the viewport — the standard fix every app (VS Code, Figma, native OS
-  // menus) uses first: slide the menu back on-screen rather than letting it spill past an edge.
-  // The OLD clamp only capped the far edge (never past the right/bottom), so a menu taller than
-  // the space below the click point (e.g. many entries on a short landscape phone) still opened
-  // with its TOP miles above the viewport — Math.min(sy, negative-number) picks the negative
-  // number, and there was nothing pulling it back down. Clamping BOTH edges keeps the whole box
-  // on-screen; #ctxMenu's own max-height + overflow-y:auto (styles.css) is the last-resort
-  // fallback for the rare case where even the full viewport height can't fit every entry.
   placeInViewport(menu, sx, sy);
 }
 
@@ -224,9 +204,7 @@ function imageMenuEntries(n: MindNode, img: HTMLImageElement): MenuEntry[] {
 
 function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   const entries: MenuEntry[] = [];
-  // While a section is OPEN the whole visible canvas is its interior, so this menu — and the top-right
-  // kebab that shares it — is where a touch user finds the way out.
-  // leaving isn't a mutation.
+  // Where a touch user finds the way out of an open section.
   const open = scopeRootNode();
   if (open){
     entries.push({ label:`Leave “${nodeLabel(open)}”`, shortcut:'⌘↑', run: () => exitScope() });
@@ -241,17 +219,13 @@ function canvasMenuEntries(sx: number, sy: number): MenuEntry[] {
   entries.push({ label:'New card', shortcut:'N', run: () => createNode(centredAt(p)) });
   entries.push({ label:'Insert image…', run: () => pickImagesAt(sx, sy, null) });
   entries.push('sep');
-  // Here as well as
-  // on ⌘A because a touch user has no ⌘ — and this menu is the only place they'd find it.
+  // A touch user has no ⌘A.
   entries.push({ label:'Select all', shortcut:'⌘A', run: () => selectAll(), disabled: !state.nodes.size });
   entries.push({ label:'Fit the map to the screen', shortcut:'F', run: () => fit(), disabled: !state.nodes.size });
   return entries;
 }
 
-// Permanent top-right kebab (#canvasMenuBtn, index.html): the same canvas menu as a right-click /
-// long-press on empty canvas, for when that gesture isn't reachable (iOS Safari's synthesized
-// contextmenu on the canvas is unreliable). New cards/images land at the current view's centre
-// since there's no click point to anchor them to; the menu itself opens under the button.
+// The canvas menu again, as iOS Safari's synthesized contextmenu on the canvas is unreliable.
 const canvasMenuBtn = byId<HTMLButtonElement>('canvasMenuBtn');
 
 export function installContextMenu(): void {
@@ -268,11 +242,10 @@ export function installContextMenu(): void {
     const t = e.target as Element | null;
     closeMenu();
     if (!t || !t.closest('#stage')) {
-      return;                 // toolbar / sidebar / dialogs: native menu
+      return;
     }
 
-    // Inside the card's text: the editor's own commands (inline-edit.ts editorMenuEntries). ⇧-right-click
-    // keeps the browser's menu there, for spelling suggestions.
+    // ⇧-right-click keeps the browser's menu in the editor, for spelling suggestions.
     if (ui.bodyEdit && (t === ui.bodyEdit.ta || ui.bodyEdit.ta.contains(t))) {
       if (!e.shiftKey) {
         e.preventDefault();
@@ -290,12 +263,10 @@ export function installContextMenu(): void {
     let entries: MenuEntry[];
     if (t.closest('[data-edge]') && state.selEdges.size) {
 
-      // a LINE: the press before this already selected it (edge-tools.ts), so Delete acts on the selection
+      // The press before this already selected the line.
       entries = [{ label: 'Delete', shortcut: '⌫', run: () => { deleteSelectedEdge(); } }];
     } else if (n){
       const img = bodyImageAt(nodeEl!, e.clientX, e.clientY);
-
-      // image entries above the card's own; same list the kebab menu shows for this card
       entries = [...(img ? imageMenuEntries(n, img) : []), ...buildCardMenu(n, e.clientX, e.clientY)];
     } else {
       entries = canvasMenuEntries(e.clientX, e.clientY);
@@ -303,12 +274,13 @@ export function installContextMenu(): void {
     openMenu(entries, e.clientX, e.clientY);
   });
 
-  // dismiss: click/tap anywhere outside, Escape (before the global deselect handler), scroll/zoom, blur
   document.addEventListener('pointerdown', (e) => {
     if (menu.classList.contains('open') && !inMenu(e.target as Node)) {
       closeMenu();
     }
   }, true);
+
+  // Capture phase: Escape must close the menu before the global deselect sees it.
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && menu.classList.contains('open')){
       e.preventDefault(); e.stopPropagation(); closeMenu();

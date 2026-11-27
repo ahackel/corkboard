@@ -1,9 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { openBoard, section, card, palette, watchErrors, tooltip, saved } from './helpers';
 
-// A "folder on disk" for the File System Access store: the picker is stubbed to hand back a folder in
-// the browser's private storage — the same directory-handle API a real folder has — so the board runs
-// on the folder store, with its re-read-on-focus, exactly as it does on a Mac.
+// A reload ignores changes within this long of its own write (persistence.ts).
+const PAST_OWN_WRITE_GUARD_MS = 650;
+
+// A stubbed picker hands back an OPFS folder, so the board runs on the FSA store as on a real folder.
 async function seedFolder(page: Page, files: Record<string, string>): Promise<void> {
   await page.evaluate(async (files) => {
     const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('picked', { create: true });
@@ -48,7 +49,7 @@ test('a note saved into the Inbox folder from elsewhere shows up inside it, whic
   // the phone saves a note into the folder; coming back to the window re-reads it
   await seedFolder(page, { 'Inbox/2026-10-27 0915.md': 'Buy oat milk\n' });
   await saved(page);
-  await page.waitForTimeout(650);   // past the reload's own-write guard (persistence.ts)
+  await page.waitForTimeout(PAST_OWN_WRITE_GUARD_MS);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   const arrived = card(page, 'Buy oat milk');
   await expect(arrived).toBeVisible();
@@ -74,7 +75,7 @@ test('a note that lands in a FOLDED Inbox pulses its pill, which counts it', asy
   await expect.poll(() => tooltip(page, pill)).toMatch(/\b1 Card\b/);
   await seedFolder(page, { 'Inbox/Two.md': 'Two\n' });
   await saved(page);
-  await page.waitForTimeout(650);   // past the reload's own-write guard
+  await page.waitForTimeout(PAST_OWN_WRITE_GUARD_MS);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect.poll(() => tooltip(page, pill)).toMatch(/\b2 Cards\b/);
   await expect(pill).toHaveClass(/arrived/);
@@ -118,7 +119,7 @@ test('coming back to the window with nothing changed on disk keeps the undo hist
   await page.keyboard.press('Backspace');
   await expect(keep).toHaveCount(0);
   await saved(page);
-  await page.waitForTimeout(650);   // past the reload's own-write guard
+  await page.waitForTimeout(PAST_OWN_WRITE_GUARD_MS);
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await page.waitForTimeout(500);
   await page.keyboard.press('ControlOrMeta+z');
@@ -138,7 +139,7 @@ test('notes changing on disk leave the selection on the same card', async ({ pag
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
   await expect(em).toHaveClass(/\bsel\b/);
   await saved(page);
-  await page.waitForTimeout(650);   // past the reload's own-write guard
+  await page.waitForTimeout(PAST_OWN_WRITE_GUARD_MS);
   // Another app deletes BOTH its neighbours: whichever way the folder is read, the card's fresh id shifts.
   await page.evaluate(async () => {
     const root = await (await navigator.storage.getDirectory()).getDirectoryHandle('picked');

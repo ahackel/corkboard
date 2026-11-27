@@ -1,11 +1,5 @@
-// What to READ of a map's folder tree, decided from the file NAMES alone — pure, shared by every store
-// (the handle-based ones list names cheaply and read only what this picks; the IndexedDB one has every
-// key in hand anyway) and pinned by tests/tree.test.ts.
-//
-// A section is a folder (utils/filenames.ts SECTION_NOTE). A FOLDED section's contents are not read at all:
-// `fold` is asked once per folder, outermost first, and a folder it answers yes for is LAZY — only its
-// own section note is read, and the notes under it are merely COUNTED, for the pill. Nothing below a lazy
-// folder is asked about, since nothing below it is read.
+// What to READ of a map's folder tree, from file names alone. `fold` is asked once per folder, outermost
+// first: a yes makes it LAZY, only its own section note read and the rest counted for the pill.
 import { SECTION_NOTE, pathKey } from '../utils/filenames.js';
 
 export interface LazyFolder { count: number; hasIndex: boolean; sections: number; }   // sections: of `count`
@@ -13,7 +7,7 @@ export interface TreePlan {
   read: string[];                      // the .md paths to read, in listing order
   lazy: Map<string, LazyFolder>;       // folder ('A/B/') -> its unread notes
   foreign: Set<string>;                // lowercased folders holding no notes at all: not sections
-  assets: string[];                    // every file that isn't a note (pictures…), for a link that names one by NAME
+  assets: string[];                    // every file that isn't a note, for a link naming one by NAME
 }
 export type FoldTest = (dir: string, hasIndex: boolean) => boolean;
 
@@ -50,7 +44,7 @@ export function planTree(paths: string[], under: string, fold: FoldTest): TreePl
     const n = mdCount.get(d) ?? 0;
     if (!n) { foreign.add(pathKey(d)); continue; }
     if ([...lazy.keys()].some(l => d.startsWith(l))) {
-      continue;   // inside a folder nobody reads
+      continue;
     }
     const hasIndex = index.has(d);
     if (fold(d, hasIndex)) {

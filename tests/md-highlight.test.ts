@@ -1,4 +1,3 @@
-// The card editor's syntax highlight (utils/md-highlight.ts).
 import { describe, expect, it } from 'vitest';
 import { highlightMarkdown } from '../src/utils/md-highlight.js';
 

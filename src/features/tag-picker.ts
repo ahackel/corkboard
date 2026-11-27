@@ -1,14 +1,5 @@
-// ---------- the `#` field: tag the selection, or pick tags to filter by ----------
-// `#` (or ⌘P "Tag…") with cards selected opens a small field beside the selection. One list answers
-// what you type, from two places:
-//   · tags already on the board, with how many cards carry each;
-//   · emoji BY NAME (utils/emoji-names.ts) — `fi` offers 🔥 fire.
-// Anything else typed is a NEW tag (utils/tags.ts cleanTag makes it one). Below the list, the
-// selection's own tags, ticked: untick one to remove it. That is the ONLY way a tag comes off — a chip
-// on a card filters (features/search.ts), so a stray click can't delete one; dragging one off removes it
-// too (features/tag-drag.ts). Tags written in the
-// note's text show here too, but can't be unticked: they're the text's (edit the note instead).
-// Recently used tags lead an empty field (localStorage — a convenience, not map data).
+// The `#` field: tag the selection from board tags, emoji by name, or a new tag. Unticking a row is the
+// only way a tag comes off here (a chip click filters); tags written in the text can't be unticked.
 import { state, setStatus } from '../core/state.js';
 import { isLockedEffective, nodesOf } from '../utils/model.js';
 import { esc } from '../utils/markdown.js';
@@ -20,10 +11,12 @@ import { readStrings, writeJSON, pushRecent } from '../utils/local-json.js';
 import { taggableSelection } from './selection.js';
 
 const MRU_KEY = 'corkboard.tagMru';
+const MRU_MAX = 16;
+const POP_GAP = 14;
 export const loadMru = (): string[] => readStrings(MRU_KEY);
 export function dropMru(tag: string): void { writeJSON(MRU_KEY, loadMru().filter(t => tagKey(t) !== tagKey(tag))); }
 export function pushMru(tag: string): void {
-  pushRecent(MRU_KEY, tag, 16, tagKey);
+  pushRecent(MRU_KEY, tag, MRU_MAX, tagKey);
 }
 
 // Every tag on the board, most used first.
@@ -59,7 +52,7 @@ const list = pop.querySelector<HTMLElement>('.tp-list')!;
 const hint = pop.querySelector<HTMLElement>('.tp-hint')!;
 
 let targets: string[] = [];
-let rows: Row[] = [];       // the actionable rows, in screen order — what ↑↓ walk
+let rows: Row[] = [];       // the actionable rows, in screen order
 let active = 0;
 
 const tagPickerOpen = (): boolean => pop.classList.contains('open');
@@ -72,7 +65,6 @@ function tagGroups(): Section[] {
   const qk = q.toLowerCase();
   const board = boardTags();
   const nodes = nodesOf(targets);
-  // the selection's own tags: frontmatter ones can be unticked, the text's can't
   const mine = new Map<string, Row>();
   for (const n of nodes) {
     for (const t of noteTags(n)) {
@@ -135,6 +127,7 @@ function render(): void {
   markActive();
   hint.textContent = '↵ add · untick to remove · esc close';
 }
+
 function markActive(): void {
   list.querySelectorAll<HTMLElement>('.tp-row[data-i]').forEach(el => el.classList.toggle('active', +el.dataset.i! === active));
   list.querySelector('.tp-row.active')?.scrollIntoView({ block: 'nearest' });
@@ -153,7 +146,6 @@ function run(r: Row | undefined): void {
   input.focus();
 }
 
-   // keep the focus in the field
 function onOutside(e: PointerEvent): void {
   if (!pop.contains(e.target as Node)) {
     closeTagPicker();
@@ -168,6 +160,7 @@ function closeTagPicker(): void {
   document.removeEventListener('pointerdown', onOutside, true);
   input.blur();
 }
+
 function open(place: () => void): void {
   active = 0; input.value = '';
   input.placeholder = 'Tag, or an emoji’s name';
@@ -178,7 +171,6 @@ function open(place: () => void): void {
   input.focus();
 }
 
-// `#`: tag the selected cards. Beside the selection's anchor card, else the first selected one.
 export function openTagPicker(): void {
   const ids = taggableSelection();
   if (!ids.length) { setStatus(state.sel.size ? 'Tags go on cards, not sections' : 'Select a card to tag'); return; }
@@ -189,8 +181,8 @@ export function openTagPicker(): void {
   open(() => {
     const r = anchor?.getBoundingClientRect();
     if (!r) { placeInViewport(pop, (window.innerWidth - pop.offsetWidth) / 2, 80); return; }
-    const right = r.right + 14 + pop.offsetWidth <= window.innerWidth;
-    placeInViewport(pop, right ? r.right + 14 : r.left - 14 - pop.offsetWidth, r.top - 8);
+    const fitsRight = r.right + POP_GAP + pop.offsetWidth <= window.innerWidth;
+    placeInViewport(pop, fitsRight ? r.right + POP_GAP : r.left - POP_GAP - pop.offsetWidth, r.top - 8);
   });
 }
 
@@ -198,7 +190,7 @@ export function installTagPicker(): void {
   document.body.appendChild(pop);
   input.addEventListener('input', () => { active = 0; render(); });
   input.addEventListener('keydown', (e) => {
-    e.stopPropagation();   // the canvas shortcuts stay out of it
+    e.stopPropagation();   // keep canvas shortcuts out
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       if (rows.length) { active = (active + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length; markActive(); }

@@ -1,5 +1,4 @@
-// What a load READS of a map's folder tree: everything, except the insides of folded sections, which
-// are only counted (store/tree.ts planTree).
+// A load reads everything but the insides of folded sections, which are only counted.
 import { describe, expect, it } from 'vitest';
 import { planTree } from '../src/store/tree.js';
 

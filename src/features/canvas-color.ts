@@ -1,19 +1,5 @@
-// ---------- the map settings panel (#settingsBtn on the dock → #settingsPop) ----------
-// Its colour row means "the colour of the canvas I'm standing on". What that IS depends on where you
-// are, and features/canvas-color.ts's canvasOwner is the single place that decides:
-//   · at the TOP level there's no section, so it edits the MAP's own colour — state.canvasColor,
-//     per-map in board.json beside the grid, so it travels with the map rather than the browser.
-//   · inside an OPEN section the canvas already IS that section's interior and wears its fill, so the
-//     button edits that SECTION's colour — the same `n.color` the float bar would write if the section
-//     were selected. Nothing new is introduced for the case; the existing paint just follows.
-// Reading the same resolver the paint reads is what makes the button honest: the chip on it always
-// shows the value it would overwrite.
-//
-// The chips are properties.ts's row verbatim (swatchRowHTML/markSwatchRow/renderRecentChips), so the
-// palette, the custom picker and the recents MRU are shared with the card colour popover rather than
-// copied. What can't be shared is createProperties itself — that whole factory is defined over node
-// ids, and at the top level the target isn't a node. Hence this module: the same row, a different
-// target, and its own undo bookkeeping for the half that isn't a node (history.ts's touchCanvas).
+// The map settings panel (#settingsPop). Its colour row edits the canvas you're standing on: the open
+// section's colour, else the map's own (canvasOwner decides, for this and for the paint alike).
 import { state, setStatus, type MindNode, stage } from '../core/state.js';
 import { nodeLabel, isLockedEffective, ancestors } from '../utils/model.js';
 import { mutate } from './mutate.js';
@@ -33,23 +19,17 @@ const colorBtn = document.getElementById('canvasColorBtn');
 const colors = document.getElementById('canvasColors');
 let built = false;
 
-// The value the button would overwrite: the open section's own authored colour, or the map's.
-// Deliberately the AUTHORED value, not the effective one — an inheriting section should show the
-// stripes, exactly as it does in the float bar, rather than pretending it owns its parent's colour.
+// The AUTHORED value, not the effective one: an inheriting section shows the stripes, as in the float bar.
 function currentColor(): string {
   const owner = canvasOwner();
   return owner ? owner.color : state.canvasColor;
 }
+
 function locked(): boolean {
   const owner = canvasOwner();
   return !!owner && isLockedEffective(owner);
 }
 
-// ---------- writing ----------
-// Two targets, two kinds of undo entry, one gesture. A section is an ordinary node edit (`record`); the
-// map's canvas colour isn't a node at all, so it goes through history's touchCanvas/commitStep pair —
-// the same shape the edge list uses. Both land in the one timeline, so ⌘Z after
-// a pick puts the colour back wherever you were standing (see history.ts's Step).
 function applyColor(color: string): void {
   const owner = canvasOwner();
   if (owner) {
@@ -59,11 +39,9 @@ function applyColor(color: string): void {
     state.canvasColor = color;
   }
 }
-// Repainting a section means repainting the cards that INHERIT from it, so the whole scope. The map's
-// own colour reaches the background — and the free edges' LABELS, whose ink is derived from the fill
-// they sit on (view/free-edges.ts, features/canvas-color.ts canvasSurface), so a label left unpainted keeps ink chosen
-// against the colour the canvas used to be. Still not paintAll: those two are the whole of what a map
-// colour touches, and this runs once per pointer move over the native colour sheet.
+
+// A section's cards inherit its colour, so repaint them all. The map's colour reaches only the background
+// and the free edges' labels (ink from canvasSurface); not paintAll, as this runs per pointer move.
 function repaint(): void {
   if (canvasOwner()) {
     paintAll();
@@ -72,20 +50,15 @@ function repaint(): void {
     paintFreeEdges();
   }
 }
+
 function setColor(color: string): void {
   const owner = canvasOwner();
   if (owner && isLockedEffective(owner)) { setStatus(`“${nodeLabel(owner)}” is locked`); return; }
-  // Inside an open section the colour is that section's node; at the top level it's the map's own.
   mutate(owner ? [owner.id] : [], () => { applyColor(color); repaint(); }, { reflow: 'none', canvas: !owner });
-  // The COMMIT path only (a chip click, or the native sheet's `change`) — applyColor also runs per
-  // `input` event during a live drag, and remembering there would bury the real picks under a drag's
-  // worth of intermediates. Same rule as properties.ts's own setColor.
   rememberColor(color);
   if (colors) { renderRecentChips(colors); markSwatchRow(colors, currentColor()); }
 }
 
-// ---------- the colour field's chip ----------
-// Mirrors the live value, so it's right before the swatch picker has ever been built.
 export function markCanvasColorBtn(): void {
   const chip = colorBtn?.querySelector<HTMLElement>('.swatch');
   if (!colorBtn || !chip) {
@@ -97,17 +70,12 @@ export function markCanvasColorBtn(): void {
   chip.style.removeProperty('--sw');
   if (v === 'none') {
     chip.classList.add('nofill');
-  }
-  // nothing authored: the colour actually behind you — the board's own grey at the top level
-  else {
+  } else {
     chip.style.setProperty('--sw', fill ?? canvasSurface());
   }
 }
 
-// ---------- the popover ----------
-// Rebuilt on every open rather than once: the FIRST chip depends on where you're standing (a section
-// inherits from its parent, the map falls back to the theme — see properties.ts's FirstChip), and the
-// recents row is derived from the open map, which may have changed since the last time it was shown.
+// Rebuilt on every open: the first chip depends on where you stand, and the recents on the open map.
 function build(): void {
   if (!colors) {
     return;
@@ -119,29 +87,23 @@ function build(): void {
     return;
   }
   built = true;
-  // Delegated once, so the row above can be replaced freely. The custom chip is excluded: its click
-  // OPENS the native sheet (the <label>'s job) and picks nothing.
   colors.addEventListener('click', (e) => {
     const sw = (e.target as HTMLElement).closest<HTMLElement>('.swatch');
     if (!sw) {
       return;
     }
+    // Its click opens the native sheet; closing here would tear the row down mid-choice.
     if (sw.classList.contains('custom')) {
-      return;   // closing here would tear the row down mid-choice
+      return;
     }
     setColor(sw.dataset.color ?? '');
     closeSubs();
   });
   bindCustom();
 }
-// A native colour input streams `input` for the whole time the user is dragging around the sheet and
-// `change` once on commit. So: preview live (paint only — no history entry, no disk write per event),
-// then make the commit ONE undo step. `record`/`commitStep` snapshot when they're called, which is
-// already too late by then, so the pre-drag value is stashed at the first `input` and rewound just
-// before committing — invisible, since nothing paints in between.
-// Both listeners sit on the ROW, not on the input, and read the input off the event — build()
-// replaces the row's innerHTML on every open, so a captured element reference would be detached
-// from the second open onwards and every later drag would commit the first input's stale value.
+
+// `input` previews live (paint only); `change` commits ONE undo step, so the pre-drag value is rewound
+// first for the history's snapshot. On the ROW, not the input: build() replaces the input on every open.
 function bindCustom(): void {
   if (!colors) {
     return;
@@ -161,7 +123,7 @@ function bindCustom(): void {
       before = currentColor();
     }
     applyColor(input.value);
-    repaint();                        // live preview: paint only — no history entry, no disk write
+    repaint();
     markSwatchRow(row, currentColor());
   });
   row.addEventListener('change', (e) => {
@@ -170,12 +132,12 @@ function bindCustom(): void {
       return;
     }
     const prev = before; before = null;
-    applyColor(prev);                 // rewind, so the history sees the real before-image
+    applyColor(prev);
     setColor(input.value);
   });
 }
-// The panel's dropdowns: each [data-pop] button opens the popover it names, nested in the panel so a
-// click in it counts as inside.
+
+// Each [data-pop] button opens the popover it names, nested in the panel so a click in it counts as inside.
 const dropdowns = (): HTMLElement[] => [...(pop?.querySelectorAll<HTMLElement>('[data-pop]') ?? [])];
 
 function closeSubs(): void {
@@ -204,7 +166,7 @@ export function openSettings(): void {
   renderGridControls();
   pop.classList.add('open');
   btn.setAttribute('aria-expanded', 'true');
-  placePopover(pop, btn, document.getElementById('dock') ?? btn);   // above the dock, not into it
+  placePopover(pop, btn, document.getElementById('dock') ?? btn);
 }
 
 function toggle(): void {
@@ -214,6 +176,8 @@ function toggle(): void {
     openSettings();
   }
 }
+
+const SUB_GAP = 8, SUB_MARGIN = 4;
 
 export function installCanvasColor(): void {
   useCanvasSurface(canvasSurface);
@@ -236,20 +200,18 @@ export function installCanvasColor(): void {
       }
       sub.classList.add('open');
       b.setAttribute('aria-expanded', 'true');
-      // beside its field, bottom-aligned with it (the panel sits low on the screen): right if it fits,
-      // else left, else above the field
+      // Bottom-aligned beside its field, as the panel sits low: right if it fits, else left, else above.
       const r = b.getBoundingClientRect(), w = sub.offsetWidth;
-      if (r.right + 8 + w <= innerWidth - 4) {
-        placeInViewport(sub, r.right + 8, r.bottom - sub.offsetHeight);
-      } else if (r.left - 8 - w >= 4) {
-        placeInViewport(sub, r.left - 8 - w, r.bottom - sub.offsetHeight);
+      if (r.right + SUB_GAP + w <= innerWidth - SUB_MARGIN) {
+        placeInViewport(sub, r.right + SUB_GAP, r.bottom - sub.offsetHeight);
+      } else if (r.left - SUB_GAP - w >= SUB_MARGIN) {
+        placeInViewport(sub, r.left - SUB_GAP - w, r.bottom - sub.offsetHeight);
       } else {
         placePopover(sub, b);
       }
     };
     closeOnOutside(sub, b, closeSubs);
   }
-  // a pick in a list closes it (colour swatches close themselves in build's handler)
   pop.addEventListener('click', (e) => {
     if ((e.target as HTMLElement).closest('.set-item')) {
       closeSubs();
@@ -257,35 +219,17 @@ export function installCanvasColor(): void {
   });
 }
 
-// While a section is OPEN the canvas IS its interior, so the canvas takes the section's own fill — the
-// very colour its box was wearing a moment before, through the same resolver its box used
-// (effectiveColor → colorFill), so the two can't drift. At the TOP level there is no section and the
-// canvas wears the MAP's own colour instead (state.canvasColor, per-map in board.json). Written on
-// #stage, not <body>, so the theme's own --bg is left completely alone; #stage sits under #grid, so
-// the grid still draws over it.
-// A SECTION's fill is the PALE one its box wears (paleFill — the same wash styles.css gives the box), so
-// the cards in it, which take its full colour, read on it the same as they did inside the box.
-// …and, for a section, only when that colour is AUTHORED somewhere up the chain. effectiveColor
-// deliberately falls back to the theme's neutral card fill for a section nobody has coloured, and
-// painting the whole canvas THAT would be both a lie (there's no colour to show) and a real problem in
-// the light theme, where the near-white fill swallows the floating chrome sitting on the canvas — the
-// ghost-card pill, the status line. The test is authorship, not the hex, so a section explicitly
-// coloured white still tints. state.canvasColor needs no such test: it's authored by definition.
+// Not the hex: effectiveColor falls back to a neutral fill for an uncoloured section, which must not
+// paint the canvas, while a section explicitly coloured white still tints.
 function hasAuthoredColor(n: MindNode): boolean {
   return [n, ...ancestors(n)].some(a => !!a.color);
 }
-// WHOSE colour the canvas shows, and therefore what the canvas-colour button edits: the section you're
-// standing IN, or nothing (= the map itself) at the top level. ONE resolver, read by the paint below
-// and by the picker (features/canvas-color.ts), so the colour you can see and the colour the button
-// writes can't become two different things.
+
+// Whose colour the canvas shows and the button edits: the open section, or null for the map itself.
 export const canvasOwner = (): MindNode | null => scopeRootNode();
-// The fill actually behind the cards right now — the one input both the background and the grid ink
-// are derived from. null = none, and the theme's own background shows through as before.
-//
-// An owner with NO authored colour anywhere up its chain falls through to the MAP's own canvas colour
-// rather than to nothing: what's behind an uncoloured section is whatever is behind IT. Standing inside a section nobody coloured
-// used to discard the canvas colour the map itself was painted in — so
-// going in turned a teal board grey, and coming out turned it teal again.
+
+// null: the theme's background shows. An open section wears the PALE wash its box wore; an uncoloured
+// one shows whatever is behind IT, the map's colour.
 function canvasFill(): string | null {
   const owner = canvasOwner();
   if (!owner || !hasAuthoredColor(owner)) {
@@ -294,16 +238,12 @@ function canvasFill(): string | null {
   const fill = colorFill(effectiveColor(owner));
   return fill && paleFill(fill);
 }
-// The fill a thing drawn ON THE CANVAS is sitting on: the canvas's own colour, else the theme's. What a
-// free edge's label plate is painted in — a label is a small
-// patch of the canvas laid over the line, so its ink is measured against exactly this.
+
+// What a thing drawn on the canvas (a free edge's label plate) sits on.
 export function canvasSurface(): string { return canvasFill() ?? THEME_BG; }
-// The grid ink is derived from the THEME (--grid/--text in styles.css), which on a coloured canvas
-// leaves it either invisible or harsh. So re-derive --grid-pat from the fill that's really behind it,
-// by the theme's own 55/45 recipe with the fill standing in for --grid and, for --text, the direction
-// that HAS contrast against that fill — inkFor, the same call a card's own ink goes through, so an
-// arbitrary picked colour needs no special case. Written on #stage, which is where the fill is set;
-// #grid is its child and declares --grid-ink from it, so one write covers both grid levels.
+
+// On #stage, not <body>, so the theme's --bg is untouched. --grid-pat re-derives the theme's 55/45 grid
+// recipe from the real fill and its ink, since the theme's grid ink is invisible or harsh on a colour.
 export function syncCanvasBackground(): void {
   const fill = canvasFill();
   if (fill) {
@@ -316,21 +256,19 @@ export function syncCanvasBackground(): void {
   markCanvasColorBtn();
   syncThemeColor(fill);
 }
-// The browser's theme colour (Safari's bars, an installed app's title bar) is the canvas you're standing
-// on, so the chrome around the board reads as part of it; the board's own grey when it has no colour. A
-// fill can be a palette VARIABLE, which a meta tag can't read, so it is resolved to rgb on a hidden probe
-// — not off #stage, whose background is mid-transition right after a change.
+
+// The browser's theme colour follows the canvas. A fill can be a CSS variable, which a meta tag can't read:
+// resolve it on a hidden probe, not off #stage, whose background is mid-transition after a change.
 const themeMeta = document.querySelector('meta[name="theme-color"]');
 let themeProbe: HTMLElement | null = null;
-let themeFill: string | null | undefined = '\0';   // what the meta tag was last resolved from
+let lastThemeFill: string | null | undefined = '\0';
 
 function syncThemeColor(fill: string | null | undefined): void {
-  // Every paintAll asks, and the answer only changes with the canvas colour: resolving it reads a
-  // computed style, which right after a paint's writes means restyling the board to answer.
-  if (!themeMeta || fill === themeFill) {
+  // Every paintAll asks; a computed-style read right after its writes would restyle the board.
+  if (!themeMeta || fill === lastThemeFill) {
     return;
   }
-  themeFill = fill;
+  lastThemeFill = fill;
   if (!themeProbe) { themeProbe = document.createElement('i'); themeProbe.hidden = true; document.body.append(themeProbe); }
   themeProbe.style.color = fill || 'var(--bg)';
   const rgb = getComputedStyle(themeProbe).color;

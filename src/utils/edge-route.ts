@@ -1,20 +1,15 @@
-// ---------- the ROUTE of a drawn line, as pure geometry ----------
-// Where an elbow line between two boxes runs, and the SVG path that draws it. Nothing here knows about
-// nodes, the DOM or the camera: view/free-edges.ts turns cards into Rects and paints what comes back,
-// which is what lets tests/edge-route.test.ts pin the router down without a browser.
+// The ROUTE of a drawn elbow line between two boxes, as pure geometry (no nodes, DOM or camera).
 import type { EdgeSide } from '../core/state.js';
 import type { Pt } from '../core/ui-state.js';
 import type { Box } from './guides.js';
 
-// The rectangle a line meets (view/free-edges.ts rimRect builds it from a node).
 export type Rect = Box;
 
 export function centre(r: Rect): Pt {
   return { x: r.x + r.w/2, y: r.y + r.h/2 };
 }
 
-// Where the segment from the box's centre toward `p` leaves its rim. Ray/box: the axis it reaches
-// first decides.
+// Where the segment from the centre toward `p` leaves the rim.
 export function rimPoint(r: Rect, p: Pt): Pt {
   const c = centre(r);
   const dx = p.x - c.x, dy = p.y - c.y;
@@ -31,15 +26,12 @@ function unit(p: Pt, q: Pt): Pt {
   return { x: dx / L, y: dy / L };
 }
 
-// A path through `pts`, each end pulled in by its own trim along its own leg, as an SVG path plus what
-// the caps and the label need. Two points is a straight segment; more is an elbow, its corners rounded
-// (CORNER_R, shrunk to fit a short leg) the way FigJam's are.
-// `box` bounds the whole route, its UNTRIMMED ends included — what the edge bar keeps clear of.
+// Each end is pulled in by its own trim; corners are rounded (CORNER_R, shrunk to fit). `box` bounds the
+// UNTRIMMED route, for the edge bar to keep clear of.
 export interface Geometry { a: Pt; b: Pt; d: string; mid: Pt; tipTan: Pt; tailTan: Pt; box: { x0: number; y0: number; x1: number; y1: number } }
 const CORNER_R = 24;
 
-// A corner never eats the END legs down to nothing: the cap needs a straight stretch to sit on, or an
-// arrowhead lands on the bend and reads as a hook.
+// The cap needs a straight stretch, or an arrowhead on the bend reads as a hook.
 const END_STRAIGHT = 16;
 
 export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
@@ -49,8 +41,8 @@ export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   const n = pts.length;
   const lenOf = (i: number): number => Math.hypot(pts[i+1].x - pts[i].x, pts[i+1].y - pts[i].y);
   const tailU = unit(pts[1], pts[0]), tipU = unit(pts[n-2], pts[n-1]);
-  // A leg too short to give up its trim keeps it (two cards nearly touching): a line that turned
-  // inside out would be worse than one that touches.
+
+  // A leg too short keeps its trim: touching beats a line turned inside out.
   const trimTail = n === 2 ? lenOf(0) > (trimA + trimB) * 1.5 : lenOf(0) > trimA * 1.5;
   const trimTip = n === 2 ? trimTail : lenOf(n-2) > trimB * 1.5;
   if (trimTail) {
@@ -67,7 +59,8 @@ export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
     d += ` L ${p.x - uin.x * r} ${p.y - uin.y * r} Q ${p.x} ${p.y} ${p.x + uout.x * r} ${p.y + uout.y * r}`;
   }
   d += ` L ${pts[n-1].x} ${pts[n-1].y}`;
-  // The label's spot: halfway along the line, which on an elbow is the middle of its middle leg.
+
+  // Halfway along the line: on an elbow, the middle of its middle leg.
   let half = 0;
   for (let i = 0; i < n - 1; i++) {
     half += lenOf(i);
@@ -82,24 +75,20 @@ export function polyline(pts: Pt[], trimA: number, trimB: number): Geometry {
   return { a: pts[0], b: pts[n-1], d, mid, tipTan: tipU, tailTan: tailU, box };
 }
 
-// ---------- a line with a PINNED end (dropped on a port) ----------
-// Each pinned end leaves its face square, from the face's midpoint; an unpinned end may use whichever
-// face routes best. The router tries a handful of orthogonal shapes for every allowed pair of faces —
-// straight, one bend, a Z through the middle, and the detours that step out STUB from each face and go
-// round either box — keeps those that leave and enter square and cross neither card, and takes the
-// shortest, each bend costing BEND_COST. Small enough to run per paint; nothing is stored but the faces.
+// Tries a handful of orthogonal shapes for every allowed pair of faces, keeps those that leave and enter
+// square and cross neither card, and takes the shortest (each bend costs BEND_COST). Cheap enough per paint.
 const DIR: Record<EdgeSide, Pt> = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
 const SIDES: EdgeSide[] = ['up', 'down', 'left', 'right'];
 export const OPPOSITE: Record<EdgeSide, EdgeSide> = { up: 'down', down: 'up', left: 'right', right: 'left' };
-const STUB = 44, BEND_COST = 40;   // a detour clears the card by STUB — room for a round corner and the cap
+const STUB = 44, BEND_COST = 40;   // a detour clears the card by STUB: room for a corner and the cap
 
-// The point `at` of the way along a face (0 → 1 from its top/left; the middle, where the port sits, by default).
+// 0 → 1 from the face's top/left; by default the middle, where the port sits.
 export function facePoint(r: Rect, s: EdgeSide, at = 0.5): Pt {
   return s === 'up' ? { x: r.x + r.w * at, y: r.y } : s === 'down' ? { x: r.x + r.w * at, y: r.y + r.h }
        : s === 'left' ? { x: r.x, y: r.y + r.h * at } : { x: r.x + r.w, y: r.y + r.h * at };
 }
 
-// Drop repeated points and the middle of three in a row; null if the path doubles back on itself.
+// Drops repeated points and collinear middles; null if the path doubles back.
 export function simplify(pts: Pt[]): Pt[] | null {
   const out: Pt[] = [];
   for (const p of pts) {
@@ -121,7 +110,7 @@ export function simplify(pts: Pt[]): Pt[] | null {
   return out.length >= 2 ? out : null;
 }
 
-// Does the axis-aligned segment p→q pass through the INSIDE of r (touching its rim is fine)?
+// Touching the rim is fine.
 export function crosses(p: Pt, q: Pt, r: Rect): boolean {
   if (r.w < 2 || r.h < 2) {
     return false;
@@ -165,14 +154,15 @@ function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide 
         if (!ok) {
           continue;
         }
-        // leaves A along its face's normal, and arrives at B moving INTO it
+
+        // Leaves A along its face's normal, and arrives at B moving INTO it.
         const u0 = unit(pts[0], pts[1]), u1 = unit(pts[pts.length-2], pts[pts.length-1]);
         if (u0.x * da.x + u0.y * da.y < 0.99 || u1.x * db.x + u1.y * db.y > -0.99) {
           continue;
         }
         const score = len + (pts.length - 2) * BEND_COST;
-        // A tie goes to the shape tried FIRST — the Z through the middle of the gap is listed before the
-        // detours, so equal-length routes turn halfway across rather than hugging one card.
+
+        // A tie goes to the shape tried FIRST: the Z through the middle beats hugging one card.
         if (score < bestScore - 0.5) { bestScore = score; best = pts; }
       }
     }
@@ -180,10 +170,7 @@ function pinnedRoute(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide 
   return best ?? [facePoint(ra, sa ?? 'right', sa ? ta : 0.5), facePoint(rb, sb ?? 'left', sb ? tb : 0.5)];
 }
 
-// The route for two boxes and their pins. A line ALWAYS runs port to port: from the middle of a face, or
-// for a pinned end, from `ta`/`tb` of the way along it (a SHIFTED end). An unpinned end just lets the router
-// pick its face. Two boxes that overlap outright have no gap to route through, so they get the plain
-// centre-to-centre line.
+// Overlapping boxes have no gap to route through, so unpinned ends get a plain centre-to-centre line.
 export function routeFor(ra: Rect, sa: EdgeSide | undefined, rb: Rect, sb: EdgeSide | undefined, ta = 0.5, tb = 0.5): Pt[] {
   const overlap = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w)) < 0 && Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h)) < 0;
   if (!sa && !sb && overlap) {

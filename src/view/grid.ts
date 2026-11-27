@@ -1,37 +1,5 @@
-// ---------- background grid (none / dot / mesh / line) ----------
-// A cosmetic layer behind the cards, drawn Miro-style in SCREEN space: see #grid in index.html,
-// a stage-sized div (sibling of #world) whose CSS-gradient tile is sized in screen pixels rather
-// than world units. That's the whole point — a pattern living inside #world inherits the zoom
-// transform, so its dots/strokes scale with it and at any k≠1 the browser resamples a sub-pixel
-// pattern across the entire canvas, which is what produced the moiré shimmer. Here the ink is
-// always exactly 1 screen px wide and only the cell SPACING follows the zoom.
-//
-// The structure is the standard "infinite grid" recipe from shader-land (Blender's floor grid,
-// Godot/Unity infinite-grid shaders, Ben Golus' grid-shader writeup) — the same math, minus the
-// shader, since CSS gradients already tile for us:
-//  - a MAJOR grid plus a SUB-GRID of SUBDIVS finer cells inside each major cell;
-//  - line width clamped in screen space (1px) instead of being allowed to thin out — thin lines
-//    are what alias;
-//  - level of detail: which world step plays "sub-grid" steps up by whole factors of SUBDIVS as
-//    you zoom out, so the sub-grid never gets denser than LOD_MIN px;
-//  - the sub-grid's opacity is the fractional part of that same log — it fades out as its cells
-//    shrink and is fully gone by the time the level steps, so the step never pops. Both levels
-//    share one ink colour (--grid-ink), scaled down by SUB_MAX for the sub-grid where the two need
-//    telling apart, so the major level reads as the stronger one.
-// The three visible styles are three fillings of those same two levels (see paintLayer):
-//  - `dot`  — a plain even dot field with no hierarchy at all: the SUB level draws every dot and the
-//    major level draws nothing (see paintLayer for why it can't just draw the same dot twice), and
-//    it's the one style that doesn't use the opacity ramp below (see subAlpha, which is where the
-//    cost of that lands — its level step changes density instead of fading).
-//  - `mesh` — major DOTS on the intersections of the sub-grid's faint LINES: the two levels read as
-//    different things rather than as strong-and-weak, so the dots stay legible while the mesh gives
-//    the fine step you actually snap to.
-//  - `line` — lines at both levels, the classic graph paper, told apart by SUB_MAX alone.
-//
-// Cost per pan/zoom section is one transform write plus one opacity write, both compositor-only;
-// the gradients are rebuilt only when the level actually changes.
-// Persisted per-map in board.json (data/board.ts) — not localStorage, since it's a
-// property of the map/vault, and should travel with it.
+// The background grid, drawn in SCREEN space (#grid, not inside #world): inside the zoom transform a
+// sub-pixel pattern resamples into moiré. A major grid plus a sub-grid that fades out by level of detail.
 import { chevron } from './icons.js';
 import gridOffIcon from '../assets/icons/grid-off.svg?raw';
 import gridDotIcon from '../assets/icons/grid-dot.svg?raw';
@@ -45,50 +13,28 @@ const GRID_ICONS: Record<GridStyle, string> = { none: gridOffIcon, dot: gridDotI
 const gridEl = document.getElementById('grid');
 const gridFineEl = document.getElementById('gridFine');
 
-// Sub-cells per major cell. state.gridSize is the SUB-grid step (what dragged cards snap to), so
-// the major cell is SUBDIVS × that.
+// state.gridSize is the SUB-grid step (what cards snap to).
 const SUBDIVS = 4;
-// Smallest on-screen sub-cell (px) before the level steps up. Only reached with the sub-grid
-// already faded to nothing, so it's a floor on the *invisible* extreme, not on legibility.
+// Smallest on-screen sub-cell before the level steps up (already faded out by then).
 const MIN_PX = 6;
-// Wherever the sub-grid needs telling apart from the major level (`mesh`, `line`) it never gets
-// brighter than this fraction of --grid-ink, which keeps the major level dominant even once it has
-// fully faded in. The cost of capping below 1 is that a level step is no longer seamless — at the
-// step the outgoing major becomes the incoming sub-grid, so the finest lines drop from full ink to
-// SUB_MAX of it. Faint lines mid-zoom, so it reads as a settle rather than a pop; raise this toward
-// 1 to trade hierarchy back for seamlessness.
+// The sub-grid's peak share of --grid-ink, so the major level stays dominant. Toward 1 trades that
+// hierarchy for a seamless level step.
 const SUB_MAX = 0.6;
-// Grid ink stays a fixed screen size at every zoom (see above): 1px lines, and dots of DOT_R —
-// doubled to MAJOR_DOT_R for `mesh`'s major dots, which have to hold their own against the lines
-// crossing under them (`dot`'s single level of dots keeps the plain radius throughout).
+// Screen pixels at every zoom.
 const DOT_R = 1, MAJOR_DOT_R = DOT_R * 2, LINE_W = 1;
 
 const LOG_SUBDIVS = Math.log(SUBDIVS);
 const log = (x: number) => Math.log(x) / LOG_SUBDIVS;
 
-// Fills ONE level (major or sub) of the two-level grid for the live style: dots at the major level
-// for `mesh` (whose sub-grid is the line style's own faint mesh) and at the SUB level only for `dot`,
-// lines everywhere else. Dots and lines register against each other because both are placed off the
-// tiling origin the shared transform aligns: a dot's centre lands one whole cell in, which is a
-// multiple of `sub` as well, hence exactly on a crossing of the mesh below it.
-//
-// `dot` leaving its major level EMPTY is what actually makes the field even, and it's the reason a
-// flat dot grid can't be "both levels, same paint": --grid-ink is translucent, so a major dot drawn
-// over the sub dot it coincides with composites to roughly twice the alpha (21% over 21% ≈ 38%) and
-// every 4th dot comes out visibly darker — the major/minor distinction back again by another route.
-// One layer can carry the whole style because the sub level alone is already the full field: it
-// tracks the LOD step, and (uniquely for `dot`) never fades, so nothing is left for a second layer
-// to hold up. The empty layer still earns its keep — #grid is what owns the transform, the overhang
-// inset and the display toggle.
+// `dot` draws only its sub level: --grid-ink is translucent, so a major dot over a sub dot would come
+// out darker. `mesh` has major dots over sub lines; `line` lines at both levels.
 function paintLayer(el: HTMLElement, step: number, isMajor: boolean): void {
   if (state.gridStyle === 'dot' && isMajor){
     el.style.backgroundImage = 'none';
     return;
   }
   if (state.gridStyle === 'dot' || (state.gridStyle === 'mesh' && isMajor)){
-    // Dot at the tile's centre with the tiling origin pushed half a cell, so the dots land ON the
-    // grid intersections — and, crucially, both levels stay aligned off the one shared transform
-    // (offsetting by half a MAJOR cell would sit a fraction of a sub-cell out).
+    // Centred in the tile, origin pushed half a cell: dots land on the intersections of both levels.
     const r = state.gridStyle === 'mesh' ? MAJOR_DOT_R : DOT_R;
     el.style.backgroundImage = `radial-gradient(circle, var(--grid-ink) ${r}px, transparent ${r + 0.5}px)`;
     el.style.backgroundPosition = `${step / 2}px ${step / 2}px`;
@@ -103,7 +49,7 @@ function paintLayer(el: HTMLElement, step: number, isMajor: boolean): void {
 // Cached so a pan only ever writes transform/opacity — never `background`, which would repaint.
 let painted = '';
 
-// Called on every pan/zoom (view/camera.ts applyView) as well as after a style/size change.
+// Runs on every pan/zoom.
 export function paintGrid(): void {
   if (!gridEl || !gridFineEl) {
     return;
@@ -112,17 +58,11 @@ export function paintGrid(): void {
   if (state.gridStyle === 'none' || !base){ gridEl.style.display = 'none'; return; }
   gridEl.style.display = '';
 
-  // Step the sub-grid up by whole factors of SUBDIVS until its cell clears MIN_PX, so
-  // sub ∈ [MIN_PX, SUBDIVS*MIN_PX) — and the fade is where `sub` sits inside that span.
+  // sub ∈ [MIN_PX, SUBDIVS*MIN_PX); the fade is where it sits in that span.
   const cell = base * state.view.k;
   const sub = cell * SUBDIVS ** Math.max(0, Math.ceil(log(MIN_PX / cell)));
   const major = sub * SUBDIVS;
-  // `dot` is a flat field of identical dots, so it opts out of the LOD FADE entirely — a partly
-  // faded sub-grid is exactly the major/minor distinction it doesn't want. Its two levels are then
-  // one indistinguishable dot field (they share the radius, the ink and this opacity, and the major
-  // dots land on sub dots), at the price of the level step being a visible change in DENSITY rather
-  // than a crossfade: the dots go from MIN_PX apart to SUBDIVS× that in one section. It only bites at
-  // the far end of a zoom-out, where the fade would have been a fine texture dissolving anyway.
+  // `dot` never fades: a half-faded sub-grid is the hierarchy it doesn't want.
   const subAlpha = state.gridStyle === 'dot' ? 1 : clamp(log(sub / MIN_PX), 0, 1) * SUB_MAX;
 
   const key = `${state.gridStyle}|${major}`;
@@ -130,29 +70,22 @@ export function paintGrid(): void {
     painted = key;
     paintLayer(gridEl, major, true);
     paintLayer(gridFineEl, sub, false);
-    // Overhang one major cell on every side so the pan-translate below never drags a bare edge
-    // into view; sized here rather than in CSS because it tracks the level we just picked.
+    // Overhang one major cell so the pan-translate never drags a bare edge into view.
     gridEl.style.inset = `${-major}px`;
   }
   gridFineEl.style.opacity = String(subAlpha);
 
-  // Translate the over-sized layer so its tiling origin lands on a world grid line. The element's
-  // top-left sits one major cell outside the stage and the tile repeats every `major`, so the
-  // offset is just view mod major (which is congruent mod `sub` too — hence one transform aligns
-  // both levels). Rounded to a whole px so the tile is never resampled at a half-pixel offset.
+  // view mod major is congruent mod sub too, so one transform aligns both levels. Whole px: no resampling.
   const off = (v: number) => Math.round((v % major + major) % major);
   gridEl.style.transform = `translate(${off(state.view.x)}px,${off(state.view.y)}px)`;
 }
 
-// Reflects state.gridStyle/gridSize onto the settings panel's grid rows and repaints the layer.
-// Called after a fresh map load (settings.json may have just changed it) and after each pick.
 export function refreshGrid(): void {
   renderGridControls();
   painted = '';   // force a rebuild — the style may have changed, not just the step
   paintGrid();
 }
 
-// The settings panel's two grid rows (#settingsPop): the style, then the snap step.
 const STYLE_LABELS: Record<GridStyle, string> = { none: 'Off', dot: 'Dots', mesh: 'Mesh', line: 'Lines' };
 
 const sizeLabel = (z: GridSize): string => z ? `${z} px` : 'Off';
@@ -178,7 +111,6 @@ export function renderGridControls(): void {
   }).join('');
 }
 
-// Told when the style or snap step is changed here; the board saves it (data/board.ts, wired in main.ts).
 let gridChanged: () => void = () => {};
 
 export function onGridChanged(listener: () => void): void {
@@ -191,8 +123,6 @@ function set(patch: { gridStyle?: GridStyle; gridSize?: GridSize }): void {
   gridChanged();
 }
 
-// Wires the grid rows. Called once at startup; the initial paint happens once the first map's
-// settings.json has loaded (loadFromDir calls refreshGrid()).
 export function installGrid(): void {
   document.getElementById('gridStyles')?.addEventListener('click', (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>('[data-style]');

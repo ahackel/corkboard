@@ -1,23 +1,5 @@
-// ---------- copy / cut / paste of cards ----------
-// The clipboard payload is the cards' NATIVE format: each card's .md file content
-// (serializeMd), concatenated. Since a card's title is its FILENAME (not stored inside the
-// file), every card is preceded by a marker line carrying it:
-//
-//   <!-- corkboard-card: My Title.md -->
-//   ---
-//   …frontmatter…
-//   ---
-//   body
-//
-// `mm_parent` is rewritten to the PAYLOAD-LOCAL name ("Title.md") when the parent is part of
-// the payload, and stripped for payload roots — so ids/disk paths never leak and a paste into
-// another tab/map reconstructs the subtree by name. Anything on the clipboard that doesn't start
-// with the marker falls through to the existing paste-as-new-card behaviour (features/attachments.ts).
-//
-// Copy does NOT put that payload on the clipboard: other apps get clean text (one card: its note;
-// more: a bullet outline, utils/outline.ts), and the payload is remembered beside it (this tab, and
-// localStorage for the others), so pasting that same text back onto a board restores the cards.
-// "Copy as formatted text" (copyFormatted) adds the same note or outline RENDERED, as HTML, beside it.
+// Copy/cut/paste and export of cards. Other apps get clean text (a note, or an outline of several); the
+// card payload (each file's text after a `<!-- corkboard-card: name -->` marker) is remembered beside it.
 import { state, setStatus, singleNoteRefuses, type MindNode } from '../core/state.js';
 import { serializeMd, parseMd, fileStem, joinHeading, type ParsedNote } from '../utils/frontmatter.js';
 import { nodesOf, outermost, isLockedEffective, subtreeIds, childrenOf, nodeLabel } from '../utils/model.js';
@@ -43,13 +25,12 @@ import { pasteShift } from '../utils/placement.js';
 import { setSelectionSet, selectedIds } from './selection.js';
 
 const MARK = '<!-- corkboard-card: ';
-// Read side accepts the app's former name too, so a payload copied from an older build (or
-// from an older tab still open beside this one) still pastes as cards rather than as text.
+
+// The read side accepts the app's former name, for a payload copied from an older build.
 const MARK_RE = /^<!-- (?:corkboard|mindmap)-card: (.+?) -->$/gm;
 const STARTS_MARK = /^<!-- (?:corkboard|mindmap)-card: /;
 
-// Rewrite the frontmatter's mm_parent to a payload-local name (or drop it for payload roots).
-// serializeMd emits the parent's on-disk path, which is meaningless outside this map.
+// serializeMd emits the parent's on-disk path, meaningless outside this map: point it into the payload instead.
 function withParentRef(md: string, parentName: string | null): string {
   const m = md.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!m) {
@@ -62,26 +43,16 @@ function withParentRef(md: string, parentName: string | null): string {
   return `---\n${fm.join('\n')}\n---\n${m[2]}`;
 }
 
-// One card as a would-be .md file: its path + its exact file content.
 export interface CardFile { name: string; text: string }
 
-// The payload-local NAME of a card — the key its children's mm_parent points at, and the filename it
-// unpacks to. Its own file path, which is unique by construction. Deliberately NOT its title, which
-// two cards may now share (both would collapse into one payload entry and adopt each other's children)
-// and which an untitled card hasn't got at all. A never-saved card has no path yet, so its ephemeral id
-// stands in — unique within the payload, which is all this has to be.
+// What children's mm_parent points at. Not the title: two cards may share one, or have none.
+// A never-saved card has no path yet, so its id stands in.
 const payloadName = (n: MindNode): string => n.file ?? `${n.id}.md`;
-// …and the leaf of that path, for the one place a payload name faces the USER: the filename a single
-// card downloads/shares as. A card living in a subfolder would otherwise offer `sub/Notes.md` as a
-// download name, which no browser will honour. Zip ENTRIES keep the full path on purpose. `fileStem`
-// drops the extension too, so both call sites below add back the one they want.
 
-// The given cards INCLUDING their subtrees as one .md file per card, parent refs payload-local.
-// Shared by copy (clipboard), the drag-out chip and ⌥-dragging a card out (files via DownloadURL).
+// The given cards INCLUDING their subtrees, parents before their children.
 function filesFor(ids: string[]): CardFile[] {
-  // dedupe: a card inside another given card's subtree is already covered
   const roots = outermost(nodesOf(ids)).map(n => n.id);
-  const all = roots.flatMap(id => subtreeIds(id));   // preorder per root → parents precede kids
+  const all = roots.flatMap(id => subtreeIds(id));
   const inPayload = new Set(all);
   return all.map(id => {
     const n = state.nodes.get(id)!;
@@ -89,14 +60,12 @@ function filesFor(ids: string[]): CardFile[] {
     return { name: payloadName(n), text: withParentRef(serializeMd(n), p ? payloadName(p) : null) };
   });
 }
+
 function selectionFiles(): CardFile[] { return filesFor(selectedIds()); }
-// Files → the marker-separated text payload tryPasteCards understands. Also used by the
-// .md-file drop importer (a dropped note IS one of these chunks).
+
 export const cardsToPayload = (files: CardFile[]): string =>
   files.map(f => `${MARK}${f.name} -->\n${f.text}`).join('\n');
 
-
-// The selection as other apps should read it: one card is its own note, more are an outline.
 const readingOrder = (a: MindNode, b: MindNode): number => a.y - b.y || a.x - b.x;
 
 function outlineItem(n: MindNode): OutlineItem {
@@ -134,18 +103,15 @@ function clipFor(ids: string[]): { count: number; text: string; payload: string 
   return { count: files.length, text: plainText(ids).trim() || payload, payload };
 }
 
-// Remember the payload behind the text just copied (payloadBehind), and say what was copied.
 function copiedNow(clip: { count: number; text: string; payload: string }, how = ''): void {
   copied = { text: clip.text, payload: clip.payload };
   writeJSON(COPIED_KEY, copied);
   setStatus(`Copied ${clip.count} card${clip.count === 1 ? '' : 's'}${how}`);
 }
 
-// Copy the selected cards INCLUDING their subtrees to the system clipboard. Resolves true iff the
-// clipboard write succeeded.
 export async function copySelection(): Promise<boolean> {
   const ids = selectedIds();
-  await readAll(ids);   // a folded section's notes are part of what's copied
+  await readAll(ids);
   const clip = clipFor(ids);
   if (!clip.count) {
     return false;
@@ -160,9 +126,7 @@ export async function copySelection(): Promise<boolean> {
   }
 }
 
-// The selection as FORMATTED text: the same shape as plainText — one card is its note, more a bulleted
-// outline — rendered, and stripped of what only this app reads (utils/rich-html.ts). Each card's
-// pictures are read beside its own note.
+// Each card's pictures resolve beside its own note.
 const cardHtml = (n: MindNode, html: string): Promise<string> => portableHtml(html, src => portableImageUrl(src, n.file));
 
 async function outlineHtml(n: MindNode): Promise<string> {
@@ -182,10 +146,8 @@ async function formattedHtml(ids: string[]): Promise<string> {
   return `<ul>${(await Promise.all(roots.map(outlineHtml))).join('')}</ul>`;
 }
 
-// Copy the selection as FORMATTED text (headings, bold, lists, tables, pictures) for a doc, a mail or a
-// chat, beside the same plain text a plain copy writes — so pasted into a plain field it is still the
-// markdown, and pasted back onto a board it is still the cards. The ClipboardItem is made AT ONCE, its
-// parts promised: Safari only lets a page write the clipboard straight from the click or key.
+// The ClipboardItem is made AT ONCE, its parts promised: Safari only lets a page write the clipboard
+// straight from the click or key.
 export async function copyFormatted(): Promise<boolean> {
   const ids = selectedIds();
   if (!ids.length) {
@@ -209,8 +171,7 @@ export async function copyFormatted(): Promise<boolean> {
   }
 }
 
-// Cut = copy + delete. The delete only happens once the clipboard write succeeded, so a
-// denied clipboard can never destroy cards. deleteSelection records its own undo step.
+// Deletes only once the clipboard write succeeded, so a denied clipboard never destroys cards.
 export async function cutSelection(): Promise<void> {
   if (singleNoteRefuses()) {
     return;
@@ -223,11 +184,10 @@ export async function cutSelection(): Promise<void> {
   setStatus(`Cut ${ids.length} card${ids.length === 1 ? '' : 's'}`);
 }
 
-// Try to paste `text` as cards. Returns false when it isn't a card payload (the caller falls
-// through to the ordinary text/image paste); true when handled (even if only with a status).
-// Roots land as children of `parent` (when given), else free at (sx,sy) / the viewport centre,
-// keeping the copied cards' relative offsets plus a small nudge so a paste over the source
-// never lands exactly on top.
+// False when `pasted` isn't a card payload, so the caller pastes it as text; true when handled.
+// So a paste over its source never lands exactly on top of it.
+const PASTE_NUDGE = 16;
+
 export function tryPasteCards(pasted: string, at: { sx: number | null; sy: number | null; parent: string | null }): boolean {
   const text = payloadBehind(pasted);
   if (!STARTS_MARK.test(text)) {
@@ -236,7 +196,6 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
   if (singleNoteRefuses()) {
     return true;
   }
-  // split on the marker lines; each chunk is one card's .md content named by its marker
   const cards: Array<{ name: string; p: ParsedNote }> = [];
   const marks = [...text.matchAll(MARK_RE)];
   for (let i = 0; i < marks.length; i++){
@@ -249,11 +208,9 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
   }
   const byName = new Map(cards.map(c => [c.name, c]));
   const isPayloadRoot = (c: { p: ParsedNote }): boolean => !c.p.mm.parent || !byName.has(c.p.mm.parent);
-  // anchor the payload roots' top-left at the target point (+ a nudge off the source)
-  // On the grid (view/geometry.ts snapPt), like every other card the user places: the payload keeps its own
-  // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
+  // Snapping the anchor puts the whole group on the grid, keeping its internal spacing.
   const target = snapPt(worldAtOrCentre(at.sx, at.sy));
-  const { x: dx, y: dy } = pasteShift(target, cards.filter(isPayloadRoot).map(c => c.p.mm), 16);
+  const { x: dx, y: dy } = pasteShift(target, cards.filter(isPayloadRoot).map(c => c.p.mm), PASTE_NUDGE);
   const dest = holderOf(at.parent) ?? detachParentId();
   const destNode = dest ? state.nodes.get(dest) : undefined;
   if (destNode && isLockedEffective(destNode)) {
@@ -264,92 +221,73 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
   mutate([], () => {
     const holder = holderOf(at.parent);
     const parentNode = holder ? state.nodes.get(holder) : undefined;
-    if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }   // reveal the drop
-    const newIds = new Map<string, string>();   // payload name -> minted id
+    if (parentNode?.collapsed){ touch(parentNode.id); parentNode.collapsed = false; }
+    const idByPayloadName = new Map<string, string>();
     for (const c of cards){
       const root = isPayloadRoot(c);
       const n = mkNode({
         x: (c.p.mm.x ?? target.x) + dx, y: (c.p.mm.y ?? target.y) + dy,
-        title: c.p.title,   // verbatim: a pasted card keeps its name, and duplicates are allowed now
+        title: c.p.title,
         color: c.p.color,
         tags: [...c.p.tags], body: c.p.body, fmEntries: c.p.fmEntries,
         collapsed: c.p.mm.collapsed, type: c.p.mm.type,
       });
       state.nodes.set(n.id, n);
-      newIds.set(c.name, n.id);
+      idByPayloadName.set(c.name, n.id);
       if (root) {
         rootIds.push(n.id);
       }
     }
-    // resolve payload-internal parent links (by original names, before any title renaming)
     for (const c of cards){
-      const n = state.nodes.get(newIds.get(c.name)!) as MindNode;
-      // …and a payload root with no paste target lands at the CURRENT top level — the open section's
-      // interior while one is open (detachParentId, nav/scope.ts). This path mints via mkNode, so it
-      // doesn't inherit createNode's own default.
-      n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : newIds.get(c.p.mm.parent)!;
+      const n = state.nodes.get(idByPayloadName.get(c.name)!) as MindNode;
+      n.parent = isPayloadRoot(c) ? (parentNode?.id ?? detachParentId()) : idByPayloadName.get(c.p.mm.parent)!;
     }
   }, { reflow: 'remeasure' });
   setSelectionSet(rootIds);
   return true;
 }
 
-// ---------- drag cards OUT of the app as .md files ----------
-// ⌥-dragging a card is natively draggable; dropping it on the OS file manager creates real
-// files. That uses Chrome/Edge's non-standard `DownloadURL` flavour, which allows ONE entry per
-// drag — a single card ships as its .md, a bigger selection as one .zip (the store-only writer
-// is synchronous, so it can run inside dragstart). Browsers without DownloadURL still carry the
-// text payload — dropping into an editor lands markdown.
+// Keeps String.fromCharCode's spread under the engine's argument limit.
+const B64_CHUNK = 0x8000;
+
 function b64(bytes: Uint8Array): string {
   let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += B64_CHUNK) {
+    s += String.fromCharCode(...bytes.subarray(i, i + B64_CHUNK));
   }
   return btoa(s);
 }
-// A multi-card export .zip is named after its first (root) card.
+
 const zipName = (files: CardFile[]): string => fileStem(files[0].name) + '.zip';
-// The selection as ONE downloadable file: a single card is its .md, more become a .zip.
+
 function exportFile(files: CardFile[]): { mime: string; name: string; bytes: Uint8Array } {
   return files.length === 1
     ? { mime: 'text/markdown', name: fileStem(files[0].name) + '.md', bytes: new TextEncoder().encode(files[0].text) }
     : { mime: 'application/zip', name: zipName(files),
         bytes: zipBytes(files.map(f => ({ name: f.name, data: f.text }))) };
 }
-// ⌥/Alt-drag a CARD out of the window → the same OS file drag as the chip. The card's plain
-// drag gesture belongs to the pointer-based canvas move (drag.ts), and a native drag can only
-// begin at gesture start — so ⌥ at dragstart is the fork: without it the native drag is
-// suppressed (canvas move proceeds untouched); with it the already-started pointer drag is
-// cancelled (positions snap back) and the browser's drag takes over, carrying the DownloadURL.
+
+// ⌥-drag a card out to the OS as its .md (or a .zip), via Chrome/Edge's one-entry `DownloadURL`. A native
+// drag can only begin at gesture start, so ⌥ at dragstart forks it from the pointer-based move (drag.ts).
 export function bindCardFileDrag(n: MindNode): void {
   const el = n.el!;
   el.draggable = true;
   el.addEventListener('dragstart', (e: DragEvent) => {
-    // The card's note is open with text selected → this is the body-text drag (features/text-drag.ts),
-    // which is a NATIVE drag like this one and must be let through: returning without preventDefault
-    // (unlike the two bails below, which hand the gesture back to the pointer machinery) leaves the
-    // browser's text drag alive for text-drag.ts's own document-level handlers to land. First, so a
-    // held ⌥ can't turn a drag of the text into an export of the whole card.
+    // A drag of selected note text (text-drag.ts) is let through, first, so a held ⌥ can't export the card.
     if (cardTextDrag(e.target)) {
       return;
     }
     if (!e.altKey || !e.dataTransfer){ e.preventDefault(); return; }
-    // ⌥-press began on an inline body image → that's an image EXTRACT gesture (image-extract.ts),
-    // not a card-file export; let the native drag stand down so the pointer machinery keeps it.
     if (imageExtractInProgress()){ e.preventDefault(); return; }
-    // the pointer machinery grabbed this gesture at pointerdown — take it back cleanly
     cancelDragRestore();
     const ids = state.sel.has(n.id) && state.sel.size > 1 ? [...state.sel] : [n.id];
     const f = exportFile(filesFor(ids));
     e.dataTransfer.effectAllowed = 'copy';
-    // ONLY DownloadURL — Chrome ignores it when other formats are set alongside (crbug 55071)
+    // ONLY DownloadURL: Chrome ignores it when other formats are set alongside (crbug 55071).
     e.dataTransfer.setData('DownloadURL', `${f.mime}:${f.name}:data:${f.mime};base64,${b64(f.bytes)}`);
   });
 }
 
-// The float bar's kebab-menu export entry: download the selected cards (with their subtrees)
-// as one .zip. A plain download works in every browser; for drag-to-Finder use ⌥-drag on the
-// card itself.
 export function exportSelection(): void {
   if (afterReading(selectedIds(), exportSelection)) {
     return;
@@ -363,16 +301,8 @@ export function exportSelection(): void {
   setStatus(`Saved ${name}`);
 }
 
-// Whether the OS share sheet is available for files — feature-detected once; gates the kebab
-// menu's "Share" entry. canShare()/navigator.share can report truthy yet every real share() call
-// still rejects with the exact same NotAllowedError, because the browser has no OS share surface
-// to hand the file to at all — excluded up front rather than greying the entry in on a false
-// positive:
-//  - a bare `file://` page (only rejects at call time)
-//  - any desktop Linux browser (no native share sheet exists on that platform at all)
-//  - Chromium (Chrome/Edge) on macOS before Chrome 128 — crbug.com/1144920, a long-standing
-//    macOS-specific gap in Chromium's Web Share implementation (Safari on macOS always had it;
-//    Chromium fixed it around Chrome 128 per caniuse, so 128+ is trusted at face value).
+// canShare() can say yes where every share() rejects for want of an OS share sheet: on file://, desktop
+// Linux, and Chromium on macOS before 128 (crbug.com/1144920).
 const ua = navigator.userAgent;
 const isMac = /Macintosh|Mac OS X/.test(ua) && !/iPhone|iPad|iPod/.test(ua);
 const isLinux = /Linux/.test(ua) && !/Android/.test(ua) && !/CrOS/.test(ua);
@@ -383,10 +313,6 @@ const shareFile = new File(['x'], 'x.md', { type: 'text/markdown' });
 export const canShareFiles = location.protocol !== 'file:' && !noOsShareSurface
   && typeof navigator.share === 'function' && !!navigator.canShare?.({ files: [shareFile] });
 
-// Share the selected cards (with their subtrees) via the OS share sheet — same payload as
-// exportSelection (single card → .md, multi → .zip), handed to another app/device instead of
-// downloaded. The receiving side just needs to accept a .md/.zip file (e.g. another Corkboard
-// tab/device via its "Open .md/.zip" import, AirDrop, Files, a chat app, …).
 export async function shareSelection(): Promise<void> {
   await readAll(selectedIds());
   const files = selectionFiles();
@@ -404,7 +330,7 @@ export async function shareSelection(): Promise<void> {
     await navigator.share({ files: [file], title: f.name });
   } catch (err) {
     if ((err as DOMException)?.name === 'AbortError') {
-      return;   // user dismissed the share sheet
+      return;
     }
     console.error('shareSelection: navigator.share failed', err, { ua: navigator.userAgent, platform: navigator.platform });
     setStatus('Couldn’t share');

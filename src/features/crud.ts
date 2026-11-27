@@ -1,7 +1,4 @@
-// ---------- node lifecycle: create / duplicate / delete / extract ----------
-// Every node is one .md file; ids are ephemeral (minted in mkNode). All create/duplicate paths go
-// through mkNode so the node schema stays in one place. Each mutation schedules a save. Re-parenting
-// by drag lives in features/drag.ts; this is the keyboard/toolbar-driven lifecycle.
+// Node lifecycle: create, duplicate, merge, extract, delete.
 import { state, setStatus, singleNoteRefuses, isStack, type MindNode, type NodeType } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf, nodeLabel, isLockedEffective, subtreeHasLocked, parentOf, isHidden, nodesOf, subtreeIds, takesDrop } from '../utils/model.js';
@@ -27,12 +24,12 @@ import { selectNode, setSelectionSet, applySelection, selectedIds } from './sele
 import { scheduleSave } from '../data/save.js';
 import { settleStacks, selectedStacks, spreadPiles } from './stacks.js';
 
-// Mint a fresh node with the standard shape; callers override only the fields they care about.
-// Keeps the node schema (and its defaults) in ONE place so every create/duplicate path stays in
-// sync — the id is always minted here (ids are ephemeral, see below).
+// The ONE place the node schema and its defaults live; every create goes through it.
 export function mkNode(fields: Partial<MindNode> = {}): MindNode {
   const id = 'n' + (state.idSeq++);
-  touch(id);   // not in state.nodes yet → before-image is null (undo of a create = remove it)
+
+  // Not in state.nodes yet, so its before-image is null: undoing the create removes it.
+  touch(id);
   return {
     id, file:null,
     x:0, y:0, rx:0, ry:0, parent:null, collapsed:false, locked:false,
@@ -42,42 +39,36 @@ export function mkNode(fields: Partial<MindNode> = {}): MindNode {
     ...fields,
   };
 }
-// A new card is a square yellow sticky (amber is the sticky pastel) — written, not inherited, so one made
-// inside a coloured section is still yellow. Every interactive create spreads it: createNode, the dock's ghost.
+
+// A square yellow sticky, written rather than inherited, so it stays yellow inside a coloured section.
 const NEW_CARD = { color: 'amber', h: NODE_W };
-// A pasted list's first-guess row height, before each card has an element to measure (layoutH's own
-// fallback is the same number); createCards restacks from the measured heights.
+
+// A first guess before each card can be measured (layoutH's fallback too); createCards restacks after.
 const NEW_CARD_H = 64;
-// Centre a fresh card on a world point — the ONE spelling of it. Every "new card HERE" gesture (the
-// canvas double-click, the canvas ⋯ menu, Space, a dropped file, a card double-clicked into a
-// container) lands the card under the pointer rather than hanging down-right of it, so the default
-// card's size is written once instead of once per gesture.
-// Where a card goes when it is placed AT a point — the pointer, usually. Centred on that point and then
-// put on the grid (view/geometry.ts snapPt), which is the one funnel every interactive create runs through: the
-// canvas double-click, Space/N, both "New card here" menus, a dropped image, a dragged-out selection. A
-// card the user positions is on the grid whether it was placed or dragged there.
+
+// The ONE spelling of "a new card HERE": centred on the point, on the grid.
 export function centredAt(p: Pt): Pt { return snapPt({ x: p.x - NODE_W / 2, y: p.y - NODE_W / 2 }); }
-// Make a new UNCONNECTED node (parent:null) at the viewport centre (or a given spot).
+
 interface CreateOpts {
   x?: number; y?: number; parent?: string | null; title?: string; color?: string;
   tags?: string[]; body?: string; type?: NodeType; isNew?: boolean;
   w?: number; h?: number;
-  edit?: boolean;   // false = don't open the inline rename (e.g. paste — the content is final)
+
+  // false: no editor opens, as for a paste whose content is final.
+  edit?: boolean;
 }
-// A new card pops in (styles.css card-pop) — only one the user just made, never on a load. A data
-// attribute, not a class: paintNode rewrites className wholesale.
+
+// A data attribute, not a class: paintNode rewrites className wholesale.
 function popIn(n: MindNode): void {
   const el = n.el;
   if (el) { el.dataset.pop = ''; el.addEventListener('animationend', () => { delete el.dataset.pop; }, { once: true }); }
 }
+
 export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   if (singleNoteRefuses()) {
     return;
   }
-  // No parent asked for means "the top level", and while a section is OPEN its interior IS the top
-  // level (detachParentId, nav/scope.ts) — a genuine root would land outside the scope and simply
-  // vanish. That's what makes this ONE line cover every create path: the canvas double-click, Space,
-  // both "New card here" menus, a paste, a dropped image.
+  // While a section is OPEN its interior is the top level; a true root would vanish outside the scope.
   const parentId = opts.parent !== undefined && opts.parent !== null ? holderOf(opts.parent) : detachParentId();
   if (parentId) {
     const p = state.nodes.get(parentId);
@@ -88,10 +79,6 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const n = mkNode({
     x: opts.x ?? c.x, y: opts.y ?? c.y,
     parent: parentId,
-    // A fresh card is UNTITLED — it has no name until the first line of its text is a `# ` heading
-    // (utils/frontmatter.ts splitHeading), and its file is slugged off that text instead. This is
-    // where the minted "New Card 1" used to come from: it existed only so the
-    // node had a unique filename, which is no longer the title's job.
     title: opts.title ?? '',
     color: opts.color ?? (isCard ? NEW_CARD.color : ''),
     tags: opts.tags ? [...opts.tags] : [], body: opts.body ?? '',
@@ -101,7 +88,6 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   const id = n.id;
   state.nodes.set(id, n);
   relayout();
-  // a new SECTION takes in what it covers
   if (n.type === 'section' && settleSections([id]).length) {
     relayout();
   }
@@ -110,16 +96,15 @@ export function createNode(opts: CreateOpts = {}): MindNode | undefined {
   if (opts.edit !== false) {
     startInlineEdit(n, { isNew: opts.isNew ?? true });
   } else {
-    commitStep();   // no rename session follows, so the create step ends here
+    commitStep();
   }
   scheduleSave();
   return n;
 }
-// Many cards at once — a pasted list (utils/paste-list.ts), one card per item — in a neat column
-// whose top-left is `at`, in ONE undo step. Each text splits like a card's own (splitHeading).
-// The column is stacked from MEASURED heights, so it has to paint first: lay out, read each card's
-// height, then restack with an even gap. Under a parent the cards become its children, in order.
-const LIST_GAP = SPACING;   // the house spacing, the same one the smart guides pull to
+
+const LIST_GAP = SPACING;
+
+// A column whose top-left is `at`, in ONE undo step, stacked from MEASURED heights, so painted first.
 export function createCards(texts: string[], at: Pt, parent: string | null): MindNode[] {
   if (!texts.length || singleNoteRefuses()) {
     return [];
@@ -130,7 +115,7 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
   const made: MindNode[] = [];
   mutate([parentId], () => {
     if (p?.collapsed) {
-      p.collapsed = false;   // reveal the new cards
+      p.collapsed = false;
     }
     texts.forEach((t, i) => {
       const { title, body } = splitHeading(t);
@@ -146,26 +131,20 @@ export function createCards(texts: string[], at: Pt, parent: string | null): Min
   made.forEach(popIn);
   return made;
 }
-// Make a new unconnected node at (x,y) and render it, but DON'T select / rename / save yet — the
-// caller drives it (e.g. the ghost-card drag rides it under the cursor, then renames on drop or
-// deletes it on cancel). Kept save-free so an abandoned drag never writes a file.
+
+// Painted but not selected, edited or saved: the dock's ghost-card drag drives it, and an abandoned
+// drag must never write a file.
 export function createDetachedNode(x: number, y: number): MindNode | undefined {
   if (singleNoteRefuses()) {
     return;
   }
-  // …parented to the open section while there is one, so the ghost card rides the ordinary section-child
-  // machinery instead of being dragged onto a canvas that can't show it.
   const n = mkNode({ ...NEW_CARD, x, y, parent: detachParentId() });
   state.nodes.set(n.id, n);
-  paintAll();   // give the card a DOM element so it can be dragged
+  paintAll();
   return n;
 }
-// Clone one card (not its subtree) at (x,y): same content/colour, keeping its parent so the copy
-// stays attached as a sibling. Keeps the source's title VERBATIM — a duplicate of "Idea" is another
-// card called "Idea", and the two are told apart by where they sit, which is what a canvas is for.
-// (It used to become "Idea 2", numbered against every other title in the map, purely so the copy's
-// filename wouldn't collide; that's desiredFileFor's business now, and it suffixes the FILE.)
-// Shared by the duplicate (sidebar/keyboard) and Shift-drag clone paths; doesn't touch selection/layout.
+
+// Not its subtree. The title is kept verbatim; desiredFileFor keeps the FILE names apart.
 function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
   const copy = mkNode({
     x, y,
@@ -174,28 +153,24 @@ function cloneNodeAt(s: MindNode, x: number, y: number): MindNode {
     color: s.color,
     tags: [...s.tags], body: s.body,
     type: s.type,
-    w: s.w, h: s.h, clip: s.clip,   // a section/image card's own box size; a clipped card's exact height
-    // …and how it was SHOWING: a copy of a folded card is a folded card (paste already worked this
-    // way — features/clipboard.ts — and a duplicate that silently springs open reads as a bug, most
-    // visibly on an image card, whose fold is its icon). titleGap rides along with the body it
-    // describes, or the copy's file would gain the blank line the original doesn't have.
+    w: s.w, h: s.h, clip: s.clip,
+
+    // titleGap rides along, or the copy's file would gain a blank line the original lacks.
     collapsed: s.collapsed, titleGap: s.titleGap, titleLevel: s.titleLevel,
   });
   state.nodes.set(copy.id, copy);
   return copy;
 }
-// A duplicate sits directly below the original, clear of it.
-// A duplicate sits one card-height below its source — snapped, since that height is MEASURED and would
-// otherwise put the copy a few px off the grid its source is on.
+
+const DUPLICATE_GAP = 24;
+
+// Snapped: the measured height would otherwise put the copy off its source's grid.
 function copyNode(s: MindNode): MindNode {
-  const at = snapPt({ x: s.x, y: s.y + nodeH(s) + 24 });
+  const at = snapPt({ x: s.x, y: s.y + nodeH(s) + DUPLICATE_GAP });
   return cloneNodeAt(s, at.x, at.y);
 }
-// The SMART duplicate (⇧D): the next card of a series — a daily log, sprints, versions. The copy's
-// title steps to its next value (utils/advance.ts: a date by a day with its weekday, else the last
-// number up) and it lands in the NEXT SLOT of its row: to the right, at the same gap the row already
-// keeps (from its left neighbour), past anything already there. Its section grows to hold it, the way a
-// drop does. A card with no heading advances its first line instead.
+
+// See "A SMART duplicate makes the NEXT card" in docs/architecture.md.
 function copyNext(s: MindNode): MindNode {
   const sibs = childrenOf(s.parent).filter(o => o !== s && !isHidden(o));
   const at = snapPt(nextInRow(boxOf(s), sibs.map(o => boxOf(o)), LIST_GAP));
@@ -208,16 +183,13 @@ function copyNext(s: MindNode): MindNode {
   }
   return c;
 }
-// Duplicate every selected card (or just the one). Each copy keeps its source's parent, so it
-// stays connected. The copies come out SELECTED, never in an editor — so D / ⇧D pressed again
-// copies the copy, and a run of them builds a series. `next` is the smart duplicate (copyNext
-// above); without it the copy is exact, just below its source.
+
+// The copies come out SELECTED, not in an editor, so D / ⇧D again builds a series.
 export function duplicateSelection({ next = false }: { next?: boolean } = {}): MindNode[] | undefined {
   if (singleNoteRefuses()) {
     return;
   }
   const ids = selectedIds();
-  // A folded section's notes may still be on disk: duplicating it copies them, so they're read first.
   if (afterReading(ids, () => duplicateSelection({ next }))) {
     return;
   }
@@ -239,23 +211,22 @@ export function duplicateSelection({ next = false }: { next?: boolean } = {}): M
   scheduleSave();
   return copies;
 }
-// Shift+drag clone: drop a copy at `pos` that keeps the source's parent (a sibling),
-// while the original is the node being dragged away. Doesn't steal selection/focus.
+
+// The copy a clone-drag leaves behind while the original is dragged away.
 export function leaveClone(s: MindNode, pos: Pt): MindNode {
   return cloneNodeAt(s, pos.x, pos.y);
 }
 
-// ---------- a new card inside a section / after a card / a new section ----------
-// A new card INSIDE a section — Tab, the ⋯ menu, a double-click in its interior (features/activate.ts activateNode,
-// which passes where the user pointed as `at`). Without a point it goes under whatever the section
-// already holds, at the interior's left edge, so Tab-Tab-Tab fills a section top to bottom.
+// Without a point, under what the section already holds, so Tab-Tab-Tab fills it top to bottom.
 export function addCardInside(sectionId: string, at?: Pt): void {
   const f = state.nodes.get(sectionId);
   if (!f || f.type !== 'section') {
     return;
   }
   if (isLockedEffective(f)) { setStatus('Locked — can’t add a card'); return; }
-  touch(sectionId);   // the reveal below belongs to the create step
+
+  // The reveal belongs to the create step.
+  touch(sectionId);
   if (f.collapsed) {
     f.collapsed = false;
   }
@@ -267,8 +238,8 @@ export function addCardInside(sectionId: string, at?: Pt): void {
   }
   createNode({ ...pos, parent: sectionId });
 }
-// A new, empty SECTION centred on a world point, its name editor open — the palette's "New section".
-// FigJam's default name: "Section 1", or one past the highest number a section already carries.
+
+// FigJam's: one past the highest "Section N" already there.
 export function nextSectionTitle(): string {
   let max = 0;
   for (const n of state.nodes.values()) {
@@ -282,12 +253,10 @@ export function nextSectionTitle(): string {
 
 export function newSectionAt(p: Pt): void {
   const at = snapPt({ x: p.x - SECTION_W / 2, y: p.y - SECTION_H / 2 });
-  // in the section under the pointer, if any — the same drop rule a card gets
   createNode({ ...at, type: 'section', w: SECTION_W, h: SECTION_H, title: nextSectionTitle(), parent: sectionAt(p.x, p.y, new Set())?.id });
 }
-// The next card after `refId`, in the same place it lives (the top level, or the same section): just
-// below it, or below whatever already sits under it — Enter, Enter, Enter down a column of cards
-// appends to it rather than stacking on the card underneath.
+
+// Below `refId`, past whatever already sits there, so Enter, Enter, Enter appends to a column.
 export function createSibling(refId: string){
   const ref = state.nodes.get(refId);
   if (!ref) {
@@ -300,35 +269,20 @@ export function createSibling(refId: string){
   createNode({ x: ref.x, y, parent: ref.parent });
 }
 
-// ---------- breaking a note apart: extract selected body text into a card of its own ----------
-// Two gestures share this: ⌘⇧E (→ a card beside it) and dragging the selection out of the editor
-// (features/text-drag.ts → a card where it was dropped, or straight into another card's note). All of them CUT the text out of the source, so the three helpers below
-// are the shared halves — deriving the new card's title/body, and the cut itself.
+// See "MERGING notes and BREAKING them apart are two DRAGS" in docs/architecture.md.
 
-// A lump of extracted text IS a card's text, so it splits exactly the way the note it came from does —
-// hence plain `splitHeading` at both sites below: a leading `# ` line is the new card's title, and
-// without one the card is untitled and the whole lump is its body. Nothing is minted; text dragged out
-// of a note keeps the shape it had.
-// Cut [start,end) out of the card's text (tidying the blank lines it leaves) and return it. What's
-// left is re-SPLIT into title + body, because a card is one field and the range may have taken the
-// title heading with it — cut a card's whole name out and the card is simply untitled now, which is
-// the whole of what used to be a refusal ("a title is a filename, so it can't be cut to nothing").
-// The in-card editor is DROPPED rather than ended: endBodyEdit would write the textarea's now-stale
-// value back over the shortened text. The caller owns closing the undo step (commitStep), since
-// nothing else will.
+// The editor is DROPPED, not ended: ending would write its stale text back. The caller commits the step.
 function cutCardText(n: MindNode, start: number, end: number, value: string): string {
-  touch(n.id);   // usually already touched by startCardEdit — idempotent
+  touch(n.id);
   const text = value.slice(start, end);
   const rest = (value.slice(0, start) + value.slice(end)).replace(/\n{3,}/g, '\n\n').trim();
   setNoteText(n, rest);
   n.dirty = true;
-  dropBodyEdit();   // see inline-edit.ts — the editor still shows the pre-cut text
+  dropBodyEdit();
   return text;
 }
-// Append a lump of markdown to a card's note, blank-line separated. Shared by every "this text now
-// lives in THAT card" path (the merge below, a dragged-in selection) — including the sync of an
-// editor that happens to be open on the target, which is easy to forget and leaves the next commit
-// writing the pre-merge text straight back over it.
+
+// Syncs an editor open on the target, or its next commit would write the old text back.
 function appendToBody(t: MindNode, md: string): void {
   if (!md) {
     return;
@@ -337,8 +291,8 @@ function appendToBody(t: MindNode, md: string): void {
   t.dirty = true;
   syncOpenEditor(t);
 }
-// Triggered with ⌘⇧E while editing a card's body in place: cut the selected text out of the note and
-// drop it into a fresh card right beside it, in the same place the source lives.
+
+// ⌘⇧E: the selected text into a fresh card beside its note.
 export function extractToCard(): void {
   if (!ui.bodyEdit || singleNoteRefuses()) {
     return;
@@ -355,27 +309,24 @@ export function extractToCard(): void {
   const card = mkNode({ ...at, parent: n.parent, title, body });
   state.nodes.set(card.id, card);
   remeasure(); selectNode(card.id); popIn(card); scheduleSave();
-  commitStep();   // extract bypasses endBodyEdit (ui.bodyEdit nulled above), so close the step here
+  commitStep();
 }
-// WHICH TEXT is being dragged: a range of the card's one editor (features/text-drag.ts captures this
-// at dragstart; the offsets are into that editor's live text, which is why the drop re-reads it rather
-// than trusting n.title/n.body). It used to carry a `part: 'title' | 'body'` too, with a contenteditable
-// measured by Range on one side and a textarea's selectionStart on the other — one field, one arm.
+
+// Offsets into the open editor's LIVE text, so they are read against that, not n.title/n.body.
 export interface TextSource { id: string; start: number; end: number }
+
 function liveText(src: TextSource): string | null {
   return ui.bodyEdit && ui.bodyEdit.id === src.id ? ui.bodyEdit.ta.value : null;
 }
-// The text under the drag, read live — `null` once that editor is no longer open on that card, which
-// is also the drop's own "did this drag outlive its editor" test. Exported for the drag PREVIEW, so
-// the ghost card and the drop read the selection through the one piece of code that knows how.
+
+// null once that editor has closed.
 export function cardText(src: TextSource): string | null {
   const value = liveText(src);
   return value == null ? null : value.slice(src.start, src.end);
 }
-// The landing of a dragged-out selection: INTO an existing card's note, or as a card of its own at a
-// world point — inside `container` when it was dropped in one, else out on the canvas (see the rule
-// below). features/text-drag.ts resolves which; canMerge says what counts as a note here.
+
 export type TextDrop = { into: MindNode } | { container: MindNode | null; at: Pt };
+
 export function dropCardText(src: TextSource, dest: TextDrop): void {
   const n = state.nodes.get(src.id);
   if (!n) {
@@ -383,13 +334,12 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   }
   const value = liveText(src);
   if (value == null) {
-    return;   // the editor closed under the drag
+    return;
   }
   if (src.start >= src.end || src.end > value.length) {
     return;
   }
-  // Resolve (and refuse) the landing BEFORE cutting, so a drop that can't be honoured leaves the
-  // card's text alone rather than removing it with nowhere to put it.
+  // Refuse the landing BEFORE cutting, so the text is never removed with nowhere to put it.
   if ('into' in dest){
     const t = dest.into;
     if (t.id === src.id || !takesDrop(t)) {
@@ -404,9 +354,6 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   if (singleNoteRefuses()) {
     return;
   }
-
-  // WHERE THE NEW CARD BELONGS: the section it was dropped in (text-drag.ts resolves it with the same
-  // sectionAt every drop uses), else the top level — the open section while there is one.
   const parent = dest.container ?? state.nodes.get(detachParentId() ?? '') ?? null;
   if (parent && isLockedEffective(parent)) { setStatus('Locked — can’t drop there'); return; }
   const text = cutCardText(n, src.start, src.end, value);
@@ -420,19 +367,11 @@ export function dropCardText(src: TextSource, dest: TextDrop): void {
   remeasure(); selectNode(card.id); scheduleSave(); commitStep();
 }
 
-// ---------- merging cards into one ----------
-// What can be FOLDED INTO another note: a card — the kind whose whole content is a body (with a title
-// above it), an image card included: its picture goes into the note it is dropped on. A section is a box
-// whose own shape is the point, so folding it into a body would throw away exactly what it is. What can
-// RECEIVE one is the narrower question, and has one answer for every kind of drop: utils/model.ts takesDrop.
+// What can be folded INTO another note; what can receive one is takesDrop.
 export const canMerge = (n: MindNode): boolean =>
   n.type === 'card' && !isLockedEffective(n);
-// ⌥-drop card(s) onto another card (features/drag.ts): fold each dragged note into the target's
-// body — `## Title` then its text, in the order they were selected — and let the now-redundant cards
-// go. The target is the card that SURVIVES, so it keeps its own id, file, colour, size and flags;
-// only tags are unioned in, since a tag is a label on content that just moved.
-// Runs INSIDE the live drag undo step — it touches + mutates only, and the caller (dragPointerUp)
-// commits. Returns how many cards were folded in.
+
+// The target SURVIVES, gaining only the tags. Runs inside the drag's undo step: the caller commits.
 export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): number {
   const target = state.nodes.get(targetId);
   if (!takesDrop(target)) {
@@ -452,36 +391,30 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
   return cards.length;
 }
 
-// ---------- delete ----------
-// Forget a set of node ids: drop them from state, remove their DOM cards, and queue
-// their files for deletion on the next save. Callers pass the full subtree(s) to remove.
+// Callers pass the full subtree(s).
 export function deleteNodes(ids: Iterable<string>): void {
   const gone = new Set(ids);
-  touch(...gone);   // single choke point: every removal's before-image lands in the step
+  touch(...gone);
   for (const id of gone){
     const n = state.nodes.get(id);
     if (!n) {
       continue;
     }
-    // …including its container wrapper: a section's clipping wrapper is hung off the node, not marked
-    // with its data-id, so nothing else would ever reach it again.
+    // A section's wrapper carries no data-id, so nothing else would ever reach it again.
     state.nodes.delete(id); n.el?.remove(); n.sectionContentEl?.remove();
     if (n.file) {
       state.toDelete.push(n.file);
     }
   }
-  // Prune the free edges that pointed at any of them. An edge with a missing end is already
-  // invisible (edgeVisible) and unsaveable (serializeEdge drops it), so leaving it would only make
-  // it linger in memory until the next save quietly ate it — and, worse, an UNDO would then restore
-  // the card with no edge attached. Pruning here, inside the same step, is what lets one ⌘Z bring
-  // back the card AND the edges that ran to it.
+  // In the same step, so one ⌘Z brings back the card AND its edges.
   if (state.edges.some(e => gone.has(e.from) || gone.has(e.to))) {
     touchEdges();
     state.edges = state.edges.filter(e => !gone.has(e.from) && !gone.has(e.to));
     scheduleSaveBoard();
   }
-  settleStacks();   // a pile left with one card is no pile (features/stacks.ts)
+  settleStacks();
 }
+
 export function deleteNode(id: string): void {
   if (singleNoteRefuses()) {
     return;
@@ -490,24 +423,18 @@ export function deleteNode(id: string): void {
     return;
   }
   if (subtreeHasLocked(id)) { setStatus('Locked — can’t delete'); return; }
-  // Deleting a folded section deletes the notes in its folder, so they're read first — that way they
-  // go through the history like any other delete, and one ⌘Z brings them all back.
+  // A folded section's notes are read first, so one ⌘Z brings them back.
   if (afterReading([id], () => deleteNode(id))) {
     return;
   }
-  mutate([], () => {                 // ids are touched inside deleteNodes
+  mutate([], () => {
     deleteNodes(subtreeIds(id));
     selectNode(null);
   }, { reflow: 'relayout' });
 }
-// Undo a creation that never became a card — Escape out of a fresh card's first edit, or clicking away
-// from one nothing was typed into. Not a delete from the user's side, and not one in the history
-// either: the pending step still holds this card's before-image (null, from mkNode), so deleting it
-// here nets null→null and commitStep DISCARDS the whole step — neither the create nor the delete is
-// left behind for ⌘Z to walk back through. `status` is passed where the user did something explicit
-// (Escape); a card abandoned by clicking away goes quietly. Shared by both editors that can open
-// on a brand-new card (features/inline-edit.ts), which
-// each used to spell out these three lines and half of the reasoning.
+
+// A fresh card left empty. Its step's before-image is null (mkNode), so null→null: commitStep
+// discards the step and ⌘Z has nothing to walk back through.
 export function discardNewCard(id: string, status?: string): void {
   deleteNode(id);
   commitStep();
@@ -515,7 +442,7 @@ export function discardNewCard(id: string, status?: string): void {
     setStatus(status);
   }
 }
-// Delete every selected card and their entire subtrees.
+
 export function deleteSelection(): void {
   if (singleNoteRefuses()) {
     return;
@@ -523,17 +450,15 @@ export function deleteSelection(): void {
   const ids = [...state.sel].filter(id => !subtreeHasLocked(id));
   if (!ids.length) { setStatus('Locked — can’t delete'); return; }
   if (afterReading(ids, deleteSelection)) {
-    return;   // a folded section's notes first (see deleteNode)
+    return;
   }
-  mutate([], () => {                 // ids are touched inside deleteNodes
+  mutate([], () => {
     state.sel.clear(); state.selId = null;
-    deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));   // dedup overlapping subtrees
+    deleteNodes(new Set(ids.flatMap(id => subtreeIds(id))));
   }, { reflow: 'relayout' });
   applySelection();
 }
-// A node is safe to delete-and-promote when it's unlocked, its own parent isn't locked (the
-// promoted children need to land there), and none of its direct children are locked (a locked
-// child can't be reparented — see drag.ts's own isLockedEffective guard on move).
+
 function canPromoteDelete(id: string): boolean {
   const n = state.nodes.get(id);
   if (!n) {
@@ -548,20 +473,15 @@ function canPromoteDelete(id: string): boolean {
   }
   return childrenOf(id).every(k => !isLockedEffective(k));
 }
-// UNGROUP: delete every selected section WITHOUT touching what it holds — its cards move up to ITS OWN
-// parent, right where they sit. (A card has no children, so on a card this is a plain delete.) Cascades correctly when a selected node's parent is ALSO selected: children
-// are read live (childrenOf), so a child already promoted by an earlier pass in this loop is what a
-// later pass (deleting that now-former parent) sees and promotes again — any chain length just
-// works, in any processing order. New parents get no explicit kidOrder splice; orderedKids
-// (view/layout.ts) already treats a reparented-but-unlisted child as "fresh" and slots it in by
-// position, so nothing needs doing here. Shared by ⌘⌫/⌥⌫, the float bar's and the right-click menu's Ungroup.
+
+// UNGROUP: each selected section's cards move up to ITS parent, where they sit. Children are read live,
+// so nested selected sections cascade in any order.
 export function deleteSelectionKeepChildren(): void {
   if (singleNoteRefuses()) {
     return;
   }
 
-  // A STACK's cards all lie on one spot, so keeping them where they sit would leave them in a heap: the stacks
-  // in the selection are UNSTACKED instead (features/stacks.ts spreadPiles), in the same step as the sections.
+  // A stack's cards all lie on one spot, so stacks are spread out instead of left in a heap.
   const stacks = selectedStacks().filter(s => canPromoteDelete(s.id));
   const ids = selectedIds().filter(id => !isStack(state.nodes.get(id)) && canPromoteDelete(id));
   if (!ids.length && !stacks.length) {
@@ -569,7 +489,7 @@ export function deleteSelectionKeepChildren(): void {
     return;
   }
   if (afterReading(ids, deleteSelectionKeepChildren, false)) {
-    return;   // the children it keeps must exist
+    return;
   }
   const promoted = new Set<string>();
   let loose: string[] = [];
@@ -588,7 +508,7 @@ export function deleteSelectionKeepChildren(): void {
         promoted.add(k.id);
       }
 
-      // the kept cards sit in the wrapper, and the next paint moves them out of it
+      // The kept cards still sit in the wrapper; the next paint moves them out.
       state.nodes.delete(id);
       n.el?.remove();
       n.sectionContentEl?.remove();
@@ -596,18 +516,16 @@ export function deleteSelectionKeepChildren(): void {
         state.toDelete.push(n.file);
       }
     }
-    // …after the sections, so a stack that was inside one spreads out where it now lies
+    // After the sections, so a stack that was in one spreads out where it now lies.
     loose = spreadPiles(stacks.filter(s => state.nodes.has(s.id)));
   }, { reflow: 'relayout', status: `Ungrouped ${[part(ids.length, 'section'), part(stacks.length, 'stack')].filter(Boolean).join(' and ')}` });
   for (const id of [...ids, ...stacks.map(s => s.id)]) {
-    promoted.delete(id);   // a node promoted-then-itself-deleted (chain) isn't a survivor
+    promoted.delete(id);
   }
   setSelectionSet([...promoted, ...loose]);
 }
-// Alt-drag an image OUT of a card (features/image-extract.ts): strip the `![alt](path)` from the
-// source card's body, then either MOVE it into another card's body (`target.toCardId`) or drop it
-// as a fresh image-only card at a world position (`target.x/y/w/h`). One undo step — touches +
-// mutates and commits it (image extraction is its own gesture, not nested in a live drag).
+
+// ⌥-drag of an image out of a card: into another card's note, or a fresh image card. Its own undo step.
 export function extractImage(sourceId: string, path: string, alt: string,
     target: { toCardId: string } | { x: number; y: number; w: number; h: number }): void {
   if (!path || singleNoteRefuses()) {
@@ -629,12 +547,11 @@ export function extractImage(sourceId: string, path: string, alt: string,
       appendToBody(tgt, md);
     }
   } else {
-    // untitled: the note is the picture and nothing else, which is what makes it render as one
-    // (core/state.ts isImageCard). The alt rides along in the markdown and names the file.
+    // Untitled, or it would not be an image card (isImageCard).
     const into = sectionAt(target.x + target.w / 2, target.y + target.h / 2, new Set());
     const n = mkNode({ x: target.x, y: target.y, parent: into?.id ?? detachParentId(), title: '',
       body: md, color: 'none', w: target.w, h: target.h });
-    touch(n.id);                 // before-image is null (not yet in state) → undo removes it
+    touch(n.id);
     state.nodes.set(n.id, n);
   }
   relayout();

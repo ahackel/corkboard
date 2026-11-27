@@ -1,30 +1,24 @@
-// ---------- writing markdown in the card's textarea ----------
-// The small set of things a note editor does FOR you, as pure text → text functions so tests/ pins
-// them without a browser: a list that continues itself on Enter, Tab/⇧Tab nesting list items, and
-// ⌘B/⌘I/⌘⇧X wrapping the selection. Each returns the WHOLE new text plus where the selection lands
-// (the same shape as utils/markdown.ts linkPaste), or null to let the key do what it natively does.
-// Tables get the same treatment (utils/md-table.ts), and win over the list keys on a table line. The editor applies the result through ONE path (features/inline-edit.ts applyTextEdit), which writes
-// only the changed span via the browser's own insert, so the textarea's ⌘Z keeps working.
+// The note editor's smart keys as pure text → text edits (pinned by tests/). Each returns the whole new
+// text and selection, or null to let the key act natively.
 import { escRe } from './markdown.js';
 import { lineAt, type TextEdit } from './text-edit.js';
 import { tableTab, tableEdit, insertTable, tableRowsMayMove, type TableOp } from './md-table.js';
 import { TYPING_TAG } from './tags.js';
 
-// A list item's lead: indent, marker (`-`/`*`/`+` or `1.`/`1)`), the gap, and an optional task box.
-// The same markers renderBodyHTML draws as a list, plus `1)` (paste-list.ts reads that one too).
+// Also matches `1)`, which paste-list.ts reads too.
 const ITEM = /^([ \t]*)([-*+]|\d+[.)])([ \t]+)(\[[ xX]\][ \t]+)?/;
 interface Item { indent: string; marker: string; gap: string; task: string; lead: number }
+
 function itemOf(line: string): Item | null {
   const m = line.match(ITEM);
   return m ? { indent: m[1], marker: m[2], gap: m[3], task: m[4] ?? '', lead: m[0].length } : null;
 }
+
 const splice = (text: string, from: number, to: number, insert: string): string =>
   text.slice(0, from) + insert + text.slice(to);
 
-// Enter inside a list item starts the NEXT item: same indent, the next number for an ordered list, a
-// fresh `[ ] ` for a task (ticked or not — the new one isn't done yet). Enter on an item with nothing
-// after its marker ENDS the list instead: the empty marker goes away, which is what Obsidian, Bear and
-// GitHub do. Only for a caret (a selection's Enter replaces it, natively) placed past the marker.
+// Enter continues a list item (next number, a fresh `[ ] `); on an empty item it ENDS the list, as
+// Obsidian and GitHub do.
 export function listEnter(text: string, start: number, end: number): TextEdit | null {
   if (start !== end) {
     return null;
@@ -43,20 +37,18 @@ export function listEnter(text: string, start: number, end: number): TextEdit | 
   return { text: splice(text, start, start, ins), start: start + ins.length, end: start + ins.length };
 }
 
-// Tab nests the line(s) the selection touches one level deeper, ⇧Tab lifts them one level out. A
-// level is measured, not fixed: one step IN is the width of the item above's marker (`- ` is 2,
-// `1. ` is 3), which puts the nested marker under that item's text — the column CommonMark (and so
-// Obsidian) needs to read it as nested. One step OUT returns to the indent of the item it's nested
-// under. Lines that aren't list items move by the same amount, so a selected block keeps its shape.
-// Always an edit (never null): in a note editor Tab must not move focus off the card mid-sentence.
+// One step IN is the width of the marker above (`- ` 2, `1. ` 3), the column CommonMark needs to read
+// nesting. Never null: Tab must not move focus off the card mid-sentence.
 export function indentLines(text: string, start: number, end: number, out: boolean): TextEdit {
   const first = lineAt(text, start).from;
-  // a selection ending at the very start of a line doesn't touch that line
+
+  // A selection ending at a line's very start doesn't touch that line.
   const last = lineAt(text, end > start && text[end - 1] === '\n' ? end - 1 : end).to;
   const lines = text.slice(first, last).split('\n');
   const width = (s: string) => s.replace(/\t/g, '  ').length;
   const lead0 = width(lines[0].match(/^[ \t]*/)![0]);
-  // the list items above the first selected line, nearest first
+
+  // The list items above, nearest first.
   const above = text.slice(0, first).split('\n').reverse().map(itemOf).filter((x): x is Item => !!x);
   let step: number;
   if (!out) {
@@ -82,17 +74,14 @@ export function indentLines(text: string, start: number, end: number, out: boole
     return nl;
   });
   const t = splice(text, first, last, next.join('\n'));
-  // The caret rides with its text; a selection grows/shrinks with the lines, its start clamped to the
-  // first line's start so an outdent can't pull it onto the line above.
+
+  // The selection's start is clamped so an outdent can't pull it onto the line above.
   const s = Math.max(first, start + delta0);
   return { text: t, start: s, end: start === end ? s : Math.max(s, end + deltaAll) };
 }
 
-// ⌘B/⌘I/⌘⇧X: wrap the selection in `**`/`*`/`~~`, or UNWRAP it if it already is — whether the
-// markers sit just outside the selection or are part of it. A run of the marker's character is read
-// whole, so ⌘I inside `**bold**` makes it `***bold***` rather than eating one of bold's stars (only a run
-// of exactly the marker, or 3 = bold+italic, holds this marker). Whitespace the selection caught at its
-// ends stays outside, since `** bold**` isn't bold. A caret gets an empty pair with the caret inside.
+// Wrap in `**`/`*`/`~~`, or unwrap if already wrapped (markers outside or inside the selection). A
+// marker run is read whole, so ⌘I inside `**bold**` gives `***bold***`. Caught whitespace stays outside.
 export function toggleWrap(text: string, start: number, end: number, mark: string): TextEdit {
   const ch = mark[0];
   const holds = (run: number) => run === mark.length || (ch === '*' && run === 3);
@@ -123,12 +112,14 @@ export function toggleWrap(text: string, start: number, end: number, mark: strin
   if (a >= b) {
     return { text, start, end };
   }
-  // markers just OUTSIDE the selection
+
+    // Markers just OUTSIDE the selection.
   if (holds(runBack(a)) && holds(runFwd(b))) {
     const t = splice(splice(text, b, b + L, ''), a - L, a, '');
     return { text: t, start: a - L, end: b - L };
   }
-  // markers INSIDE it (the whole `**word**` selected)
+
+    // Markers INSIDE it (the whole `**word**` selected).
   const inner = text.slice(a, b);
   let lead = 0;
   while (inner[lead] === ch) {
@@ -146,9 +137,7 @@ export function toggleWrap(text: string, start: number, end: number, mark: strin
   return { text: t, start: a + L, end: b + L };
 }
 
-// ---------- more list keys: Backspace, ⌥↑/⌥↓, ⌘L, and numbers that keep themselves ----------
-// Rewrite lines [first, last) to `next` (the same count), carrying a selection with its text: a
-// position past a line's indent moves by however much that line grew or shrank ahead of it.
+// A position past a line's indent moves by however much that line grew or shrank ahead of it.
 function rewriteLines(text: string, first: number, last: number, next: string[], start: number, end: number): TextEdit {
   const old = text.slice(first, last).split('\n');
   const map = (pos: number): number => {
@@ -164,15 +153,15 @@ function rewriteLines(text: string, first: number, last: number, next: string[],
   };
   return { text: splice(text, first, last, next.join('\n')), start: map(start), end: map(end) };
 }
-// The lines a selection touches, as [from, to) — a selection ending at a line's very start leaves it out.
+
+// [from, to); a selection ending at a line's very start leaves that line out.
 function linesOf(text: string, start: number, end: number): { first: number; last: number } {
   return { first: lineAt(text, start).from, last: lineAt(text, end > start && text[end - 1] === '\n' ? end - 1 : end).to };
 }
 const indentOf = (l: string): number => l.match(/^[ \t]*/)![0].replace(/\t/g, '  ').length;
 
-// Backspace right after an item's marker takes the MARKER, not one character of it: a nested item
-// steps out a level first (⇧Tab), a top-level one becomes a plain line keeping its text — the way
-// back out of a list that Enter on an empty item is the way forward out of it.
+
+// Backspace after a marker takes the whole MARKER: a nested item steps out, a top-level one becomes plain.
 export function listBackspace(text: string, start: number, end: number): TextEdit | null {
   if (start !== end) {
     return null;
@@ -188,8 +177,8 @@ export function listBackspace(text: string, start: number, end: number): TextEdi
   return { text: splice(text, from, start, ''), start: from, end: from };
 }
 
-// ⌥↑ / ⌥↓: swap the selected lines with the ones above / below. An item travels WITH its nested
-// children, and hops a whole neighbouring item (children included) rather than landing inside it.
+
+// An item travels WITH its children and hops a whole neighbouring item rather than landing inside it.
 export function moveLines(text: string, start: number, end: number, up: boolean): TextEdit | null {
   if (!tableRowsMayMove(text, start, end, up)) {
     return null;
@@ -236,11 +225,10 @@ export function moveLines(text: string, start: number, end: number, up: boolean)
   return { text: out.join('\n'), start: start + d, end: end + d };
 }
 
-// ⌘L: make the touched lines tasks, or tick them. Lines that are all tasks flip together — all done
-// becomes all open, anything else becomes all done; otherwise every line that isn't a task yet gets a
-// box (a list item keeps its marker, bullet or number; a plain line gets `- [ ] `). Headings are left
-// alone: the first one is the card's title. ⌘L on an empty line starts a task there.
+// All tasks flip together (all done → all open, else all done); otherwise non-tasks get a box. Headings
+// are left alone: the first one is the card's title.
 const HEADING = /^ {0,3}#{1,6}(?:\s|$)/;
+
 export function taskLines(text: string, start: number, end: number): TextEdit {
   const { first, last } = linesOf(text, start, end);
   const lines = text.slice(first, last).split('\n');
@@ -273,12 +261,10 @@ export function taskLines(text: string, start: number, end: number): TextEdit {
   return rewriteLines(text, first, last, next, start, end);
 }
 
-// A numbered list keeps counting from its first item, whatever was inserted, moved, nested or deleted
-// in it. Applied to the run of non-blank lines around the edit only, so a list elsewhere in the note
-// that skips on purpose is never touched. A top-level list keeps its own start (`5.` stays 5); a NESTED
-// one counts from 1, which is what nesting an item with Tab should give. A bullet or a plain line at a
-// level ends the count there, as it ends the list in the renderer.
+// Renumbers only the run of non-blank lines around the edit, so a list elsewhere that skips on purpose
+// is untouched. A top-level list keeps its start (`5.`); a NESTED one counts from 1.
 const ORDERED = /^([ \t]*)(\d+)([.)])(?=[ \t])/;
+
 export function renumber(r: TextEdit): TextEdit {
   const lines = r.text.split('\n');
   let li = r.text.slice(0, r.start).split('\n').length - 1;
@@ -329,12 +315,8 @@ export function renumber(r: TextEdit): TextEdit {
 }
 export const renumbered = (r: TextEdit | null): TextEdit | null => r && renumber(r);
 
-// ---------- double-click lands where you clicked ----------
-// The rendered card is a list of text nodes; each one is (nearly) verbatim somewhere in the source,
-// in order — the markdown around them is markers, URLs and padding. Find each node's text in the
-// source from where the previous one ended (whitespace may differ: a soft line break renders as a
-// space, a table cell loses its padding), and the clicked node's offset maps into its match. `from`
-// skips the title heading. Null when the clicked text can't be found, so the caller keeps its default.
+// Double-click lands where you clicked: each rendered text node is found in the source after the
+// previous one (whitespace may differ), and the click offset maps into its match. Null if not found.
 export function sourceOffset(source: string, from: number, texts: string[], hit: number, off: number): number | null {
   let cur = from;
   for (let i = 0; i <= hit; i++) {
@@ -355,7 +337,8 @@ export function sourceOffset(source: string, from: number, texts: string[], hit:
       continue;
     }
     if (i === hit) {
-      // walk the rendered text and its match together, a whitespace run against a whitespace run
+
+      // A whitespace run in the rendered text matches a whitespace run in the source.
       const k = Math.max(0, Math.min(s.length, off - (t.length - t.trimStart().length)));
       let x = 0, y = 0;
       while (x < k) {
@@ -376,9 +359,7 @@ export function sourceOffset(source: string, from: number, texts: string[], hit:
   return null;
 }
 
-// A HEADING's section: from the heading line to just before the next heading of the same or a higher
-// level (or the note's end), less the blank lines it ends on. Triple-click on a heading selects it
-// (features/inline-edit.ts), so a whole section drags out as its own card in one gesture. Null off a heading.
+// From the heading line to before the next heading of the same or higher level, less trailing blanks.
 export function headingSection(text: string, pos: number): { start: number; end: number } | null {
   const level = (l: string): number => {
     const m = /^ {0,3}(#{1,6})(?:\s|$)/.exec(l);
@@ -406,11 +387,10 @@ export function headingSection(text: string, pos: number): { start: number; end:
   return { start: from, end };
 }
 
-// ---------- what the caret is in the middle of typing: a link or a tag ----------
-// `[[Pla|` is a link being typed, `#proj|` a tag — the card editor offers the map's cards and tags for them
-// (features/complete.ts). `from` is where the typed name starts, `query` the name so far. Nothing inside code
-// (a fenced block, or an open `inline span`) is either, and a link stops being one at `|`, `#` or `^`.
+// `[[Pla|` is a link being typed, `#proj|` a tag; `from` is where the name starts. Never inside code, and
+// a link stops at `|`, `#` or `^`.
 export interface Completing { kind: 'link' | 'tag'; from: number; query: string }
+
 export function completingAt(text: string, caret: number): Completing | null {
   const lineStart = text.lastIndexOf('\n', caret - 1) + 1, before = text.slice(lineStart, caret);
   const fences = text.slice(0, lineStart).split('\n').filter(l => /^(```|~~~)/.test(l)).length;
@@ -424,8 +404,8 @@ export function completingAt(text: string, caret: number): Completing | null {
   const tag = before.match(TYPING_TAG);
   return tag ? { kind: 'tag', from: caret - tag[1].length, query: tag[1] } : null;
 }
-// The text with `choice` written in place of what was typed: a link CLOSED (`]]`, unless it already was) with
-// the caret after it, a tag followed by a space unless one is already there.
+
+// A link gets CLOSED with `]]` unless it already was; a tag gets a trailing space unless one is there.
 export function completeAt(text: string, c: Completing, caret: number, choice: string): TextEdit {
   if (c.kind === 'link') {
     const ins = choice + ']]', rest = text.slice(caret);
@@ -437,22 +417,18 @@ export function completeAt(text: string, c: Completing, caret: number, choice: s
   return { text: text.slice(0, c.from) + ins + rest, start: at, end: at };
 }
 
-// Put a completion trigger (`[[` for a link, `#` for a tag) in front of the selection, the caret at its end,
-// so the editor's list of names opens on what was selected — or on nothing, at a bare caret. A tag needs a
-// space before its `#`, so one is added after a word.
+// Opens the completion list on the selection. A tag's `#` needs a space before it, so one is added.
 export function startCompletion(text: string, start: number, end: number, mark: '[[' | '#'): TextEdit {
   const lead = mark === '#' && start > 0 && !/[\s([{,;]/.test(text[start - 1]) ? ' ' + mark : mark;
   const at = end + lead.length;
   return { text: splice(text, start, start, lead), start: at, end: at };
 }
 
-// ---------- the Format menu: block formats, inserts, Clear styles ----------
-// What the right-click menu's Format submenu writes (iA Writer's menu, cut to what the card renders). Each
-// is a pure edit like the keys above, and each acts on the lines the selection touches.
+// The Format submenu. Each edit acts on the lines the selection touches.
 
-// A line's block LEAD — heading hashes, a quote's `>`, a list marker with its task box — any number of
-// them (`> - [ ] x`), so a new format REPLACES the old one rather than stacking on it.
+// Any stack of leads (`> - [ ] x`), so a new format REPLACES the old one rather than stacking on it.
 const LEAD = /^(?:#{1,6}[ \t]+|>[ \t]?|(?:[-*+]|\d+[.)])[ \t]+(?:\[[ xX]\][ \t]+)?)/;
+
 function stripLeads(line: string): { indent: string; rest: string } {
   const indent = line.match(/^[ \t]*/)![0];
   let rest = line.slice(indent.length), m: RegExpMatchArray | null;
@@ -462,6 +438,7 @@ function stripLeads(line: string): { indent: string; rest: string } {
   return { indent, rest };
 }
 export type Block = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'bullet' | 'number' | 'quote' | 'body';
+
 function blockOf(line: string): Block {
   const h = line.match(/^ {0,3}(#{1,6})[ \t]/);
   if (h) {
@@ -473,9 +450,8 @@ function blockOf(line: string): Block {
   const it = itemOf(line);
   return !it || it.task ? 'body' : /\d/.test(it.marker) ? 'number' : 'bullet';
 }
-// Make the touched lines a heading, a bulleted or numbered list, a quote — or plain BODY text again. Lines
-// that already all are that format go back to body, so picking it twice undoes it. A list keeps each
-// line's indent (its nesting); the rest start at the margin. Blank lines in a selection are left blank.
+
+// Picking the format all lines already have reverts them to body. A list keeps each line's indent.
 export function setBlock(text: string, start: number, end: number, kind: Block): TextEdit {
   const { first, last } = linesOf(text, start, end);
   const lines = text.slice(first, last).split('\n');
@@ -501,16 +477,16 @@ export function setBlock(text: string, start: number, end: number, kind: Block):
     }
     return to === 'body' ? rest : '#'.repeat(Number(to[1])) + ' ' + rest;
   });
-  if (lines.length === 1) {                       // one line: the caret goes to its end, past the new lead
+  if (lines.length === 1) {                       // the caret goes past the new lead
     const at = first + next[0].length;
     return renumber({ text: splice(text, first, last, next[0]), start: at, end: at });
   }
   return renumber({ text: splice(text, first, last, next.join('\n')), start: first, end: first + next.join('\n').length });
 }
 
-// Fence the touched lines as a code block — or, when they are one already (fences included, or just
-// outside the selection), take the fences away. On an empty line: an empty block with the caret inside.
+// Fences the touched lines, or removes fences already there (inside or just outside the selection).
 const FENCE = /^(```|~~~)/;
+
 export function codeBlock(text: string, start: number, end: number): TextEdit {
   const { first, last } = linesOf(text, start, end);
   const body = text.slice(first, last);
@@ -529,7 +505,6 @@ export function codeBlock(text: string, start: number, end: number): TextEdit {
   return { text: splice(text, first, last, '```\n' + body + '\n```'), start: at, end: at + body.length };
 }
 
-// (Pasting a URL over a selection links it too — utils/markdown.ts linkPaste.)
 export function insertLink(text: string, start: number, end: number): TextEdit {
   const sel = text.slice(start, end);
   const out = splice(text, start, end, `[${sel}]()`);
@@ -537,8 +512,7 @@ export function insertLink(text: string, start: number, end: number): TextEdit {
   return { text: out, start: at, end: at };
 }
 
-// A horizontal rule under the caret's line (on it, when it's empty), with a blank line above: `---` right
-// under text is a HEADING to Obsidian and every CommonMark reader. The caret goes to the line after it.
+// `---` right under text would be a setext HEADING, so a blank line goes above.
 export function insertRule(text: string, _start: number, end: number): TextEdit {
   const { from, to } = lineAt(text, end);
   const blank = !text.slice(from, to).trim();
@@ -551,10 +525,9 @@ export function insertRule(text: string, _start: number, end: number): TextEdit 
   return { text: out, start: head.length + 1, end: head.length + 1 };
 }
 
-// Take the inline marks — bold, italic, strikethrough, highlight, code — off the selection (or the caret's
-// line), including marks sitting just OUTSIDE it, as when a word is selected inside its `**`. Block leads
-// (lists, headings) stay: Body is the command for those.
+// Inline marks only, including those just OUTSIDE the selection; block leads are Body's job.
 const MARK = '*_~=`';
+
 export function clearStyles(text: string, start: number, end: number): TextEdit {
   let a = start, b = end;
   if (a === b) {
@@ -575,17 +548,13 @@ export function clearStyles(text: string, start: number, end: number): TextEdit 
   return { text: splice(text, a, b, s), start: a, end: a + s.length };
 }
 
-// ---------- the editor's commands, ONE list for its keys and its right-click menu ----------
-// Each is a pure edit plus the key that runs it, so the keyboard and the menu can't drift apart: the card
-// editor (features/inline-edit.ts) matches a keydown with editCommandFor and lists them on a right-click,
-// the keyless ones (the Format and Edit Table submenus) by id. A command whose edit returns null where the
-// caret is shows greyed out. Enter, Backspace and the clipboard aren't here — they are the textarea's own
-// keys, made smarter.
+// ONE list for the editor's keys and its right-click menu, so they can't drift. A command whose edit
+// returns null at the caret shows greyed out.
 export interface EditKey { key: string; mod?: boolean; shift?: boolean; alt?: boolean }
 export interface EditCommand {
   id: string;
   label: string;
-  shortcut?: string;                   // as shown, in the ⌘ spelling (utils/dom.ts keys() makes it Ctrl+)
+  shortcut?: string;                   // the ⌘ spelling; keys() makes it Ctrl+ elsewhere
   key?: EditKey;
   edit: (text: string, start: number, end: number) => TextEdit | null;
 }
@@ -625,7 +594,7 @@ export const EDIT_COMMANDS: EditCommand[] = [
   table('reformat', 'Reformat table'), table('transpose', 'Transpose rows and columns'),
 ];
 
-// The command a key press runs, if any: the key, and exactly the modifiers it names (⌘ or Ctrl both count as mod).
+// ⌘ and Ctrl both count as mod; the other modifiers must match exactly.
 export function editCommandFor(e: { key: string; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean }): EditCommand | null {
   const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey;
   return EDIT_COMMANDS.find(({ key: c }) => c && c.key === k && !!c.mod === mod && !!c.shift === e.shiftKey && !!c.alt === e.altKey) ?? null;

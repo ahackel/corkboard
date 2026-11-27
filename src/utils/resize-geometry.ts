@@ -1,6 +1,4 @@
-// The arithmetic of a resize: one box dragged by an edge or corner, and a multi-selection's frame scaled.
-// The edges NOT dragged stay put; sizes clamp to a floor; a picture keeps its aspect. Pure, and pinned by
-// tests/resize-geometry.test.ts.
+// The arithmetic of a resize: one box by an edge or corner, or a multi-selection's frame scaled.
 import { snapTo } from './num.js';
 import type { Side } from './guides.js';
 import type { Edges } from './drag-geometry.js';
@@ -13,13 +11,12 @@ export function sidesOf(dir: string): Sides {
   return { west: dir.includes('w'), east: dir.includes('e'), north: dir.includes('n'), south: dir.includes('s') };
 }
 
-// A smart guide's pull on each axis, or null where nothing lines up.
+// null on an axis where nothing lines up.
 export interface Pull { x: number | null; y: number | null }
 
 export interface ResizeOpts { minW: number; minH: number; aspect: number | null; round: (v: number) => number }
 
-// A picture is driven by ONE axis, the other following its aspect: on a corner, whichever the pointer
-// changes more (relative to the size it started at).
+// A picture is driven by ONE axis: on a corner, whichever the pointer changes more, relative to its size.
 function aspectDrive(e0: Edges, s: Sides, d: Pt): { wRaw: number; hRaw: number; byWidth: boolean } {
   const w0 = e0.right - e0.left, h0 = e0.bottom - e0.top;
   const hasX = s.east || s.west, hasY = s.north || s.south;
@@ -28,8 +25,7 @@ function aspectDrive(e0: Edges, s: Sides, d: Pt): { wRaw: number; hRaw: number; 
   return { wRaw, hRaw, byWidth };
 }
 
-// The box the raw pointer asks for, before the grid or a floor, and which of its edges move: what the
-// smart guides are asked about. A picture offers only its driving edge.
+// What the smart guides are asked about: the raw box before grid or floor. A picture offers only its driving edge.
 export function resizeProbe(e0: Edges, s: Sides, d: Pt, aspect: number | null): { box: Rect; edges: { x?: Side; y?: Side } } {
   if (aspect) {
     const { wRaw, hRaw, byWidth } = aspectDrive(e0, s, d);
@@ -46,8 +42,7 @@ export function resizeProbe(e0: Edges, s: Sides, d: Pt, aspect: number | null): 
   };
 }
 
-// Where the edges end up: a guide's pull wins over the grid (`round`) on its axis, sizes stop at the floor,
-// and the opposite edge holds still.
+// A guide's pull beats the grid (`round`) on its axis; sizes stop at the floor; the opposite edge holds.
 export function resizeEdges(e0: Edges, s: Sides, d: Pt, pull: Pull, o: ResizeOpts): Edges {
   const { left: left0, top: top0, right: right0, bottom: bottom0 } = e0;
   if (o.aspect) {
@@ -82,15 +77,12 @@ export function resizeEdges(e0: Edges, s: Sides, d: Pt, pull: Pull, o: ResizeOpt
   return { left, top, right, bottom };
 }
 
-// A picture scaled down until its SHORT side is icon-sized becomes the icon (it folds).
+// A picture whose SHORT side shrinks to icon size folds to the icon.
 export function foldsToIcon(e: Edges, icon: number): boolean {
   return Math.min(e.right - e.left, e.bottom - e.top) <= icon;
 }
 
-// ---------- the selection frame ----------
-
-// A member's own resize band, when that edge lies ON the frame, scales the whole group: the frame's handle
-// it stands for, or '' when the member's edge is an inner one.
+// A member's band ON the frame's edge scales the whole group: the frame handle it stands for, or ''.
 export function frameEdgeDir(member: Rect, frame: Rect, dir: string): string {
   const on = (a: number, b: number): boolean => Math.abs(a - b) < 1;
   const y = dir.includes('n') && on(member.y, frame.y) ? 'n' : dir.includes('s') && on(member.y + member.h, frame.y + frame.h) ? 's' : '';
@@ -98,9 +90,8 @@ export function frameEdgeDir(member: Rect, frame: Rect, dir: string): string {
   return y + x;
 }
 
-// How far the frame scales on each axis (1 on an axis not dragged), and the corner held still. The dragged
-// side lands on the grid; the scale stops at `min` (its tightest member's floor); `uniform` (Shift on a
-// corner) scales both axes alike.
+// 1 on an axis not dragged. The dragged side lands on the grid; `min` is the tightest member's floor;
+// `uniform` (Shift on a corner) scales both axes alike.
 export function frameScale(f0: Rect, s: Sides, d: Pt, grid: number, min: Pt, uniform: boolean): { sx: number; sy: number; anchor: Pt } {
   const l0 = f0.x, t0 = f0.y, r0 = f0.x + f0.w, b0 = f0.y + f0.h;
   const hasX = s.east || s.west, hasY = s.north || s.south;

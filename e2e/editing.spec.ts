@@ -2,7 +2,8 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 import { openBoard, makeCard, clickAway, select, card } from './helpers';
 
 const editor = (c: Locator) => c.locator('textarea.body-edit');
-// Open a fresh card with N and leave its editor open, for the keys under test.
+
+// Leaves the editor open, for the keys under test.
 async function freshEditor(page: Page): Promise<Locator> {
   await page.mouse.move(400, 300);
   await page.keyboard.press('n');

@@ -1,11 +1,5 @@
-// ---------- peek: read a FOLDED card without unfolding it ----------
-// Rest the mouse on a collapsed card for a moment and its whole note floats beside it, in the card's own
-// colour. Reading changes nothing — no fold state, no layout, no save — which is the point: a fold is how
-// you keep the board tidy, and checking what's under one shouldn't undo it. Hover is mouse-only; TAPPING
-// the card's "N more lines" (peekCard) opens the same panel on any device, which is the touch way in.
-//
-// The panel is a `.node` with a `.body` so it picks up the card text styles (headings, lists, code) from
-// the same rules a card uses; it lives outside #world, so nothing that walks the canvas ever sees it.
+// Hovering (mouse) or tapping "N more lines" on a FOLDED card floats its note beside it, changing nothing.
+// The panel is a `.node > .body` for the card text styles, outside #world so canvas walks never see it.
 import { state, world } from '../core/state.js';
 import { isBusy } from '../core/ui-state.js';
 import { renderBodyHTML } from '../utils/markdown.js';
@@ -13,37 +7,36 @@ import { cardMarkdown } from '../utils/frontmatter.js';
 import { placeInViewport } from '../utils/dom.js';
 import { hydrateImages } from './images.js';
 
-const PEEK_DELAY = 450;   // long enough that sweeping the pointer across the board never flashes one
+const PEEK_DELAY = 450;   // sweeping the pointer across the board never flashes one
 const GAP = 10;
 
 const panel = Object.assign(document.createElement('div'), { id: 'peek', className: 'node', innerHTML: '<div class="body"></div>' });
 const panelBody = panel.querySelector('.body') as HTMLElement;
 
-let showing: string | null = null;   // the card id the panel is for
+let showingId: string | null = null;
 let timer: number | null = null;
 
 function cancel(): void { if (timer != null) { clearTimeout(timer); timer = null; } }
+
 function hidePeek(): void {
   cancel();
-  showing = null;
+  showingId = null;
   panel.classList.remove('open');
 }
 
-const busy = isBusy;
-
-// Tap/click on a folded card's "N more lines": the panel at once, or away again if it's already up.
+// The tap on a folded card's "N more lines": toggles the panel.
 export function peekCard(cardEl: HTMLElement): void {
-  if (showing === cardEl.dataset.id) { hidePeek(); return; }
+  if (showingId === cardEl.dataset.id) { hidePeek(); return; }
   hidePeek();
   show(cardEl);
 }
+
 function show(cardEl: HTMLElement): void {
   const n = state.nodes.get(cardEl.dataset.id ?? '');
-  if (!n || !n.collapsed || n.type === 'section' || busy() || !cardEl.isConnected) {
-    return;   // a folded section's pill is a count, not a note
+  if (!n || !n.collapsed || n.type === 'section' || isBusy() || !cardEl.isConnected) {
+    return;
   }
-  showing = n.id;
-  // the card's own colour: its palette class, or a custom colour's variables
+  showingId = n.id;
   panel.className = 'node open ' + [...cardEl.classList].filter(c => c.startsWith('c-')).join(' ');
   for (const v of ['--card', '--ink', '--scrim']) {
     const val = cardEl.style.getPropertyValue(v);
@@ -56,10 +49,10 @@ function show(cardEl: HTMLElement): void {
   panelBody.innerHTML = renderBodyHTML(cardMarkdown(n));
   hydrateImages(panelBody, n.file);
   panel.scrollTop = 0;
-  // beside the card — to its right, or its left when the right has no room
   const r = cardEl.getBoundingClientRect();
   const w = panel.offsetWidth;
-  const x = r.right + GAP + w <= window.innerWidth ? r.right + GAP : r.left - GAP - w;
+  const fitsRight = r.right + GAP + w <= window.innerWidth;
+  const x = fitsRight ? r.right + GAP : r.left - GAP - w;
   placeInViewport(panel, x, r.top);
 }
 
@@ -70,7 +63,7 @@ export function installPeek(): void {
       return;
     }
     const el = (e.target as Element).closest<HTMLElement>('.node.collapsed[data-id]');
-    if (!el || el.dataset.id === showing) {
+    if (!el || el.dataset.id === showingId) {
       return;
     }
     hidePeek();
@@ -80,19 +73,19 @@ export function installPeek(): void {
     const to = e.relatedTarget as Node | null;
     const from = (e.target as Element).closest('.node[data-id]');
     if (to && (panel.contains(to) || (from && from.contains(to)))) {
-      return;   // still on the card, or onto the panel
+      return;
     }
     hidePeek();
   });
   panel.addEventListener('pointerleave', (e: PointerEvent) => {
     const to = e.relatedTarget as Element | null;
-    if (to?.closest?.(`.node[data-id="${showing}"]`)) {
-      return;   // back onto its card
+    if (to?.closest?.(`.node[data-id="${showingId}"]`)) {
+      return;
     }
     hidePeek();
   });
-  // anything that acts on the board puts it away
-  // (not a press on "N more lines": that one toggles it itself, in peekCard)
+
+  // Not on "N more lines": peekCard toggles it itself.
   document.addEventListener('pointerdown', (e) => {
     const t = e.target as Element;
     if (!panel.contains(t) && !t.closest?.('.fold-more')) {

@@ -1,5 +1,3 @@
-// Tags are Obsidian's: frontmatter `tags:` plus `#tags` in the text. `#` adds and removes them, a click on
-// one filters the board by it (features/tags.ts, tag-picker.ts, tag-filter.ts).
 import { test, expect } from '@playwright/test';
 import { openBoard, seedBoard, note, card, select, clickAway, diskFiles, watchErrors, dragOnto, settled } from './helpers';
 
@@ -85,7 +83,7 @@ test('a click on a tag searches by it; more narrow it; Esc ends the search', asy
   await card(page, 'Plan offsite').locator('.tag', { hasText: '#people' }).click();
   await expect(chips).toHaveCount(2);
   await expect(card(page, 'Fix login')).toHaveClass(/search-dim/);
-  // nothing was changed by it
+  // filtering writes nothing
   expect(Object.values(await diskFiles(page)).find(t => t.includes('Fix login'))).toContain('tags: [🔥, backend]');
   await page.keyboard.press('Escape');
   await expect(page.locator('#searchWrap')).toBeHidden();
@@ -224,7 +222,6 @@ test('a folded section says how many of its cards match the search', async ({ pa
   await expect(page.locator('#world .node.section-folded')).not.toHaveClass(/search-dim/);
 });
 
-// Carry a sticker up off the tray onto the bare board, and let go.
 async function dragOff(page: import('@playwright/test').Page, from: import('@playwright/test').Locator): Promise<void> {
   const a = (await from.boundingBox())!;
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);

@@ -1,14 +1,5 @@
-// ============================================================
-// The selected EDGE's floating bar: colour ▾ · line style ▾ · ends ▾ (label = double-click; Delete/⌫ removes it).
-//
-// Its own bar rather than a mode of features/float-bar.ts. That one is keyed on `state.sel` and
-// anchored to a CARD from end to end (anchorNode, labelRect, the locked-selection collapse), and an
-// edge shares none of its controls — folding two unrelated control sets into one component would
-// cost more than the shell it saves. It wears the same chrome, so the two still read as one idea.
-//
-// It anchors to the MIDPOINT of the curve, tracked across pan/zoom/drag by the same kind of rAF
-// follow loop the card bar uses.
-// ============================================================
+// The selected line's floating bar (colour, line style, ends) and its label editor. Not a mode of
+// float-bar.ts: that one is anchored to a CARD throughout, and shares none of these controls.
 import { state, type EdgeCap, type BoardEdge } from '../core/state.js';
 import { canvasMoving } from '../core/ui-state.js';
 import { selectedEdges, leadEdge } from './edge-tools.js';
@@ -35,27 +26,25 @@ const arrowChips = byId('ebArrowChips');
 const dashPop = byId('ebDashPop');
 const dashChips = byId('ebDashChips');
 
-const GAP = 22;   // clear of the end handles (HANDLE_R) and the arrowhead
+// Clear of the end handles (HANDLE_R) and the arrowhead.
+const GAP = 22;
 
-// Inline SVG rather than the icon sheet: these three are specific to an edge and exist nowhere else,
-// and the glyph has to CHANGE with the control's state (a dashed line, one arrowhead or two), which
-// a data-icon placeholder can't do.
+// Inline, not the icon sheet: the glyph CHANGES with the control's state.
 const SVG = (inner: string): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">${inner}</svg>`;
 const ICON_SOLID  = SVG('<path d="M4 12h16"/>');
 const ICON_DASHED = SVG('<path d="M4 12h16" stroke-dasharray="4 3"/>');
-// The two ends, drawn as they will look. A cap glyph sits at one end of a short line, and the SHAFT
-// is shortened to make room for it — the same relationship the real edge has with its terminators,
-// so a chip is a small picture of the result rather than a symbol to be learnt.
 const CAP_DOT_R = 2.6;
+
+// The shaft is shortened to make room for the cap, as on the real line.
 function capIcon(cap: EdgeCap, end: 'from' | 'to'): string {
   const left = end === 'from';
-  const x = left ? 5 : 19;                                   // where the cap sits
-  const x1 = left && cap !== 'none' ? 7 : 4;                 // …and where the shaft starts
+  const capX = left ? 5 : 19;
+  const x1 = left && cap !== 'none' ? 7 : 4;
   const x2 = !left && cap !== 'none' ? 17 : 20;
   const shaft = `<path d="M${x1} 12H${x2}"/>`;
   if (cap === 'dot') {
-    return SVG(shaft + `<circle cx="${x}" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`);
+    return SVG(shaft + `<circle cx="${capX}" cy="12" r="${CAP_DOT_R}" fill="currentColor" stroke="none"/>`);
   }
   if (cap === 'arrow') {
     const head = left ? `M9 8l-4 4 4 4` : `M15 8l4 4-4 4`;
@@ -63,7 +52,7 @@ function capIcon(cap: EdgeCap, end: 'from' | 'to'): string {
   }
   return SVG(shaft);
 }
-// The BAR's own button shows the pair — the line as it currently ends, at both ends at once.
+
 function endsIcon(from: EdgeCap, to: EdgeCap): string {
   const x1 = from === 'none' ? 4 : 7, x2 = to === 'none' ? 20 : 17;
   let g = `<path d="M${x1} 12H${x2}"/>`;
@@ -81,8 +70,8 @@ function endsIcon(from: EdgeCap, to: EdgeCap): string {
   }
   return SVG(g);
 }
-// Each end offers the same three, and they are chosen INDEPENDENTLY: one axis of three values could
-// never say "a dot here, an arrow there", which is an ordinary thing a diagram wants to say.
+
+// Chosen per end, independently.
 const CAP_CHOICES: Array<{ key: EdgeCap; label: string }> = [
   { key: 'none',  label: 'Bare' },
   { key: 'dot',   label: 'Dot — attaches here, no direction' },
@@ -91,16 +80,14 @@ const CAP_CHOICES: Array<{ key: EdgeCap; label: string }> = [
 const CAP_NAME: Record<EdgeCap, string> = { none: 'bare', dot: 'dot', arrow: 'arrow' };
 
 let wired = false;
+
 function wire(): void {
   if (wired) {
     return;
   }
   wired = true;
 
-  // Every control acts on the WHOLE selection, and sets one VALUE across it rather than toggling
-  // each edge's own — three lines where two are dashed become three dashed lines, not two solid and
-  // one dashed. The lead edge (the last one clicked, whose state the button shows) decides which
-  // value that is, so the button does what it looks like it will do.
+  // Each control SETS one value across the selection, the one the lead edge shows, rather than toggling.
   dashBtn.onclick = (ev) => { ev.stopPropagation(); dashPop.classList.contains('open') ? closeDashPop() : openDashPop(); };
   dashChips.onclick = (ev) => {
     const chip = (ev.target as Element).closest<HTMLElement>('[data-dash]');
@@ -128,8 +115,7 @@ function wire(): void {
         e.toCap = cap;
       }
     });
-    // The picker stays OPEN: the two ends are two choices, and closing after the first would make
-    // setting both a matter of reopening the same menu.
+    // Stays open: the two ends are two choices.
     openArrowPop();
   };
 
@@ -148,7 +134,6 @@ function wire(): void {
   closeOnOutside(dashPop, dashBtn, closeDashPop);
 }
 
-// Set one value across every selected line, as one undo step (mutate saves the board).
 function editEdges(set: (e: BoardEdge) => void): void {
   mutate([], () => { selectedEdges().forEach(set); }, { edges: true, reflow: 'none' });
   paintFreeEdges();
@@ -156,13 +141,14 @@ function editEdges(set: (e: BoardEdge) => void): void {
 }
 
 function openColorPop(): void {
-  // No separate "default" chip: the default ink IS the palette's `stone`, so that chip puts a coloured
-  // line back to how it looked.
+  // No "default" chip: the default ink IS the palette's `stone`.
   colorRow.innerHTML = paletteChipsHTML();
   colorPop.classList.add('open');
   placeColorPop();
 }
+
 function closeColorPop(): void { colorPop.classList.remove('open'); }
+
 function openArrowPop(): void {
   const e = leadEdge();
   const cur: Record<'from' | 'to', EdgeCap> = { from: e?.fromCap ?? 'none', to: e?.toCap ?? 'arrow' };
@@ -174,8 +160,9 @@ function openArrowPop(): void {
   arrowPop.classList.add('open');
   placePop(arrowPop, arrowsBtn);
 }
+
 function closeArrowPop(): void { arrowPop.classList.remove('open'); }
-// Line style: a menu of the two, each drawn as it looks — the same dropdown every picker in the bar is.
+
 function openDashPop(): void {
   const dashed = leadEdge()?.dashed ?? false;
   dashChips.innerHTML = [{ v: false, icon: ICON_SOLID, label: 'Solid' }, { v: true, icon: ICON_DASHED, label: 'Dashed' }]
@@ -183,11 +170,13 @@ function openDashPop(): void {
   dashPop.classList.add('open');
   placePop(dashPop, dashBtn);
 }
+
 function closeDashPop(): void { dashPop.classList.remove('open'); }
-// A picker opens on the side of the bar AWAY from the line (barAbove, set by place()), so it never
-// covers what it's changing either.
+
+// Pickers open on the side of the bar AWAY from the line, never covering it.
 let barAbove = true;
 const placePop = (pop: HTMLElement, anchor: HTMLElement): void => placePopover(pop, anchor, bar, !barAbove);
+
 function placeColorPop(): void { placePop(colorPop, colorBtn); }
 
 function syncControls(): void {
@@ -202,8 +191,7 @@ function syncControls(): void {
   arrowsBtn.title = `Ends: ${CAP_NAME[e.fromCap]} → ${CAP_NAME[e.toCap]}`;
 }
 
-// The whole line's bounds in SCREEN space — what the bar hangs clear of. Returns null when the edge has
-// gone (deleted, or an endpoint hidden), which is what closes the bar.
+// In SCREEN space; null once the line has gone or is hidden, which closes the bar.
 function lineBox(): { x0: number; y0: number; x1: number; y1: number } | null {
   const e = leadEdge();
   if (!e || !edgeVisible(e)) {
@@ -217,8 +205,7 @@ function lineBox(): { x0: number; y0: number; x1: number; y1: number } | null {
   return { x0: sx(g.box.x0), y0: sy(g.box.y0), x1: sx(g.box.x1), y1: sy(g.box.y1) };
 }
 
-// FigJam's placement: ABOVE the whole line, centred on it, never on top of it — the bar is for the line,
-// and covering it hides what you're changing. Below it when there's no room above.
+// FigJam's: centred above the whole line, never on it; below when there's no room above.
 function place(): boolean {
   const b = lineBox();
   if (!b) {
@@ -244,6 +231,7 @@ function place(): boolean {
 }
 
 let raf: number | null = null;
+
 function followLoop(): void {
   if (!bar.classList.contains('open')) { raf = null; return; }
   if (!place()) { hide(); return; }
@@ -257,13 +245,13 @@ function followLoop(): void {
   dashPop.classList.toggle('hide-interact', busy);
   raf = requestAnimationFrame(followLoop);
 }
+
 function hide(): void {
   bar.classList.remove('open');
   closeColorPop(); closeArrowPop(); closeDashPop();
   if (raf != null) { cancelAnimationFrame(raf); raf = null; }
 }
 
-// Called from applySelection / paintFreeEdges' callers whenever the edge selection may have changed.
 export function syncEdgeBar(): void {
   wire();
   const e = leadEdge();
@@ -275,10 +263,8 @@ export function syncEdgeBar(): void {
     followLoop();
   }
 }
-// ---------- the label, edited IN PLACE ----------
-// Double-clicking an edge opens a small field over the line's midpoint, where the label already is
-// (or is about to be) — the same gesture that opens a card's own text, and it puts the caret exactly
-// where the result will appear rather than in a bar off to one side.
+
+// The label is edited in place, over the line's midpoint.
 const labelEdit = byId<HTMLInputElement>('ebLabelEdit');
 let editingId: string | null = null;
 let labelBefore = '';
@@ -289,18 +275,18 @@ export function startLabelEdit(edgeId: string): void {
     return;
   }
   editingId = edgeId;
-  touchEdges();                       // one undo step for the whole editing session
+  touchEdges();
   labelBefore = e.label;
   labelEdit.value = e.label;
   labelEdit.classList.add('open');
   placeLabelEdit();
   labelEdit.focus(); labelEdit.select();
 }
-// The field is a fixed-position HTML element while the label it stands in for is SVG inside #world —
-// so everything about it has to be scaled by the zoom BY HAND, or the two are the same size only at
-// 100%: typing at 60% showed big text that shrank the moment it was committed, which reads as the
-// edit having changed something. Font, width and padding all take the same k.
-const LABEL_PX = 14;                 // must match .fe-label's font-size (styles.css)
+
+// Must match .fe-label's font-size (styles.css).
+const LABEL_PX = 14;
+
+// A fixed HTML field standing in for SVG inside #world, so it is scaled by the zoom BY HAND.
 function placeLabelEdit(): void {
   const e = editingId ? state.edges.find(x => x.id === editingId) : null;
   if (!e) {
@@ -314,8 +300,7 @@ function placeLabelEdit(): void {
   const x = g.mid.x * state.view.k + state.view.x, y = g.mid.y * state.view.k + state.view.y;
   labelEdit.style.fontSize = (LABEL_PX * k) + 'px';
   labelEdit.style.padding = `${2 * k}px ${6 * k}px`;
-  // Grow with the text so the field is never narrower than what it holds — the same estimate the
-  // label's own plate is sized by (view/free-edges.ts), in world px, brought into screen px.
+  // The same width estimate the label's plate is sized by (view/free-edges.ts).
   labelEdit.style.width = (Math.max(56, labelEdit.value.length * 8 + 16) * k) + 'px';
   labelEdit.style.left = (x - labelEdit.offsetWidth / 2) + 'px';
   labelEdit.style.top = (y - labelEdit.offsetHeight / 2) + 'px';
@@ -332,11 +317,11 @@ function endLabelEdit(commitIt: boolean): void {
     e.label = labelEdit.value.trim();
     scheduleSaveBoard();
   } else if (e) {
-    // typing wrote the label live, so a cancel has to put it back
+    // Typing wrote the label live.
     e.label = labelBefore;
   }
   paintFreeEdges();
-  commitStep();                       // a cancelled edit nets no change, so the step discards itself
+  commitStep();
 }
 
 export function installEdgeBar(): void {
@@ -345,12 +330,12 @@ export function installEdgeBar(): void {
     if (!e) {
       return;
     }
-    e.label = labelEdit.value;          // live on the line, like a card's inline edit
+    e.label = labelEdit.value;
     paintFreeEdges();
     placeLabelEdit();
   });
   labelEdit.addEventListener('keydown', (ev) => {
-    ev.stopPropagation();               // canvas shortcuts stay out of a text field
+    ev.stopPropagation();
     if (ev.key === 'Enter') { ev.preventDefault(); endLabelEdit(true); }
     else if (ev.key === 'Escape') { ev.preventDefault(); endLabelEdit(false); }
   });

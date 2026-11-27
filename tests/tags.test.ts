@@ -1,5 +1,4 @@
-// Tags are Obsidian's (utils/tags.ts): what counts as one, in a note's text and as typed, and how they
-// match. Plus emoji by name for the `#` field (utils/emoji-names.ts) and how a `#tag` renders.
+// Also emoji by name for the `#` field (utils/emoji-names.ts).
 import { describe, expect, it } from 'vitest';
 import { cleanTag, textTags, hasTag, isEmojiTag, noteTags } from '../src/utils/tags.js';
 import { emojiByName } from '../src/utils/emoji-names.js';

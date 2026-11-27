@@ -1,5 +1,3 @@
-// A note's filename tracks its text, never collides (case-insensitively), and a rename carries
-// the [[wikilinks]] that point at it.
 import { describe, expect, it } from 'vitest';
 import { safeName, slugStem, desiredFileFor, retargetLinks, parentFileOf, isSectionNote, prunableDirs } from '../src/utils/filenames.js';
 

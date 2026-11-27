@@ -1,12 +1,9 @@
-// ---- minimal ZIP writer + reader (store + deflate; no library) ----
-// Used to move maps between devices: exportZip → zipBlob, importFiles → unzip.
-// Zero-dependency: store entries are raw; deflate-raw via the platform
-// DecompressionStream. crc32/inflateRaw are internal helpers.
+// A minimal ZIP writer (store only) and reader (store + deflate via DecompressionStream).
 
-// An entry to write: either raw `bytes` (e.g. an image) or UTF-8 `data` text.
 export interface ZipInput { name: string; bytes?: Uint8Array; data?: string; }
-// An entry read back out: text (decoded) plus the raw bytes (kept for binary entries).
 export interface ZipEntry { name: string; text: string; bytes: Uint8Array; }
+
+const LOCAL_HEADER_SIG = 0x04034b50, CENTRAL_HEADER_SIG = 0x02014b50, END_OF_CENTRAL_SIG = 0x06054b50;
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -19,6 +16,7 @@ const CRC_TABLE = (() => {
   }
   return t;
 })();
+
 function crc32(bytes: Uint8Array): number {
   let c = 0xFFFFFFFF;
   for (let i=0;i<bytes.length;i++) {
@@ -26,27 +24,26 @@ function crc32(bytes: Uint8Array): number {
   }
   return (c ^ 0xFFFFFFFF) >>> 0;
 }
-// The archive as raw bytes — synchronous (store, no compression), so callers that need the
-// data inside a single event handler (e.g. a dragstart's DownloadURL) can build it inline.
+
+// Synchronous (no compression), so a single event handler (a dragstart's DownloadURL) can build it inline.
 export function zipBytes(files: ZipInput[]): Uint8Array {
   const enc = new TextEncoder();
   const u16 = (v: number) => [v & 0xFF, (v>>>8) & 0xFF];
   const u32 = (v: number) => [v & 0xFF, (v>>>8) & 0xFF, (v>>>16) & 0xFF, (v>>>24) & 0xFF];
 
-  // General-purpose flag bit 11: names are UTF-8. Without it Windows reads them as CP437.
+  // Flag bit 11: names are UTF-8. Without it Windows reads them as CP437.
   const UTF8_NAMES = 0x0800;
   const body: (Uint8Array)[] = [], central: Uint8Array[] = [];
   let offset = 0;
   for (const f of files){
-    // f.bytes (a Uint8Array, e.g. an image) is stored verbatim; otherwise f.data is UTF-8 text.
     const name = enc.encode(f.name), data = f.bytes || enc.encode(f.data ?? ''), crc = crc32(data);
     const local = [
-      ...u32(0x04034b50), ...u16(20), ...u16(UTF8_NAMES), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(LOCAL_HEADER_SIG), ...u16(20), ...u16(UTF8_NAMES), ...u16(0), ...u16(0), ...u16(0),
       ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length), ...u16(0),
     ];
     body.push(new Uint8Array(local), name, data);
     central.push(new Uint8Array([
-      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(UTF8_NAMES), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(CENTRAL_HEADER_SIG), ...u16(20), ...u16(20), ...u16(UTF8_NAMES), ...u16(0), ...u16(0), ...u16(0),
       ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(name.length),
       ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
     ]), name);
@@ -57,7 +54,7 @@ export function zipBytes(files: ZipInput[]): Uint8Array {
     centralSize += c.length;
   }
   const eocd = new Uint8Array([
-    ...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
+    ...u32(END_OF_CENTRAL_SIG), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length),
     ...u32(centralSize), ...u32(offset), ...u16(0),
   ]);
   const parts = [...body, ...central, eocd];
@@ -69,20 +66,22 @@ export function zipBytes(files: ZipInput[]): Uint8Array {
   let at = 0; for (const p of parts){ out.set(p, at); at += p.length; }
   return out;
 }
+
 export function zipBlob(files: ZipInput[]): Blob {
   return new Blob([zipBytes(files) as BlobPart], { type:'application/zip' });
 }
+
 export async function unzip(buf: ArrayBuffer): Promise<ZipEntry[]> {
   const u8 = new Uint8Array(buf), dv = new DataView(buf), dec = new TextDecoder();
   let eocd = -1;
-  for (let i = u8.length - 22; i >= 0; i--){ if (dv.getUint32(i, true) === 0x06054b50){ eocd = i; break; } }
+  for (let i = u8.length - 22; i >= 0; i--){ if (dv.getUint32(i, true) === END_OF_CENTRAL_SIG){ eocd = i; break; } }
   if (eocd < 0) {
     throw new Error('Not a .zip file');
   }
   const count = dv.getUint16(eocd + 10, true);
   let off = dv.getUint32(eocd + 16, true);
   const out: ZipEntry[] = [];
-  for (let n = 0; n < count && off + 46 <= u8.length && dv.getUint32(off, true) === 0x02014b50; n++){
+  for (let n = 0; n < count && off + 46 <= u8.length && dv.getUint32(off, true) === CENTRAL_HEADER_SIG; n++){
     const method = dv.getUint16(off + 10, true);
     const compSize = dv.getUint32(off + 20, true);
     const nameLen = dv.getUint16(off + 28, true);
@@ -100,13 +99,14 @@ export async function unzip(buf: ArrayBuffer): Promise<ZipEntry[]> {
       data = await inflateRaw(comp);
     }
     if (data) {
-      out.push({ name, text: dec.decode(data), bytes: data });   // bytes kept for binary entries (images)
+      out.push({ name, text: dec.decode(data), bytes: data });
     }
     off += 46 + nameLen + extraLen + commentLen;
   }
   return out;
 }
-// Unpacked with a ceiling: a few kilobytes of zip can claim to hold gigabytes, and the tab would try.
+
+// A few kilobytes of zip can claim to hold gigabytes, and the tab would try.
 const MAX_ENTRY = 256 * 1024 * 1024;
 
 async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
@@ -134,9 +134,7 @@ async function inflateRaw(bytes: Uint8Array): Promise<Uint8Array> {
   return out;
 }
 
-// An archive entry's name as a path INSIDE a map: forward slashes, no leading slash, and null for one
-// that climbs out (`..`) or has an empty part. Windows tools write `\`; a store refuses such a name
-// half-way through an import, which is too late.
+// Null for a name that climbs out (`..`) or has an empty part: a store would refuse it mid-import.
 export function entryPath(name: string): string | null {
   const parts = name.replace(/\\/g, '/').replace(/^\/+/, '').split('/');
   const dir = parts[parts.length - 1] === '';

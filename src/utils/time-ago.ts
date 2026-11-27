@@ -1,4 +1,4 @@
-// ---------- “5m ago”: how long since a map was last opened (the home screen's list) ----------
+// “5m ago”, for the home screen's list of maps.
 export function timeAgo(ts: number, now = Date.now()): string {
   if (!ts) {
     return '';                       // migrated entries carry no last-opened time yet

@@ -1,4 +1,4 @@
-// ---------- every action: the keyboard shortcuts, and the ⌘P palette's list (features/palette.ts shows it) ----------
+// Every action: the keyboard shortcuts, and the ⌘P palette's list.
 import { createNode, centredAt, newSectionAt, duplicateSelection, createSibling, addCardInside, deleteSelectionKeepChildren, deleteSelection } from './crud.js';
 import { worldAtOrCentre, zoomAt } from '../view/camera.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
@@ -33,89 +33,53 @@ import { nodesOf } from '../utils/model.js';
 import { exportZip, openImportPicker } from '../data/zip-io.js';
 import { exportImage, type ImageFormat } from './export-image.js';
 
-// A new card AT THE POINTER (the viewport centre before the mouse has moved) — what `N`/⌘N do, and
-// what a Space tap used to.
 function newCardAtPointer(): void {
   createNode(centredAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y)));
 }
 
-// …and an empty SECTION there, named on the spot — the palette's "New section".
 function newSectionAtPointer(): void {
   newSectionAt(worldAtOrCentre(ui.lastMouse?.x, ui.lastMouse?.y));
 }
 
-// Where the pointer is, in SCREEN coords — the middle of the window before the mouse has moved.
 function pointerOrCentre(): { x: number; y: number } {
   return ui.lastMouse ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 }
 
-// Zoom about the middle of the screen — ⌘+/⌘− and the palette's Zoom in/out.
+const ZOOM_STEP = 1.2;
+
 function zoomStep(factor: number): void {
   zoomAt(window.innerWidth / 2, window.innerHeight / 2, factor);
 }
-// ---------- arrow keys: go IN and OUT of sections, fold and unfold branches ----------
-//   ⌘↓ open the selected section (nav/scope.ts)       ⌘↑ leave the open one — Finder's keys
-//   →  unfold                                        ←  fold
-// The four keys are about DEPTH, in the two senses this map has: which folder you're standing in,
-// and whether a branch is showing. Walking siblings and stepping onto a child lost their keys to
-// that, deliberately — opening a section is now the primary way to navigate a big map, and clicking
-// covers moving between siblings.
-// They were never geometric and still aren't — a child now lives INSIDE its parent, so there is no
-// direction from one to the other for an arrow key to mean.
-// ←/→ are DIRECTIONAL, unlike the chip / X / the ⋯ menu, which all toggle: pressing → twice can't
-// fold what it just unfolded. They act on the WHOLE selection (setCollapsedSelection), like the chip
-// and X do — a fold is something you do to cards, and there's no reason a keyboard fold should reach
-// fewer of them than a click does.
+
+// ⌘↓/⌘↑ open and leave a section; →/← unfold and fold, DIRECTIONALLY (unlike X, which toggles).
+// See "Arrow keys go IN and OUT" in docs/architecture.md.
 function navArrow(key: string): void {
-  // ⌘↑ reads the SCOPE, not the selection, so it still works right after clicking empty space to
-  // deselect — which is exactly when you want to go back up. Inert at the top level, silently: a
-  // status line there would nag on every repeat press.
+  // Reads the SCOPE, not the selection, so it works right after deselecting.
   if (key === 'ArrowUp') { exitScope(); return; }
   const n = state.selId ? state.nodes.get(state.selId) : null;
   if (key === 'ArrowDown') {
-    // ⌘↓ stays single: you can only stand in one place, so it acts on the anchor.
     if (!n) { setStatus('Select a section to open it'); return; }
-    openSection(n);          // reports its own refusal for the kinds that can't be opened
+    openSection(n);
     return;
   }
   if (!n) {
-    return;          // ←/→ have nothing to fold
+    return;
   }
-  // → unfolds, ← folds — every selected card that isn't already there.
   setCollapsedSelection(selectedIds(), key === 'ArrowLeft');
 }
-// keyboard:
-//  · N / ⌘N        → new node at the pointer   (Space: hand-pan; on an image card, open the picture)
-//  · Enter          → a new card below the selected one, in the same place
-//  · Tab            → a new card inside the selected section
-//  · F2             → rename the selected node in place (also: double-click its title)
-//  · X              → collapse/eXpand the selected node(s) (also: the corner chip)
-//  · ⌘↓ ⌘↑ → ←      → open/leave a section, unfold/fold
-//  · E              → edit the selected node's note/body in place (also: double-click the body)
-//  · #              → tag the selected cards (features/tag-picker.ts), or with none find by tag
-//  · ⌘F or /        → find, by text and #tags (features/search.ts); Esc ends a standing search first
-//  · T              → the tag tray (features/tag-tray.ts)
-//  · Delete/Backspace → delete the selected node (only when the edit panel is closed)
-// A focused field (a card's editor, a section's label, the search box) counts as "typing",
-// so these card shortcuts stay out of the way while you're naming something.
+
 function onShortcutKey(e: KeyboardEvent): void {
-  // The letter shortcuts below are case-INSENSITIVE (Caps Lock, or a held ⇧ that means something of
-  // its own like ⇧D), so a single printable character is folded down once here rather than tested
-  // twice per line. Named keys keep their own spelling — 'F2' must not become 'f2', nor 'ArrowUp'
-  // 'arrowup' — hence the length test rather than a blanket toLowerCase.
+  // Letters are case-insensitive (Caps Lock, ⇧D); named keys like 'F2' keep their spelling.
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   const mod = e.metaKey || e.ctrlKey;
   const del = key === 'Delete' || key === 'Backspace';
 
-  // Intercept browser zoom shortcuts (Cmd/Ctrl +/-/0) so they drive the canvas, not the viewport.
-  // Must be checked before the `typing` guard so they work even while a text field is focused.
+  // Ahead of the typing guard, so even a focused field never hands these to the browser.
   if (mod) {
-    if (key === '=' || key === '+') { e.preventDefault(); zoomStep(1.2); return; }
-    if (key === '-')                { e.preventDefault(); zoomStep(1 / 1.2); return; }
+    if (key === '=' || key === '+') { e.preventDefault(); zoomStep(ZOOM_STEP); return; }
+    if (key === '-')                { e.preventDefault(); zoomStep(1 / ZOOM_STEP); return; }
     if (key === '0')                { e.preventDefault(); focusOrFit(); return; }
-    // ⌘F is FIND here, the way it is on every canvas app — not the browser's find-in-page
     if (key === 'f' && !e.shiftKey && !e.altKey) { e.preventDefault(); openSearch(); return; }
-    // ⌘S wraps the selection in a new section (FigJam); with nothing selected it still saves now.
     if (key === 's') {
       e.preventDefault();
       if (state.sel.size && !isTypingInField()) {
@@ -126,7 +90,7 @@ function onShortcutKey(e: KeyboardEvent): void {
       return;
     }
 
-    // ⌥⇧⌘R is Figma's Resize to fit — by KEY CODE, since ⌥ rewrites the letter on a Mac.
+    // By KEY CODE: ⌥ rewrites the letter on a Mac.
     if (e.code === 'KeyR' && e.altKey && e.shiftKey) {
       e.preventDefault();
       if (state.sel.size && !isTypingInField()) {
@@ -135,7 +99,6 @@ function onShortcutKey(e: KeyboardEvent): void {
       return;
     }
 
-    // ⌘P is FigJam's quick actions. Never the browser's print dialog, even while typing in a card.
     if (key === 'p') {
       e.preventDefault();
       if (!isTypingInField()) {
@@ -144,7 +107,6 @@ function onShortcutKey(e: KeyboardEvent): void {
       return;
     }
 
-    // While typing, ⌘A and ⌘Z/⌘Y belong to the field (its own select-all and native undo).
     if (!isTypingInField() && (key === 'a' || key === 'z' || key === 'y')) {
       e.preventDefault();
       if (key === 'a') {
@@ -160,7 +122,7 @@ function onShortcutKey(e: KeyboardEvent): void {
 
   const active = document.activeElement as HTMLElement | null;
   const typing = isTypingInField();
-  // Esc blurs the active field (so Delete works next), or deselects when not typing.
+  // See "Esc peels ONE layer" in docs/architecture.md.
   if (key === 'Escape'){
     e.preventDefault();
     if (typing) {
@@ -168,7 +130,7 @@ function onShortcutKey(e: KeyboardEvent): void {
     } else if (state.selEdges.size) {
       clearEdgeSelection();
     } else if (searchActive()) {
-      closeSearch();   // a search left standing over the board, before the selection
+      closeSearch();
     } else if (state.sel.size) {
       selectNode(null);
     }
@@ -178,16 +140,15 @@ function onShortcutKey(e: KeyboardEvent): void {
     return;
   }
   if (tidyShortcut(e)) {
-    return;   // ⌥A/H/D/W/V/S align, ⌃⌥T/H/V tidy and distribute (features/tidy.ts)
+    return;
   }
-  // ⌘↓/⌘↑ go in and out, →/← unfold and fold (navArrow). Plain ↑/↓ and ⇧/⌥ arrows are left free for
-  // the browser and for later (extend-selection).
+
+  // Plain ↑/↓ and ⇧/⌥ arrows are left to the browser.
   const vertical = key === 'ArrowUp' || key === 'ArrowDown';
   if (key.startsWith('Arrow') && !e.shiftKey && !e.altKey && mod === vertical){
     e.preventDefault(); navArrow(key); return;
   }
-  if (key === '/'){ e.preventDefault(); openSearch(); return; }   // find a card
-  // #: tag the selected cards (features/tag-picker.ts) — or, with none, find by tag
+  if (key === '/'){ e.preventDefault(); openSearch(); return; }
   if (key === '#' && !mod){
     e.preventDefault();
     if (taggableSelection().length) {
@@ -197,22 +158,20 @@ function onShortcutKey(e: KeyboardEvent): void {
     }
     return;
   }
-  if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }   // the tag tray
-  // NEW CARD, at the pointer. ⌘N is the name everyone knows it by — but on macOS Chrome/Safari it is an
-  // application-menu accelerator (File ▸ New Window) and never reaches the page, so plain `N` carries the
-  // shortcut in practice and sits in the same family as the app's other bare letters (E/X/D/F/L/T).
-  // Both are bound: whichever the browser lets through does the same thing.
+  if (key === 't' && !mod && !e.altKey && !e.shiftKey){ e.preventDefault(); toggleTray(); return; }
+
+  // ⌘N too, though macOS browsers keep it for New Window.
   if (key === 'n' && !e.shiftKey && !e.altKey){ e.preventDefault(); newCardAtPointer(); return; }
-  // Space = hand-tool to pan while held (a tap on a selected image card opens it — see the keyup below).
+  // Held, Space pans; a tap is onSpaceUp's.
   if (key === ' '){ e.preventDefault(); if (!e.repeat){ ui.spaceHeld = true; ui.spaceUsedForPan = false; } return; }
   if (key === 'f'){ e.preventDefault(); focusOrFit(); return; }
   if (/^[1-9]$/.test(key) && !mod && !e.altKey && state.sel.size){ e.preventDefault(); colorSelection(KEY_COLORS[+key - 1]); return; }
-  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }   // ⇧D: the SMART duplicate (crud.ts copyNext)
-  // ⌘/Ctrl C / X copy / cut the selected cards (with their subtrees). No ⌘V handler here —
-  // the native `paste` event (features/attachments.ts) carries clipboardData permission-free.
+  if (key === 'd' && state.sel.size){ e.preventDefault(); duplicateSelection({ next: e.shiftKey }); return; }
+
+  // No ⌘V here: the native `paste` event (attachments.ts) carries clipboardData permission-free.
   if (key === 'c' && mod && state.sel.size){ e.preventDefault(); void copySelection(); return; }
   if (key === 'x' && mod && state.sel.size){ e.preventDefault(); void cutSelection(); return; }
-  if (key === 'x' && !mod && state.sel.size){   // don't shadow cut
+  if (key === 'x' && !mod && state.sel.size){
     e.preventDefault(); toggleCollapseSelection(state.sel); return;
   }
   if (key === 'l' && !mod && state.sel.size){
@@ -220,9 +179,8 @@ function onShortcutKey(e: KeyboardEvent): void {
     toggleLockSelection();
     return;
   }
-  // image cards have no title/body UI to rename or edit — they're a leaf that shows only the image
   if (key === 'F2' && state.selId){
-    e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;   // selId guards non-null
+    e.preventDefault(); startInlineEdit(state.nodes.get(state.selId)); return;
   }
   if (key === 'e' && !mod && state.selId){
     e.preventDefault(); const n = state.nodes.get(state.selId);
@@ -232,15 +190,13 @@ function onShortcutKey(e: KeyboardEvent): void {
     return;
   }
   if (key === 'Enter' && state.selId){ e.preventDefault(); createSibling(state.selId); return; }
-  // Tab puts a new card INSIDE the selected section — the one thing that has an inside. Anywhere else
-  // it stays the browser's: the way to the dock and the bars without a mouse.
+  // Anywhere else Tab stays the browser's: the way to the dock and the bars without a mouse.
   if (key === 'Tab' && !e.shiftKey && state.selId && canOpen(state.nodes.get(state.selId))){
     e.preventDefault();
     addCardInside(state.selId);
     return;
   }
   if (del && state.selEdges.size){ e.preventDefault(); deleteSelectedEdge(); return; }
-  // ⌘L connects the selected cards (MindNode's shortcut for the same thing). Bare `l` is lock.
   if (key === 'l' && mod && state.sel.size){ e.preventDefault(); connectSelection(); return; }
   if (del && state.sel.size){
     e.preventDefault();
@@ -262,25 +218,20 @@ function onSpaceUp(e: KeyboardEvent): void {
   if (isTypingInField() || wasPan || ui.pan) {
     return;
   }
-  // A Space TAP on a lone IMAGE card opens it full-screen — the picture is the whole card, so "look at
-  // this properly" is the obvious thing the key can mean there, and the viewer closes on Space too
-  // (features/image-viewer.ts). Everything else Space used to do on release (making a card) is `N` now.
+  // A tap on a lone image card opens it full-screen; the viewer closes on Space too.
   const sole = state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : null;
   if (sole && isImageCard(sole)) {
     openImageAt(sole, sole.el?.querySelector('img.md-img') ?? null);
   }
 }
 
-// ---------- the ⌘P command palette's list ----------
-// Every action the app has, with the shortcut that does the same — built here because every action
-// function is in scope here. `when` hides what can't apply right now (features/palette.ts).
 const editable = (): boolean => store.isOpen;
 const hasSel = (): boolean => state.sel.size > 0 && editable();
-// What adds or removes a card — none of it applies to a single note (core/state.ts singleNoteRefuses).
+
+// Adding or removing a card doesn't apply to a single note (singleNoteRefuses).
 const canGrow = (): boolean => editable() && !state.singleNote;
 const growSel = (): boolean => hasSel() && !state.singleNote;
 const oneSel = (): MindNode | undefined => state.sel.size === 1 && state.selId ? state.nodes.get(state.selId) : undefined;
-// A section in the selection that is a box, not a stack — what decides Ungroup against Unstack.
 const plainSectionSelected = (): boolean => nodesOf(selectedIds()).some(n => n.type === 'section' && !isStack(n));
 
 function paletteCommands(): Command[] {
@@ -291,8 +242,8 @@ function paletteCommands(): Command[] {
     { label: 'Undo', shortcut: '⌘Z', when: editable, run: undo },
     { label: 'Redo', shortcut: '⇧⌘Z', when: editable, run: redo },
     { label: state.selId ? 'Focus the selection' : 'Fit the map to the screen', shortcut: 'F', keywords: 'zoom view', run: focusOrFit },
-    { label: 'Zoom in', shortcut: '⌘+', run: () => zoomStep(1.2) },
-    { label: 'Zoom out', shortcut: '⌘−', run: () => zoomStep(1 / 1.2) },
+    { label: 'Zoom in', shortcut: '⌘+', run: () => zoomStep(ZOOM_STEP) },
+    { label: 'Zoom out', shortcut: '⌘−', run: () => zoomStep(1 / ZOOM_STEP) },
     { label: 'Select all', shortcut: '⌘A', run: selectAll },
     { label: 'Edit', shortcut: 'E', keywords: 'note text write', when: () => editable() && !!oneSel() && oneSel()!.type !== 'section', run: () => startBodyEdit(oneSel()!) },
     { label: 'Rename', shortcut: 'F2', keywords: 'title name', when: () => editable() && oneSel()?.type === 'section', run: () => startInlineEdit(oneSel()) },
@@ -321,7 +272,7 @@ function paletteCommands(): Command[] {
     { label: 'Expand all', keywords: 'unfold every card section', when: () => foldScope().some(n => n.collapsed), run: expandAll },
     ...KEY_COLORS.map((c, i) => ({ label: `Colour ${c}`, shortcut: String(i + 1), keywords: 'color fill paint', when: hasSel, run: () => colorSelection(c) })),
     { label: anyLocked(state.sel) ? 'Unlock' : 'Lock', shortcut: 'L', when: hasSel, run: toggleLockSelection },
-    // ⌘⌫ is listed once: Unstack when only stacks are selected, else Ungroup, which unstacks the stacks among them too
+    // ⌘⌫ is listed once: Unstack when only stacks are selected, else Ungroup, which unstacks them too.
     { label: 'Unstack', shortcut: '⌘⌫', keywords: 'stack pile spread cards out', when: () => hasStackSelected() && !plainSectionSelected(), run: unstackSelection },
     { label: 'Turn into section', keywords: 'stack pile box convert', when: hasStackSelected, run: stackToSection },
     { label: 'Ungroup', shortcut: '⌘⌫', keywords: 'delete section keep cards', when: () => canGrow() && plainSectionSelected(), run: deleteSelectionKeepChildren },
@@ -347,10 +298,11 @@ function paletteCommands(): Command[] {
       } })),
   ];
 }
+
 export function installCommands(): void {
   window.addEventListener('keydown', onShortcutKey);
 
-  // Track the mouse so keyboard/clipboard actions (Space-tap, paste) land AT the pointer.
+  // So keyboard and clipboard actions land AT the pointer.
   window.addEventListener('pointermove', (e) => {
     if (e.pointerType === 'mouse') {
       ui.lastMouse = { x: e.clientX, y: e.clientY };

@@ -1,17 +1,5 @@
-// ---------- in-place card editing ----------
-// Editing happens ON the card, not in the sidebar, and a card is ONE text field: its title is the
-// leading `# ` line of that text (utils/frontmatter.ts splitHeading), so there is nothing to edit
-// separately. Double-click, F2, `E` and the pen all open the SAME raw-markdown textarea and differ
-// only in where the caret lands — startInlineEdit puts it on the title, startBodyEdit past it.
-// An open ui.bodyEdit defers the file rename / disk-reload while typing so the folder isn't littered
-// with half-typed names. Reflow uses the live DOM height. The note itself is written while you PAUSE
-// typing and when the tab hides or closes (flushOpenEdit), so a long edit is never only in the textarea.
-// Esc and a click away both END the edit, keeping what's there; ⌘Z takes the whole session back.
-//
-// What the merge deleted, and why none of it is missed: the contenteditable `.title` editor (and with
-// it the draggable-ancestor dance that only a contenteditable needed — see setCardDraggable's obituary
-// in features/text-drag.ts), and `titleProblem`, which had nothing left to refuse once a title may be
-// empty (untitled cards) AND duplicated.
+// In-place editing: a card is ONE raw-markdown textarea (its title is the leading `# ` line); a section's
+// label is renamed on its tab. Esc and a click away both keep the text; ⌘Z takes the session back.
 import { state, stage, setStatus, type MindNode } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { isLockedEffective } from '../utils/model.js';
@@ -37,10 +25,6 @@ import { updateCompletion, completionKey, closeCompletion } from './complete.js'
 import { jumpViewTo, stageSize, bottomInset } from '../view/camera.js';
 import type { MenuEntry } from './context-menu.js';
 
-// The text the editor holds is the note with its title back on the front as a heading — exactly the
-// file's own body (utils/frontmatter.ts cardMarkdown), which makes the editor a view of the note rather
-// than a form over two fields.
-
 export function syncOpenEditor(n: MindNode): void {
   if (ui.bodyEdit?.id === n.id) {
     ui.bodyEdit.ta.value = ui.bodyEdit.saved = cardMarkdown(n);
@@ -48,10 +32,8 @@ export function syncOpenEditor(n: MindNode): void {
   }
 }
 
-// ---------- an open edit is never only in the textarea ----------
-// Write what the open editor holds into its note WITHOUT closing it, and queue the save. The card keeps its
-// textarea, the filename stays frozen until the edit ends (frozenFileNodeId), and the session is still one
-// undo step (its before-image was taken when it opened). True when there was something new to write.
+// Writes the open editor into its note WITHOUT closing it, so a long edit is never only in the textarea.
+// The filename stays frozen until the edit ends. True when there was something new to write.
 export function flushOpenEdit(): boolean {
   const be = ui.bodyEdit;
   if (!be || be.ta.value === be.saved) {
@@ -67,8 +49,7 @@ export function flushOpenEdit(): boolean {
   scheduleSave();
   return true;
 }
-// …after a pause in the typing, and AT ONCE when the tab is hidden or closed — the last moments a page
-// is sure to get (data/save.ts flushes the rest of the map on the same events).
+
 const IDLE_SAVE_MS = 1500;
 let idleSave: number | undefined;
 const flushNow = (): void => {
@@ -77,9 +58,9 @@ const flushNow = (): void => {
   }
 };
 
-// ---------- the view follows the caret ----------
-// Where the caret's line sits, in the textarea's own CSS px from its top: a hidden copy of the textarea
-// laid out with the text up to the caret (the browser reports no caret position for a textarea).
+const FALLBACK_LINE_PX = 20;
+
+// A textarea reports no caret position, so lay out a hidden copy up to the caret and measure it.
 function caretTop(ta: HTMLTextAreaElement): { top: number; left: number; line: number } {
   const cs = getComputedStyle(ta), m = document.createElement('div');
   for (const p of ['font', 'letterSpacing', 'lineHeight', 'padding', 'border', 'boxSizing', 'width', 'tabSize',
@@ -91,28 +72,30 @@ function caretTop(ta: HTMLTextAreaElement): { top: number; left: number; line: n
   const mark = m.appendChild(document.createElement('span'));
   mark.textContent = '\u200b';
   document.body.appendChild(m);
-  const out = { top: mark.offsetTop, left: mark.offsetLeft, line: mark.offsetHeight || parseFloat(cs.lineHeight) || 20 };
+  const out = { top: mark.offsetTop, left: mark.offsetLeft, line: mark.offsetHeight || parseFloat(cs.lineHeight) || FALLBACK_LINE_PX };
   m.remove();
   return out;
 }
-// The caret's line on screen, top and bottom.
+
 function caretOnScreen(ta: HTMLTextAreaElement): { top: number; bottom: number } {
   const k = state.view.k || 1, c = caretTop(ta), top = ta.getBoundingClientRect().top + c.top * k;
   return { top, bottom: top + c.line * k };
 }
-// …and where the caret is on screen, for the list of names under it (features/complete.ts).
+
 function caretPoint(ta: HTMLTextAreaElement): { left: number; bottom: number } {
   const k = state.view.k || 1, c = caretTop(ta), r = ta.getBoundingClientRect();
   return { left: r.left + c.left * k, bottom: r.top + (c.top + c.line) * k };
 }
-// Offer the map's cards after `[[` and its tags after `#`, if that's what the caret is typing.
+
+// Cards after `[[`, tags after `#`.
 function offerNames(ta: HTMLTextAreaElement, n: MindNode): void {
   updateCompletion(ta, n.id, () => caretPoint(ta), r => applyTextEdit(ta, r));
 }
-// Typing past the edge of the screen PANS the view to keep the caret's line in sight — never zooms: the
-// canvas is still the canvas, the camera just walks down the note with you.
+
+// Pans (never zooms) to keep the caret's line on screen.
 const CARET_MARGIN = 56;
 let followFrame = 0;
+
 function followCaret(ta: HTMLTextAreaElement): void {
   cancelAnimationFrame(followFrame);
   followFrame = requestAnimationFrame(() => {
@@ -130,7 +113,6 @@ function followCaret(ta: HTMLTextAreaElement): void {
   });
 }
 
-// A note longer than its card scrolls inside it while edited (render.ts paintNode): keep the caret's line in that box.
 function scrollCaretIntoCard(ta: HTMLTextAreaElement): void {
   const box = ta.parentElement!;
   if (box.scrollHeight <= box.clientHeight) {
@@ -144,17 +126,16 @@ function scrollCaretIntoCard(ta: HTMLTextAreaElement): void {
   }
 }
 
-// ---------- leaving the editor keeps your place ----------
-// The rendered note is shorter than its raw markdown, so on a TALL card the line you were editing would
-// jump away when the editor closes. Find that line's block in the rendered note — by its text, the
-// markdown marks stripped — so the view can be panned to keep it where it was on screen.
-const strip = (s: string): string => s
+const stripMarks = (s: string): string => s
   .replace(/^\s*(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+(?:\[[ xX]\]\s+)?)/, '')
   .replace(/\]\([^)]*\)/g, '').replace(/[*_`~[\]]/g, '').replace(/\s+/g, ' ').trim();
+const MATCH_CHARS = 40;
+
+// The rendered block of the caret's line, matched by its text, so closing a TALL card's editor can keep
+// that line where it was on screen.
 function renderedBlockFor(bodyEl: HTMLElement, text: string, pos: number): HTMLElement | null {
   const from = text.lastIndexOf('\n', pos - 1) + 1, nl = text.indexOf('\n', pos);
   const line = text.slice(from, nl < 0 ? text.length : nl);
-  // in a table row, the cell the caret is in
   let seg = line;
   if (line.trim().startsWith('|')) {
     const cells = line.split(/(?<!\\)\|/);
@@ -167,84 +148,64 @@ function renderedBlockFor(bodyEl: HTMLElement, text: string, pos: number): HTMLE
       at += c.length + 1;
     }
   }
-  const want = strip(seg).slice(0, 40) || strip(line).slice(0, 40);
+  const want = stripMarks(seg).slice(0, MATCH_CHARS) || stripMarks(line).slice(0, MATCH_CHARS);
   if (want.length < 2) {
     return null;
   }
-  const nth = text.slice(0, from).split('\n').filter(l => strip(l).includes(want)).length;
+  const nth = text.slice(0, from).split('\n').filter(l => stripMarks(l).includes(want)).length;
   const blocks = [...bodyEl.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6,p,li,td,th,blockquote,pre')]
     .filter(b => (b.textContent ?? '').replace(/\s+/g, ' ').includes(want))
-    .filter((b, _i, all) => !all.some(o => o !== b && b.contains(o)));   // the innermost match
+    .filter((b, _i, all) => !all.some(o => o !== b && b.contains(o)));
   return blocks[Math.min(nth, blocks.length - 1)] ?? null;
 }
 
-// ---------- rename (F2 / the ⋯ menu / a fresh card / a double-clicked title row) ----------
-// Not its own editor any more: it opens the card's one field with the caret on the TITLE. Kept as the
-// single rename FUNNEL, so the lock refusal happens in exactly one place.
-// `at`, a click's point on a section's tab, puts the caret there instead of selecting the name.
+// The single rename funnel (so the lock refusal is in one place). `at`, a click on a section's tab, puts
+// the caret there instead of selecting the name.
 export function startInlineEdit(n: MindNode | undefined, { isNew = false, at }: { isNew?: boolean; at?: Pt } = {}): void {
   if (!n) {
     return;
   }
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
-  // A SECTION's label can't live in the card editor — it's a folder TAB of fixed height, and the section's own
-  // `.body` is display:none, so a textarea in there couldn't be focused (see ui-state.ts TitleEdit). Its
-  // tab is renamed on itself instead.
+  // A section's `.body` is display:none, so its tab is renamed on itself.
   if (n.type === 'section') { startTitleEdit(n, { isNew, at }); return; }
   startCardEdit(n, { caret: 'title', isNew });
 }
 
-// ---------- a section's label, renamed in place (on its tab) ----------
-// The float bar's title button (T): open the label with its NAME selected — and on an untitled section,
-// which shows no label at all, seed one first, so the label comes back with a name ready to type over.
-// Esc on a seeded name leaves the section untitled, as it was.
+// An untitled section is seeded a name to type over; Esc leaves it untitled.
 export function editSectionTitle(n: MindNode): void {
   if (isLockedEffective(n)) { setStatus('Locked — can’t rename'); return; }
   startTitleEdit(n, { seed: nextSectionTitle() });
 }
+
 function startTitleEdit(n: MindNode, { isNew = false, seed = '', at }: { isNew?: boolean; seed?: string; at?: Pt } = {}): void {
   if (!n.el) {
     return;
   }
-  if (ui.bodyEdit) {
-    endBodyEdit();                                  // close a card editor first
-  }
-  if (ui.titleEdit) {
-    endTitleEdit();                                // …or any other label editor
-  }
-  touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh section, incl. its creation)
+  endInPlaceEdit();
+  touch(n.id);
   if (state.selId !== n.id || state.sel.size !== 1) {
     selectNode(n.id);
   }
-  // Scoped to a DIRECT child: nodeEl builds `.title-row > .title` for every kind, a folded section
-  // included, and a section's child cards may be DOM-nested inside it — so an unscoped
-  // `.title` lookup could pick a child card's title instead of this node's own.
+  // Child cards may be DOM-nested inside, so only this node's OWN title.
   const titleEl = n.el.querySelector(':scope > .title-row > .title') as HTMLElement;
-  // The label is the section's NAME and nothing else (view/layout.ts sectionName), so that is all the
-  // editor holds: plain text, one line, no `# ` — endTitleEdit writes it back as the heading.
   const raw = sectionName(n) || seed;
-  // A click's point is read off the RENDERED tab, so before the raw text replaces it.
+  // Read off the RENDERED tab, before the raw text replaces it.
   const clicked = at ? offsetAt([titleEl], raw, 0, at) : null;
   ui.titleEdit = { id:n.id, el:titleEl, isNew };
   setCardDraggable(n, false);
-  // The raw text REPLACES the rendered tab, so paintNode's render cache no longer describes what's in
-  // the element — clear the key, or a cancelled (or unchanged) edit leaves the editor's plain text sitting
-  // in the tab: the next paint sees a matching key and skips the re-render. Same reason startCardEdit
-  // clears the body's.
+  // Invalidate paintNode's render cache, or an unchanged edit would leave the raw text in the tab.
   delete titleEl.dataset.md;
-  // An UNNAMED section draws no tab (view/layout.ts sectionLabelled) — reveal the row for the duration, or the
-  // editor would open on a display:none element and swallow every keystroke. paintNode keeps it revealed
-  // while ui.titleEdit points here, and hides it again after the commit if nothing was typed.
+  // An unnamed section's tab is display:none, which would swallow every keystroke.
   n.el.classList.remove('no-title');
   titleEl.textContent = raw;
   titleEl.setAttribute('contenteditable', 'plaintext-only');
   titleEl.classList.add('editing');
-  n.el.classList.add('title-editing');   // what the handles and the ring key on (paintNode keeps it)
+  n.el.classList.add('title-editing');
   titleEl.focus();
   selectTitle(titleEl, clicked);
 }
 
-// The caret at `at` in a label being renamed, or (null) the whole name selected, so typing replaces it.
+// null selects the whole name, so typing replaces it.
 function selectTitle(titleEl: HTMLElement, at: number | null): void {
   const r = document.createRange();
   if (at != null && titleEl.firstChild) {
@@ -255,8 +216,7 @@ function selectTitle(titleEl: HTMLElement, at: number | null): void {
   const s = window.getSelection()!; s.removeAllRanges(); s.addRange(r);
 }
 
-// ALL of the open editor's text selected: the double-click (or double-tap) whose first click opened it
-// (features/activate.ts editOnClick), as FigJam's double-click on a sticky does.
+// For the double-click whose first click opened the editor, as FigJam's does.
 export function selectAllInEditor(): void {
   if (ui.bodyEdit) {
     const ta = ui.bodyEdit.ta;
@@ -266,39 +226,32 @@ export function selectAllInEditor(): void {
     selectTitle(ui.titleEdit.el, null);
   }
 }
-// A card element is `draggable` (the ⌥ card-file export, features/clipboard.ts), and a draggable
-// ANCESTOR is decisive: the browser resolves any drag begun inside it as that ELEMENT's drag, so a
-// mouse can't select text inside a contenteditable while it holds. (A <textarea> is the exception — a
-// text control with a selection outranks the ancestor — which is why the CARD editor needs none of
-// this.) Every teardown path puts it back; exporting a section mid-rename isn't a gesture anyone is making.
+
+// A `draggable` ancestor stops a mouse selecting text in a contenteditable (a textarea is immune).
 function setCardDraggable(n: MindNode | undefined, on: boolean): void {
   if (n?.el) {
     n.el.draggable = on;
   }
 }
-// Live: reflow as the label grows. n.title is untouched (layout uses the live DOM), so a half-typed
-// name can't corrupt anything — and there is nothing to VALIDATE any more (empty and duplicate are
-// both legal), which is what took the old `.invalid` outline away.
+
+// n.title is untouched until the commit; layout reads the live DOM.
 export function onTitleInput(n: MindNode): void {
   if (!ui.titleEdit || ui.titleEdit.id !== n.id) {
     return;
   }
   relayout();
 }
+
 export function onTitleKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.titleEdit || ui.titleEdit.id !== n.id) {
     return;
   }
-  // Enter finishes, ⇧Enter too: a name is one line, and a label shows nothing else.
+  // ⇧Enter finishes too: a name is one line.
   if (e.key === 'Enter' || e.key === 'Tab'){ e.preventDefault(); e.stopPropagation(); endTitleEdit(); }
   else if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); endTitleEdit({ cancel:true }); }
 }
-// Commit (or cancel) a section rename. The text is the NAME, written back as the note's `# ` heading — and an
-// EMPTY commit is accepted: a section may have no name, in which case it shows no label at all (view/layout.ts
-// sectionLabelled), like an untitled FigJam section. The label hangs outside the box, so neither moves
-// the box. The toolbar's title button (features/float-bar.ts) brings a label back.
-// Nothing restores the element's text here: `ui.titleEdit` is nulled first, which lets the paintAll below
-// re-render the tab from the fields — the raw source goes away with the editor.
+
+// An EMPTY name is accepted: the section then shows no label. The repaint restores the tab's text.
 export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   const te = ui.titleEdit;
   if (!te) {
@@ -306,7 +259,6 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   }
   ui.titleEdit = null;                                // null first → the blur handler becomes a no-op
   const n = state.nodes.get(te.id);
-  // One line: a pasted line break folds to a space.
   const val = (te.el.innerText ?? te.el.textContent ?? '').replace(/\s+/g, ' ').trim();
   setCardDraggable(n, true);
   te.el.removeAttribute('contenteditable');
@@ -314,12 +266,12 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
   n?.el?.classList.remove('title-editing');
   te.el.blur();                                       // ensure the keyboard closes on iOS
   if (!n) { commitStep(); return; }
-  if (cancel && te.isNew){                            // Esc on a freshly-created section = cancel creation
+  if (cancel && te.isNew){
     discardNewCard(n.id, 'Cancelled new card');
     return;
   }
   if (!cancel) {
-    // A note written without a heading showed its first line as the name, so that line IS what was edited.
+    // Without a heading the first line was shown as the name, so that line IS what was edited.
     if (!n.title.trim()) {
       const lines = n.body.split('\n');
       lines.splice(Math.max(0, firstTextLine(lines)), 1);
@@ -328,28 +280,20 @@ export function endTitleEdit({ cancel = false }: { cancel?: boolean } = {}): voi
     n.title = val;
   }
   n.dirty = true;
-  remeasure();             // the label may have changed width → reflow
+  remeasure();
   scheduleSave();
-  commitStep();                                       // one undo step per rename session
+  commitStep();
 }
-// Commit whichever in-place editor is open. The ONE call every "something else is happening now" path
-// uses — a canvas tap, an undo, a drag, a scope change — so none of them has to know which of the two
-// sessions it might be closing.
+
+// What every "something else is happening now" path calls, whichever editor is open.
 export function endInPlaceEdit(): void { endBodyEdit(); endTitleEdit(); }
 
-// ---------- the card's ONE editor ----------
-// Shows the RAW markdown of the whole note — title heading included — in a textarea inside `.body`,
-// with the rendered `.title-row` hidden for the duration (styles.css `.node.card-editing`), since the
-// title is in the textarea and showing it twice would read as two fields. Enter inserts a newline
-// (continuing a list item — utils/md-edit.ts has the writing helpers); Esc and blur both commit.
 export function autosizeBody(ta: HTMLTextAreaElement): void {
   ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px';
   paintHighlight(ta);
 }
 
-// The syntax highlight laid BEHIND the card editor's transparent text (styles.css `.body-hl`). Repainted
-// with every size check, since every path that changes the text — typing, the editor's own helpers, an
-// image paste — already ends in one.
+// Laid BEHIND the textarea's transparent text; every path that changes the text ends in autosizeBody.
 function paintHighlight(ta: HTMLTextAreaElement): void {
   const hl = ta.nextElementSibling as HTMLElement | null;
   if (hl?.classList.contains('body-hl')) {
@@ -357,11 +301,8 @@ function paintHighlight(ta: HTMLTextAreaElement): void {
     hl.style.top = ta.offsetTop + 'px';
   }
 }
-// Paste a URL over selected text and the text becomes a LINK — or, if it already is one, keeps its
-// label and takes the new URL (utils/markdown.ts linkPaste owns that rule). Bound by the card's editor.
-// It writes nothing but the textarea and then dispatches `input`, so the editor's own live path runs
-// (the card's reflow) without needing to know this happened.
-// Returns whether it handled the event, so an image paste still gets its turn.
+
+// A URL pasted over selected text makes it a link. False leaves the paste to the next handler.
 function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   const r = linkPaste(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
   if (!r) {
@@ -371,12 +312,9 @@ function pasteUrlLink(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   applyTextEdit(ta, r);
   return true;
 }
-// The ONE way the editor's own helpers (link paste, list Enter, Tab, ⌘B…) write into the textarea:
-// replace only the span that CHANGED, through the browser's own insert, so it lands on the textarea's
-// native undo stack — assigning `ta.value` wipes that stack, and ⌘Z in the editor would then undo
-// nothing. `execCommand` is deprecated but still the only call that does this in Chrome and Safari;
-// where it's refused, `setRangeText` writes the same span (without undo) and we raise the `input`
-// the browser would have, so the editor's live path (autosize, reflow) runs either way.
+
+// The ONE way the editor's helpers write: only the changed span, via execCommand so it lands on the native
+// undo stack (assigning `ta.value` wipes it). Where refused, setRangeText plus a synthetic `input`.
 function applyTextEdit(ta: HTMLTextAreaElement, r: TextEdit): void {
   const a = ta.value, b = r.text;
   let p = 0;
@@ -399,10 +337,10 @@ function applyTextEdit(ta: HTMLTextAreaElement, r: TextEdit): void {
   }
   ta.setSelectionRange(r.start, r.end);
 }
-// Where the caret lands: on the card's NAME (selected, so typing replaces it — the old rename's
-// select-all) or at the end. 'title' on an untitled card lands at the top and types a heading for you,
-// which is the one nudge that keeps F2 meaningful there.
+
+// 'title' selects the name (on an untitled card: the very start); a Pt is a click's point.
 type Caret = 'title' | 'end' | 'all' | Pt;
+
 function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: Caret; isNew?: boolean } = {}): void {
   if (!n) {
     return;
@@ -412,49 +350,32 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
     return;
   }
   if (ui.bodyEdit && ui.bodyEdit.id === n.id) {
-    return;          // already editing this card
+    return;
   }
-  if (ui.bodyEdit) {
-    endBodyEdit();                              // close any other open editor
-  }
-  if (ui.titleEdit) {
-    endTitleEdit();                            // …including a section's label
-  }
-  touch(n.id);   // the whole edit session becomes ONE undo step (for a fresh card, incl. its creation)
+  endInPlaceEdit();
+  touch(n.id);
   if (state.selId !== n.id || state.sel.size !== 1) {
     selectNode(n.id);
   }
   const bodyEl = n.el.querySelector('.body') as HTMLElement;
   const ta = document.createElement('textarea');
-  // The editor opens on the note EXACTLY as it is — a rename of an untitled card used to seed a bare
-  // `# ` for the name to be typed into, and no longer does: putting a marker in a note nobody asked to
-  // name writes markdown the user didn't type, and it had to be swept up again at commit when they
-  // didn't want it. F2 on an untitled card puts the caret at the very start instead (caretIn), which is
-  // where a `# ` would go if that's what they meant.
   const text = cardMarkdown(n);
-  // A click's point is read off the RENDERED note, so it has to be read before the textarea replaces it.
-  // From the very start, title included: a card's heading is drawn in its `.body` like the rest.
+  // Read off the RENDERED note, before the textarea replaces it.
   const clicked = typeof caret === 'object' ? offsetAt([bodyEl], text, 0, caret) : null;
   ta.className = 'body-edit'; ta.spellcheck = true; ta.value = text;
-  // `isNew` marks a just-created card: Escape then cancels the whole creation (deletes it), rather
-  // than just reverting the edit the way it does for an existing card.
-  ta.rows = 1;   // a textarea's default is 2 rows: a one-line card would grow a line just by opening
+  ta.rows = 1;   // the default 2 would grow a one-line card just by opening
   ui.bodyEdit = { id:n.id, orig:text, saved:text, el:bodyEl, ta, isNew, holdH: n.el.getBoundingClientRect().height / (state.view.k || 1) };
-  n.el.classList.remove('no-body');                            // give the body slot room while editing
-  // The textarea REPLACES the rendered note, so the render cache paintNode keys `.body` on is no longer
-  // describing what's in there — clear it, or committing an edit that changed nothing would leave the
-  // textarea sitting in the card (the guarded re-render would see a matching key and skip).
+  n.el.classList.remove('no-body');
+  // Invalidate paintNode's render cache, or an unchanged edit would leave the textarea in the card.
   delete bodyEl.dataset.md;
   const hl = document.createElement('pre');
   hl.className = 'body-hl'; hl.setAttribute('aria-hidden', 'true');
-  ta.classList.add('with-hl');   // its own text goes transparent over the highlight (styles.css)
+  ta.classList.add('with-hl');
   bodyEl.innerHTML = ''; bodyEl.append(ta, hl);   // the textarea stays first: .body's first-child spacing is its
   bodyEl.classList.add('editing');
-  // typing: keep the textarea sized to its content and reflow siblings as the card grows/shrinks
   let lineCount = text.split('\n').length;
   ta.addEventListener('input', (e) => {
-    // A line deleted, cut or pasted into a numbered list renumbers it (md-edit.ts renumber) — only when
-    // the LINE COUNT changed, so fixing a digit by hand isn't fought over keystroke by keystroke.
+    // Renumber lists only when the LINE COUNT changed, so a digit fixed by hand isn't fought over.
     const lines = ta.value.split('\n').length, kind = (e as InputEvent).inputType ?? '';
     if (lines !== lineCount && (kind.startsWith('delete') || kind.startsWith('insertFrom'))) {
       const r = renumber({ text: ta.value, start: ta.selectionStart, end: ta.selectionEnd });
@@ -469,18 +390,16 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
     clearTimeout(idleSave);
     idleSave = window.setTimeout(flushOpenEdit, IDLE_SAVE_MS);
   });
-  // moving the caret by keyboard walks the view along too
   ta.addEventListener('keyup', (e) => {
     if (/^(Arrow|Page|Home|End)/.test(e.key)) {
-      paintHighlight(ta);              // the focus follows the caret
+      paintHighlight(ta);
       followCaret(ta);
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
         offerNames(ta, n);
       }
     }
   });
-  // A triple-click on a HEADING selects its whole section (md-edit.ts headingSection) — ready to drag out
-  // as a card of its own, or ⌘⇧E. Anywhere else it is the browser's own line select.
+  // A triple-click on a HEADING selects its whole section.
   ta.addEventListener('click', (e) => {
     const r = e.detail === 3 ? headingSection(ta.value, ta.selectionStart) : null;
     if (r) {
@@ -491,32 +410,33 @@ function startCardEdit(n: MindNode, { caret = 'end', isNew = false }: { caret?: 
   });
   ta.addEventListener('keydown', (e) => onBodyKeydown(e, n));
   ta.addEventListener('blur',    () => {
-    // (Dragging this card's edge takes the focus too, but the editor stays open: features/resize.ts gives it back.)
+    // A resize takes the focus too, and gives it back.
     if (ui.bodyEdit && ui.bodyEdit.id === n.id && ui.resizingId !== n.id) {
       endBodyEdit();
     }
   });
-  // a URL over a selection links it; anything else falls through to the image paste / the native insert
   ta.addEventListener('paste',   (e) => {
     if (!pasteSheet(e, ta) && !pasteUrlLink(e, ta) && !pasteRich(e, ta)) {
       onBodyPaste(e);
     }
   });
-  ta.addEventListener('pointerdown', (e) => e.stopPropagation());   // place the caret, don't drag the card
+  ta.addEventListener('pointerdown', (e) => e.stopPropagation());
   ta.focus({ preventScroll: true });   // the camera, not a scroll of #stage, brings the caret into view
-  autosizeBody(ta);              // size to content first so the card's real height is known…
-  relayout();    // …then reflow siblings around it (not just after a newline)
+  autosizeBody(ta);
+  relayout();
   const [from, to] = clicked != null ? [clicked, clicked]
     : caret === 'all' ? [0, text.length]
     : caretIn(text, caret === 'title' ? 'title' : 'end');
   ta.setSelectionRange(from, to);
   scrollCaretIntoCard(ta);
-  paintHighlight(ta);            // the focus starts where the caret landed
+  paintHighlight(ta);
 }
-// Rich text copied from a web page, Google Docs, Word… pastes as markdown (utils/html-md.ts), keeping its links,
-// bold, lists and tables; ⌘⇧V (the system's "paste as plain text") pastes the plain text, as it always did.
-// A picture on the clipboard is left to the image paste (features/attachments.ts), which saves the file.
+
+// ⌘⇧V's keydown opens this window, marking the paste that follows as plain.
+const PLAIN_PASTE_WINDOW_MS = 1000;
 let plainUntil = 0;
+
+// Rich text pastes as markdown; a picture is left to the image paste.
 function pasteRich(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   const plain = Date.now() < plainUntil;
   plainUntil = 0;
@@ -533,7 +453,7 @@ function pasteRich(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   applyTextEdit(ta, { text: v.slice(0, a) + md + v.slice(b), start: a + md.length, end: a + md.length });
   return true;
 }
-// Cells copied from a spreadsheet paste as a markdown table (md-edit.ts pasteTable).
+
 function pasteSheet(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   const r = pasteTable(ta.value, ta.selectionStart, ta.selectionEnd, e.clipboardData?.getData('text/plain') ?? '');
   if (!r) {
@@ -543,10 +463,8 @@ function pasteSheet(e: ClipboardEvent, ta: HTMLTextAreaElement): boolean {
   applyTextEdit(ta, r);
   return true;
 }
-// Where in the SOURCE a point on rendered text is: the text node under the point and the offset into
-// it (the browser's own hit test), mapped through md-edit.ts sourceOffset, reading the source from
-// `from`. `roots` are the rendered elements, in source order. Null for a miss (an image, a gap), leaving
-// the caret where the caller puts it by default.
+
+// Where in the SOURCE a point on rendered text is; `roots` in source order. Null for a miss.
 function offsetAt(roots: HTMLElement[], source: string, from: number, at: Pt): number | null {
   const d = document as Document & { caretRangeFromPoint?: (x: number, y: number) => Range | null };
   let node: Node | null = null, off = 0;
@@ -570,16 +488,11 @@ function offsetAt(roots: HTMLElement[], source: string, from: number, at: Pt): n
   return hit < 0 ? null : sourceOffset(source, from, texts, hit, off);
 }
 
-// "Edit the note" — the same one editor, caret past the name rather than on it. Kept as its own name
-// because that's what its callers mean (a click on the selected card, a double-click, `E`, the pen). A
-// click passes its point, and the caret lands on the letter it hit; a double-click passes 'all'.
 export function startBodyEdit(n: MindNode, at?: Pt | 'all'): void {
   startCardEdit(n, { caret: at ?? 'end' });
 }
-// Drop the editor WITHOUT reading the textarea back, because the caller (crud.ts cutBodyRange) has
-// already written the shortened n.body and endBodyEdit would commit the textarea's pre-cut value
-// straight over it. The textarea element itself goes with the next paintNode, which re-renders .body
-// once no editor claims this card.
+
+// WITHOUT reading the textarea back: the caller has already written n.body. The next paintNode removes it.
 export function dropBodyEdit(): void {
   const be = ui.bodyEdit;
   if (!be) {
@@ -589,9 +502,8 @@ export function dropBodyEdit(): void {
   closeCompletion();
   be.el.classList.remove('editing');
 }
-// Live, as the user types: only this card's height and the lines meeting it can change (nothing flows),
-// so only they repaint — not the whole map per keystroke. n.body isn't touched here, so an in-progress
-// edit can't corrupt anything — the textarea content is preserved by paintNode.
+
+// Only this card and its lines can change while typing, so not the whole map per keystroke.
 function onBodyInput(n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) {
     return;
@@ -599,24 +511,24 @@ function onBodyInput(n: MindNode): void {
   paintNode(n);
   paintFreeEdges();
 }
+
 function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
   if (!ui.bodyEdit || ui.bodyEdit.id !== n.id) {
     return;
   }
-  e.stopPropagation();                                  // keep canvas/card shortcuts out while typing
+  e.stopPropagation();
   if (e.isComposing) {
-    return;                            // an IME owns Enter/Tab while it composes
+    return;
   }
   if (completionKey(e)) {
-    return;                            // ↑↓, Enter, Tab and Esc are the list's while it's up
+    return;
   }
   const ta = ui.bodyEdit.ta, mod = e.metaKey || e.ctrlKey, k = e.key.toLowerCase();
   if (mod && e.shiftKey && k === 'v') {
-    plainUntil = Date.now() + 1000;     // the paste this starts is a plain one (pasteRich)
+    plainUntil = Date.now() + PLAIN_PASTE_WINDOW_MS;
   }
   const edit = (r: TextEdit | null): void => { if (r){ e.preventDefault(); applyTextEdit(ta, r); } };
-  // Esc is "done", like a click away — never "throw it away": a stray Esc must not cost a long edit, and
-  // ⌘Z takes the whole session back. Only a FRESH card nobody typed into is cancelled (endBodyEdit).
+  // Esc is "done", never "throw it away": a stray Esc must not cost a long edit.
   if (e.key === 'Escape') {
     e.preventDefault();
     endBodyEdit({ cancel: !!ui.bodyEdit.isNew });
@@ -627,20 +539,14 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
     e.preventDefault();
     extractToCard();
   }
-  // A plain Enter in a table adds a row, in a list item starts the next one (an empty one ends either);
-  // anywhere else it falls through and the textarea inserts a newline (notes are multi-line). ⇧Enter is
-  // always a bare newline — the way to write a second paragraph inside an item.
+  // ⇧Enter is always a bare newline: a second paragraph inside a list item.
   else if (e.key === 'Enter' && !e.shiftKey && !mod && !e.altKey) {
     const [v, a, b] = [ta.value, ta.selectionStart, ta.selectionEnd];
     edit(tableEnter(v, a, b) ?? renumbered(listEnter(v, a, b)));
   }
-  // Backspace just past a list marker takes the marker (a nested item steps out first).
   else if (e.key === 'Backspace' && !mod && !e.altKey && !e.shiftKey) {
     edit(renumbered(listBackspace(ta.value, ta.selectionStart, ta.selectionEnd)));
   }
-  // ⌘B / ⌘I / ⌘⇧X wrap, ⌘L makes tasks, Tab / ⇧Tab nest (in a table: walk the cells — and never move focus,
-  // which would blur the card shut), ⌥↑ / ⌥↓ move lines: md-edit.ts EDIT_COMMANDS, the list the
-  // right-click menu shows too.
   else {
     const cmd = editCommandFor(e);
     if (cmd) {
@@ -648,11 +554,8 @@ function onBodyKeydown(e: KeyboardEvent, n: MindNode): void {
     }
   }
 }
-// ---------- the editor's right-click menu ----------
-// Every command the editor knows, with its key, where the caret is (features/context-menu.ts opens it on a
-// right-click inside the card's text): the formats in a Format submenu, and in a table an Edit table one. The menu takes no focus (its pointerdown is held), so the textarea
-// keeps its caret and selection and each entry acts on them, exactly as its key would. ⇧-right-click
-// still gets the browser's own menu, for spelling suggestions.
+
+// The menu takes no focus, so each entry acts on the textarea's selection exactly as its key would.
 export function editorMenuEntries(): MenuEntry[] {
   const be = ui.bodyEdit;
   if (!be) {
@@ -680,7 +583,6 @@ export function editorMenuEntries(): MenuEntry[] {
       offerNames(ta, n);
     }
   };
-  // iA Writer's Format menu, cut to what a card draws: block formats, then inline ones, then what it adds.
   const format: MenuEntry[] = [
     { label: 'Heading', sub: commands('h1', 'h2', 'h3', 'h4', 'h5', 'h6') },
     { label: 'List', sub: commands('bullet', 'number', 'task') },
@@ -710,10 +612,9 @@ export function editorMenuEntries(): MenuEntry[] {
     { label: 'Spelling suggestions', shortcut: '⇧ right-click', run: () => {}, disabled: true },
   ];
 }
-// The menu's Paste: what a ⌘V would paste, read off the clipboard and handed to the editor's own paste path
-// as a paste event, so a URL over a selection still links, a sheet still becomes a table and rich text still
-// becomes markdown (each handler reads only `clipboardData`). Nobody taking it inserts the plain text. Plain
-// skips all that. The browser may ask for permission to read the clipboard the first time.
+
+// Replays the clipboard as a synthetic paste event through the editor's own handlers; if none takes it,
+// the plain text is inserted.
 async function pasteClipboard(ta: HTMLTextAreaElement, plain: boolean): Promise<void> {
   const still = (): boolean => ui.bodyEdit?.ta === ta;
   try {
@@ -743,10 +644,8 @@ async function pasteClipboard(ta: HTMLTextAreaElement, plain: boolean): Promise<
     setStatus('Couldn’t read the clipboard — use ⌘V');
   }
 }
-// Commit (or cancel) the edit. Commit SPLITS the textarea back into the card's title and note
-// (splitHeading — the leading `# ` line is the name, everything else the body, and no heading means
-// the card is untitled); cancel puts back what the note held when the edit opened (a mid-edit flush may
-// already have written past it). Either way we drop the textarea and re-render.
+
+// Cancel restores the note as it was when the edit opened (a mid-edit flush may have written past it).
 export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void {
   const be = ui.bodyEdit;
   if (!be) {
@@ -756,38 +655,30 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
   closeCompletion();
   clearTimeout(idleSave);
   const editH = state.nodes.get(be.id)?.el?.offsetHeight ?? 0;   // read before anything repaints the card
-  // A card taller than the screen is a document you are IN: remember where the caret's line is on screen,
-  // so the same line can be put back there once the note renders (below).
+  // A card taller than the screen keeps the caret's line where it is on screen.
   const keepPlace = !cancel && editH * (state.view.k || 1) > stageSize().height
     ? { y: caretOnScreen(be.ta).top, text: be.ta.value, pos: be.ta.selectionEnd } : null;
   be.ta.blur();                                         // ensure keyboard closes on iOS when ended by keypress
   const n = state.nodes.get(be.id);
   be.el.classList.remove('editing');
   if (!n) { commitStep(); return; }
-  // An EMPTY card is allowed: clicking away from a fresh one you never typed into keeps it, a blank
-  // sticky. It reads as "No-title N" in a list (nodeLabel) and stays blank across a reload, which is what
-  // serializeMd's `mm_blank` is for. Only Escape on a fresh, still-empty card cancels the creation.
+  // Only Esc on a fresh, still-empty card cancels it; a click away keeps a blank sticky.
   if (be.isNew && cancel && !be.ta.value.trim()){
     discardNewCard(n.id);
     return;
   }
-  // …and one with text in it is KEPT, whichever way the edit ends: Esc on a fresh card is "done
-  // typing", not "throw this away" (capture costs nothing — docs/PRODUCT.md). ⌘Z still removes it.
   if (be.isNew) {
     cancel = false;
   }
   const text = cancel ? be.orig : be.ta.value;
   const changed = text !== be.orig;
   if (text !== be.saved){
-    // No sweeping-up of a bare `# ` first line here either: nothing puts one there but the user now,
-    // and deleting what somebody typed is worse than leaving an empty heading in their note.
     setNoteText(n, text);
     n.dirty = true;
   }
-  remeasure();               // re-render and reflow the height change
+  remeasure();
 
-  // Confirming never changes the card's height either: it stays what it was while edited (BodyEdit.holdH).
-  // Text now taller than that is CLIPPED (n.clip), text now shorter leaves it standing at that minimum.
+  // Committing keeps the height it had while edited: taller text is clipped, shorter leaves a minimum.
   const hold = be.holdH ?? 0;
   const pinned = !n.collapsed && !heightIsDeclared(n) && hold > 0 && Math.abs((n.el?.offsetHeight ?? hold) - hold) > 1;
   if (pinned) {
@@ -796,8 +687,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
     n.dirty = true;
     remeasure();
   }
-  // The text decides what the bar offers (a card with lines to tuck away can fold): the bar was synced for
-  // the text the edit STARTED with, and the card often stays selected after it ends.
+  // What the bar offers (e.g. fold) depends on the text.
   if (changed || pinned || be.saved !== be.orig) { scheduleSave(); syncFloatBar(); }
   if (keepPlace) {
     const block = renderedBlockFor(be.el, keepPlace.text, keepPlace.pos);
@@ -806,7 +696,7 @@ export function endBodyEdit({ cancel = false }: { cancel?: boolean } = {}): void
       jumpViewTo(state.view.x, state.view.y + dy);
     }
   }
-  commitStep();                                         // no-op sessions (cancel/unchanged) are discarded
+  commitStep();
 }
 
 export function installInlineEdit(): void {
@@ -818,9 +708,7 @@ export function installInlineEdit(): void {
   window.addEventListener('pagehide', flushNow);
   window.addEventListener('beforeunload', flushNow);
 
-  // The browser scrolls a focused field into view by scrolling its nearest scrollable box — #stage, which is
-  // `overflow:hidden` and must never scroll (it would shift the canvas under every hit test). followCaret
-  // does that job with the camera instead.
+  // The browser scrolls a focused field into view by scrolling #stage, which would shift every hit test.
   stage.addEventListener('scroll', () => {
     if (stage.scrollTop || stage.scrollLeft) {
       stage.scrollTop = 0;

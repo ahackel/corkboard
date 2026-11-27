@@ -1,5 +1,4 @@
-// The picture export's PDF: every cross-reference must point at the object it names, or readers
-// reject (or silently "repair") the file.
+// Every cross-reference must point at the object it names, or readers reject (or "repair") the file.
 import { describe, expect, it } from 'vitest';
 import { jpegPdf } from '../src/utils/pdf.js';
 

@@ -1,19 +1,18 @@
-// The card editor's SYNTAX HIGHLIGHT: the raw markdown as HTML that keeps EVERY character of the source,
-// in order, wrapped in spans (features/inline-edit.ts lays it behind the transparent textarea). Spans may
-// change colour, opacity, background and decoration — never anything that moves a glyph — so the
-// painted text stays exactly under the textarea's caret and selection. Pinned by tests/md-highlight.test.ts.
+// The editor's syntax highlight: EVERY source character, in order, in spans that never move a glyph
+// (no size or spacing changes), so the painted text stays exactly under the textarea's caret.
 import { esc } from './markdown.js';
 import { TAG_CH } from './tags.js';
 
 const span = (cls: string, s: string): string => s ? `<span class="${cls}">${esc(s)}</span>` : '';
 
-// Inline marks, in the order they win where two could start at the same place.
+// In the order they win where two could start at the same place.
 const INLINE = new RegExp([
   String.raw`(?<code>(?<tick>` + '`+' + String.raw`)[^\n]*?\k<tick>)`,
   String.raw`(?<wiki>!?\[\[[^\]\n]+\]\])`,
   String.raw`(?<link>!?\[[^\]\n]*\]\([^)\n]*\))`,
   String.raw`(?<em>(?<m>\*\*|~~|==)(?=\S)[^\n]*?\S\k<m>|\*(?=[^\s*])[^\n*]*?\*`
-    // `_` and `__` only at words' edges, so snake_case_word stays plain (as in CommonMark)
+
+    // `_`/`__` only at word edges, so snake_case_word stays plain, as in CommonMark.
     + String.raw`|(?<![\p{L}\p{N}])(?:__(?=\S)[^\n]*?\S__|_(?=[^\s_])[^\n_]*?_)(?![\p{L}\p{N}]))`,
   String.raw`(?<tag>(?<=^|[\s(\[{,;])#${TAG_CH}+)`,
 ].join('|'), 'gu');
@@ -73,9 +72,8 @@ function line(s: string): string {
   return inline(s);
 }
 
-// FOCUS: given the caret, the lines outside the block it is in (the run of lines between blank ones) are
-// wrapped in `hl-far`, which fades them — iA Writer's focus mode, so a long note reads as the one
-// paragraph you're writing. Each line's HTML is self-contained, so wrapping whole lines is safe.
+// iA Writer's focus mode: lines outside the caret's block fade. Each line's HTML is self-contained, so
+// wrapping whole lines is safe.
 export function highlightMarkdown(src: string, caret?: number): string {
   const lines = src.split('\n');
   let fence = '';

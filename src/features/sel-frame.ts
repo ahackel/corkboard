@@ -1,10 +1,5 @@
-// ---------- the SELECTION FRAME: one box round a multi-selection, moving it and scaling it as one ----------
-// FigJam's: select two or more and a single frame is drawn round all of them, with the same square
-// corner handles a lone selection wears. It works like ONE card's box: its empty interior drags the
-// whole selection, and its corners and edges scale it. Those grips sit in two layers (styles.css): the
-// outline and the corner squares above everything, the interior and the edge bands BELOW every card, so
-// a card, its tags and a section's tab keep their own presses. Where a member's edge IS the frame's edge,
-// that member's own resize band scales the group instead of the one card (memberEdgeResize).
+// One frame round a multi-selection: its interior drags the group, its corners and edges scale it.
+// Interior and edge bands sit BELOW every card (styles.css), so cards keep their own presses.
 import { type MindNode, state, world, isStack } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isHidden, isLockedEffective, outermost, childrenOf } from '../utils/model.js';
@@ -35,7 +30,7 @@ function frameEl(): HTMLElement {
   const fill = document.createElement('div');
   fill.className = 'sf-fill';
 
-  // A plain press only: Space/middle-button still pans and ⌘/Ctrl still starts an adding marquee (gestures.ts).
+  // A plain press only: Space/middle-button pans and ⌘/Ctrl starts an adding marquee.
   fill.addEventListener('pointerdown', (e) => {
     if (e.button === 0 && !ui.spaceHeld && !e.metaKey && !e.ctrlKey) {
       startSelectionDrag(e);
@@ -54,7 +49,6 @@ function frameEl(): HTMLElement {
   return frame;
 }
 
-// The selected nodes actually on the canvas — a frame round an invisible card would point at nothing.
 function members(): MindNode[] {
   const out: MindNode[] = [];
   for (const id of state.sel) {
@@ -70,8 +64,6 @@ function boundsOf(ns: MindNode[]): Rect {
   return unionRect(ns.map(nodeRect));
 }
 
-// Redraw the frame round the selection as it is now. Called wherever the selection or the geometry of
-// what's in it changes: the selection funnel, every full paint, a drag frame, a resize step.
 export function syncSelFrame(): void {
   const ns = state.sel.size > 1 ? members() : [];
   if (ns.length < 2) {
@@ -88,10 +80,8 @@ export function syncSelFrame(): void {
   el.classList.toggle('locked', ns.some(isLockedEffective));
 }
 
-// How one node follows the frame. A node with a size of its own to scale (an open section, a card, a
-// picture) maps its whole rect through the frame and its contents follow the same mapping; anything
-// sized by what it SHOWS (a folded chip or pill, a pile, a folded picture) keeps its size and is only
-// carried, its subtree with it, by the shift of its own top-left corner.
+// A node sized by what it SHOWS (chip, pill, pile, folded picture) is only carried by its corner's shift,
+// its subtree with it; anything else maps its whole rect through the frame.
 type Plan =
   | { n: MindNode; mode: 'move'; x: number; y: number; ax: number; ay: number }
   | { n: MindNode; mode: 'box' | 'card' | 'image'; x: number; y: number; w: number; h: number; minH: number; natural: number; aspect: number };
@@ -119,10 +109,7 @@ function planFor(n: MindNode, out: Plan[], anchor: MindNode | null): void {
   }
 }
 
-// A press on a selected member's own resize band, in a multi-selection: when that edge lies ON the frame
-// (the card is the outermost on that side) it is the frame's edge too, so it scales the whole group —
-// the part of the frame's edge the card covers would otherwise be the one stretch you couldn't grab.
-// An inner edge still resizes just its card. Returns whether the group took the press.
+// A member's edge that lies ON the frame scales the whole group. Returns whether the group took the press.
 export function memberEdgeResize(e: PointerEvent, n: MindNode, dir: Dir): boolean {
   if (state.sel.size < 2 || !state.sel.has(n.id)) {
     return false;
@@ -138,10 +125,7 @@ export function memberEdgeResize(e: PointerEvent, n: MindNode, dir: Dir): boolea
   return startGroupResize(e, groupDir);
 }
 
-// Drag a frame corner or edge: every selected node (and everything inside a selected section) scales
-// with the frame, the opposite side held still. The frame stops shrinking where its tightest member
-// reaches its minimum, so the arrangement keeps its proportions instead of piling up at the floor.
-// Shift on a corner scales both axes alike. The dragged side lands on the grid, as a resized box's does.
+// The frame stops shrinking at its tightest member's minimum, so the arrangement keeps its proportions.
 function startGroupResize(e: PointerEvent, dir: Dir): boolean {
   const ns = members();
   if (ns.length < 2 || ns.some(isLockedEffective)) {
@@ -177,8 +161,8 @@ function startGroupResize(e: PointerEvent, dir: Dir): boolean {
       if (p.mode === 'move') {
         n.x = p.x + mapX(p.ax) - p.ax; n.y = p.y + mapY(p.ay) - p.ay;
       } else if (p.mode === 'image') {
-        // A picture keeps its own aspect: it scales by the axis being dragged (the smaller of the two,
-        // on a corner), centred on where its centre maps to.
+
+        // A picture keeps its aspect, scaled by the dragged axis (the smaller on a corner) about its centre.
         const s = hasX && hasY ? Math.min(sx, sy) : hasX ? sx : sy;
         const w = Math.max(minWOf(n), p.w * s), h = Math.max(p.minH, w / p.aspect);
         n.x = mapX(p.x + p.w / 2) - w / 2; n.y = mapY(p.y + p.h / 2) - h / 2;
@@ -231,8 +215,6 @@ function startGroupResize(e: PointerEvent, dir: Dir): boolean {
       }
       paintNode(n);
     }
-
-    // A resized SECTION takes in what it now covers and lets go of what it no longer does.
     settleSections([...scaled].filter(isSection).map(n => n.id));
     relayout(); scheduleSave(); commitStep();
     syncFloatBar();

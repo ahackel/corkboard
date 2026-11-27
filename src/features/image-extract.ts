@@ -1,10 +1,5 @@
-// ---------- alt-drag an inline image OUT of a card ----------
-// Body images are pointer-events:none (clicks/drags fall through to the card), so extraction is
-// initiated by bindNodeDrag: an Alt-press whose point sits over a body image on a NON-image card
-// starts this gesture instead of a card drag. A floating preview rides the cursor; on drop the
-// image either MOVES into the card released on (dashed .drop-merge highlight) or becomes a fresh
-// image-only card on empty canvas. Escape / released-nowhere-valid still creates the card at the
-// drop point (a canvas drop); pointercancel or a no-move press leaves the card untouched.
+// ⌥-drag an inline image OUT of a card (started by bindNodeDrag): it moves into the card it is
+// dropped on, else becomes an image card where it lands. Cancel or a no-move press changes nothing.
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { nodeAtTarget, takesDrop } from '../utils/model.js';
@@ -13,15 +8,16 @@ import { extractImage } from './crud.js';
 import { classMarker, trackPointer } from '../utils/dom.js';
 import { IMAGE_W, IMAGE_H, snapPt } from '../view/geometry.js';
 
-// True while an image-extract gesture is live. A card is natively `draggable` (⌥-drag exports it
-// as a .md file, see clipboard.ts bindCardFileDrag) — that native dragstart would otherwise hijack
-// this pointer gesture, so the export handler bails while this is set.
+// A card is natively `draggable` (⌥-drag exports a .md); that dragstart bails while this is true,
+// or it would hijack the gesture.
 export function imageExtractInProgress(): boolean { return ui.extracting; }
 
 const setHover = classMarker('drop-merge');
-// The card under a screen point that this image can MOVE into: a plain body card, never the source,
-// an image card or a section. The floating preview is hidden for the hit-test so it
-// never shadows the card beneath it.
+const PREVIEW_W = 140;
+const PREVIEW_MIN_H = 40;
+const MOVE_THRESHOLD_PX = 3;
+
+// The preview is hidden for the hit-test so it never shadows the card beneath.
 function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLElement): { el: HTMLElement; id: string } | null {
   preview.style.display = 'none';
   const under = document.elementFromPoint(x, y) as HTMLElement | null;
@@ -32,6 +28,7 @@ function moveTargetAt(x: number, y: number, sourceId: string, preview: HTMLEleme
   }
   return { el: node.el, id: node.id };
 }
+
 export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, sx: number, sy: number): void {
   if (state.singleNote) {
     return;
@@ -45,8 +42,7 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
   const nw = img.naturalWidth || IMAGE_W, nh = img.naturalHeight || IMAGE_H;
   const cardW = Math.round(Math.min(IMAGE_W, nw));
   const cardH = Math.round(cardW * (nh / nw)) || IMAGE_H;
-  // floating cursor preview (a small thumbnail of the grabbed image)
-  const pw = 140, ph = Math.max(40, Math.round(pw * (nh / nw)));
+  const pw = PREVIEW_W, ph = Math.max(PREVIEW_MIN_H, Math.round(pw * (nh / nw)));
   const preview = document.createElement('div');
   preview.className = 'image-extract-preview';
   preview.style.width = pw + 'px'; preview.style.height = ph + 'px';
@@ -63,7 +59,7 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
     ui.extracting = false;
   };
   const onMove = (ev: PointerEvent): void => {
-    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > 3) {
+    if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) > MOVE_THRESHOLD_PX) {
       moved = true;
     }
     place(ev.clientX, ev.clientY);
@@ -73,13 +69,13 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
     const t = moveTargetAt(ev.clientX, ev.clientY, source.id, preview);
     cleanup();
     if (!moved) {
-      return;                                   // a plain Alt-click on the image: no change
+      return;
     }
     if (t) {
       extractImage(source.id, path, alt, { toCardId: t.id });
     } else {
       const p = screenToWorld(ev.clientX, ev.clientY);
-      const at = snapPt({ x: p.x - cardW / 2, y: p.y - cardH / 2 });   // on the grid, like any placed card
+      const at = snapPt({ x: p.x - cardW / 2, y: p.y - cardH / 2 });
       extractImage(source.id, path, alt, { x: at.x, y: at.y, w: cardW, h: cardH });
     }
   };
@@ -88,6 +84,5 @@ export function startImageExtractDrag(source: MindNode, img: HTMLImageElement, s
       cleanup();
     }
   };
-  // an interrupted gesture (tab switch, etc.) leaves the card as it is
   const stop = trackPointer({ move: onMove, up: onUp, cancel: cleanup, key: onKey });
 }

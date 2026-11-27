@@ -1,178 +1,108 @@
-// ============================================================
-// Shared mutable UI state for the interactive canvas subsystem (drag, in-place editing,
-// pan/zoom gestures, image-drop). Like `state`, this is ONE object whose PROPERTIES are
-// mutated in place (never reassign `ui`) so the live interaction state is shared across the
-// render core (render.ts) and the feature modules split out of it (drag / inline-edit / gestures
-// / attachments). Imported `let` bindings are read-only, hence the holder-object pattern.
-// ============================================================
+// Live interaction state shared by the render core and the features. Mutate `ui`'s properties in
+// place: an imported `let` would be read-only.
 import type { EdgeSide, MindNode } from './state.js';
 
 export interface Pt { x: number; y: number }
 
-// A live node drag (moves a whole subtree, or the multi-selection). `active` is the card being
-// dragged/dropped; `targets` follow the cursor (or, after a Shift-clone, just the clones).
+// `targets` follow the cursor (after a Shift-clone, just the clones).
 export interface Drag {
   n: MindNode; active: MindNode; multi: boolean;
   sx: number; sy: number; cx: number; cy: number;
   start: Map<string, Pt>; targets: Map<string, Pt>; origins: Map<string, Pt>;
-  // Top-level roots of the drag (a single-node drag's [n.id], or a multi-selection's members
-  // whose own parent isn't ALSO selected — descendants ride along with their selected ancestor).
-  selRoots: string[];
-  // The parent the active card would have if released now — the section its centre is in, or null for
-  // the top level (view/layout.ts sectionAt). Read by effectiveColor to preview an inherited colour.
-  moved: boolean; dropTarget: string | null;
+  selRoots: string[];              // the outermost dragged nodes; descendants ride along
+  moved: boolean;
+  dropTarget: string | null;       // the section a release would land in now; previews colour
   alt: boolean; shift: boolean; cloned: boolean;
   meta: boolean; touch: boolean;
 
-  // Pressed on the selection FRAME's empty interior (features/sel-frame.ts), not on a card: a plain
-  // click there leaves the selection as it is instead of narrowing it to the card that anchors the drag.
-  fromFrame?: boolean;
-  // A plain press on the card that was already the ONLY selection: released without moving, it opens the
-  // card's text (features/activate.ts editOnClick) instead of just selecting it again.
-  reclick?: boolean;
+  fromFrame?: boolean;             // pressed on the selection frame: a click keeps the selection
+  reclick?: boolean;               // pressed on the sole selection: a click opens its editor
   clones?: MindNode[] | null;
-  // Alt-dragging CARD(s) over another card: the target card's id to fold their notes
-  // into on drop (crud.ts mergeCardsInto) instead of reparenting. Set by updateDropTarget, consumed
-  // by dragPointerUp. Not a reparent-with-a-landing, so it's its own field rather than a dropMode:
-  // dropTarget stays null and every other preview stands down.
-  cardMerge?: string | null;
-  // Over a folded section's pill or a crumb of the open-section path: the drop FILES the dragged cards
-  // there (drag.ts fileAway) instead of placing them where they were let go. `beside` is the section the
-  // cards come out of, for a crumb — they land next to it.
-  chute?: Chute | null;
-
-  // Over a STACK, or held over a plain card long enough (features/stacks.ts PILE_HOVER_MS): the drop PILES
-  // the dragged cards there. `make` = the target is a card, and a new stack is made around it.
-  pile?: { id: string; make: boolean } | null;
-
-  // The card the pointer is resting on, and since when — the hover that arms a new stack.
+  cardMerge?: string | null;       // ⌥ over a card: merge into it; dropTarget stays null
+  chute?: Chute | null;            // over a folded pill or a crumb: file the cards there
+  pile?: { id: string; make: boolean } | null;   // `make`: the target is a card, so wrap it in a stack
   pileHover?: { id: string; since: number } | null;
-
-  // Dragging a card of the FANNED stack within the fan: the place in the pile it would take.
-  fanSlot?: number | null;
+  fanSlot?: number | null;         // the slot within the fanned stack
 }
+
+// `beside`: the section the cards came out of, for a crumb; they land next to it.
 export interface Chute { parent: string | null; beside?: string }
-// A card's editing session. ONE per card and one field: a card's title is the leading `# ` line of
-// its text (utils/frontmatter.ts splitHeading), so there is no separate title editor to hold — the
-// textarea holds the whole note, heading and all. `isNew` marks a just-created card, where Escape
-// cancels the CREATION rather than just the edit (it used to live on the title editor).
-// `holdH` is the card's height when the editor opened: held as its min-height until it closes, so a
-// card never jumps between its rendered and its raw size (render.ts paintNode).
-// `saved` is the text the NOTE holds right now: `orig` until the open editor is written through mid-edit
-// (features/inline-edit.ts flushOpenEdit), then whatever that last wrote.
+
+// A card's title is its text's first line, so ONE textarea holds the whole note. `holdH` pins the
+// opening height so the card doesn't jump; `saved` is what the note holds now (after flushOpenEdit).
 export interface BodyEdit { id: string; orig: string; saved: string; el: HTMLElement; ta: HTMLTextAreaElement; isNew?: boolean; holdH?: number; }
-// A SECTION's label being renamed in place, on its tab.
-// A card has no session of its own kind: its name is the leading `# ` line of the one text field above.
-// A section can't do that, and the reason is structural rather than stylistic — its `.body` is
-// `display:none` (styles.css: a section's box holds child cards, not its own note), and an editor inside a
-// hidden element can't be focused or typed into. So its label is edited ON itself, one line, in a
-// contenteditable. Same contract as BodyEdit otherwise: while set, persistence freezes this node's
-// filename and skips the focus-reload.
-// No `orig`: unlike a card's editor there is nothing to compare against on commit — an empty label
-// falls back to what the node had, and the element's own text is the only value read.
+
+// A section's `.body` is display:none, so its label is edited ON its tab, in a contenteditable.
 export interface TitleEdit { id: string; el: HTMLElement; isNew?: boolean; }
 export interface PanState { sx: number; sy: number; ox: number; oy: number; }
 export interface Marquee { sx: number; sy: number; add: boolean; base: Set<string>; moved: boolean;
-  // When a marquee is started from an unselected SECTION (drag inside it rubber-band-selects its
-  // contents), a no-move click should SELECT that section instead of deselecting — this holds its id.
-  clickNode?: string | null;
-  // Every visible card's box in world coords, taken when the band first moves, and the ids it holds now
-  // (features/gestures.ts selectWithinMarquee).
+  clickNode?: string | null;       // started on an unselected section: a no-move click selects it
   boxes?: Array<{ id: string; x0: number; y0: number; x1: number; y1: number }>;
   hits?: string; }
 export interface Pinch { dist: number; cx: number; cy: number; }
-// Safari-only pinch events (not in lib.dom): clientX/Y + a scale factor.
+
+// Safari-only pinch events (not in lib.dom).
 export interface GestureEvt extends Event { clientX: number; clientY: number; scale: number; }
 
 export const ui = {
-  // Counts every repaint and placement of a node (render.ts paintNode/placeSelf): what a follower of the
-  // canvas compares to know whether anything can have moved since it last looked (the float bar).
+  // Bumped by every paint/placement, so followers can tell whether anything moved.
   paintTick: 0,
-  // A wheel or trackpad pan/zoom is under way (no pointer is down for those; float-bar.ts times it out),
-  // and a picture is being pulled out of a card (features/image-extract.ts).
   wheeling: false,
   extracting: false,
-  // ---- node drag (features/drag.ts) ----
   drag: null as Drag | null,
-  dragRAF: null as number | null,   // pending rAF for drag paint; coalesces moves per frame
+  dragRAF: null as number | null,
   autoPanRAF: null as number | null,
-  // ---- pan / zoom gestures (features/gestures.ts) ----
   pan: null as PanState | null,
   marquee: null as Marquee | null,
   spaceHeld: false,
   spaceUsedForPan: false,
-  pinch: null as Pinch | null,                    // active two-finger gesture
-  // A free EDGE being drawn or re-routed, following the pointer. `sourceId` is the card at the fixed
-  // end (the one you dragged a ring off, or the end that isn't moving); `to` is the pointer; `overId`
-  // the card under it — the only thing a drop can land on. `edgeId`/`end` are set only when moving one
-  // end of an existing edge. `grabbedAt` (world units) is where the press began: a drop only counts if
-  // it travelled (features/edge-tools.ts MIN_DRAG_PX), so a twitch on a ring or a handle is a click.
-  // `side` is the port a fresh draw started from (a CLICK on it makes a connected card that way, and a
-  // line drawn from it is pinned to it); `overSide` the target's port under the pointer, if any.
+  pinch: null as Pinch | null,
+
+  // A line being drawn or re-routed: `sourceId` is the fixed end, `edgeId`/`end` set only when moving
+  // an existing end. `grabbedAt` lets a too-short drag count as a click.
   edgeDraw: null as { sourceId: string; to: Pt; grabbedAt: Pt; overId?: string; overSide?: EdgeSide; overAt?: number;
                       edgeId?: string; end?: 'from' | 'to'; side?: EdgeSide } | null,
   gestureStartK: 1,
   gestureMid: { x: 0, y: 0 } as Pt,
-  // ---- resize (features/resize.ts): the card whose edge is being dragged; paintNode keeps its class ----
   resizingId: null as string | null,
-  // ---- in-place card editing (features/inline-edit.ts) ----
-  // Either open defers the file rename / disk-reload while typing. A CARD gets `bodyEdit`: one field
-  // holding its title and its note together. A CONTAINER gets `titleEdit`: its label alone (see above).
-  // At most one of the two is ever set — each opener closes the other.
+
+  // At most one is set; either defers the file rename and disk reload.
   bodyEdit: null as BodyEdit | null,
   titleEdit: null as TitleEdit | null,
-
-  // ---- the stack FANNED OUT over the board (features/stacks.ts), its cards shown; null = none ----
-  fan: null as string | null,
-  // ---- animated relayout (layout-anim.ts) ----
+  fan: null as string | null,      // the fanned-out stack
   animToken: 0,
-  // ---- last known mouse position (window pointermove, features/commands.ts) ----
-  // Lets keyboard/clipboard actions (Space-tap new card, paste) land AT the cursor; null until
-  // the mouse first moves (touch never sets it) → callers fall back to the viewport centre.
+
+  // null until the mouse first moves (touch never sets it): callers fall back to the viewport centre.
   lastMouse: null as Pt | null,
 };
 
-// pointerId -> position, for the multi-touch gesture layer (a const Map, mutated in place).
 export const gPointers = new Map<number, Pt>();
 
-// ---- edit-session predicates ----
-// "Is an editor holding uncommitted text" — a card's one text field, or a section's label. One source of
-// truth for the save loop, the disk-reload guard, the render core, the float bar and a canvas tap,
-// rather than `ui.bodyEdit || ui.titleEdit` spelled out at each.
 export function inPlaceEditActive(): boolean { return !!(ui.bodyEdit || ui.titleEdit); }
 
-// The ONE spelling of "the canvas is busy", for the chrome that stands down meanwhile.
-//   canvasMoving — what is under the pointer is moving or being typed into: a drag, a pan, a pinch, a
-//                  rubber band, a wheel, an open editor. The selection bars hide for these.
-//   isBusy       — that, or anything else in hand: a line being drawn, a picture pulled out of a card.
-//                  A hover peek waits for all of it.
+// The ONE spelling of "busy". canvasMoving hides the selection bars; isBusy (also a line being drawn,
+// a picture being pulled) holds back a hover peek.
 export function canvasMoving(): boolean {
   return !!(ui.drag || ui.pan || ui.pinch || ui.marquee) || inPlaceEditActive() || ui.wheeling;
 }
 
 export function isBusy(): boolean { return canvasMoving() || !!ui.edgeDraw || ui.extracting; }
-// …and the same question about ONE node: is this the card/label currently being typed into.
+
 export function inPlaceEditOn(id: string): boolean {
   return ui.bodyEdit?.id === id || ui.titleEdit?.id === id;
 }
-// The node whose filename must stay frozen while its title is being typed (the rename lands on
-// commit, so the folder isn't littered with M.md, Ma.md, Mag.md…). The in-card editor is IN here now:
-// it used to be excluded because a body edit couldn't touch the title, and now the title is the first
-// line of the very text it holds. null → nothing frozen. Every arm names its OWN node, so the
-// selection has nothing to say about it.
+
+// Frozen while typing, so the folder isn't littered with M.md, Ma.md, Mag.md…; renamed on commit.
 export function frozenFileNodeId(): string | null { return ui.bodyEdit?.id ?? ui.titleEdit?.id ?? null; }
 
-// ---- responsive mode predicates ----
-// 700px MUST match the `@media (max-width:700px)` breakpoint in styles.css (the docked bars).
+// Must match the `@media (max-width:700px)` breakpoint in styles.css.
 export const NARROW_MQ = matchMedia('(max-width: 700px)');
 const COARSE_MQ = matchMedia('(pointer: coarse)');
-// "Phone" = coarse pointer AND narrow screen. Deliberately AND, not OR: an iPad is coarse but
-// wide, and a narrow desktop window keeps its fine pointer. Only boot asks: a phone opens framed on
-// the map's biggest branch rather than fitted to all of it (boot.ts orientForPhone).
+
+// AND, not OR: an iPad is coarse but wide, a narrow desktop window keeps its fine pointer.
 export function phoneMode(): boolean { return COARSE_MQ.matches && NARROW_MQ.matches; }
 
-// True when focus is in a text field (sidebar input/textarea) or a contenteditable (the in-card
-// title rename) — i.e. the user is typing, so card/canvas shortcuts and disk-reload should stand down.
+// Card/canvas shortcuts and the disk reload stand down while the user types in a field.
 export function isTypingInField(): boolean {
   const a = document.activeElement as HTMLElement | null;
   return ['INPUT', 'TEXTAREA', 'SELECT'].includes(a?.tagName ?? '') || !!a?.isContentEditable;

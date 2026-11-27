@@ -1,12 +1,5 @@
-// ============================================================
-// Free edges: selecting, drawing, moving an end, deleting.
-//
-// The one rule this module exists to protect: DRAWING AN EDGE NEVER REORGANISES THE MAP. A drag that
-// starts on a card moves that card (and re-parents it); a drag that starts on one of the card's
-// RINGS draws an edge. Same pointer, two grabs, and neither can be mistaken for the other — which
-// is what lets the rings be always-available on a selected card without accidental connectors.
-// A line goes from CARD to CARD: drop it anywhere on the target. There is nothing else to aim at.
-// ============================================================
+// Free edges: selecting, drawing, moving an end, deleting. Drawing a line NEVER reorganises the map:
+// a drag from a card moves it, a drag from one of its rings draws a line.
 import { state, stage, setStatus, type BoardEdge, type EdgeSide } from '../core/state.js';
 import { ui, type Pt } from '../core/ui-state.js';
 import { makeEdge, scheduleSaveBoard } from '../data/board.js';
@@ -22,19 +15,18 @@ import { createNode } from './crud.js';
 import { trackPointer } from '../utils/dom.js';
 import { nodeW, nodeH, NODE_W } from '../view/geometry.js';
 
-// Every selected edge, in board order. What the edge bar's colour, dash, ends and delete act on.
 export function selectedEdges(): BoardEdge[] {
   return state.edges.filter(e => state.selEdges.has(e.id));
 }
-// The one the bar hangs off and reads its state from: the LAST one clicked (a Set iterates in
-// insertion order, so the newest is simply the last).
+
+// The LAST one clicked: a Set iterates in insertion order.
 export function leadEdge(): BoardEdge | null {
   const ids = [...state.selEdges];
   const last = ids[ids.length - 1];
   return last ? state.edges.find(e => e.id === last) ?? null : null;
 }
-// Selecting an edge clears the card selection and vice versa — see AppState.selEdges. `add` is the
-// ⌘/Ctrl-click path and TOGGLES, exactly as it does for cards (features/selection.ts selectNode).
+
+// Clears the card selection (AppState.selEdges). `add` TOGGLES, as ⌘-click does for cards.
 function selectEdge(id: string | null, add = false): void {
   if (id == null) {
     state.selEdges.clear();
@@ -48,6 +40,7 @@ function selectEdge(id: string | null, add = false): void {
   paintAll();
   syncEdgeBar();
 }
+
 export function clearEdgeSelection(): void {
   if (!state.selEdges.size) {
     return;
@@ -57,19 +50,19 @@ export function clearEdgeSelection(): void {
   syncEdgeBar();
 }
 
-// Where an end attaches: a face and how far along it (a PIN), or nothing (the face is picked per paint).
+// A face and how far along it; an unpinned end picks its face per paint.
 interface Pin { side: EdgeSide; at: number }
 
-// The edge already joining these two cards AT THE SAME POINTS, either way round (an unpinned end counts
-// as its own "port"). Two such lines would lie exactly on top of each other, so a second draw selects the
-// first instead — but the same two cards can be joined again through other ports, or other points of one.
+// Two lines between the same POINTS would lie on top of each other; other points of the same cards are fine.
 const samePin = (side: EdgeSide | undefined, at: number | undefined, p?: Pin): boolean =>
   side === p?.side && (!side || (at ?? 0.5) === p?.at);
+
 function edgeBetween(a: string, b: string, pa?: Pin, pb?: Pin): BoardEdge | undefined {
   return state.edges.find(e => (e.from === a && e.to === b && samePin(e.fromPort, e.fromAt, pa) && samePin(e.toPort, e.toAt, pb))
                             || (e.from === b && e.to === a && samePin(e.fromPort, e.fromAt, pb) && samePin(e.toPort, e.toAt, pa)));
 }
-// Write a pin onto one end of an edge — the middle of a face is the plain port, so it stores no `at`.
+
+// The middle of a face is the plain port, so it stores no `at`.
 function setPin(e: BoardEdge, end: 'from' | 'to', pin?: Pin): void {
   const port = end === 'from' ? 'fromPort' : 'toPort', at = end === 'from' ? 'fromAt' : 'toAt';
   delete e[port];
@@ -81,7 +74,7 @@ function setPin(e: BoardEdge, end: 'from' | 'to', pin?: Pin): void {
     }
   }
 }
-// The pins fix the ends to those points (BoardEdge); left out, an end picks its face itself.
+
 function addEdge(fromId: string, toId: string, fromPin?: Pin, toPin?: Pin): BoardEdge | null {
   if (fromId === toId || !connectable(fromId) || !connectable(toId)) {
     return null;
@@ -95,9 +88,7 @@ function addEdge(fromId: string, toId: string, fromPin?: Pin, toPin?: Pin): Boar
   return e;
 }
 
-// ⌘L / the float bar's Connect. Two or more cards selected: chain them in selection order (A→B→C,
-// which is what a flow usually wants), as ONE undo step. This is also the TOUCH path — iOS never
-// fires contextmenu on long-press, so a ring drag can't be the only way in.
+// Chains the selection in order, A→B→C. Also the touch path in.
 export function connectSelection(): void {
   const ids = [...state.sel];
   if (ids.length < 2) { setStatus('Select two cards to connect — or drag from a ring on the selected card.'); return; }
@@ -127,9 +118,7 @@ function anchorOf(draw: NonNullable<typeof ui.edgeDraw>): Anchor | undefined {
   return draw.end === 'from' ? { n, side: e.toPort, at: e.toAt } : { n, side: e.fromPort, at: e.fromAt };
 }
 
-// What a line end dropped at `p` lands on: a point on a card's FACE (pinning the end there — its port or
-// shifted along it; the floating dots sit outside the card, so a face wins even off the card's body), else
-// the card under the point, topmost first — the drop target for both a fresh draw and a moved end.
+// A point on a card's FACE wins (its dots sit outside the card), else the topmost card under the point.
 function dropAt(p: Pt, exclude: string, anchor?: Anchor): { id: string; pin?: Pin } | null {
   let hit: { id: string; pin?: Pin } | null = null;
   for (const n of state.nodes.values()) {
@@ -142,16 +131,13 @@ function dropAt(p: Pt, exclude: string, anchor?: Anchor): { id: string; pin?: Pi
       continue;
     }
     if (!hit?.pin) {
-      hit = { id: n.id };      // later nodes paint over earlier ones; take the last match
+      hit = { id: n.id };
     }
   }
   return hit;
 }
 
-// ---------- pointer wiring ----------
-// Bound on #STAGE in the CAPTURE phase so a grab on a ring, a handle or an edge is claimed before the
-// card-drag and canvas-pan handlers ever see the event. (#stage, not #world: #world has no size of its
-// own, so a click on the empty canvas never lands inside it.)
+// Capture phase on #stage, ahead of card drag and pan. Not #world: it has no size, so the empty canvas isn't in it.
 export function installEdgeTools(): void {
   stage.addEventListener('pointerdown', (ev: PointerEvent) => {
     const t = ev.target as Element | null;
@@ -173,40 +159,32 @@ export function installEdgeTools(): void {
         return;
       }
       const end = handle.getAttribute('data-handle') as 'from' | 'to';
-      // The end you are NOT dragging is the anchor the draft hangs off.
       beginDraw(ev, { sourceId: end === 'to' ? edge.from : edge.to, to: screenToWorld(ev.clientX, ev.clientY),
                       grabbedAt: screenToWorld(ev.clientX, ev.clientY), edgeId: edge.id, end });
       return;
     }
     if (hit) {
-      // stopPropagation only — preventDefault on pointerdown would suppress the clicks the two-press
-      // label gesture below is timed against.
+      // Not preventDefault, which would suppress the clicks twoPresses is timed against.
       ev.stopPropagation();
       const id = hit.getAttribute('data-edge')!;
       const dbl = twoPresses(id, ev);
       selectEdge(id, ev.metaKey || ev.ctrlKey);
-      // preventDefault ONLY here: the field is focused next, and the press's default action would move
-      // focus straight back out of it, closing the editor in the same tick.
+      // The press's default action would move focus straight back out of the label field.
       if (dbl) { ev.preventDefault(); startLabelEdit(id); }
       return;
     }
-    // Anything else on the canvas — a card, the background — takes the selection back, so an edge
-    // and a card are never both selected (see AppState.selEdges).
     clearEdgeSelection();
   }, true);
-  // A browser dblclick that does arrive on a line must not fall through to the canvas's own
-  // double-click, which would drop a card on it.
+  // The canvas's own double-click would drop a card on the line.
   stage.addEventListener('dblclick', (ev: MouseEvent) => {
     if ((ev.target as Element | null)?.closest('[data-edge]')) { ev.preventDefault(); ev.stopPropagation(); }
   }, true);
 }
 
-// Two presses on the SAME edge, close in time and place: double-click an edge → edit its label. Not the
-// browser's dblclick: the first press selects the edge, which repaints #freeEdges wholesale, so the
-// second lands on a different element and Chrome dispatches no dblclick at all. Counting presses here
-// also gives touch a double TAP for free.
+// Not the browser's dblclick: the first press repaints #freeEdges, so Chrome dispatches none.
 const DBL_MS = 450, DBL_SLOP = 6;
 let lastPress = { id: '', t: 0, x: 0, y: 0 };
+
 function twoPresses(id: string, ev: PointerEvent): boolean {
   const near = lastPress.id === id && ev.timeStamp - lastPress.t < DBL_MS
             && Math.hypot(ev.clientX - lastPress.x, ev.clientY - lastPress.y) < DBL_SLOP;
@@ -236,16 +214,13 @@ function beginDraw(ev: PointerEvent, seed: NonNullable<typeof ui.edgeDraw>): voi
   const stop = trackPointer({ move, up, cancel: abort, key });
 }
 
-// How far the pointer must travel before a release lands anything — below it the gesture was a press.
 const MIN_DRAG_PX = 12;
 
 function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   const travelled = Math.hypot(at.x - draw.grabbedAt.x, at.y - draw.grabbedAt.y) * (state.view.k || 1);
   const target = draw.overId;
-  // A CLICK on a port (FigJam's ⊕): a new card on that side, joined to this one.
   if (travelled < MIN_DRAG_PX && draw.side && !draw.edgeId) { spawnConnected(draw.sourceId, draw.side); return; }
-  // A press that never travelled, or a release over no card: nothing changes. Moving an end off into
-  // empty space leaves the line where it was — Delete is how a line goes away.
+  // An end moved off into empty space leaves the line where it was.
   if (travelled < MIN_DRAG_PX || !target) { paintFreeEdges(); return; }
   const existing = draw.edgeId ? state.edges.find(e => e.id === draw.edgeId) : null;
   const overPin = draw.overSide ? { side: draw.overSide, at: draw.overAt ?? 0.5 } : undefined;
@@ -255,7 +230,7 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
     const otherSide = toEnd ? existing.fromPort : existing.toPort, otherAt = toEnd ? existing.fromAt : existing.toAt;
     const dup = edgeBetween(other, target, otherSide ? { side: otherSide, at: otherAt ?? 0.5 } : undefined, overPin);
     if (target === other || (dup && dup !== existing)) { paintFreeEdges(); return; }
-    // …and the end lets go of the path it held into a folded section's unread notes, if any (data/board.ts)
+    // The end lets go of any path it held into a folded section's unread notes (data/board.ts).
     mutate([], () => {
       if (toEnd) { existing.to = target; delete existing.toPath; }
       else { existing.from = target; delete existing.fromPath; }
@@ -271,12 +246,10 @@ function finishDraw(draw: NonNullable<typeof ui.edgeDraw>, at: Pt): void {
   selectEdge(made.id);
 }
 
-// FigJam's ⊕: click a port and a new card appears CONNECT_GAP away on that side, exactly (no grid snap) — the same colour and
-// size as the card it came from, joined to it by a line, and open for typing. Click again and the
-// next one lands beside the last instead of on it. Its home is the source's: a card's section, or for a
-// section the place the section itself sits. One undo step with the card (createNode's rename session
-// commits it), so an abandoned empty card takes its line with it (crud.ts discardNewCard).
+// FigJam's ⊕: a card like its source, joined to it, exactly CONNECT_GAP away (no grid snap).
 const CONNECT_GAP = 60;
+const MAX_SLOT_TRIES = 50;
+
 function spawnConnected(srcId: string, side: EdgeSide): void {
   const src = state.nodes.get(srcId);
   if (!src) {
@@ -291,7 +264,7 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   // Step past whatever already stands there: down a column on the left/right, along a row up/down.
   const blocked = (): boolean => [...state.nodes.values()].some(o => o.parent === src.parent && o !== src && !isHidden(o)
     && x < o.x + nodeW(o) && x + w > o.x && y < o.y + nodeH(o) && y + h > o.y);
-  for (let i = 0; i < 50 && blocked(); i++) {
+  for (let i = 0; i < MAX_SLOT_TRIES && blocked(); i++) {
     if (horiz) {
       y += h + CONNECT_GAP;
     } else {
@@ -303,14 +276,14 @@ function spawnConnected(srcId: string, side: EdgeSide): void {
   if (!n) {
     return;
   }
-  touchEdges();          // into the new card's step, which its rename session commits
+
+  // Into the new card's step, so an abandoned empty card takes its line with it.
+  touchEdges();
   addEdge(srcId, n.id, { side, at: 0.5 }, { side: OPPOSITE[side], at: 0.5 });
   scheduleSaveBoard();
   paintFreeEdges();
 }
 
-// Delete/Backspace with edges selected — handled before the card path in features/tag-tray.ts's key handler. All
-// of them go in ONE undo step: the selection was the unit the user acted on.
 export function deleteSelectedEdge(): boolean {
   const ids = [...state.selEdges];
   if (!ids.length) {

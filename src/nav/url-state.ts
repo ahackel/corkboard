@@ -1,24 +1,6 @@
-// ============================================================
-// URL hash reflects navigable state: current map + selected node, the open section, camera and the
-// search query — so browser back/forward, reload, and bookmarks restore the
-// same view. Node identity in the hash is the note's FILE PATH (the real, stable identity
-// per CLAUDE.md), never the in-memory id, which is re-minted on every load. Registry-backed
-// maps use their stable kind/id pair, so a bookmark can switch away from the currently open map.
-//
-// Shape: #/<map-kind>/<map-id>/<node-file-path>?open=&x=&y=&k=&q=
-//
-// `open` is the section you're standing INSIDE (nav/scope.ts) — query string, not path, because it's
-// navigable VIEW state rather than identity. Only the INNERMOST level is carried;
-// the crumb path above it is rebuilt from the tree (openPathTo), so there's nothing to keep in sync.
-// The path carries IDENTITY (which map, which node); the query string carries VIEW STATE
-// (open section/camera/search) — all of it ephemeral: none of these fields are ever
-// written back to a note's frontmatter, they only ever flow FROM state INTO the URL.
-//
-// Opening or leaving a section pushes a new history entry: where you STAND is the unit of back/forward
-// navigation. The selection, the camera and the search replace the current entry instead
-// (scheduleUrlSync, debounced) — they tag along with wherever you last navigated rather than creating
-// their own back-stops. (A selection used to push: Back then walked through every card you had clicked.)
-// ============================================================
+// The URL hash: #/<map-kind>/<map-id>/<node-file-path>?open=&x=&y=&k=&q=
+// The path is IDENTITY (a node by its file, never its per-load id); the query is view state, never written
+// to a note. Opening or leaving a section pushes history; selection, camera and search only replace it.
 import { revealPath } from '../data/lazy.js';
 import { state, setStatus } from '../core/state.js';
 import { openMapRef } from '../data/persistence.js';
@@ -34,8 +16,6 @@ import { selectNode } from '../features/selection.js';
 function slugify(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'map';
 }
-// Node identity: the note's relative file path, percent-encoded per path segment so it
-// round-trips through a URL hash regardless of what characters are in the title/filename.
 function encodeFilePath(file: string): string {
   return file.replace(/\.md$/i, '').split('/').map(encodeURIComponent).join('/');
 }
@@ -76,9 +56,7 @@ function buildHash(): string {
   return '#/' + parts.join('/') + '?' + params.toString();
 }
 
-// Guards the re-entrant writes (selectNode/applyView/runSearch)
-// triggered from WITHIN applyUrlFromHash — without this every hash read would immediately
-// write an identical hash straight back out.
+// Set while applyUrlFromHash runs, so what it selects and pans isn't written straight back out.
 let applying = false;
 let lastHash: string | null = null;
 let replaceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -99,23 +77,23 @@ function writeHash(kind: 'push' | 'replace'): void {
   }
 }
 
-// Node selection changed: a discrete navigation step, pushes a new history entry.
+// A section opened or left: a new history entry.
 export function syncUrl(): void {
   writeHash('push');
 }
-// Everything else (camera/search) — debounced, replaces the current entry
-// rather than creating a new back-stop for every drag section or keystroke.
+
+const URL_SYNC_DELAY_MS = 350;
+
+// Selection, camera, search: replaces the current entry.
 export function scheduleUrlSync(): void {
   if (applying) {
     return;
   }
   clearTimeout(replaceTimer);
-  replaceTimer = setTimeout(() => writeHash('replace'), 350);
+  replaceTimer = setTimeout(() => writeHash('replace'), URL_SYNC_DELAY_MS);
 }
 
-// Read the current hash and apply everything it encodes: select the node, and restore
-// camera/search. Safe to call on boot and on popstate; registry-backed hashes
-// switch to their map first, while legacy name-based hashes work only for the map already open.
+// On boot and popstate. A legacy name-based hash works only for the map already open.
 export async function applyUrlFromHash(): Promise<void> {
   const hash = location.hash;
   if (!hash || hash.length < 2) {
@@ -142,7 +120,6 @@ export async function applyUrlFromHash(): Promise<void> {
     }
     pathSegs = rest;
   } else {
-    // Backward compatibility for pre-ID hashes: restore only when their named map is already open.
     if (slugify(store.name) !== mapPart) {
       return;
     }
@@ -152,13 +129,9 @@ export async function applyUrlFromHash(): Promise<void> {
   applying = true;
   try {
     const params = new URLSearchParams(queryPart);
-    // The SCOPE goes first, ahead of both the selection and the camera. Ahead of the selection
-    // because isSelectable refuses an out-of-scope id, so the node has to be validated against the
-    // scope it's in; ahead of the camera because restoring the scope would otherwise fit over the
-    // pan/zoom the URL explicitly asked for (hence restoreScopeFromFile's own no-camera contract).
+    // Scope first: isSelectable refuses an out-of-scope id, and a scope restored later would refit the
+    // camera. Unread folded sections on the way are read first.
     const open = params.get('open');
-    // A link may point INTO a folded section whose notes haven't been read (data/lazy.ts): read the
-    // folders on the way first, so there is a node there to stand in or select.
     if (open) {
       await revealPath(decodeFilePath(open));
     }

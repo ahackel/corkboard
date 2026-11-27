@@ -1,6 +1,4 @@
-// A drop FILES cards off the canvas: onto a folded section's pill (into it), or onto a crumb of the
-// open-section path (up to that level) — features/drag.ts chuteAt/fileAway. And the search's "1/2" and
-// chevrons, which find a match even inside a folded section never read.
+// features/drag.ts chuteAt/fileAway, and search stepping into folded sections never read.
 import { test, expect } from '@playwright/test';
 import { openBoard, seedBoard, note, section, card, watchErrors, diskFiles, tooltip, dragOnto, settled } from './helpers';
 

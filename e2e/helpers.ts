@@ -1,14 +1,10 @@
-// Shared gestures for the e2e specs. Each spells ONE thing a person does on the canvas, the same way
-// every time, so a spec reads as the story it tests.
 import { expect, type Page, type Locator } from '@playwright/test';
 
-// A spot on the canvas that is never under a card, a bar or the dock: clicking it clears the selection
-// and ends any editor.
+// Never under a card, a bar or the dock.
 export const AWAY = { x: 1180, y: 60 };
 
-// The canvas has come to rest: nothing on it moved for a few frames — the camera, every card's box — and
-// no finite animation or transition (a fold, a fade) is still running. Glides are a mix of rAF loops
-// (camera.ts, main.ts) and CSS/WAAPI, so it watches what they move rather than how.
+// Nothing moved for a few frames and no finite animation runs. Glides mix rAF loops and CSS/WAAPI, so
+// this watches what they move rather than how.
 export async function settled(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>(resolve => {
     const world = document.getElementById('world')!;
@@ -31,46 +27,42 @@ export async function settled(page: Page): Promise<void> {
   }));
 }
 
-// The disk has caught up: no note or board write is queued or in flight (data/save-flag.ts).
+// No write queued or in flight (data/save-flag.ts).
 export async function saved(page: Page): Promise<void> {
   await expect(page.locator('html')).not.toHaveAttribute('data-saving');
 }
 
-// Open a fresh board. Motion is OFF unless a spec is about the motion itself (`{ motion: true }`): every
-// glide, fold and fade lands at once (utils/motion.ts), so no step waits out an animation.
+// Motion is off unless asked for (utils/motion.ts), so no step waits out an animation.
 export async function openBoard(page: Page, { motion = false }: { motion?: boolean } = {}): Promise<void> {
   if (!motion) {
     await page.addInitScript(() => { (window as Window & { corkboardMotion?: boolean }).corkboardMotion = false; });
   }
   await page.goto('/');
   await expect(page.locator('#stage')).toBeVisible();
-  await expect(page.locator('#folderName .sc-name')).toBeVisible();   // booted onto the (fresh) map
+  await expect(page.locator('#folderName .sc-name')).toBeVisible();
 }
 
 export function card(page: Page, text: string): Locator {
   return page.locator('#world .node', { hasText: text }).first();
 }
+
 export function section(page: Page, text: string): Locator {
   return page.locator('#world .node.section', { hasText: text }).first();
 }
 
-// What a node's tooltip says. A folded section writes its own as the pointer comes in (main.ts nodeEl), so
-// come in from somewhere else first.
+// A folded section writes its tooltip as the pointer comes in (main.ts nodeEl), so come in from elsewhere.
 export async function tooltip(page: Page, l: Locator): Promise<string | null> {
   await page.mouse.move(AWAY.x, AWAY.y);
   await l.hover();
   return l.getAttribute('title');
 }
 
-// A click on empty canvas: it closes an open editor and lets go of the selection.
 export async function clickAway(page: Page): Promise<void> {
   await page.mouse.click(AWAY.x, AWAY.y);
   await expect(page.locator('textarea.body-edit')).toHaveCount(0);
 }
 
-// N with the pointer at (x, y) makes a card there and opens it for typing. `text` is INSERTED rather
-// than typed, so it lands verbatim: a typed Enter after a list item would continue the list
-// (utils/md-edit.ts listEnter) and double every marker. It may hold several lines.
+// `text` is inserted, not typed: a typed Enter after a list item would continue the list (listEnter).
 export async function makeCard(page: Page, x: number, y: number, text: string): Promise<Locator> {
   await page.mouse.move(x, y);
   await page.keyboard.press('n');
@@ -79,21 +71,17 @@ export async function makeCard(page: Page, x: number, y: number, text: string): 
   await clickAway(page);
   const first = text.split('\n')[0].replace(/^#\s*/, '');
   await expect(card(page, first)).toBeVisible();
-  // pinned to its id, not its text: while the card is being edited its text lives in a textarea's
-  // value, which a text match can't see
+  // By id: while editing, the text lives in a textarea's value, which a text match can't see.
   const id = await card(page, first).getAttribute('data-id');
   await settled(page);
   return page.locator(`#world .node[data-id="${id}"]`);
 }
 
-// An element's centre on screen.
 export async function centre(l: Locator): Promise<{ x: number; y: number }> {
   const b = (await l.boundingBox())!;
   return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
 }
 
-// Press at `from`, carry it to `to` (screen points) and let go; `hold` rests there first — what a person does
-// to say "this one, onto that".
 export async function dragTo(page: Page, from: { x: number; y: number }, to: { x: number; y: number },
                              { hold = 0 }: { hold?: number } = {}): Promise<void> {
   await page.mouse.move(from.x, from.y);
@@ -106,13 +94,11 @@ export async function dragTo(page: Page, from: { x: number; y: number }, to: { x
   await settled(page);
 }
 
-// …from one element's centre onto another's.
 export async function dragOnto(page: Page, what: Locator, onto: Locator): Promise<void> {
   await dragTo(page, await centre(what), await centre(onto));
 }
 
-// Make `c` the one selection. A click on the card that ALREADY is opens its editor (main.ts editOnClick),
-// so then there is nothing to click.
+// A click on the card that already is the selection would open its editor (main.ts editOnClick).
 export async function select(page: Page, c: Locator): Promise<void> {
   if (await c.evaluate(el => el.classList.contains('solo'))) {
     return;
@@ -123,20 +109,24 @@ export async function select(page: Page, c: Locator): Promise<void> {
 }
 
 export type Side = 'up' | 'down' | 'left' | 'right';
-// Click the selected card's port on `side` where a person would: on the dot (which is drawn over the
-// port's own hit circle, so a locator click would be refused as "intercepted").
+
+// By coordinates: the dot is drawn over the hit circle, so a locator click is refused as "intercepted".
 export async function clickPort(page: Page, side: Side): Promise<void> {
   const p = (await page.locator(`g.fe-socket[data-socket="${side}"] .fe-port-hit`).boundingBox())!;
   await page.mouse.click(p.x + p.width / 2, p.y + p.height / 2);
   await settled(page);
 }
-// Where a card's floating port for `side` sits, in screen px (free-edges.ts SOCKET_OUT outside the rim).
+
+// free-edges.ts SOCKET_OUT, at zoom 1.
+const PORT_OUTSET = 17;
+
 async function portPoint(c: Locator, side: Side): Promise<{ x: number; y: number }> {
-  const b = (await c.boundingBox())!, o = 17;
+  const b = (await c.boundingBox())!, o = PORT_OUTSET;
   return side === 'up' ? { x: b.x + b.width / 2, y: b.y - o } : side === 'down' ? { x: b.x + b.width / 2, y: b.y + b.height + o }
        : side === 'left' ? { x: b.x - o, y: b.y + b.height / 2 } : { x: b.x + b.width + o, y: b.y + b.height / 2 };
 }
-// Drag a line from `from`'s port on `side` onto `to` — onto its port `toSide`, or its body when omitted.
+
+// Onto `to`'s port `toSide`, or its body when omitted.
 export async function drawLine(page: Page, from: Locator, side: Side, to: Locator, toSide?: Side): Promise<void> {
   await clickAway(page);
   await select(page, from);
@@ -145,7 +135,7 @@ export async function drawLine(page: Page, from: Locator, side: Side, to: Locato
   const t = (await to.boundingBox())!;
   await page.mouse.move(p.x + p.width / 2, p.y + p.height / 2);
   await page.mouse.down();
-  await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2, { steps: 8 });   // over the body first: its ports show
+  await page.mouse.move(t.x + t.width / 2, t.y + t.height / 2, { steps: 8 });   // over the body first, so its ports show
   if (toSide) { const q = await portPoint(to, toSide); await page.mouse.move(q.x, q.y, { steps: 4 }); }
   await page.mouse.up();
   await settled(page);
@@ -159,20 +149,17 @@ export async function palette(page: Page, command: string): Promise<void> {
   await settled(page);
 }
 
-// Survive a reload: wait out the debounced autosave first.
 export async function reload(page: Page): Promise<void> {
   await saved(page);
   await page.reload();
-  await expect(page.locator('#folderName .sc-name')).toBeVisible();   // booted back onto the map
+  await expect(page.locator('#folderName .sc-name')).toBeVisible();
   await settled(page);
 }
 
-// Write a whole map straight into the board's OPFS folder and reload onto it — for scenes (nested
-// sections, saved states) that would take a page of gestures to build by hand. A first card is made so
-// the map's folder exists, then everything in it is replaced.
+// Replaces the map's OPFS contents and reloads; the first card only makes the map's folder exist.
 export async function seedBoard(page: Page, files: Record<string, string>): Promise<void> {
   await makeCard(page, 300, 300, 'seed');
-  await saved(page);   // …and its save has landed, so nothing is still writing the files we replace
+  await saved(page);   // nothing may still be writing the files we replace
   await page.evaluate(async (files) => {
     async function find(d: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle | undefined> {
       for await (const [n, h] of (d as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
@@ -188,7 +175,7 @@ export async function seedBoard(page: Page, files: Record<string, string>): Prom
       return undefined;
     }
     const dir = (await find(await navigator.storage.getDirectory()))!;
-    // the map's notes, board and section FOLDERS go; the map's own meta file stays
+    // the map's own meta file stays
     for await (const [n, h] of (dir as unknown as AsyncIterable<[string, FileSystemHandle]>)) {
       if (n.endsWith('.md') || n === 'board.json' || h.kind === 'directory') {
         await dir.removeEntry(n, { recursive: true });
@@ -205,21 +192,20 @@ export async function seedBoard(page: Page, files: Record<string, string>): Prom
     }
   }, files);
   await page.reload();
-  await expect(page.locator('#folderName .sc-name')).toBeVisible();     // booted back onto the map…
-  await expect(page.locator('#world .node').first()).toBeAttached();   // …and the seeded map is on the canvas
-  await page.keyboard.press('f');   // fit the seeded map
+  await expect(page.locator('#folderName .sc-name')).toBeVisible();
+  await expect(page.locator('#world .node').first()).toBeAttached();
+  await page.keyboard.press('f');   // fit
   await settled(page);
 }
 
 export function note(body: string, fm: Record<string, string> = {}): string {
   const lines = Object.entries(fm).map(([k, v]) => `${k}: ${v}`);
   if (!lines.length) {
-    return `${body}\n`;   // no frontmatter at all, the way a hand-written note has none
+    return `${body}\n`;
   }
   return `---\n${lines.join('\n')}\n---\n\n${body}\n`;
 }
 
-// Collect uncaught page errors and console errors; a spec asserts the list is empty at the end.
 export function watchErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
@@ -231,7 +217,7 @@ export function watchErrors(page: Page): string[] {
   return errors;
 }
 
-// Every file of the open map on disk (OPFS), path → text — what a section-as-folder test reads back.
+// Every .md of the open map in OPFS, path → text.
 export async function diskFiles(page: Page): Promise<Record<string, string>> {
   await saved(page);
   return page.evaluate(async () => {

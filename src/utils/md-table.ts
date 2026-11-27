@@ -1,25 +1,18 @@
-// ---------- pipe tables in the card's textarea ----------
-// Tab/Enter in a table, a pasted spreadsheet, Add table, and the Edit Table menu — the same pure
-// text → text shape as utils/md-edit.ts.
+// Pipe tables in the card's textarea: the same pure text → text shape as utils/md-edit.ts.
 import { tableAt, tableRow } from './markdown.js';
 import { lineAt, type TextEdit } from './text-edit.js';
 
-// ---------- tables ----------
-// In a pipe table Tab walks the CELLS (selecting a one-word cell's text, so typing replaces it; the caret
-// goes to the END of a longer one, which a keystroke must not wipe out), Tab past the
-// last cell adds a row, and Enter adds a row under the caret's — the moves of every spreadsheet and of
-// Obsidian's Advanced Tables. Each of them also TIDIES the table it's in: cells padded so the pipes line
-// up (worth it now the editor is monospace), the delimiter row rebuilt from its own `:` alignments.
-// Only on these keys and only this table, so nothing rewrites a note you didn't touch, and the tidy is
-// whitespace a renderer ignores. What counts as a table is the renderer's own test (markdown.ts
-// tableAt/tableRow), so the editor never tidies something the card doesn't draw as one.
+
+// Tab/Enter walk and add cells like a spreadsheet, and TIDY only the table they're in. A table is
+// whatever the renderer's tableAt says, so the editor never tidies something not drawn as one.
 const PIPE = /(?:^|[^\\])\|/;
 interface TableAt {
-  from: number; to: number;       // the table's span in the text, first line's start to last line's end
-  rows: string[][];               // header, delimiter, body rows — cells unescaped (tableRow)
+  from: number; to: number;       // first line's start to last line's end
+  rows: string[][];               // header, delimiter, body rows, cells unescaped
   cols: number; align: string[]; indent: string;
   row: number; col: number;       // where the caret is
 }
+
 function tableAround(text: string, pos: number): TableAt | null {
   const lines = text.split('\n');
   const before = text.slice(0, pos);
@@ -44,7 +37,8 @@ function tableAround(text: string, pos: number): TableAt | null {
   }
   const tableLines = lines.slice(h, end);
   const align = tableRow(lines[h + 1]).map(c => c.startsWith(':') && c.endsWith(':') ? 'c' : c.endsWith(':') ? 'r' : c.startsWith(':') ? 'l' : '');
-  // the caret's cell: unescaped pipes before it on its line, less the optional leading one
+
+  // Unescaped pipes before the caret on its line, less the optional leading one.
   const line = lines[li], at = pos - (before.lastIndexOf('\n') + 1);
   let pipes = 0;
   for (let k = 0; k < at; k++) {
@@ -56,24 +50,25 @@ function tableAround(text: string, pos: number): TableAt | null {
   return { from, to: from + tableLines.join('\n').length, rows: tableLines.map(tableRow), cols, align,
            indent: lines[h].match(/^[ \t]*/)![0], row: li - h, col: Math.min(cols - 1, Math.max(0, pipes - lead)) };
 }
-// How many monospace columns a string takes: East Asian wide characters and emoji take two, combining
-// marks and joiners none — close enough that a table of names or emoji still lines up. "Emoji" is every
-// character DRAWN as one by default (Emoji_Presentation), which takes in ✅ and ❌ outside the emoji block.
+
+// Wide characters and emoji take two columns, combining marks none: close enough for names and emoji.
 const WIDE = /\p{Emoji_Presentation}|[\u1100-\u115F\u2E80-\u303E\u3041-\u33FF\u3400-\u4DBF\u4E00-\u9FFF\uA000-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6\u{1F300}-\u{1FAFF}\u{20000}-\u{3FFFD}]/u;
-// eslint-disable-next-line no-misleading-character-class -- the joiner, selectors and marks are matched ONE BY ONE, on purpose
-const ZERO = /[\p{M}\u200D\uFE0F]/u;
+
+// eslint-disable-next-line no-misleading-character-class -- each is matched ONE BY ONE on purpose
+const ZERO_WIDTH = /[\p{M}\u200D\uFE0F]/u;
+
 function cellWidth(s: string): number {
   let w = 0;
   for (const ch of s) {
-    w += WIDE.test(ch) ? 2 : ZERO.test(ch) ? 0 : 1;
+    w += WIDE.test(ch) ? 2 : ZERO_WIDTH.test(ch) ? 0 : 1;
   }
   return w;
 }
-// Padding lines the pipes up only while a row still fits a line: a table of sentences padded to its
-// widest cell made EVERY row hundreds of characters long, a wall of spaces in the editor and the file.
-// Wider than this, the table is written COMPACT — one space either side of each cell, no padding.
+
+// Wider than this a table is written COMPACT: padding sentences to the widest cell makes a wall of spaces.
 const TIDY_WIDTH = 80;
-// Write the table back tidied, and say where cell (r, c)'s text sits in what was written.
+
+// Also returns where cell (r, c)'s text sits in what was written.
 function writeTable(t: TableAt, r: number, c: number): { text: string; start: number; end: number } {
   const cells = t.rows.map(row => row.map(x => x.replace(/\|/g, '\\|')));
   const n = Math.max(t.cols, ...cells.map(row => row.length));
@@ -109,6 +104,7 @@ function writeTable(t: TableAt, r: number, c: number): { text: string; start: nu
   });
   return { text: out, start, end };
 }
+
 function placeTable(text: string, t: TableAt, r: number, c: number): TextEdit {
   const wr = writeTable(t, r, c);
   const out = text.slice(0, t.from) + wr.text + text.slice(t.to);
@@ -117,8 +113,7 @@ function placeTable(text: string, t: TableAt, r: number, c: number): TextEdit {
 }
 const emptyRow = (t: TableAt): string[] => Array(t.cols).fill('');
 
-// Tab / ⇧Tab: the next / previous cell, row by row, stepping over the delimiter row. Tab out of the
-// last cell adds a row; ⇧Tab out of the first stays there. Null off a table (Tab then indents).
+// Tab out of the last cell adds a row. Null off a table (Tab then indents).
 export function tableTab(text: string, start: number, _end: number, back: boolean): TextEdit | null {
   const t = tableAround(text, start);
   if (!t) {
@@ -137,10 +132,8 @@ export function tableTab(text: string, start: number, _end: number, back: boolea
   }
   return placeTable(text, t, r, c);
 }
-// Enter: a new row under the caret's (under the delimiter, from the header), caret in the same column.
-// Enter on an EMPTY LAST row ends the table — the row goes, and the caret lands on a new line below it,
-// as an empty list item ends a list. And Enter at the end of a lone `| a | b |` line STARTS a table:
-// it gets its delimiter row and a first empty row, the way you'd begin one by hand.
+
+// Enter on an EMPTY LAST row ends the table; at the end of a lone `| a | b |` line it STARTS one.
 export function tableEnter(text: string, start: number, end: number): TextEdit | null {
   const t = tableAround(text, start);
   if (!t) {
@@ -156,6 +149,7 @@ export function tableEnter(text: string, start: number, end: number): TextEdit |
   t.rows.splice(r, 0, emptyRow(t));
   return placeTable(text, t, r, t.col);
 }
+
 function tableStart(text: string, start: number, end: number): TextEdit | null {
   if (start !== end) {
     return null;
@@ -182,9 +176,7 @@ function tableStart(text: string, start: number, end: number): TextEdit | null {
   return placeTable(text, t, 2, 0);
 }
 
-// In a table only the BODY rows move, and only among themselves: the header and its delimiter stay put,
-// or a row moved above the delimiter would become the header, and one moved out the bottom would stop
-// being part of the table at all.
+// Only BODY rows move: above the delimiter a row would become the header, below the end it leaves the table.
 export function tableRowsMayMove(text: string, start: number, end: number, up: boolean): boolean {
   const ta = tableAround(text, start), tb = tableAround(text, end);
   if (!ta && !tb) {
@@ -195,11 +187,9 @@ export function tableRowsMayMove(text: string, start: number, end: number, up: b
   }
   return up ? ta.row > 2 : tb.row < ta.rows.length - 1;
 }
-// ---------- pasting a spreadsheet ----------
-// Cells copied from Sheets, Excel or Numbers arrive as tab-separated rows (a cell holding a line break
-// or a tab is quoted, `""` inside being a quote). Two or more rows of the same two-or-more columns
-// become a tidied table, its first row the header; anything else is pasted as the text it is. Not
-// inside a table — there a tab is just a cell's character.
+
+// Tab-separated rows from a spreadsheet (quoted cells may hold breaks/tabs). Two or more rows of the same
+// two-plus columns become a table; anything else pastes as text.
 function parseTsv(s: string): string[][] | null {
   if (!s.includes('\t')) {
     return null;
@@ -232,6 +222,7 @@ function parseTsv(s: string): string[][] | null {
   }
   return rows.map(x => x.map(c => c.replace(/\s*\n\s*/g, ' ').trim()));
 }
+
 export function pasteTable(text: string, start: number, end: number, clip: string): TextEdit | null {
   const rows = parseTsv(clip);
   if (!rows || tableAround(text, start)) {
@@ -248,8 +239,7 @@ export function pasteTable(text: string, start: number, end: number, clip: strin
   return { text: before + pre + table + post + after, start: at, end: at };
 }
 
-// A new two-column table on its own lines below the caret's line (or ON it, when it's empty), set apart by
-// blank lines so Obsidian reads it as one too, with the first header selected to type over.
+// Set apart by blank lines so Obsidian reads it as a table too; the first header is selected.
 export function insertTable(text: string, _start: number, end: number): TextEdit {
   const { from, to } = lineAt(text, end);
   const blank = !text.slice(from, to).trim();
@@ -262,15 +252,11 @@ export function insertTable(text: string, _start: number, end: number): TextEdit
   return { text: head + table + gap + tail, start: at, end: at + 'Column 1'.length };
 }
 
-// `[selection]()` with the caret where the address goes; with nothing selected, `[]()` with it in the text.
-// ---------- the Edit Table menu ----------
-// Rows and columns as a spreadsheet moves them, on the table around the caret, written back tidied
-// (writeTable) with the caret in the cell it followed. Null where the operation can't apply (no table;
-// the header row can't be deleted or moved; nothing left of the column to move into), which is also how
-// the menu knows to grey it out.
+// The Edit Table menu. Null where an op can't apply, which also greys it out in the menu.
 export type TableOp = 'sortAsc' | 'sortDesc' | 'rowAbove' | 'rowBelow' | 'colBefore' | 'colAfter' |
   'alignLeft' | 'alignCenter' | 'alignRight' | 'deleteCol' | 'deleteRow' | 'colLeft' | 'colRight' |
   'rowUp' | 'rowDown' | 'reformat' | 'transpose';
+
 export function tableEdit(text: string, start: number, op: TableOp): TextEdit | null {
   const t = tableAround(text, start);
   if (!t) {

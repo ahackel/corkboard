@@ -1,4 +1,3 @@
-// The chrome round the canvas: the first-run hint, what Esc and ⇧-click do, the Back button, the sidebar.
 import { test, expect } from '@playwright/test';
 import { openBoard, makeCard, select, watchErrors, palette } from './helpers';
 

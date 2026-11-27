@@ -1,4 +1,3 @@
-// The smart duplicate's next title (utils/advance.ts).
 import { describe, expect, it } from 'vitest';
 import { advanceTitle } from '../src/utils/advance.js';
 

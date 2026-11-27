@@ -19,8 +19,8 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `npm run build` → `dist/index.html`; `npm run preview` serves it; a push to `main` deploys it (`deploy.yml`) with `public/format.md` (the file-format spec — update it with any format change), `public/about/` (the about page) and `public/sw.js` (the offline copy). `ci.yml` runs every check incl. e2e, by hand only.
 - `npm run typecheck` after touching types (fully strict, no `@ts-nocheck`); verify in a browser by exercising
   the canvas. Keep `.js` in import specifiers (bundler resolution maps them to `.ts`).
-- **Code style** (all code you write or touch): readable code over comments — comment only what it can't say;
-  a blank line before every comment and function/class definition; braces on every `if`/`else`/loop body.
+- **Code style**: nice, readable code; self-explanatory names over comments. Comments as SPARSE as possible: a
+  short "why" the code can't say, never a story (rationale goes in `docs/architecture.md`). Braces on every `if`/`else`/loop body.
 - Runs in any modern browser incl. iPad (OPFS default); "Open folder" needs FSA (Chrome/Edge only).
 
 ## Module layout (`src/`)

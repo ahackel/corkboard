@@ -1,4 +1,3 @@
-// A formatted copy is the card's rendering with everything only Corkboard reads taken off (utils/rich-html.ts).
 import { describe, expect, it } from 'vitest';
 import { portableHtml } from '../src/utils/rich-html.js';
 import { renderBodyHTML } from '../src/utils/markdown.js';

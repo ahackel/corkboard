@@ -1,5 +1,4 @@
-// Modules under data/ read the page shell (core/state.ts DOM handles), so a test that imports them needs it first.
-// Booting the app opens IndexedDB, which the test DOM lacks, and no data test needs it.
+// Import first in a test whose modules read core/state.ts DOM handles. Boot is mocked: it needs IndexedDB.
 import { vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 

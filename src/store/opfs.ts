@@ -1,21 +1,14 @@
-// OPFS adapter — the LOCAL-FIRST default. The Origin Private File System is a private,
-// per-origin store every modern browser (incl. iPad Safari) supports. Its handle API matches
-// FSA, so file ops delegate to the same handle-store helpers (DRY); only the root differs.
-// No picker, no permission, no external watcher.
-//
-// Multi-map: each map is its own directory — maps/<id>/ for new maps, plus the legacy
-// pre-multi-map 'vault/' dir, which simply IS the map with id 'vault' (no migration copy).
-// openMap(id) retargets every file op; each dir carries a map.json ({name}) so the registry
-// can be rebuilt from disk if localStorage is ever cleared.
+// The OPFS adapter, the local-first default. Each map is a directory: maps/<id>/, or the legacy root
+// 'vault/' as the map with id 'vault'.
 import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob } from './handle-store.js';
 import type { FoldTest } from './tree.js';
 import { MAP_META_FILE, serializeMapMeta, parseMapMetaName } from './maps.js';
 import type { DeviceStore, PickResult } from './types.js';
 import { keepStorage } from './persist.js';
 
-// OPFS can't change underneath us — except from ANOTHER TAB on the same map. Each write tells the other
-// tabs which map it touched, so a tab still showing the old board reloads instead of writing it back.
+// Only another tab can change OPFS underneath us: each write tells the others which map it touched.
 const otherTabs = new BroadcastChannel('corkboard-opfs');
+const OTHER_TAB_SETTLE_MS = 300;
 
 export const opfsStore = {
   _dir: null as FileSystemDirectoryHandle | null,
@@ -25,7 +18,6 @@ export const opfsStore = {
   get isOpen(){ return this._opened; },
   get name(){ return this._mapName; },
 
-  // Resolve a map id to its directory handle ('vault' lives at the root, the rest under maps/).
   async _mapDir(id: string, create: boolean): Promise<FileSystemDirectoryHandle> {
     const root = await navigator.storage.getDirectory();
     if (id === 'vault') {
@@ -38,7 +30,7 @@ export const opfsStore = {
     return this._dir ??= await this._mapDir(this._mapId, true);
   },
 
-  // Retarget every file op at another map. Cheap — the dir handle is re-resolved lazily.
+  // Cheap: the dir handle is re-resolved lazily.
   openMap(id: string, name?: string): void {
     if (id !== this._mapId){ this._mapId = id; this._dir = null; this._opened = false; }
     if (name) {
@@ -57,7 +49,7 @@ export const opfsStore = {
       } else {
         await (await root.getDirectoryHandle('maps')).removeEntry(id, { recursive: true });
       }
-    } catch { /* already gone — fine */ }
+    } catch { /* already gone */ }
     if (id === this._mapId){ this._dir = null; this._opened = false; }
   },
   async renameMap(id: string, name: string): Promise<void> {
@@ -66,7 +58,6 @@ export const opfsStore = {
       this._mapName = name;
     }
   },
-  // Enumerate the maps that exist on disk (for the registry's one-time migration/rebuild).
   async listMaps(): Promise<Array<{ id: string; name: string }>> {
     const nameOf = async (d: FileSystemDirectoryHandle, fallback: string): Promise<string> => {
       const blob = await readFileBlob(d, MAP_META_FILE);
@@ -98,9 +89,9 @@ export const opfsStore = {
     otherTabs.onmessage = e => {
       if (e.data === this._mapId && this._opened) {
         clearTimeout(wait);
-        wait = window.setTimeout(cb, 300);
+        wait = window.setTimeout(cb, OTHER_TAB_SETTLE_MS);
       }
     };
   },
 };
-opfsStore satisfies DeviceStore;   // compile-time contract check (extra _dir/_opened/_root allowed on a reference)
+opfsStore satisfies DeviceStore;

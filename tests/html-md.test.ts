@@ -1,4 +1,3 @@
-// Rich text pasted into a card becomes the markdown the card draws (utils/html-md.ts).
 import { describe, expect, it } from 'vitest';
 import { htmlToMarkdown } from '../src/utils/html-md.js';
 

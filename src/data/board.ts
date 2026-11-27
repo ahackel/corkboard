@@ -1,15 +1,5 @@
-// ============================================================
-// board.json — the ONE sidecar beside the notes.
-//
-// A node is a file and carries its own frontmatter; everything that is about the BOARD rather than
-// about a note lives here instead: where each card sits, the lines the user drew, and the per-map view
-// preferences. It replaced the settings.json this app used to keep, which is still READ once when a
-// map has no board.json yet — and never written again.
-//
-// The split rule, in one line: frontmatter describes the NOTE, board.json describes the BOARD's
-// arrangement of it. Membership is neither: a section is a FOLDER (docs/architecture.md), so which section
-// holds a note is where its file sits — which is what lets a folder stand on its own if this file is lost.
-// ============================================================
+// board.json, the one sidecar: the board's ARRANGEMENT (positions, sizes, folds, lines, view settings).
+// Membership is not here: a section is a folder.
 import { state, GRID_STYLES, GRID_SIZES, type BoardEdge, type EdgeCap, type EdgeSide, type MindNode } from '../core/state.js';
 import { dirOf } from '../utils/filenames.js';
 import { store } from './active-store.js';
@@ -20,20 +10,14 @@ import { setSaving } from './save-flag.js';
 import { colorFill } from '../view/color.js';
 
 export const BOARD_FILE = 'board.json';
-// The MODEL the board was last written by, which is how the flatten migration knows a map predates
-// containment. 1 (or a missing board file) = a map whose card-to-card `mm_parent` links meant
-// "placed BESIDE this card, joined by a branch line"; 2 = they mean "inside it, as outline rows".
-// data/migrate.ts flattenLegacyBranches converts the first into the second, once, and the write
-// that follows stamps this. Bump it only for another migration of the same kind.
+// Model 1 (or no board file) predates containment; flattenLegacyBranches migrates it. Bump only for
+// another migration of that kind.
 const BOARD_MODEL = 2;
-// The file's own generation. A board with a HIGHER version or model than this build knows was written by
-// a newer one, and holds something this one would get wrong: it is shown, and not written to (loadBoard).
+// A board with a higher version or model was written by a newer build: shown, never written.
 const BOARD_VERSION = 1;
 let loadedModel = BOARD_MODEL;
 
-// What a NEWER build wrote that this one has no name for — a key at the top level, in `settings`, on a
-// node or on a line — goes back out as it came in, the way a note's unknown frontmatter does. So an
-// older build opening a newer map of the SAME version loses nothing by saving it.
+// Keys this build doesn't know are written back as they came in, like a note's unknown frontmatter.
 type Extra = Record<string, unknown>;
 const KNOWN_TOP = new Set(['version', 'model', 'settings', 'edges', 'nodes', 'strokes', 'junctions']);
 const KNOWN_SETTING = new Set(['grid', 'gridSize', 'canvasColor']);
@@ -51,7 +35,6 @@ function unknownKeys(v: unknown, known: Set<string>): Extra | null {
   return rest.length ? Object.fromEntries(rest) : null;
 }
 
-// A note moved or was renamed (data/save.ts): what is kept for its old path follows it.
 export function boardPathMoved(from: string, to: string): void {
   const extra = extraNode.get(from);
   if (extra) {
@@ -59,19 +42,15 @@ export function boardPathMoved(from: string, to: string): void {
     extraNode.set(to, extra);
   }
 }
-// Did the map we just loaded predate containment? Only meaningful between loadBoard and the
-// migration that reads it.
+// Only meaningful between loadBoard and the migration that reads it.
 export function boardIsLegacy(): boolean { return loadedModel < BOARD_MODEL; }
 // Superseded sidecar: read once when there is no board.json yet, never written.
 const SETTINGS_FILE = 'settings.json';
-// The ink of the retired sketch layer (docs/PRODUCT.md, "Cut"). Nothing draws it any more, but a
-// board that has some keeps it, verbatim and untouched, so cutting the feature never deletes a drawing.
+// The retired sketch layer's ink, kept verbatim so cutting the feature never deleted a drawing.
 let keptStrokes: unknown;
 
 export function boardJSON(): string {
-  // rx/ry is the PERSISTED form of a node's position and is derived from the live x/y — refresh it
-  // before reading it here. saveAll does the same before serializing notes; the board file has its
-  // own debounce, so it cannot rely on that one having run.
+  // The board has its own debounce, so it can't rely on saveAll having refreshed rx/ry.
   commitRel();
   return JSON.stringify({
     ...extraTop,
@@ -84,35 +63,26 @@ export function boardJSON(): string {
   });
 }
 
-// An edge's ENDPOINTS go to disk as paths, never as ids — see BoardEdge in core/state.ts. An edge
-// whose endpoint has no file yet (a card created this session and not yet saved) is dropped rather
-// than written half-resolved; the next save, once the note has a name, writes it whole.
+// Endpoints are stored as PATHS (ids are minted per load); an end with no file yet is dropped until saved.
 interface StoredEdge { id: string; from: string; to: string;
-                    fromJ?: string; toJ?: string;      // legacy: a JUNCTION end (read, flattened, never written)
+                    fromJ?: string; toJ?: string;      // legacy junction end: read, flattened, never written
                     color?: string; dashed?: boolean; fromCap?: EdgeCap; toCap?: EdgeCap;
-                    // The pinned faces. NOT the `fromSide`/`toSide` an older build wrote on EVERY edge
-                    // (defaulting to right/left): reading those back would pin every old line to a
-                    // face nobody chose, so they stay ignored and these are new keys.
+                    // Deliberately not the old `fromSide`/`toSide`, which pinned every line to a face nobody chose.
                     fromPort?: EdgeSide; toPort?: EdgeSide;
-                    fromAt?: number; toAt?: number;   // a pinned end shifted along its face (BoardEdge)
-                    arrows?: 'none' | 'to' | 'both';   // legacy: ONE direction axis, read never written
+                    fromAt?: number; toAt?: number;
+                    arrows?: 'none' | 'to' | 'both';   // legacy: read, never written
                     label?: string }
-// A shifted end's place along its face, 0..1: three decimals is finer than any card is wide.
+// Three decimals is finer than any card is wide.
 const shift = (at: number): number => Math.round(at * 1000) / 1000;
 const isShift = (v: unknown): v is number => typeof v === 'number' && v >= 0 && v <= 1;
 
 function serializeEdge(e: BoardEdge): StoredEdge | null {
-  // An end held by a PATH is a note inside a folded section nobody has read (resolveEdges): the section
-  // stands in for it on the canvas, but the path is still where the line goes.
+  // A path-held end is a note in an unread folded section: the path is still where the line goes.
   const from = e.fromPath ?? state.nodes.get(e.from)?.file, to = e.toPath ?? state.nodes.get(e.to)?.file;
   if (!from || !to) {
     return null;
   }
-  // Most fields are omitted when they equal the DEFAULT a fresh edge is born with (makeEdge), so a
-  // board file stays readable. `dashed` is written ALWAYS, deliberately: it is a boolean whose
-  // default has already been changed once, and the omit-when-default rule silently inverts such a
-  // field the moment its default flips (a solid edge came back dashed, and then the reverse). A few
-  // bytes buy immunity from that whole class of bug.
+  // Defaults are omitted, except `dashed`: omitting a boolean silently inverts it if its default ever flips.
   return { id: e.id, from, to,
            ...(e.color ? { color: e.color } : {}), dashed: e.dashed,
            ...(e.fromCap !== 'none' ? { fromCap: e.fromCap } : {}),
@@ -122,7 +92,7 @@ function serializeEdge(e: BoardEdge): StoredEdge | null {
            ...(e.toPort && e.toAt != null ? { toAt: shift(e.toAt) } : {}) };
 }
 
-// A persisted id, unlike a node's — a node is identified by its file and an edge has no file.
+// Persisted, unlike a node's id: an edge has no file to be identified by.
 function newEdgeId(): string {
   return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
@@ -132,31 +102,19 @@ export function makeEdge(from: string, to: string): BoardEdge {
            fromCap: 'none', toCap: 'arrow', label: '' };
 }
 
-// ---------- node geometry ----------
-// Where a card SITS, how big it is, whether it is folded, and the order of its children — everything
-// about a note's place on the board rather than about the note. Keyed by the note's PATH, for the same
-// reason an edge's endpoints are: in-memory ids are minted fresh every load.
-//
-// `x`/`y` keep the meaning `mm_position_x/y` had — an offset from the parent, world coords for a
-// top-level card — so nothing about the layout pipeline had to change when they moved file.
-//
-// `order` is a SORT HINT, never a record of membership: the folder alone says who belongs to whom.
-// Entries that don't resolve are ignored and children missing from the list are appended by position
-// (view/layout.ts orderedKids already does exactly this), so the list cannot lie about the tree — at
-// worst it is incomplete, and incomplete degrades to filename order.
+// Keyed by the note's PATH. `x`/`y` are relative to the parent (world coords at the top level). `order` is
+// only a sort hint (orderedKids reconciles it), never membership: the folder alone says that.
 export interface StoredGeom { x?: number; y?: number; w?: number; h?: number; clip?: boolean; collapsed?: boolean; stack?: boolean; order?: string[] }
 let geom = new Map<string, StoredGeom>();
 export function boardGeom(path: string | null): StoredGeom | undefined {
   return path ? geom.get(path) : undefined;
 }
-// The folders of the folded sections whose notes are still unread (MindNode.lazy).
 function lazyFolders(): string[] {
   return [...state.nodes.values()].filter(n => n.lazy != null && n.file).map(n => dirOf(n.file!));
 }
 function collectGeom(): Record<string, StoredGeom> {
   const out: Record<string, StoredGeom> = {};
-  // What sits in an UNREAD folder isn't in memory, so its geometry is carried over as it was read
-  // (or as it was when it was let go of — rememberGeom), or the next write would forget it.
+  // An unread folder's notes aren't in memory: carry their geometry over or the write would forget it.
   const lazy = lazyFolders();
   if (lazy.length) {
     for (const [path, g] of geom) {
@@ -167,11 +125,9 @@ function collectGeom(): Record<string, StoredGeom> {
   }
   for (const n of state.nodes.values()) {
     if (!n.file) {
-      continue;                       // never saved yet: it has no key to be stored under
+      continue;                       // never saved yet: no key to store it under
     }
     const g: StoredGeom = { x: Math.round(n.rx), y: Math.round(n.ry) };
-    // The AUTHORED size — every kind can carry both axes. A section's and an IMAGE card's h is its box;
-    // a plain card's is a MINIMUM its text can still grow past (main.ts paintNode).
     if (n.w != null) {
       g.w = Math.round(n.w);
     }
@@ -179,17 +135,17 @@ function collectGeom(): Record<string, StoredGeom> {
       g.h = Math.round(n.h);
     }
     if (n.clip) {
-      g.clip = true;                   // …unless it was dragged SHORTER than its text: then exact
+      g.clip = true;
     }
     if (n.collapsed) {
       g.collapsed = true;
     }
     if (n.stack) {
-      g.stack = true;                  // a section drawn as a pile (features/stacks.ts)
+      g.stack = true;
     }
     const order = (n.kidOrder ?? []).map(id => state.nodes.get(id)?.file).filter((f): f is string => !!f);
     if (order.length > 1) {
-      g.order = order;       // a single child has no order worth writing
+      g.order = order;
     }
     if (n.lazy != null && geom.get(n.file)?.order) {
       g.order = geom.get(n.file)!.order;   // its kids are unread
@@ -198,8 +154,7 @@ function collectGeom(): Record<string, StoredGeom> {
   }
   return out;
 }
-// Note the live geometry of nodes about to be LET GO of (data/lazy.ts releaseFolded), so collectGeom
-// keeps writing it while they're not in memory, and the next read of their folder seeds them from it.
+// For nodes about to be let go of (releaseFolded): collectGeom keeps writing it, the next read seeds from it.
 export function rememberGeom(nodes: Iterable<MindNode>): void {
   commitRel();
   for (const n of nodes) {
@@ -211,8 +166,6 @@ export function rememberGeom(nodes: Iterable<MindNode>): void {
                        collapsed: n.collapsed, stack: !!n.stack, order: order.length > 1 ? order : geom.get(n.file)?.order });
   }
 }
-// Re-seed each parent's in-memory child order from the stored paths. Called by loadFromDir once the
-// path index exists. orderedKids owns the reconciliation from here — see the `order` note above.
 export function resolveOrder(byPath: Map<string | null, string>): void {
   for (const n of state.nodes.values()) {
     const order = geom.get(n.file ?? '')?.order;
@@ -226,13 +179,9 @@ export function resolveOrder(byPath: Map<string | null, string>): void {
   }
 }
 
-// ---------- reading ----------
-// A board file that is THERE but can't be read as one — cut short by a sync, hand-edited into a typo —
-// is not the same as no board file: every position, size and line in it is about to be written over.
-// So its text is put aside first, beside it, under a name that says when.
+// An unreadable board.json is about to be written over, so its text is kept aside first (keepUnreadable).
 let notice = '';
 
-// What the last loadBoard has to tell the user, once (data/load.ts shows it when the map is up).
 export function takeBoardNotice(): string {
   const said = notice;
   notice = '';
@@ -269,8 +218,7 @@ async function readJSON(path: string): Promise<Record<string, unknown> | null> {
   return null;
 }
 
-// Both shapes land here: board.json nests these under `settings`, the legacy settings.json had them
-// at the top level, and the keys are the same either way.
+// Same keys under board.json's `settings` and at the top of the legacy settings.json.
 function applySettings(d: Record<string, unknown> | null | undefined): void {
   if (!d) {
     return;
@@ -281,8 +229,7 @@ function applySettings(d: Record<string, unknown> | null | undefined): void {
   if (GRID_SIZES.includes(d.gridSize as never)) {
     state.gridSize = d.gridSize as never;
   }
-  // Validated the same way a node's own colour is (colorFill resolves a palette key OR a hex, and
-  // nothing else), so a hand-edited board.json can't paint the canvas an arbitrary CSS value.
+  // colorFill accepts only a palette key or hex: a hand-edited file can't inject arbitrary CSS.
   if (typeof d.canvasColor === 'string' && colorFill(d.canvasColor)) {
     state.canvasColor = d.canvasColor;
   }
@@ -311,10 +258,7 @@ function applyGeom(v: unknown): void {
   }
 }
 
-// Edges arrive holding PATHS; resolveEdges (below) turns them into ids once the notes are loaded.
-// The meeting points, read BEFORE the edges so an edge can check its end exists (applyEdges).
-// A board written while JUNCTIONS existed lists them; their ids are all that matters now, so the edges
-// ending at one can be recognised and flattened into card-to-card lines (resolveEdges).
+// Legacy junction ids, read before the edges so resolveEdges can flatten lines that met at one.
 let legacyJunctions = new Set<string>();
 function applyJunctions(v: unknown): void {
   if (!Array.isArray(v)) {
@@ -332,10 +276,7 @@ function applyEdges(v: unknown): void {
   }
   const cap = (c: unknown, fallback: EdgeCap): EdgeCap =>
     (c === 'none' || c === 'dot' || c === 'arrow') ? c : fallback;
-  // An edge written before the two caps existed carries the old single `arrows` axis instead. It maps
-  // exactly — none → bare at both ends, to → an arrowhead at the target, both → one at each end — so
-  // the migration is a READ, with nothing to rewrite: the next save writes caps and the old key drops
-  // out on its own.
+  // The old single `arrows` axis maps exactly onto the two caps.
   const legacy = (a: unknown): { from: EdgeCap; to: EdgeCap } =>
     a === 'none' ? { from: 'none', to: 'none' }
   : a === 'both' ? { from: 'arrow', to: 'arrow' }
@@ -346,26 +287,24 @@ function applyEdges(v: unknown): void {
     if (!raw || typeof raw.from !== 'string' || typeof raw.to !== 'string') {
       continue;
     }
-    // A legacy junction end is already an id — it needs no path lookup, so it goes straight into
-    // `from`/`to` and leaves the matching *Path undefined for resolveEdges to skip.
+    // A junction end is already an id, so it gets no *Path for resolveEdges to look up.
     const fromJ = typeof raw.fromJ === 'string' ? raw.fromJ : '';
     const toJ = typeof raw.toJ === 'string' ? raw.toJ : '';
     if ((fromJ && !legacyJunctions.has(fromJ)) || (toJ && !legacyJunctions.has(toJ))) {
-      continue;   // point is gone: so is the edge
+      continue;
     }
+    // The id goes into SVG markup and the file can come from anywhere: only the shape we mint is kept.
     const id = typeof raw.id === 'string' && /^[\w-]+$/.test(raw.id) ? raw.id : newEdgeId();
     const extra = unknownKeys(raw, KNOWN_EDGE);
     if (extra) {
       extraEdge.set(id, extra);
     }
     state.edges.push({
-      // The id goes into SVG markup (view/free-edges.ts), and a board.json can come from anywhere — a
-      // zip, a synced vault — so only the shape this app mints is kept.
       id,
       from: fromJ, to: toJ,
       ...(fromJ ? {} : { fromPath: raw.from }), ...(toJ ? {} : { toPath: raw.to }),
       color: (typeof raw.color === 'string' && colorFill(raw.color)) ? raw.color : '',
-      dashed: raw.dashed === true,   // absent = the default, which is SOLID
+      dashed: raw.dashed === true,
       fromCap: cap(raw.fromCap, legacy(raw.arrows).from),
       toCap: cap(raw.toCap, legacy(raw.arrows).to),
       label: typeof raw.label === 'string' ? raw.label : '',
@@ -387,8 +326,6 @@ export async function loadBoard(): Promise<void> {
   if (board && (newer(board.version, BOARD_VERSION) || newer(board.model, BOARD_MODEL))) {
     holdWrites('This map was saved by a newer Corkboard. Nothing you change here is saved: reload to get the new version.');
   }
-  // No board file at all is the strongest legacy signal there is: every map written since this
-  // landed has one. An older board file (sketches/settings only) says the same thing.
   loadedModel = typeof board?.model === 'number' ? board.model : 1;
   if (board) {
     extraTop = unknownKeys(board, KNOWN_TOP) ?? {};
@@ -400,27 +337,18 @@ export async function loadBoard(): Promise<void> {
     keptStrokes = board.strokes;
     return;
   }
-  // No board.json: an older vault. Read the settings sidecar it replaced, once. Nothing deletes it —
-  // the next save simply writes board.json beside it, so the old file stays readable by an older
-  // build of the app until the user removes it.
   const legacy = await readJSON(SETTINGS_FILE);
-  // A brand-new map (no board, no old settings) starts on a dotted board — the paper-and-sticky look
-  // (docs/PRODUCT.md). An existing map keeps whatever grid it saved.
+  // A brand-new map starts dotted; an existing one keeps its grid.
   if (!legacy) {
     state.gridStyle = 'dot';
   }
   applySettings(legacy);
 }
 
-// Turn each edge's stored PATHS into live node ids. Called by loadFromDir once every note is in
-// state.nodes and the path index exists. An endpoint that doesn't resolve — a note deleted in
-// Finder, a renamed file — drops the whole edge silently: a board degrades, it never corrupts.
-// …EXCEPT an end inside a folded section whose notes weren't read (data/lazy.ts): `standIn` names that
-// section, which holds the end on the canvas the way a folded pill always has, and the path is KEPT —
-// it is what serializeEdge writes back, and what resolves once the folder is read (unparkEdges).
+// Stored paths → live ids. An unresolved end drops the edge (a board degrades, never corrupts), unless it
+// is in an unread folded section: `standIn` holds it on the canvas and the path is kept (unparkEdges).
 export function resolveEdges(byPath: Map<string | null, string>, standIn: (path: string) => string | null = () => null): void {
   state.edges = state.edges.filter(e => {
-    // A legacy junction end has no path; only the note ends go through the index.
     const end = (path: string | undefined, id: string): [string | null | undefined, boolean] => {
       if (path == null) {
         return [id, false];
@@ -441,8 +369,6 @@ export function resolveEdges(byPath: Map<string | null, string>, standIn: (path:
     }
     return true;
   });
-  // …and lines that met at a junction become plain card-to-card lines (utils/edge-graph.ts). The next
-  // board write drops the junctions for good.
   if (legacyJunctions.size) {
     state.edges = flattenJunctions(state.edges, id => legacyJunctions.has(id))
       .filter(e => state.nodes.has(e.from) && state.nodes.has(e.to) && e.from !== e.to);
@@ -450,7 +376,6 @@ export function resolveEdges(byPath: Map<string | null, string>, standIn: (path:
   }
 }
 
-// A folder has just been read: the ends that were waiting on its notes take their real ids.
 export function unparkEdges(byPath: Map<string | null, string>): void {
   for (const e of state.edges) {
     const f = e.fromPath != null ? byPath.get(e.fromPath) : undefined;
@@ -459,29 +384,26 @@ export function unparkEdges(byPath: Map<string | null, string>): void {
     if (t) { e.to = t; delete e.toPath; }
   }
 }
-// Nodes are being let go of: every end on one of them goes back to its PATH, held by `standIn`.
+// Nodes are being let go of: their ends go back to PATHS, held by `standIn` (an existing path is kept).
 export function parkEdges(gone: Map<string, string>, standIn: string): void {
   for (const e of state.edges) {
-    // An end already held by a path (it was on a folded section inside this one) keeps that path.
     const f = gone.get(e.from); if (f) { e.fromPath ??= f; e.from = standIn; }
     const t = gone.get(e.to); if (t) { e.toPath ??= t; e.to = standIn; }
   }
 }
 
-// ---------- writing ----------
-// Its own debounce, separate from the notes': a burst of pen moves must not rewrite any .md, and an
-// edge restyle must not touch a note at all.
+// Its own debounce: an edge restyle must not touch a note.
+const BOARD_SAVE_DELAY_MS = 400;
 let boardTimer: number | undefined;
 export function scheduleSaveBoard(): void {
   if (!store.isOpen || writesHeld()) {
-    return;   // demo mode, or a map from a newer build: never write
+    return;
   }
   setSaving('board', true);
   clearTimeout(boardTimer);
-  boardTimer = window.setTimeout(flushBoard, 400);
+  boardTimer = window.setTimeout(flushBoard, BOARD_SAVE_DELAY_MS);
 }
-// A write that FAILED is still pending: the board in memory is the only copy of it, and a reload
-// (data/persistence.ts reloadFromDisk) must not read the older one over it.
+// A failed write is still pending: a reload must not read the older file over it.
 let boardFailed = false;
 export function boardSavePending(): boolean { return boardTimer != null || boardFailed; }
 export async function flushBoard(): Promise<void> {

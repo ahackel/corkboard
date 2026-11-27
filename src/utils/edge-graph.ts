@@ -1,10 +1,5 @@
-// ============================================================
-// Reading an older board's JUNCTIONS — points where several lines met away from any card. Junctions
-// are CUT (docs/PRODUCT.md: a line only has to say "these belong together"), so a board that still
-// has some is flattened on load: every group of junctions joined by lines becomes a STAR of plain
-// card-to-card lines from the first card that reached it, each keeping the style of the line that
-// brought its card in. Pure, so tests/edge-graph.test.ts can pin it down.
-// ============================================================
+// Junctions (lines meeting away from any card) are CUT: an older board's are flattened on load into a
+// STAR of card-to-card lines from the first card that reached each.
 import type { EdgeCap } from '../core/state.js';
 
 export interface GraphEdge {
@@ -13,7 +8,7 @@ export interface GraphEdge {
 }
 
 export function flattenJunctions<E extends GraphEdge>(edges: E[], isJunction: (id: string) => boolean): E[] {
-  // Which junctions are one meeting point: those joined by a line that runs junction to junction.
+  // Junctions joined junction-to-junction are one meeting point (union-find).
   const root = new Map<string, string>();
   const find = (j: string): string => {
     let r = j;
@@ -34,7 +29,8 @@ export function flattenJunctions<E extends GraphEdge>(edges: E[], isJunction: (i
       root.set(find(e.from), find(e.to));
     }
   }
-  // The cards reaching each meeting point, in board order, with the line and the cap they came in by.
+
+  // The cards reaching each meeting point, in board order, with the line and cap they came in by.
   const reach = new Map<string, Array<{ card: string; cap: EdgeCap; via: E }>>();
   const plain: E[] = [];
   for (const e of edges) {

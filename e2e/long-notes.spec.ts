@@ -1,5 +1,3 @@
-// A long, structured note in one card — a checklist with sections and tables: it is never lost mid-edit,
-// it frames and edits readably however tall it is, and its tables fit the card.
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { openBoard, seedBoard, card, clickAway, diskFiles, palette, settled } from './helpers';
 
@@ -16,7 +14,13 @@ async function seedDoc(page: Page, w = 200): Promise<Locator> {
 const zoom = (page: Page): Promise<number> =>
   page.locator('#world').evaluate(el => Number(/scale\(([\d.]+)\)/.exec(el.style.transform)?.[1]));
 const editor = (page: Page): Locator => page.locator('textarea.body-edit');
-// Open the editor with the caret at the end of the title line.
+
+// A tall card's middle is off the screen.
+async function selectByTop(page: Page, c: Locator): Promise<void> {
+  await c.locator('h1').click();
+  await settled(page);
+}
+
 async function openAtTitleEnd(page: Page, c: Locator): Promise<void> {
   await c.locator('h1').dblclick();
   await expect(editor(page)).toBeFocused();
@@ -29,8 +33,7 @@ test('a table wider than a narrow card is squeezed to fit it, and Resize to fit 
   const c = await seedDoc(page);
   const fits = () => c.locator('table').evaluate((t: HTMLElement) => t.offsetWidth <= t.parentElement!.clientWidth + 1);
   expect(await fits()).toBe(true);
-  await c.locator('h1').click();   // its top: a tall card's middle is off the screen
-  await settled(page);
+  await selectByTop(page, c);
   await palette(page, 'Resize to fit');
   expect(await c.evaluate((el: HTMLElement) => el.offsetWidth)).toBeGreaterThan(400);
   await expect(c.locator('table')).not.toHaveClass(/squeezed/);
@@ -40,8 +43,7 @@ test('a table wider than a narrow card is squeezed to fit it, and Resize to fit 
 test('F frames a tall card from its top at a readable zoom', async ({ page }) => {
   await openBoard(page);
   const c = await seedDoc(page, 600);
-  await c.locator('h1').click();   // its top: a tall card's middle is off the screen
-  await settled(page);
+  await selectByTop(page, c);
   await page.keyboard.press('f');
   await settled(page);
   expect(await zoom(page)).toBeGreaterThanOrEqual(0.5);
@@ -75,8 +77,7 @@ test('Esc keeps the edit, and ⌘Z takes it back', async ({ page }) => {
 test('typing at the end of a tall note walks the view along, and leaving keeps the line in place', async ({ page }) => {
   await openBoard(page);
   const c = await seedDoc(page, 600);
-  await c.locator('h1').click();   // its top: a tall card's middle is off the screen
-  await settled(page);
+  await selectByTop(page, c);
   await page.keyboard.press('f');
   await settled(page);
   await c.locator('h1').dblclick();

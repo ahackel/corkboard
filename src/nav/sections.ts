@@ -13,31 +13,16 @@ import { focusScope } from './focus.js';
 import { setSelectionSet, selectNode } from '../features/selection.js';
 import { scheduleSave } from '../data/save.js';
 
-// ---------- OPENING a section: the scoped canvas ----------
-// The ACTIONS; nav/scope.ts holds the model and the reasoning. They sit beside focusNode because
-// that's their template (reveal → select → glide), but this is a separate feature: focusNode frames
-// a card WITHIN the map, opening replaces what the map is for as long as you're inside.
+// Opening and leaving sections; nav/scope.ts holds the model.
 
-// The viewport rect the open section lays its contents out in — read back through containerBox /
-// sectionInterior. A SNAPSHOT, taken here and refreshed only on a window resize:
-//  · not LIVE: the drop test reads it on every move, and a rect that moved with every pan would
-//    make where a card lands depend on how you got there.
-//  · sized at k = 1 (the app's canonical 1 world px = 1 screen px), not at the current zoom: the
-//    camera is about to change, since opening fits the contents, so reading the live k is circular.
-//    frameBox clamps k ≤ 1.0 anyway, so the fitted result lands near 1 and the contents do fill it.
-//  · bottomInset() is deliberately NOT subtracted. It's nonzero only while the float bar is docked
-//    AND open, i.e. it tracks the SELECTION — folding it in would reflow the section on every click.
-//    It belongs to the camera moves (frameBox/revealInView) and stays there. Same for the crumb bar,
-//    which is floating chrome over the canvas like #toolbar.
-//  · anchored at the section's own content origin, so opening a section moves nothing at all (and so
-//    dirties nothing).
+// A SNAPSHOT of the viewport at k = 1, anchored at the section's origin so opening moves nothing. Not live
+// (where a drop lands mustn't depend on panning); no bottomInset (it tracks the selection).
 function scopeRectFor(t: MindNode): { x: number; y: number; w: number; h: number } {
-  const home = containerBox(t);   // read before the level is pushed, so it's the section's real bounds
+  const home = containerBox(t);   // read before the level is pushed: the section's real bounds
   const s = stageSize();
   return { x: home.x, y: home.y, w: s.width, h: s.height };
 }
-// Re-measure the open level after a window resize; the anchor is kept, since the open section can't
-// move (it isn't selectable and nothing lays it out). Returns whether anything actually changed.
+// The anchor is kept: the open section can't move.
 function refreshScopeRect(): boolean {
   const top = scope.stack[scope.stack.length - 1];
   if (!top) {
@@ -52,11 +37,8 @@ function refreshScopeRect(): boolean {
 }
 function currentBack(): ScopeBack { return { view: { ...state.view }, sel: [...state.sel], selId: state.selId }; }
 
-// Rebuild the stack so its last level is `target` (null = the whole map). The stack IS the crumb
-// path — the openable ancestor chain, not just what the user happened to click through — so opening
-// a deep section from the ⋯ menu still reads `Map › A › B › C`. Levels that survive the rebuild keep
-// their remembered camera and rect, which is what makes `open A → open B → leave` cut back to the
-// camera A really had; levels nobody stepped through get no `back` and are re-fitted instead.
+// The stack IS the crumb path: the whole openable ancestor chain. Surviving levels keep their camera;
+// levels nobody stepped through get no `back` and are re-fitted.
 function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
   if (!target) { scope.stack = []; scope.rootId = null; return; }
   const keep = new Map(scope.stack.map(l => [l.rootId, l]));
@@ -66,7 +48,7 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
   }
   const top = next[next.length - 1]!;
   if (!keep.has(top.rootId)) {
-    top.back = back;   // only a level you're newly entering records a way back
+    top.back = back;
   }
   scope.stack = next;
   scope.rootId = target.id;
@@ -74,25 +56,19 @@ function setScopeStack(target: MindNode | null, back: ScopeBack | null): void {
 
 interface ScopeOpts { back?: ScopeBack | null; restore?: ScopeBack | null; exiting?: boolean; camera?: boolean; }
 function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
-  // A scope change re-parents elements (a child moves between #world and a wrapper), which would
-  // drop a captured pointer or blur an open editor.
+  // Re-parenting elements would drop a captured pointer or blur an open editor.
   endInPlaceEdit();
   cancelViewAnim();
   const before = scope.rootId;
-  // No layout glide: the cards of the level you step into are simply THERE, where they sit — played from
-  // where they were, they fly in from their ancestor and the canvas visibly builds itself up.
   setScopeStack(target, opts.back ?? null);
-  // settledHost caches which wrapper each element sits in (hostSectionId), and the scope just
-  // changed which wrapper that IS. Drop the cache or the children keep being placed into a
-  // wrapper paintNode is about to remove.
+  // The cached host wrapper may be the one paintNode is about to remove.
   for (const n of state.nodes.values()) {
     n.hostSectionId = undefined;
   }
   refreshScopeRect();
   remeasure();
   if (opts.exiting) {
-    // Leaving: select the section you came out of — that's what makes a crumb read as a back button —
-    // and cut back to the camera you left. A level nobody stepped through has none, so it re-fits.
+    // Selecting the section you came out of is what makes a crumb read as a back button.
     const came = before ? state.nodes.get(before) : undefined;
     const ids = came && !outOfScope(came) ? [came.id]
       : (opts.restore?.sel ?? []).filter(id => { const n = state.nodes.get(id); return !!n && !outOfScope(n); });
@@ -103,70 +79,54 @@ function applyScope(target: MindNode | null, opts: ScopeOpts = {}): void {
       focusScope(true);
     }
   } else {
-    selectNode(null);            // the section itself is off the canvas now, so nothing is selected
+    selectNode(null);            // the section itself is off the canvas now
     if (opts.camera !== false) {
       focusScope(true);
     }
   }
-  syncUrl();                     // a discrete navigation step, like selecting a node → a history entry
+  syncUrl();
   if (before !== scope.rootId) {
     scheduleSave();
   }
 }
 
-// Open a section. Allowed on a LOCKED section: looking inside the box isn't changing it.
+// Allowed on a locked section: looking inside isn't changing it.
 export function openSection(target: MindNode | undefined): void {
   const t = target;
   if (!t || !canOpen(t)) { setStatus('Only a section can be opened'); return; }
   if (afterReading([t.id], () => openSection(t), false)) {
-    return;   // its notes are the canvas you open onto
+    return;
   }
   const back = currentBack();
-  // Opening is pure navigation, in the same class as revealInView: it writes no node field. A FOLDED
-  // section stays folded — while you stand in it its interior is the canvas whatever its fold says
-  // (isHidden asks about the open section before the fold), and you come back out to the same pill.
+  // Pure navigation: writes no node field, so a folded section stays folded.
   if (isScopeRoot(t)) {
-    return;                  // already standing in it
+    return;
   }
   applyScope(t, { back });
 }
-// Leave the innermost level.
+// Leaves the innermost level and every synthesized level (no `back`) beneath it: you were never in those.
 export function exitScope(): void {
-  // Leave the level you're standing in — AND every SYNTHESIZED level beneath it. A level with no
-  // `back` is one nobody stepped through (setScopeStack): opening a card that lives three sections deep
-  // pushes those sections as crumbs, and leaving one at a time would walk you out through folders you
-  // were never in. Coming out of a card therefore lands you where you were when you went into it,
-  // which is what "close" means. A level you DID open by hand keeps its own back and stops the walk,
-  // so `open A → open B → leave` still lands in A exactly as before.
   let d = scope.stack.length - 1;
   while (d > 0 && scope.stack[d - 1]!.back === null) {
     d--;
   }
   goToScopeDepth(d);
 }
-// Leave the level AT `depth`, landing in the one above it — so depth 0 is "back to the whole map".
-// A crumb click is exactly this, which is why the crumbs need no logic of their own.
+// Leaves the level AT `depth`: depth 0 is the whole map. A crumb click is exactly this.
 export function goToScopeDepth(depth: number): void {
   if (depth < 0 || depth >= scope.stack.length) {
-    return;   // ↓ at the top level: silently inert
+    return;
   }
   const leaving = scope.stack[depth]!;
   const upId = depth > 0 ? scope.stack[depth - 1]!.rootId : null;
-  // Several levels can be left at once — exitScope pops the synthesized ones, a crumb click jumps out
-  // of many. The camera to go back to belongs to the OUTERMOST level being left, or, when that one
-  // was synthesized and never recorded a camera, to the innermost that did: that is the state the user
-  // was actually in before the whole excursion.
+  // The outermost level left that recorded a camera: where the user was before the whole excursion.
   let back = leaving.back;
   for (let i = scope.stack.length - 1; i > depth && !back; i--) {
     back = scope.stack[i]!.back;
   }
   applyScope(upId ? state.nodes.get(upId) ?? null : null, { restore: back, exiting: true });
 }
-// Restore the scope a URL hash asked for (nav/url-state.ts). No fit: the hash carries its own camera
-// and must win. The hash is AUTHORITATIVE, so a path that's absent, gone, or no longer a section all
-// mean the same thing — the whole map — rather than quietly leaving you wherever you were: that
-// distinction only shows up on a back/forward step, where honouring the URL is the entire point.
-// No error either way; a shared link to a since-deleted section should just open the map.
+// The hash is authoritative and carries its own camera: a path that's gone or not a section means the map.
 export function restoreScopeFromFile(file: string | null): void {
   const t = file ? nodeByFile(file) : undefined;
   const want = t && canOpen(t) ? t : null;
@@ -177,29 +137,18 @@ export function restoreScopeFromFile(file: string | null): void {
   withoutScopeFade();
   applyScope(want, { camera: false });
 }
-// The canvas colour must LAND, not fade in, whenever the scope comes from the URL rather than from
-// something the user just did. On a reload there is nothing to transition FROM — the map has only just
-// appeared — so the fade reads as the app flashing the wrong background before settling on the right
-// one; on a back/forward step the camera and selection jump too, so a sliding background would be the
-// only thing still catching up. Suppressed for two sections (long enough for the paint that sets
-// --canvas-bg to land), after which every real open/leave fades again.
+// A scope from the URL lands its canvas colour instantly (for two frames) instead of fading in.
 function withoutScopeFade(): void {
   document.body.classList.add('scope-instant');
   requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('scope-instant')));
 }
-// Bring `t` into reach from ANYWHERE: leave as many levels as it takes for it to be inside the scope
-// we land in. The deliberately UNSCOPED jumps (a [[wikilink]], an undo that
-// resurrects a node elsewhere) all go through here, so none of them can select a card that isn't on
-// the canvas — isSelectable refuses an out-of-scope id.
+// For unscoped jumps (a wikilink, an undo elsewhere): leave levels until `t` is in scope.
 export function popScopeFor(t: MindNode): void {
   for (let guard = 0; scopeActive() && outOfScope(t) && guard < 64; guard++) {
     exitScope();
   }
 }
-// Keep the crumb bar in step, and recover from the open section having been deleted / undone away /
-// removed on disk. pruneScope (view/layout.ts's applyLayouts) already truncated the stack; the
-// camera half has to live here, and without it you'd be staring at the parent scope through the
-// departed child's camera. Driven from paintAll, so every mutation path gets it.
+// Driven from paintAll. When pruneScope dropped the open section, this moves the camera off it.
 export function syncScopeChrome(): void {
   renderCrumbs();
   syncCanvasBackground();
@@ -214,9 +163,7 @@ export function syncScopeChrome(): void {
   const open = scopeRootNode();
   setStatus(open ? `That section is gone — back to “${nodeLabel(open)}”` : 'That section is gone — back to the whole map');
 }
-// Keep the rect honest across a window resize. Nothing to re-lay-out — an open section's contents sit
-// where they were put; what still reads the rect is the drop test (sectionAt / containerBox), which a
-// stale rect would confine to the old window. Debounced, and a no-op when the size didn't really change.
+// A stale rect would confine the drop test to the old window size.
 let scopeResizeTimer: ReturnType<typeof setTimeout> | undefined;
 
 export function installScopeResize(): void {

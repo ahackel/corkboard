@@ -1,8 +1,4 @@
-// ---------- pan / zoom / marquee-select gestures ----------
-// The unified Pointer-Events gesture layer on #stage (the empty canvas): one finger / mouse drag
-// rubber-band selects, two fingers pinch-zoom + pan, Space / middle-button hand-pans, and wheel +
-// Safari gesture events zoom/pan. Node drag/reparent lives in features/drag.ts; this only handles
-// the canvas background. `installGestures` registers its listeners.
+// Gestures on the empty canvas: marquee select, pinch-zoom, hand-pan, wheel and Safari gesture zoom.
 import { state, stage } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { applyView, cancelViewAnim, screenToWorld, zoomAt } from '../view/camera.js';
@@ -17,9 +13,16 @@ import { selectNode, setSelectionSet } from './selection.js';
 
 const marqueeEl = Object.assign(document.createElement('div'), { id: 'marquee' });
 
-// ---- touch gestures: track each finger that lands on the empty canvas. One finger marquee-selects
-// (same as mouse), two fingers pinch-zoom + pan. (Mouse keeps Space-to-pan / marquee-select behaviour.)
+const MOVE_THRESHOLD_PX = 3;
+const PINCH_WHEEL_RATE = 0.01;
+const WHEEL_ZOOM_IN = 1.15;
+const WHEEL_ZOOM_OUT = 0.87;
+const SAFARI_MIN_K = 0.2;
+const SAFARI_MAX_K = 2.5;
+const ORIENTATION_SETTLE_MS = 50;
+
 const gDist = (a: Pt, b: Pt) => Math.hypot(a.x-b.x, a.y-b.y);
+
 function startPinch(): void {
   const [a,b] = [...gPointers.values()];
   ui.pinch = { dist: gDist(a,b), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2 };
@@ -35,14 +38,12 @@ function endGesturePointer(e: PointerEvent): boolean {
   }
   if (gPointers.size === 0){
     ui.pan = null; stage.classList.remove('panning');
-    // End marquee exactly like the mouse path does
     if (ui.marquee){ endMarquee(); }
   }
-  // gPointers.size === 1: one finger remains after pinch — don't start a new marquee mid-gesture
   return true;
 }
-// Tear down the active marquee. A no-move, non-additive gesture resolves to a plain click: on empty
-// canvas that DESELECTS; started from an unselected section (clickNode set) it SELECTS that section.
+
+// A no-move, non-additive band is a click: it deselects, or selects the section it started on.
 function endMarquee(): void {
   const m = ui.marquee;
   if (!m) {
@@ -54,10 +55,8 @@ function endMarquee(): void {
   }
   ui.marquee = null;
 }
-// Start a rubber-band select from a press that landed on `nodeId`'s element (an UNSELECTED section),
-// rather than on the empty canvas. Behaves exactly like a canvas marquee — the shared window
-// move/up handlers drive and finish it — except a no-move click selects the section (see endMarquee).
-// Registering the touch pointer in gPointers lets a second finger still upgrade to pinch-zoom.
+
+// A marquee from a press on an UNSELECTED section; a touch pointer joins gPointers so a second finger can pinch.
 export function beginMarqueeFromNode(e: PointerEvent, nodeId: string): void {
   cancelViewAnim();
   endInPlaceEdit();
@@ -68,6 +67,7 @@ export function beginMarqueeFromNode(e: PointerEvent, nodeId: string): void {
   drawMarquee(e.clientX, e.clientY);
   marqueeEl.style.display = 'block';
 }
+
 function drawMarquee(cx: number, cy: number): void {
   const marquee = ui.marquee;
   if (!marquee) {
@@ -79,6 +79,7 @@ function drawMarquee(cx: number, cy: number): void {
   marqueeEl.style.width  = Math.abs(cx - marquee.sx) + 'px';
   marqueeEl.style.height = Math.abs(cy - marquee.sy) + 'px';
 }
+
 function selectWithinMarquee(cx: number, cy: number): void {
   const marquee = ui.marquee;
   if (!marquee) {
@@ -86,13 +87,11 @@ function selectWithinMarquee(cx: number, cy: number): void {
   }
   const a = screenToWorld(Math.min(marquee.sx, cx), Math.min(marquee.sy, cy));
   const b = screenToWorld(Math.max(marquee.sx, cx), Math.max(marquee.sy, cy));
-  // Every card's box, taken ONCE when the band first moves: nothing on the board moves under a rubber
-  // band, and measuring each card's height again on every pointer move was most of what a band cost.
+  // Measured ONCE per band: nothing moves under it, and re-measuring was most of its cost.
   if (!marquee.boxes) {
     marquee.boxes = [];
     for (const n of state.nodes.values()){
-      // A marquee started from inside a section (clickNode) never selects that section itself — dragging
-      // within its box would otherwise always enclose it. Only its CONTENTS get rubber-banded.
+      // A band started inside a section would always enclose it; only its contents count.
       if (!isHidden(n) && n.id !== marquee.clickNode) {
         marquee.boxes.push({ id: n.id, x0: n.x, y0: n.y, x1: n.x + nodeW(n), y1: n.y + nodeH(n) });
       }
@@ -104,7 +103,6 @@ function selectWithinMarquee(cx: number, cy: number): void {
       hits.push(m.id);
     }
   }
-  // …and the selection is touched only when the band takes a card in or lets one go.
   const key = hits.join(' ');
   if (key === marquee.hits) {
     return;
@@ -113,16 +111,8 @@ function selectWithinMarquee(cx: number, cy: number): void {
   setSelectionSet(marquee.add ? new Set([...marquee.base, ...hits]) : hits);
 }
 
-// ---- iOS Safari landscape scroll-vs-fixed desync workaround ----
-// #stage is `position:fixed; inset:0`, which per spec stays viewport-anchored no matter what
-// the document's own scroll position is — but iOS Safari's landscape compact toolbar (which,
-// unlike portrait, floats OVER the page instead of reserving its own space) drives an internal
-// scroll adjustment of its own height when it hides/shows, and WebKit has a long-standing bug
-// where `position:fixed` content visually drifts with that scroll while pointer/touch
-// coordinates stay viewport-true — so a tap lands correctly on-screen but resolves against a
-// canvas that's silently shifted by the toolbar's height. Nothing in this app ever intentionally
-// scrolls the top-level document (html/body are `overflow:hidden`), so any non-zero scroll here
-// is exactly that quirk — snap it back to (0,0) whenever it occurs.
+// iOS Safari's landscape toolbar scrolls the document, and WebKit then draws the fixed #stage shifted
+// while pointer coordinates are not. The app never scrolls the document, so undo any scroll.
 function resetPageScroll(): void {
   if (window.scrollX || window.scrollY) {
     window.scrollTo(0, 0);
@@ -132,40 +122,37 @@ function resetPageScroll(): void {
 export function installGestures(): void {
   stage.appendChild(marqueeEl);
 
-  // Empty-canvas drag = rubber-band SELECT (mouse and single-finger touch). Hold Space / middle-button to PAN.
   stage.addEventListener('pointerdown', (e) => {
     if ((e.target as HTMLElement).closest('.node')) {
-      return;            // node drags capture their own pointer
+      return;
     }
     if (e.button === 2) {
-      return;         // right-click = context menu only: no marquee, keep editors/selection
+      return;
     }
     cancelViewAnim();
 
-    // Tapping the canvas background closes any open in-place text editor (important on touch) and lets go
-    // of the card, as FigJam does: left selected, the next click on it would open the editor again
-    // (features/activate.ts editOnClick). The press goes no further — it was spent leaving the editor, not starting a marquee.
+    // Leaving an editor also lets go of the card, as FigJam does: left selected, the next click would edit.
     if (inPlaceEditActive()) {
       endInPlaceEdit();
       selectNode(null);
       return;
     }
 
-    if (e.pointerType !== 'mouse'){                   // touch / pen
+    if (e.pointerType !== 'mouse'){
       gPointers.set(e.pointerId, { x:e.clientX, y:e.clientY });
-      if (gPointers.size === 1){                      // one finger → marquee select
+      if (gPointers.size === 1){
         ui.marquee = { sx:e.clientX, sy:e.clientY, add:false, base:new Set(state.sel), moved:false };
         drawMarquee(e.clientX, e.clientY);
         marqueeEl.style.display = 'block';
-        stage.setPointerCapture(e.pointerId);         // keep events on stage even when finger slides onto a node
-      } else if (gPointers.size === 2){               // second finger → pinch-zoom + two-finger pan
+        stage.setPointerCapture(e.pointerId);
+      } else if (gPointers.size === 2){
         ui.marquee = null; marqueeEl.style.display = 'none';
         startPinch();
       }
       return;
     }
 
-    if (ui.spaceHeld || e.button === 1){                 // hand-pan
+    if (ui.spaceHeld || e.button === 1){
       if (ui.spaceHeld) {
         ui.spaceUsedForPan = true;
       }
@@ -174,28 +161,18 @@ export function installGestures(): void {
       return;
     }
 
-    // start a marquee. ⇧ or ⌘/Ctrl keeps the existing selection and adds to it.
     ui.marquee = { sx:e.clientX, sy:e.clientY, add:e.metaKey||e.ctrlKey||e.shiftKey, base:new Set(state.sel), moved:false };
     drawMarquee(e.clientX, e.clientY);
     marqueeEl.style.display = 'block';
   });
 
-  // Double-click the empty canvas — one gesture, read against what the canvas currently IS:
-  //   · inside an open section, the canvas is that section's interior, so double-clicking it LEAVES —
-  //     the exact inverse of the double-click on a section's interior that took you in (activateNode).
-  //     Going in and coming out being the same gesture is what makes the whole thing feel like a folder.
-  //   · at the top level there's nowhere to leave to, so it keeps its original meaning: a NEW CARD
-  //     there, straight into its rename.
-  // Making a card INSIDE an open section therefore moved to Space, Tab and the canvas right-click, all of
-  // which land it in that section (detachParentId, nav/scope.ts).
-  // Mouse/trackpad only: a stray double-TAP while panning would strew cards across the map, and touch
-  // already has the ⋯ canvas menu (features/context-menu.ts) for this.
+  // Inside an open section a double-click LEAVES it (the inverse of going in); at the top it makes a card.
   stage.addEventListener('dblclick', (e) => {
     if ((e.target as HTMLElement).closest('.node')) {
-      return;   // nodes handle their own double-click
+      return;
     }
     if (scopeActive()) { exitScope(); return; }
-    createNode(centredAt(screenToWorld(e.clientX, e.clientY)));   // like the canvas menu's "New card here"
+    createNode(centredAt(screenToWorld(e.clientX, e.clientY)));
   });
   window.addEventListener('pointermove', (e) => {
     if (gPointers.has(e.pointerId)){
@@ -205,18 +182,16 @@ export function installGestures(): void {
         const [a,b] = [...gPointers.values()];
         const nd = gDist(a,b), ncx = (a.x+b.x)/2, ncy = (a.y+b.y)/2;
 
-        // stage is position:fixed; inset:0 so its origin is always (0,0) — no getBoundingClientRect needed
+        // #stage is fixed at inset 0, so client coordinates are stage coordinates.
         if (pinch.dist > 0) {
           zoomAt(ncx, ncy, nd / pinch.dist);
         }
-        state.view.x += ncx - pinch.cx;               // pan by the midpoint's movement
+        state.view.x += ncx - pinch.cx;
         state.view.y += ncy - pinch.cy;
         applyView();
         pinch.dist = nd; pinch.cx = ncx; pinch.cy = ncy;
         return;
       }
-
-      // single finger falls through to the pan branch below
     }
     if (ui.pan){
       state.view.x = ui.pan.ox + (e.clientX - ui.pan.sx);
@@ -225,7 +200,7 @@ export function installGestures(): void {
     }
     const marquee = ui.marquee;
     if (marquee){
-      if (Math.abs(e.clientX-marquee.sx) + Math.abs(e.clientY-marquee.sy) > 3) {
+      if (Math.abs(e.clientX-marquee.sx) + Math.abs(e.clientY-marquee.sy) > MOVE_THRESHOLD_PX) {
         marquee.moved = true;
       }
       drawMarquee(e.clientX, e.clientY);
@@ -247,10 +222,7 @@ export function installGestures(): void {
     endGesturePointer(e);
   });
 
-  // Trackpad on macOS delivers BOTH gestures as wheel events:
-  //  · pinch          → wheel with ctrlKey = true  → zoom toward the cursor
-  //  · two-finger pan → wheel with ctrlKey = false → pan by deltaX/deltaY
-  // (A mouse wheel also lands here with ctrlKey = false; we treat its vertical delta as zoom.)
+  // A macOS trackpad pinch arrives as a ctrlKey wheel, a two-finger pan as a plain one.
   stage.addEventListener('wheel', (e) => {
     e.preventDefault();
     cancelViewAnim();
@@ -258,34 +230,28 @@ export function installGestures(): void {
     const mx = e.clientX - r.left, my = e.clientY - r.top;
 
     if (e.ctrlKey){
-      // pinch-zoom — deltaY is small & continuous; convert to a gentle factor
-      zoomAt(mx, my, Math.exp(-e.deltaY * 0.01));
+      zoomAt(mx, my, Math.exp(-e.deltaY * PINCH_WHEEL_RATE));
       return;
     }
 
-    // a plain MOUSE wheel: deltaMode is "lines" (1) not "pixels" (0), or it's the classic
-    // 100/120-px notch. Trackpad scroll is always pixel-mode with fractional deltas, so this
-    // won't catch it — trackpad users zoom by pinching (handled above).
+    // Line mode or a 100/120px notch; trackpad scroll is fractional pixel mode.
     const isMouseWheel = e.deltaX === 0 &&
       (e.deltaMode === 1 || Math.abs(e.deltaY) === 100 || Math.abs(e.deltaY) === 120);
     if (isMouseWheel){
-      zoomAt(mx, my, e.deltaY < 0 ? 1.15 : 0.87);
+      zoomAt(mx, my, e.deltaY < 0 ? WHEEL_ZOOM_IN : WHEEL_ZOOM_OUT);
       return;
     }
 
-    // two-finger scroll → pan
     state.view.x -= e.deltaX;
     state.view.y -= e.deltaY;
     applyView();
   }, { passive:false });
 
-  // Safari fires native gesture events for pinch instead of ctrl+wheel. These only APPLY the
-  // canvas zoom — cancelling the browser's page zoom happens once, in the window guards below
-  // (gesture events bubble there from anywhere, including the stage).
+  // Safari pinches with gesture events instead; a touchscreen pinch (gPointers) is already handled.
   stage.addEventListener('gesturestart', (ev) => {
     const e = ev as GestureEvt;
     if (gPointers.size) {
-      return;   // touchscreen pinch is handled via pointer events instead
+      return;
     }
     ui.gestureStartK = state.view.k;
     const r = stage.getBoundingClientRect();
@@ -294,27 +260,23 @@ export function installGestures(): void {
   stage.addEventListener('gesturechange', (ev) => {
     const e = ev as GestureEvt;
     if (gPointers.size) {
-      return;   // …so we don't double-apply zoom on iPad
+      return;
     }
     const k0 = state.view.k;
-    const target = clamp(ui.gestureStartK * e.scale, 0.2, 2.5);
+    const target = clamp(ui.gestureStartK * e.scale, SAFARI_MIN_K, SAFARI_MAX_K);
     zoomAt(ui.gestureMid.x, ui.gestureMid.y, target / k0);
   });
 
-  // ---- block BROWSER page zoom globally (canvas AND toolbar, editor panel, search, …).
-  // The stage handlers above turn the gesture into canvas zoom; here the page zoom is cancelled.
-  // Trackpad pinch arrives as wheel+ctrlKey (Chrome/Edge/Firefox) …
+  // Block the BROWSER's page zoom everywhere: ctrl+wheel, and Safari's gesture events.
   window.addEventListener('wheel', (e) => {
     if (e.ctrlKey) {
       e.preventDefault();
     }
   }, { passive:false });
-
-  // … and as native gesture events on Safari.
   for (const type of ['gesturestart', 'gesturechange', 'gestureend'] as const) {
     window.addEventListener(type, (e) => e.preventDefault());
   }
   window.addEventListener('scroll', resetPageScroll, { passive: true });
-  window.addEventListener('orientationchange', () => setTimeout(resetPageScroll, 50));
+  window.addEventListener('orientationchange', () => setTimeout(resetPageScroll, ORIENTATION_SETTLE_MS));
   resetPageScroll();
 }

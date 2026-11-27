@@ -1,19 +1,5 @@
-// ---------- dragging a card's text OUT of it ----------
-// The inverse of the ⌥-drop card merge (features/drag.ts): select part of a card's text in its in-place
-// editor and drag the selection out. Dropped on another CARD the text is appended to that card's note;
-// dropped anywhere else it becomes a card of its own at the drop point. Either way it's a MOVE: the text
-// leaves the card it came from (crud.ts dropCardText owns every landing).
-//
-// A card's NAME comes out through this same gesture and needs no arm of its own — the name is the `# `
-// line inside the one field being dragged from, and cutCardText re-splits whatever is left, so cutting
-// the heading away simply leaves the card untitled. That's what retired the old title/body split here
-// (and cutTitleRange's refusal, back when a title had to stand as a filename on its own).
-//
-// This rides the browser's NATIVE text drag — a selection inside a textarea is draggable for free —
-// rather than the pointer-driven node drag in features/drag.ts, which is what
-// keeps it out of that file's gesture vocabulary entirely. The cost is that it's a desktop gesture:
-// dragging a selection isn't a thing on iPad Safari, where ⌘⇧E (extract to a child) stays the way to
-// break a note apart.
+// Dragging selected text OUT of a card's editor: onto a card appends it, elsewhere it becomes a card; a MOVE.
+// Rides the browser's NATIVE textarea drag, so it is desktop-only (⌘⇧E extracts on iPad).
 import { state, type MindNode } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
@@ -27,42 +13,28 @@ import { classMarker } from '../utils/dom.js';
 import { colorClass, applyColorVars } from '../view/color.js';
 import { NODE_W } from '../view/geometry.js';
 
-// The selection as it stood when the drag began (crud.ts TextSource — which card, which half of it,
-// which range). Captured here because it's read at DROP time, by when the editor may have lost the
-// selection to the drop, and the range is what the cut is made from.
+// Captured at dragstart: by drop time the editor may have lost the selection.
 let pending: TextSource | null = null;
 
-// Where a release right now would put the text. `null` = not a drop we handle (anywhere on the card
-// it came FROM, or over something locked), which leaves the browser its native behaviour — dragging
-// the selection back into its own note must stay a plain in-textarea move.
+// `null` leaves the browser its native behaviour: a drag back into its own note stays an in-textarea move.
 type Dest = { into: MindNode } | { container: MindNode | null };
+
 function destAt(t: EventTarget | null, sourceId: string): Dest | null {
-  // A card's own element is what a drop hits: .section-content is pointer-events:none, so the empty
-  // interior of a section resolves to the SECTION, and a card inside it to that card.
   const n = nodeAtTarget(t);
-  if (n?.id === sourceId) {
-    return null;                   // its own card (editor or not): a native move
+  if (n?.id === sourceId || (n && isLockedEffective(n))) {
+    return null;
   }
-  if (!n) {
-    return { container: null };                    // open canvas → the top level
+  if (n && takesDrop(n)) {
+    return { into: n };
   }
-  if (isLockedEffective(n)) {
-    return null;                 // locked: no drop, no hint
+  if (n && isSection(n)) {
+    return { container: n };
   }
-  if (takesDrop(n)) {
-    return { into: n };                    // a card swallows the text
-  }
-  if (isSection(n)) {
-    return { container: n };               // a section takes a card of its own
-  }
-  // Anything else under the cursor (an image card or a folded section) has no
-  // note to take the text and no interior to hold a card, so it counts as canvas — the new card
-  // simply lands over it.
+
+  // The canvas, or what can't take text or hold a card (an image card, a folded section).
   return { container: null };
 }
 
-// The drop hint: the same dashed outline the ⌥ card merge uses when the text lands IN a card, and
-// the section-drop outline when it lands inside a section.
 const markMerge = classMarker('drop-merge');
 const markSection = classMarker('drop-target');
 
@@ -71,21 +43,8 @@ function showHint(dest: Dest | null): void {
   markSection(dest && 'container' in dest ? dest.container?.el ?? null : null);
 }
 
-// What a native drag beginning on `target` is dragging, if it's THIS gesture: a range of the open
-// editor on the card the drag started on. Exported because a card element is `draggable` and its own
-// dragstart (the ⌥ card-file export, features/clipboard.ts) cancels every native drag it doesn't own —
-// it has to stand aside for this one, and both sides must agree on what "this one" is. The card test is
-// what keeps them honest: an editor left open on ANOTHER card must not make that card's export (or an
-// ⌥ image extract) stand down, and a pointerdown elsewhere doesn't always close it first (drag.ts's
-// image-extract branch returns before it gets that far).
-//
-// This used to have a second arm for the card's TITLE, whose contenteditable selection had to be
-// measured with a Range because it has no selectionStart — and which needed setCardDraggable to turn
-// the card's own export drag OFF for the duration, since a draggable ANCESTOR is decisive about what a
-// drag begun inside it drags, and a contenteditable (unlike a textarea) loses that contest. A card is
-// ONE textarea now, and a text control holding a selection outranks its draggable ancestor, so the arm,
-// the Range measurement and the whole draggable dance went with it. Dragging a card's NAME out still
-// works — the name is the `# ` line inside this very selection.
+// A range of the open editor on the card the drag began on. Shared with the card's own export dragstart
+// (features/clipboard.ts), which must stand aside for exactly this gesture and no other.
 export function cardTextDrag(target: EventTarget | null): TextSource | null {
   if (!(target instanceof Element)) {
     return null;
@@ -101,16 +60,8 @@ export function cardTextDrag(target: EventTarget | null): TextSource | null {
   return { id: be.id, start: be.ta.selectionStart, end: be.ta.selectionEnd };
 }
 
-// What rides the cursor: a CARD, not the browser's snapshot of the dragged text. The gesture's whole
-// point is that a card comes out of this, and the default drag image — a translucent slice of the
-// textarea — reads as "moving some letters around". So the ghost is a real `.node` captioned with the
-// dragged text's own first line (firstLineLabel, the WIDE read: any first line makes a caption, where
-// only a `# ` line would make the new card a real title), tinted with the SOURCE card's resolved
-// colour, since a sibling is what the text becomes on the open canvas and it would inherit exactly that.
-// Lives off-screen for one tick: the browser snapshots it during dragstart, so it must be in the
-// document and rendered (display:none / visibility:hidden snapshot as nothing) — and only `left` is
-// moved off-screen, so the snapshot keeps the card's true width. Removed on the next tick, since
-// removing it inside the handler can beat the snapshot.
+// The drag image is a CARD in the source's colour. The browser snapshots it during dragstart, so it must be
+// rendered (display:none snapshots as nothing) and is removed only on the next tick.
 function buildGhost(source: MindNode, text: string): HTMLElement {
   const col = effectiveColor(source);
   const el = document.createElement('div');
@@ -131,10 +82,11 @@ function buildGhost(source: MindNode, text: string): HTMLElement {
   return el;
 }
 
+// Near the ghost's title, as if held by it.
+const GHOST_GRIP = { x: 28, y: 22 };
+
 export function installTextDrag(): void {
-  // The drag DATA is left to the browser: a textarea selection already carries its text/plain (which is
-  // what lets the same gesture drop into another app), and touching the store here could only disturb
-  // the one drop we DON'T handle — the selection dragged back into its own note.
+  // The drag DATA is left to the browser: its text/plain lets the text drop into another app.
   document.addEventListener('dragstart', (e) => {
     pending = cardTextDrag(e.target);
     if (!pending) {
@@ -146,7 +98,7 @@ export function installTextDrag(): void {
       return;
     }
     const ghost = buildGhost(source, text);
-    e.dataTransfer.setDragImage(ghost, 28, 22);   // cursor near the ghost's title, as if held by it
+    e.dataTransfer.setDragImage(ghost, GHOST_GRIP.x, GHOST_GRIP.y);
     setTimeout(() => ghost.remove(), 0);
   });
   document.addEventListener('dragover', (e) => {
@@ -156,7 +108,7 @@ export function installTextDrag(): void {
     const dest = destAt(e.target, pending.id);
     showHint(dest);
     if (!dest) {
-      return;              // no preventDefault → the browser keeps the drop (or refuses it)
+      return;              // the browser keeps the drop
     }
     e.preventDefault();
     if (e.dataTransfer) {
@@ -178,7 +130,5 @@ export function installTextDrag(): void {
     dropCardText(p,
       'into' in dest ? dest : { container: dest.container, at: centredAt(screenToWorld(e.clientX, e.clientY)) });
   });
-
-  // Cancelled (Esc, released outside the window) or finished: nothing to clean up but the hint.
   document.addEventListener('dragend', () => { pending = null; showHint(null); });
 }

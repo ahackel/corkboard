@@ -1,10 +1,5 @@
-// Drag ONE Markdown note (or a folder) in from the OS and a pill at the top offers to OPEN it: the map becomes
-// that very file, edited in place (boot.ts openDropped). A drop anywhere else still ADDS it to the board as a
-// card where it lands (attachments.ts), so the drop point keeps deciding which section a copy goes in. A single
-// note can't take a card beside it, so there a drop anywhere opens.
-//
-// Opening needs write access, and asking for it needs a click, which a drop from the OS may not count as:
-// then the pill stays as a button naming the file, and its click finishes the job.
+// The pill that OPENS a note or folder dragged in from the OS; a drop elsewhere adds a card instead.
+// See "A note dragged in from the OS is OPENED on the pill" in docs/architecture.md.
 import { state, setStatus } from '../core/state.js';
 import { store } from '../data/active-store.js';
 import { byId } from '../utils/dom.js';
@@ -25,7 +20,6 @@ const sub = byId('openDropSub');
 let asking: FileSystemHandle | null = null;
 let askTimer = 0;
 
-// Only one dragged item can be opened, and only an item that may be a note or a folder.
 function openable(e: DragEvent): boolean {
   const items = e.dataTransfer?.items;
   return CAN_OPEN && !!items && items.length === 1 && items[0]!.kind === 'file' && OPENABLE_TYPES.includes(items[0]!.type);
@@ -45,6 +39,7 @@ function hide(): void {
   clearTimeout(askTimer);
 }
 
+// Write access needs a click, which a drop from the OS may not count as.
 function offerClick(handle: FileSystemHandle): void {
   asking = handle;
   pill.classList.add('ask');

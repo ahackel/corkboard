@@ -1,8 +1,5 @@
-// `npm run e2e` — the canvas, driven in a real browser (e2e/). `npm test` pins the FILE FORMAT; this pins
-// the interactions: cards, frames, lines and ports, folding, menus. Each test gets a fresh browser
-// context, so a fresh OPFS: a new, empty map. The specs run against the BUILT single file (what ships),
-// served on its own port: a 2s build, then every page load is one request instead of the dev server's
-// per-module transforms, which cost the suite about a third of its CPU.
+// Specs run against the BUILT single file (what ships): far cheaper per page load than the dev server.
+// Each test's fresh browser context means a fresh OPFS, so a new, empty map.
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 5179;
@@ -11,7 +8,7 @@ export default defineConfig({
   testDir: 'e2e',
   timeout: 30_000,
   fullyParallel: true,
-  workers: '100%',   // every core: the default (half) left this machine idle while specs waited
+  workers: '100%',
   reporter: [['list']],
   use: {
     baseURL: `http://localhost:${PORT}/`,

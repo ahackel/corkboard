@@ -1,5 +1,3 @@
-// Getting text onto the board and back off it: a drop from another app, number-key colours, and a copy
-// that other apps read as clean text yet pastes back onto the board as the same cards.
 import { test, expect } from '@playwright/test';
 import { openBoard, makeCard, select, card, clickAway, watchErrors, palette } from './helpers.js';
 

@@ -1,16 +1,11 @@
-// ---------- tidy-up geometry: pure, so tests/tidy.test.ts can pin it ----------
-// Where each of a set of boxes goes for "Tidy up", the six aligns and the two distributes
-// (features/tidy.ts applies the answer). Boxes in, top-left corners out; nothing here knows what a
-// card is. Every function returns a position for every box it was given, moved or not.
+// Tidy up, align and distribute as pure geometry: boxes in, a top-left for every box out.
 
 export interface Box { id: string; x: number; y: number; w: number; h: number }
 export interface Pt { x: number; y: number }
 export type AlignEdge = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
 
-// The ROWS a loose arrangement already forms, top to bottom, each left to right. A box joins the row
-// above when it overlaps that row vertically at all AND shares no column with a box already in it (no
-// horizontal overlap) — so a messy column (each card a little lower than the last, overlapping the one
-// above) stays a column, while a row whose cards drift up and down, or hold a taller note, stays a row.
+// A box joins the row above when it overlaps it vertically AND shares no column with it, so a messy
+// column stays a column and a drifting row stays a row.
 export function rowsOf(items: Box[]): Box[][] {
   const rows: Array<{ top: number; bottom: number; items: Box[] }> = [];
   const sideBySide = (a: Box, b: Box): boolean => Math.min(a.x + a.w, b.x + b.w) <= Math.max(a.x, b.x);
@@ -27,10 +22,8 @@ export function rowsOf(items: Box[]): Box[][] {
   return rows.map(r => r.items.sort((a, b) => a.x - b.x));
 }
 
-// TIDY UP (FigJam's): the rows the selection already forms become a GRID — each column as wide as its
-// widest box, each row as tall as its tallest, `gap` between them, left/top aligned in their cells,
-// starting at the selection's own top-left. Order is kept: nothing changes row, column or neighbour.
-// A single row lines up across, a single column stacks down — the same rule, no special case.
+// FigJam's TIDY UP: the rows become a GRID (columns as wide as their widest, rows as tall as their
+// tallest), order kept, starting at the selection's top-left.
 export function tidyGrid(items: Box[], gap: number, origin?: Pt): Map<string, Pt> {
   const out = new Map<string, Pt>();
   if (!items.length) {
@@ -51,7 +44,6 @@ export function tidyGrid(items: Box[], gap: number, origin?: Pt): Map<string, Pt
   return out;
 }
 
-// ALIGN: every box to one edge (or centre line) of the selection's bounds, on one axis only.
 export function align(items: Box[], edge: AlignEdge): Map<string, Pt> {
   const x0 = Math.min(...items.map(b => b.x)), x1 = Math.max(...items.map(b => b.x + b.w));
   const y0 = Math.min(...items.map(b => b.y)), y1 = Math.max(...items.map(b => b.y + b.h));
@@ -64,8 +56,7 @@ export function align(items: Box[], edge: AlignEdge): Map<string, Pt> {
   return out;
 }
 
-// DISTRIBUTE: equal GAPS between neighbours along one axis — the first and last box stay put and the
-// ones between slide (in their current order) so every gap is the same. Fewer than three: nothing to do.
+// The first and last box stay put; the ones between slide so every gap is equal.
 export function distribute(items: Box[], axis: 'x' | 'y'): Map<string, Pt> {
   const out = new Map<string, Pt>(items.map(b => [b.id, { x: b.x, y: b.y }]));
   if (items.length < 3) {

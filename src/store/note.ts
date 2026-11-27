@@ -1,10 +1,5 @@
-// ONE .md file opened on its own (File System Access, Chrome/Edge): a map that is a single card.
-//
-// The map is that one note and nothing else, so the tree this store lists holds exactly one path, the
-// file's own name. There is no folder to put a second card, a picture or a board.json in: the board
-// (the card's size, the grid, the canvas colour) is kept in IndexedDB under the file's key instead, so
-// the note on disk stays exactly the note. Nothing may add a card beside it or take it away
-// (core/state.ts singleNoteRefuses), and its filename never follows its title (data/save.ts planPaths).
+// ONE .md file opened on its own (FSA): a map of a single card. Its board.json lives in IndexedDB, so the
+// note on disk stays exactly the note. See "A single NOTE opens as a map of ONE card" in docs/architecture.md.
 import { idbGet, idbPut, idbDel } from '../utils/idb.js';
 import { readMaps, upsertMap, removeMapRef } from './maps.js';
 import { notifyRecentsChanged } from './recents.js';
@@ -22,7 +17,7 @@ type FilePicker = (opts?: {
 }) => Promise<FileSystemFileHandle[]>;
 const showOpenFilePicker = (window as Window & { showOpenFilePicker?: FilePicker }).showOpenFilePicker;
 
-// The board's stand-in for the board.json a folder would hold — the only other path this store answers.
+// The only other path this store answers.
 const BOARD_PATH = 'board.json';
 const PICK_NOTE = {
   types: [{ description: 'Markdown note', accept: { 'text/markdown': ['.md', '.markdown'] } }],
@@ -38,7 +33,7 @@ async function rememberedHandle(key: string): Promise<FileSystemFileHandle | und
   }
 }
 
-// The key a file was opened under before, so reopening it finds its board again; else a fresh one.
+// Reuses the key a file was opened under before, so it finds its board again.
 async function keyFor(handle: FileSystemFileHandle): Promise<string> {
   for (const m of readMaps()) {
     if (m.kind !== 'note') {
@@ -55,16 +50,13 @@ async function keyFor(handle: FileSystemFileHandle): Promise<string> {
 export const noteStore = {
   _file: null as FileSystemFileHandle | null,
   _key: null as string | null,
-  // The file as this app last saw it (size + modification time), so a refocus can tell whether
-  // anything else touched it.
   _stamp: null as string | null,
   singleNote: true as const,
   get isOpen(){ return !!this._file; },
   get name(){ return this._file ? this._file.name.replace(/\.(md|markdown)$/i, '') : ''; },
   get currentKey(){ return this._key; },
 
-  // Adopt a picked, remembered or DROPPED note as the open map, once read-write access is confirmed.
-  // `key`: the entry it takes the place of (relink), so the note keeps that entry's board.
+  // `key`: the entry it replaces (relink), so the note keeps that entry's board.
   async adopt(handle: FileSystemFileHandle, key?: string): Promise<PickResult> {
     const r = await ensureWrite(handle);
     if (r !== 'ok') {
@@ -78,7 +70,6 @@ export const noteStore = {
     return 'ok';
   },
 
-  // Pick a note file (needs a user gesture).
   async pick(): Promise<PickResult> {
     if (!showOpenFilePicker) {
       return 'unsupported';
@@ -90,9 +81,7 @@ export const noteStore = {
     return handle ? this.adopt(handle) : 'cancel';
   },
 
-  // Find a remembered note AGAIN (its handle is dead: permission.ts ensureWrite 'gone'): the picker, opened
-  // beside the old file when Chrome still knows where that is, and the note chosen takes the old entry's
-  // key — and so its board.
+  // For a dead handle: the picker, opened beside the old file if Chrome still knows where it is.
   async relink(key: string): Promise<PickResult> {
     if (!showOpenFilePicker) {
       return 'unsupported';
@@ -116,13 +105,11 @@ export const noteStore = {
     return handle ? this.adopt(handle, key) : 'needs-click';
   },
 
-  // Reopen a remembered note by its key (the click is the gesture for the permission prompt).
   async openRecent(key: string): Promise<PickResult> {
     const handle = await rememberedHandle(key);
     return handle ? this.adopt(handle) : 'gone';
   },
 
-  // Silent reopen at boot — only if read-write permission is still granted.
   async resume(key: string): Promise<boolean> {
     const handle = await rememberedHandle(key);
     if (!handle) {
@@ -135,14 +122,12 @@ export const noteStore = {
     return true;
   },
 
-  // Forget a remembered note: its registry entry, its handle and its board.
   async forget(key: string): Promise<void> {
     removeMapRef(key);
     await idbDel(key).catch(() => {});
     await idbDel(boardKey(key)).catch(() => {});
   },
 
-  // The one note. A section's folder can't exist here, so asking under one finds nothing.
   async listTree(under: string, _fold: FoldTest): Promise<TreeListing> {
     const empty: TreeListing = { files: [], lazy: new Map(), foreign: new Set() };
     if (under || !this._file) {
@@ -159,8 +144,7 @@ export const noteStore = {
       return;
     }
     if (path !== this._file?.name) {
-      // Nothing in single-note mode should ever ask (core/state.ts singleNoteRefuses): fail loudly
-      // rather than drop what was meant for it.
+      // Nothing should ever ask (singleNoteRefuses): fail loudly rather than drop it.
       throw new Error(`A single note has nowhere to save “${path}”.`);
     }
     const w = await this._file.createWritable();
@@ -169,7 +153,6 @@ export const noteStore = {
     this._stamp = stampOf(await this._file.getFile());
   },
 
-  // The note itself is never removed from here, and there is nothing else on disk to remove.
   async remove(_path: string){},
   async removeDir(_dir: string){},
 
@@ -184,7 +167,6 @@ export const noteStore = {
     return null;
   },
 
-  // Has anything outside this app changed the file since the last read or write? Unknown counts as yes.
   async changed(): Promise<boolean> {
     if (!this._file) {
       return false;

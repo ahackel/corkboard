@@ -166,8 +166,7 @@ test('undo and redo say what they took back', async ({ page }) => {
   await expect(page.locator('#status')).toHaveText('Redo: Deleted “Groceries”');
 });
 
-// What a card's note takes dropped into it has ONE rule (utils/model.ts takesDrop): a plain, unlocked card.
-// An image card IS its picture, so a card ⌥-dropped on it is not folded in — it lands on the board.
+// utils/model.ts takesDrop
 test('⌥-dropping a card merges it into a plain card, never into an image card', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

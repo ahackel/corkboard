@@ -1,5 +1,4 @@
-// The drop rule over a real model: a card belongs to the innermost section its centre is in, else the top
-// level; a section takes in what it covers (CLAUDE.md, "a drop lands in the innermost section…").
+// A card belongs to the innermost section its centre is in, else the top level.
 import { describe, it, expect, beforeEach } from 'vitest';
 import './page-shell.js';
 

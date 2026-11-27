@@ -1,5 +1,4 @@
-// A stack's geometry as plain numbers: its cards in a grid, fanned out in an arc, and the gap a card dragged
-// within the fan would drop into. Pure, and pinned by tests/fan.test.ts; view/pile.ts feeds it the cards.
+// A stack's geometry: its cards in a grid, fanned in an arc, and where a card dragged within the fan drops.
 import type { Box } from './guides.js';
 import type { Pt } from './rect.js';
 
@@ -7,8 +6,7 @@ export interface Size { w: number; h: number }
 
 export interface Spot extends Pt { tilt: number }
 
-// Cards in a GRID: ⌈√n⌉ columns as wide as the widest card, each row as tall as its tallest, `gap` apart.
-// Each card's top-left as an offset from the grid's own, and the grid's size.
+// ⌈√n⌉ columns as wide as the widest card; each row as tall as its tallest. Offsets from the grid's top-left.
 export function gridCells(cards: Size[], gap: number): { at: Pt[]; w: number; h: number } {
   const cols = Math.ceil(Math.sqrt(cards.length));
   const colW = Math.max(...cards.map(c => c.w)) + gap;
@@ -25,8 +23,7 @@ export function gridCells(cards: Size[], gap: number): { at: Pt[]; w: number; h:
 
 export interface ArcStyle { gap: number; lift: number; dip: number; tilt: number }
 
-// A hand of cards held up over the pile, side by side so each reads whole: centred on `cx`, the middle
-// `lift` above `top` and the ends `dip` lower, tilting out to ±`tilt` degrees.
+// Side by side so each reads whole: the middle `lift` above `top`, the ends `dip` lower, tilting to ±`tilt`°.
 export function fanArc(widths: number[], cx: number, top: number, a: ArcStyle): Spot[] {
   const step = Math.max(...widths) + a.gap;
   const last = widths.length - 1;
@@ -36,9 +33,8 @@ export function fanArc(widths: number[], cx: number, top: number, a: ArcStyle): 
   });
 }
 
-// Where a card dragged within the fan would go: the gap beside the fanned card nearest `p` (within `reach`
-// of it), before or after it by which half `p` is over. `shown` is the fan as laid out, top card first;
-// `slot` counts from the BOTTOM of the pile; `x`/`y`/`h` are the insertion line down the middle of the gap.
+// The gap beside the nearest fanned card within `reach`. `shown` is top card first; `slot` counts from the
+// BOTTOM of the pile; `x`/`y`/`h` is the insertion line.
 export interface FanInsert { slot: number; x: number; y: number; h: number }
 
 export function fanInsertAt(shown: Box[], p: Pt, reach: number): FanInsert | null {
@@ -63,7 +59,7 @@ export function fanInsertAt(shown: Box[], p: Pt, reach: number): FanInsert | nul
   };
 }
 
-// The pile's order (bottom first) with `id` moved to `slot`.
+// Bottom first.
 export function reorderedPile(order: string[], id: string, slot: number): string[] {
   const out = order.filter(x => x !== id);
   out.splice(Math.min(slot, out.length), 0, id);

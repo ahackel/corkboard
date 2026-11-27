@@ -1,5 +1,4 @@
-// A section is a FOLDER on disk (`<Name>/_index.md` plus its cards), and a folded section's notes are not
-// read until it is unfolded (data/lazy.ts).
+// A section is a folder on disk; a folded one's notes are read only when unfolded (data/lazy.ts).
 import { test, expect } from '@playwright/test';
 import { openBoard, seedBoard, note, section, card, reload, watchErrors, diskFiles, palette, tooltip, settled, saved, select } from './helpers';
 
@@ -180,8 +179,7 @@ test('a folded section is a folder and its name; what it holds is in its tooltip
   expect(errors).toEqual([]);
 });
 
-// Opening a folder renames nothing in it: a file keeps the name it came with until the text that names
-// it is edited (data/note-names.ts keepsName).
+// data/note-names.ts keepsName
 test('a note keeps its filename until its first line is edited, then is named after it', async ({ page }) => {
   const errors = watchErrors(page);
   await openBoard(page);

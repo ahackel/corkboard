@@ -1,6 +1,4 @@
-// Ask the browser to KEEP what is stored on this device. Without it the notes sit in "best effort"
-// storage, which a browser may clear when the disk runs low. Asked once, on the first write: by then
-// there is something worth keeping. A refusal changes nothing — the store works as before.
+// Asks once, on the first write, for persistent storage: "best effort" may be cleared when the disk runs low.
 let asked = false;
 
 export function keepStorage(): void {

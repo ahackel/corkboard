@@ -1,9 +1,5 @@
-// ---------- the card editor offers names: `[[` a card, `#` a tag ----------
-// Typing `[[` in a note lists the map's cards, and `#word` its tags, in a small list under the caret — a
-// link has to name its card exactly, and a tag is only worth having if it's spelt like the others. What
-// counts as "typing a link/tag" is pure (utils/md-edit.ts completingAt); this is the list. It is not a
-// toolbar: it exists only while a name is being typed, and Esc or typing on past it puts it away.
-// ↑/↓ choose, Enter or Tab writes the choice, a click does too.
+// The `[[` card and `#` tag completion list under the editor's caret; what counts as typing one is
+// utils/md-edit.ts completingAt.
 import { state } from '../core/state.js';
 import { nodeLabel, parentOf } from '../utils/model.js';
 import { esc } from '../utils/markdown.js';
@@ -12,10 +8,10 @@ import type { TextEdit } from '../utils/text-edit.js';
 import { boardTags } from './tag-picker.js';
 
 interface Option { insert: string; label: string; hint: string }
-const MAX = 8;
+const MAX_OPTIONS = 8;
+const CARET_GAP = 4, VIEWPORT_MARGIN = 8;
 
-// What `[[` can link to: every card and section but the one being edited. Its TITLE when that names one
-// card only, else its PATH (`Ideas/Plan`), the one name that can't be ambiguous (utils/model.ts resolveWikilink).
+// A node's TITLE when that names one node only, else its PATH (`Ideas/Plan`): see resolveWikilink.
 function linkOptions(query: string, selfId: string): Option[] {
   const titles = new Map<string, number>();
   for (const n of state.nodes.values()) {
@@ -36,10 +32,12 @@ function linkOptions(query: string, selfId: string): Option[] {
   }
   return ranked(out, query);
 }
+
 function tagOptions(query: string): Option[] {
   return ranked(boardTags().map(t => ({ insert: t.tag, label: '#' + t.tag, hint: String(t.count) })), query);
 }
-// Those whose name holds the query, the ones it STARTS first, then shortest; at most MAX.
+
+// Prefix matches first, then substring matches, shortest first.
 function ranked(all: Option[], query: string): Option[] {
   const q = query.trim().toLowerCase();
   const score = (o: Option): number => {
@@ -48,7 +46,7 @@ function ranked(all: Option[], query: string): Option[] {
   };
   return all.map(o => ({ o, s: score(o) })).filter(x => x.s >= 0)
     .sort((a, b) => a.s - b.s || a.o.label.length - b.o.label.length || a.o.label.localeCompare(b.o.label))
-    .slice(0, MAX).map(x => x.o);
+    .slice(0, MAX_OPTIONS).map(x => x.o);
 }
 
 const pop = Object.assign(document.createElement('div'), { className: 'md-complete', id: 'mdComplete', role: 'listbox' });
@@ -56,6 +54,7 @@ const pop = Object.assign(document.createElement('div'), { className: 'md-comple
 interface Open { ta: HTMLTextAreaElement; at: Completing; options: Option[]; active: number; apply: (r: TextEdit) => void }
 let open: Open | null = null;
 let picking = false;
+
 // Esc puts the list away for the name being typed there; it comes back for the next one.
 let dismissedFrom = -1;
 
@@ -67,6 +66,7 @@ export function closeCompletion(): void {
   open = null;
   pop.classList.remove('open');
 }
+
 // Look at the caret again (after typing, or a caret move) and show, move or put away the list. `caretAt` is
 // where the caret's line is on screen; `apply` writes an edit into the textarea the editor's own way.
 export function updateCompletion(ta: HTMLTextAreaElement, selfId: string, caretAt: () => { left: number; bottom: number },
@@ -92,10 +92,11 @@ export function updateCompletion(ta: HTMLTextAreaElement, selfId: string, caretA
   ta.setAttribute('aria-expanded', 'true');
   render();
   const c = caretAt(), w = pop.offsetWidth, h = pop.offsetHeight;
-  const below = c.bottom + 4 + h <= window.innerHeight - 8;
-  pop.style.left = Math.max(8, Math.min(c.left - 8, window.innerWidth - w - 8)) + 'px';
-  pop.style.top = (below ? c.bottom + 4 : Math.max(8, c.bottom - h - 28)) + 'px';
+  const below = c.bottom + CARET_GAP + h <= window.innerHeight - VIEWPORT_MARGIN;
+  pop.style.left = Math.max(VIEWPORT_MARGIN, Math.min(c.left - 8, window.innerWidth - w - VIEWPORT_MARGIN)) + 'px';
+  pop.style.top = (below ? c.bottom + CARET_GAP : Math.max(VIEWPORT_MARGIN, c.bottom - h - 28)) + 'px';
 }
+
 function render(): void {
   if (!open) {
     return;
@@ -108,6 +109,7 @@ function render(): void {
   o.ta.setAttribute('aria-activedescendant', `mc-${o.active}`);
   pop.querySelector('.mc-row.active')?.scrollIntoView({ block: 'nearest' });
 }
+
 function pick(i: number): void {
   const o = open, choice = o?.options[i];
   if (!o || !choice) {
@@ -121,7 +123,8 @@ function pick(i: number): void {
     picking = false;
   }
 }
-// The list's keys, while it is up. True when the key was its, and the editor must not act on it too.
+
+// True when the key was the list's, and the editor must not act on it too.
 export function completionKey(e: KeyboardEvent): boolean {
   if (!open || e.metaKey || e.ctrlKey || e.altKey) {
     return false;

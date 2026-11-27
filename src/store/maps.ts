@@ -1,28 +1,22 @@
-// ============================================================
-// The unified map registry — ONE localStorage list of every map the user has, on-device
-// (OPFS) and local-folder (FSA) alike, so both kinds look the same to the UI. Each entry
-// is a MapRef: `kind` says where the files live, `id` is the OPFS dir name (kind 'device')
-// or the FSA handle key in IndexedDB (kind 'folder', and kind 'note' for one file opened on its own). Disk lifecycle of on-device maps
-// (create/delete/rename) is delegated to the store adapter's map ops; this module
-// owns only the registry + last-map bookkeeping and the one-time legacy migration.
-// ============================================================
+// The map registry: ONE localStorage list of every map (on-device, folder, note), plus the last-map key.
+// Disk lifecycle of on-device maps is the store adapter's.
 import { readJSON, writeJSON } from '../utils/local-json.js';
 import type { DeviceStore } from './types.js';
 
 export interface MapRef {
   id: string;                    // device: OPFS dir name ('vault' = the legacy pre-multi-map dir); folder/note: FSA handle key
   kind: 'device' | 'folder' | 'note';
-  name: string;                  // display name (folder kind: the real directory name; note kind: the file's)
+  name: string;
   when: number;                  // last opened / created (ms since epoch)
 }
 export type MapKind = MapRef['kind'];
 
-const MAPS_KEY = 'corkboard.maps';        // MapRef[] — the registry
+const MAPS_KEY = 'corkboard.maps';
 const LAST_MAP_KEY = 'corkboard.lastMap'; // {kind, id} — what boot() reopens
 
 export function readMaps(): MapRef[] { return readJSON<MapRef[]>(MAPS_KEY, []); }
 function writeMaps(list: MapRef[]): void {
-  writeJSON(MAPS_KEY, [...list].sort((a, b) => b.when - a.when));   // most recent first
+  writeJSON(MAPS_KEY, [...list].sort((a, b) => b.when - a.when));
 }
 export function upsertMap(ref: MapRef): void {
   writeMaps([ref, ...readMaps().filter(m => m.id !== ref.id)]);
@@ -40,8 +34,7 @@ export function getLastMap(): { kind: MapKind; id: string } | null {
 }
 export function setLastMap(kind: MapKind, id: string): void { writeJSON(LAST_MAP_KEY, { kind, id }); }
 
-// Each on-device map dir/prefix carries a map.json ({name}) so the registry can be rebuilt
-// from disk if localStorage is ever cleared. App-owned, non-.md → invisible to the note walk.
+// Lets the registry be rebuilt from disk if localStorage is cleared.
 export const MAP_META_FILE = 'map.json';
 export function serializeMapMeta(name: string): string { return JSON.stringify({ name }); }
 export function parseMapMetaName(text: string): string | null {
@@ -54,11 +47,11 @@ export function parseMapMetaName(text: string): string | null {
   return null;
 }
 
-// Mint a new on-device map id (also its OPFS dir name under maps/).
+// Also its OPFS dir name under maps/.
 function newMapId(): string {
   return 'm' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
-// "Untitled", "Untitled 2", … — auto-number against the given names (default: the registry).
+// "Untitled", "Untitled 2", …
 function uniqueMapName(base: string, names = new Set(readMaps().map(m => m.name))): string {
   if (!names.has(base)) {
     return base;
@@ -70,7 +63,6 @@ function uniqueMapName(base: string, names = new Set(readMaps().map(m => m.name)
   return `${base} ${i}`;
 }
 
-// ---- on-device map lifecycle: registry entry + the adapter's disk op ----
 export async function createDeviceMap(s: DeviceStore, name?: string): Promise<MapRef> {
   const id = newMapId();
   const finalName = uniqueMapName((name || 'Untitled').trim() || 'Untitled');
@@ -95,13 +87,8 @@ export async function renameDeviceMap(s: DeviceStore, id: string, name: string):
   }
 }
 
-// ---- one-time migration + rebuild ----
-// Populates an empty registry from what exists already: the legacy FSA recents list, and
-// whatever on-device maps the adapter can enumerate (incl. the legacy vault/ dir, which
-// simply BECOMES the first map — no files are moved). Also derives the last-map ref from
-// the legacy last-store key so the first boot after the update reopens the same map.
-// These carry the CURRENT prefix even though they're pre-registry keys: utils/legacy-keys.ts
-// renames every `mindmap.*` key to `corkboard.*` before anything here reads one.
+// An empty registry is rebuilt from the legacy recents list and the maps on disk. These keys already
+// carry the new prefix: utils/legacy-keys.ts renames `mindmap.*` before anything reads them.
 const LEGACY_RECENTS_KEY = 'corkboard.recentFolders';
 const LEGACY_LAST_STORE_KEY = 'corkboard.lastStore';
 
@@ -110,11 +97,9 @@ export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
     return;
   }
   const refs: MapRef[] = [];
-  // legacy FSA recents → folder refs (handle keys unchanged, so resume keeps working)
   for (const r of readJSON<Array<{ key: string; name: string; when: number }>>(LEGACY_RECENTS_KEY, [])) {
     refs.push({ id: r.key, kind: 'folder', name: r.name, when: r.when });
   }
-  // on-device maps found on disk (legacy vault/ included)
   for (const m of await s.listMaps()) {
     refs.push({ id: m.id, kind: 'device', name: uniqueMapName(m.name, new Set(refs.map(r => r.name))), when: 0 });
   }
@@ -123,7 +108,6 @@ export async function ensureMapRegistry(s: DeviceStore): Promise<void> {
   }
   writeMaps(refs);
   try { localStorage.removeItem(LEGACY_RECENTS_KEY); } catch {}
-  // legacy last-store → last-map, so boot() reopens what the user last had open
   if (!getLastMap()) {
     let legacy: string | null = null;
     try { legacy = localStorage.getItem(LEGACY_LAST_STORE_KEY); } catch {}

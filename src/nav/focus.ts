@@ -1,4 +1,4 @@
-// ---------- focus: bring a card (or everything on the canvas) into view ----------
+// Bringing a card, or everything on the canvas, into view.
 import { type MindNode, state, setStatus } from '../core/state.js';
 import { layoutSnapshot, animateReflow } from '../layout-anim.js';
 import { relayout } from '../render.js';
@@ -14,14 +14,15 @@ import { selectNode } from '../features/selection.js';
 import { scheduleSave } from '../data/save.js';
 import { afterReading } from '../data/lazy.js';
 
-// Focus a card: unfold it when openTarget, select it, frame it + all its visible descendants.
+const NEW_LINK_CARD_GAP = 40;
+
+// Unfolds its sections (and itself when openTarget), selects it and frames it with its descendants.
 export function focusNode(target: MindNode | undefined, openTarget = false): void {
   if (!target) {
     return;
   }
-  const before = layoutSnapshot();             // pre-reveal frame to glide away from
-  // Unfold the sections it's tucked inside (and, when openTarget, the card itself) so it's on the canvas —
-  // only up to the open section: what's above it is not on the canvas, folded or not.
+  const before = layoutSnapshot();
+  // Only up to the open section: what's above it is off the canvas anyway.
   const toReveal: MindNode[] = [];
   for (const p of ancestors(target)) {
     if (isScopeRoot(p)) {
@@ -38,40 +39,29 @@ export function focusNode(target: MindNode | undefined, openTarget = false): voi
   if (toReveal.length) {
     record(toReveal.map(m => m.id), () => { for (const m of toReveal){ m.collapsed = false; } revealed = true; });
   }
-  selectNode(target.id);                       // select → the card shows its full body (grows)
-  relayout();                  // reflow siblings around the now-taller selection
-  animateReflow(before);                       // one glide from the pre-reveal frame to the final
+  selectNode(target.id);
+  relayout();
+  animateReflow(before);
   frameBox(subtreeIds(target.id).map(id => state.nodes.get(id)));
   if (revealed && store.isOpen) {
     scheduleSave();
   }
 }
-// Follow a [[wikilink]] and focus its target. Map-wide, on purpose — a link that only worked inside the
-// section you happened to be in would be a broken link — so it comes out of as many scope levels as it
-// takes to show the target (popScopeFor).
-//
-// Two cards may now share a title, so a bare `[[Notes]]` can be AMBIGUOUS. It resolves to the first
-// match either way (a link has to go somewhere, and refusing to move would read as a dead link), but it
-// SAYS so, since the alternative — picking silently and looking like a bug — is the worse of the two.
-// The way to be exact is the PATH form, `[[Sections/Notes]]` or `[[Notes 2]]`, matched against the node's
-// file: that's the one name in this app guaranteed unique, which is exactly why the disambiguator lives
-// there rather than in some new syntax.
+// Follows a [[wikilink]] map-wide, leaving scope levels as needed. An ambiguous bare title goes to the
+// first match and says so; the PATH form (`[[Sections/Notes]]`) is exact.
 export function focusByTitle(link: string, from?: MindNode, readFolded = false): void {
   const hits = resolveWikilink(link), title = linkName(link);
   const target = hits[0];
-  // A FOLDED section's notes aren't read yet (data/lazy.ts), so a link to one of them finds nothing — read
-  // them and follow it then, rather than writing a second card of the same name.
+  // The target may be in an unread folded section: read first, rather than write a duplicate card.
   if (!target && !readFolded && afterReading([...state.nodes.keys()], () => focusByTitle(link, from, true))) {
     return;
   }
-  // A link to a card that isn't there yet WRITES it (Obsidian's gesture): the new card lands beside
-  // the one you clicked from, free-standing — a wikilink is a relation, never containment. Only the
-  // TITLE form can be created: the PATH form names a folder nothing here chooses.
+  // A missing target is written beside the card you clicked from (Obsidian's gesture), title form only.
   if (!target){
     if (!from || title.includes('/')){
       setStatus(`No node titled “${title}” in this map`); return;
     }
-    const at = snapPt({ x: from.x + nodeW(from) + 40, y: from.y });
+    const at = snapPt({ x: from.x + nodeW(from) + NEW_LINK_CARD_GAP, y: from.y });
     createNode({ x: at.x, y: at.y, title, edit: false });
     return;
   }
@@ -81,9 +71,7 @@ export function focusByTitle(link: string, from?: MindNode, readFolded = false):
     setStatus(`${hits.length} cards are titled “${title}” — went to the one in ${target.file ?? 'this map'}`);
   }
 }
-// The "focus" command (toolbar button + F): frame the selected card (+ its subtree), or
-// frame the whole map when nothing is selected — both glide with the same easing. While a section is
-// OPEN, "the whole map" means its contents: frameBox filters isHidden, so the scope comes for free.
+// The F command: the selection, else everything on the canvas.
 export function focusOrFit(): void {
   if (state.selId && state.nodes.has(state.selId)) {
     focusNode(state.nodes.get(state.selId));
@@ -91,7 +79,5 @@ export function focusOrFit(): void {
     focusScope();
   }
 }
-// Re-frame whatever is ON the canvas right now: the open section's contents while scoped (isHidden
-// does the filtering), the whole map plus its ink otherwise. The single spelling of "frame all of
-// this", shared by F-with-nothing-selected, every open/exit and the current crumb.
+// frameBox filters isHidden, so while scoped this is the open section's contents.
 export function focusScope(instant = false): void { frameBox([...state.nodes.values()], instant); }

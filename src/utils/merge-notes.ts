@@ -1,8 +1,5 @@
-// What ⌥-dropping cards onto a card MERGES into its note (features/crud.ts mergeCardsInto). Pure, and pinned
-// by tests/merge-notes.test.ts.
-
-// Each card's text, in order, a blank line apart: a titled card under a `## Title` heading (one level below
-// the target's own `# ` line), an untitled one as just its text — no heading is invented for it.
+// What ⌥-dropping cards onto a card MERGES into its note: each titled card under a `## Title` (one level
+// below the target's), an untitled one as just its text, a blank line apart.
 export function mergedText(cards: Array<{ title: string; body: string }>): string {
   const part = (c: { title: string; body: string }): string => {
     const body = (c.body || '').trim();

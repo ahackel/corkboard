@@ -1,17 +1,12 @@
-// Smart guides: where a dragged box would like to land among its neighbours. Pure geometry — boxes in,
-// a correction and the lines to draw out — so tests/guides.test.ts pins it; features/guides.ts draws.
-//
-// Per axis, the box is pulled (within `tol`) to the NEAREST of:
-//  - ALIGNMENT: one of its edges onto a neighbour's edge, or its centre onto a neighbour's centre;
-//  - SPACING: exactly SPACING (20px) from a neighbour it faces, the same gap as the pair it continues (a column of cards keeps its rhythm), or the
-//    middle between the two neighbours it sits between.
-// A RESIZE pulls only the edge being dragged (`snapEdges`): onto a neighbour's edge, SPACING from a
-// neighbour it faces, or the gap of the pair it continues.
-// Nothing moves on its own: this only runs while the user drags, and only ever by a few pixels.
+// Smart guides as pure geometry. Per axis a dragged box is pulled (within `tol`) to the NEAREST alignment
+// (edge or centre) or spacing (SPACING from a facing neighbour, the gap of the pair it continues, or the
+// middle between two). A resize pulls only the dragged edge.
 export interface Box { x: number; y: number; w: number; h: number; }
-// axis 'x' = a VERTICAL line at x=`at` from y=`from` to y=`to`; axis 'y' = a horizontal one.
+
+// axis 'x' = a VERTICAL line at x=`at`; axis 'y' = a horizontal one.
 export interface Guide { axis: 'x' | 'y'; at: number; from: number; to: number; }
-// A spacing marker: a gap along `axis` from `from` to `to`, drawn across at `at` on the other axis.
+
+// A gap along `axis` from `from` to `to`, drawn across at `at` on the other axis.
 export interface Gap { axis: 'x' | 'y'; from: number; to: number; at: number; }
 export interface Snap { dx: number; dy: number; guides: Guide[]; gaps: Gap[]; }
 
@@ -22,12 +17,14 @@ const lo = (b: Box, a: Axis): number => a === 'x' ? b.x : b.y;
 const len = (b: Box, a: Axis): number => a === 'x' ? b.w : b.h;
 const hi = (b: Box, a: Axis): number => lo(b, a) + len(b, a);
 const mid = (b: Box, a: Axis): number => lo(b, a) + len(b, a) / 2;
-// Do the two boxes face each other across `a` — i.e. overlap on the OTHER axis?
+
+// Do the boxes overlap on the OTHER axis?
 const facing = (p: Box, q: Box, a: Axis): boolean => {
   const o = other(a);
   return lo(p, o) < hi(q, o) && lo(q, o) < hi(p, o);
 };
 const shift = (b: Box, a: Axis, d: number): Box => a === 'x' ? { ...b, x: b.x + d } : { ...b, y: b.y + d };
+
 
 // The neighbour just BEFORE `b` along `a` (facing it, ending before its middle), and just AFTER.
 function before(b: Box, all: Box[], a: Axis): Box | null {
@@ -40,6 +37,7 @@ function before(b: Box, all: Box[], a: Axis): Box | null {
   }
   return best;
 }
+
 function after(b: Box, all: Box[], a: Axis): Box | null {
   let best: Box | null = null;
   for (const o of all) {
@@ -52,6 +50,7 @@ function after(b: Box, all: Box[], a: Axis): Box | null {
 }
 
 interface Pull { d: number; gaps: (box: Box) => Gap[]; }
+
 function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
   let best: Pull | null = null;
   const offer = (d: number, gaps: Pull['gaps'] = () => []): void => {
@@ -64,11 +63,11 @@ function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
     offer(mid(o, a) - mid(box, a));
   }
   const o = other(a);
-  // a gap marker between p and q, drawn across the middle of where they overlap
+
+  // Drawn across the middle of where p and q overlap.
   const gap = (p: Box, q: Box): Gap => ({ axis: a, from: hi(p, a), to: lo(q, a),
     at: (Math.max(lo(p, o), lo(q, o)) + Math.min(hi(p, o), hi(q, o))) / 2 });
-  // the house spacing: an edge SPACING away from a facing neighbour's edge, so cards are easy to set
-  // a standard distance apart
+
   for (const n of others) {
     if (facing(n, box, a)) {
       offer(hi(n, a) + SPACING - lo(box, a), bx => [gap(n, bx)]);
@@ -90,8 +89,8 @@ function bestPull(box: Box, others: Box[], a: Axis, tol: number): Pull | null {
   return best;
 }
 
-// The alignment lines the (already snapped) box shows: every neighbour edge/centre it now sits on —
-// ONE line per position, spanning every box that shares it, so a row of aligned cards reads as one rule.
+
+// ONE line per position, spanning every box on it, so a row of aligned cards reads as one rule.
 function alignGuides(box: Box, others: Box[], a: Axis): Guide[] {
   const o = other(a), out = new Map<number, Guide>();
   const mine = [lo(box, a), mid(box, a), hi(box, a)];
@@ -113,8 +112,8 @@ function alignGuides(box: Box, others: Box[], a: Axis): Guide[] {
       }
     }
   }
-  // Cards of one width share left, centre AND right — three rules through the text say no more than
-  // two: the centre line only shows when no edge lines up.
+
+  // Same-width cards share left, centre and right: the centre line shows only when no edge lines up.
   const edges = [...out.values()].filter(g => g.at !== Math.round(mid(box, a) * 2) / 2);
   return edges.length ? edges : [...out.values()];
 }
@@ -130,11 +129,12 @@ export function snapBox(box: Box, others: Box[], tol: number): Snap {
   };
 }
 
-// Which edge of the box a resize drags on an axis: its low (left/top) or high (right/bottom) one.
+
+// The edge a resize drags on an axis.
 export type Side = 'lo' | 'hi';
 
-// The pull for ONE dragged edge: the opposite edge stays where it is, so only alignments and gaps that
-// this edge can make count — never a centre, which would move as the edge does.
+
+// The opposite edge stays put, so a centre (which would move with the edge) never counts.
 function edgePull(box: Box, others: Box[], a: Axis, side: Side, tol: number): Pull | null {
   let best: Pull | null = null;
   const offer = (d: number, gaps: Pull['gaps'] = () => []): void => {
@@ -170,9 +170,8 @@ function edgePull(box: Box, others: Box[], a: Axis, side: Side, tol: number): Pu
   return best;
 }
 
-// Snap a box being RESIZED: per axis, the dragged edge (`edges.x`/`edges.y`, absent = that axis isn't
-// dragged) is pulled; `dx`/`dy` is how far THAT EDGE moves. The lines shown are only the ones running
-// through a dragged edge — an edge that stays put isn't news.
+
+// `dx`/`dy` is how far the dragged edge moves; only lines through a dragged edge are shown.
 export function snapEdges(box: Box, edges: { x?: Side; y?: Side }, others: Box[], tol: number): Snap {
   const px = edges.x ? edgePull(box, others, 'x', edges.x, tol) : null;
   const py = edges.y ? edgePull(box, others, 'y', edges.y, tol) : null;
@@ -199,8 +198,8 @@ export function snapEdges(box: Box, edges: { x?: Side; y?: Side }, others: Box[]
   };
 }
 
-// Where `b` comes to rest sliding along `axis` (rightwards or downwards): past every box in its way,
-// `gap` clear of each.
+
+// Slides rightwards or downwards past every box in its way, `gap` clear of each.
 export function slidePast(b: Box, others: Box[], axis: 'x' | 'y', gap: number): Box {
   const at = { ...b };
   for (let moved = true; moved;) {

@@ -1,13 +1,5 @@
-// ============================================================
-// The store adapter — the single swappable I/O boundary. All disk access goes through one
-// of the adapters below, which share the same handle-based interface:
-//   opfsStore — local-first default (OPFS), works on every browser incl. iPad.
-//   fsaStore  — File System Access API (Chrome/Edge): a real local folder.
-//   idbStore  — IndexedDB fallback for Safari < 17.2 (no OPFS createWritable).
-//   noteStore — ONE .md file opened on its own (FSA file handle): a map that is a single card.
-// Retargeting the app (Obsidian vault, Tauri, …) means replacing only this folder. This
-// barrel re-exports the adapters + recents helpers and resolves which on-device store to use.
-// ============================================================
+// The store adapters, the single swappable I/O boundary: opfsStore (default), fsaStore (a real folder),
+// idbStore (Safari < 17.2) and noteStore (one .md file). Also resolves which on-device store to use.
 import { opfsStore } from './opfs.js';
 import { idbStore } from './idb-store.js';
 import type { DeviceStore } from './types.js';
@@ -23,8 +15,7 @@ export {
   type MapRef, type MapKind,
 } from './maps.js';
 
-// OPFS write requires FileSystemWritableFileStream (createWritable), which Safari added in 17.2.
-// On iOS ≤16 we fall back to an IndexedDB store with the same interface.
+// OPFS createWritable arrived in Safari 17.2.
 async function opfsCanWrite(): Promise<boolean> {
   try {
     const root = await navigator.storage.getDirectory();
@@ -36,8 +27,6 @@ async function opfsCanWrite(): Promise<boolean> {
   } catch { return false; }
 }
 
-// Pick the on-device store once: the real OPFS where writes work, else the IndexedDB
-// fallback (Safari < 17.2). Cached so the capability probe runs at most once.
 let _onDeviceStore: DeviceStore | null = null;
 export async function resolveOnDeviceStore(): Promise<DeviceStore> {
   if (_onDeviceStore) {

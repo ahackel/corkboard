@@ -1,10 +1,10 @@
-// Save a Blob to the user's disk via a programmatic <a download> click. Shared by the
-// map-level .zip export (data/persistence.ts) and the card export button (features/clipboard.ts).
+// Saves a Blob via a programmatic <a download> click.
+const REVOKE_AFTER_MS = 4000;   // time for the download to start reading the URL
+
 export function downloadBlob(blob: Blob, name: string): void {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
-  // revoke only after the download has had a chance to start reading the blob URL
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  setTimeout(() => URL.revokeObjectURL(a.href), REVOKE_AFTER_MS);
 }

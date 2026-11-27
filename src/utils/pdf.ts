@@ -1,5 +1,5 @@
-// A one-page PDF holding one JPEG that fills the page: all a picture export needs, so no library.
-// PDF readers draw a JPEG natively (DCTDecode), so the bytes go in exactly as the canvas encoded them.
+// A one-page PDF holding one JPEG that fills the page. Readers decode JPEG natively (DCTDecode), so the
+// canvas's bytes go in as they are.
 
 const MAX_PT = 14400;   // 200in, the largest page Acrobat opens
 

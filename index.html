@@ -2,50 +2,34 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<!-- viewport-fit=cover: WITHOUT it iOS letterboxes the whole layout viewport into the safe area, so
-     an iPhone in landscape loses a ~50px strip of canvas down each side (and a notch-width band at
-     the top in standalone/PWA mode) to flat background colour. With it the page owns every pixel of
-     the screen and the insets become OUR problem instead — styles.css's --sa-t/r/b/l (fed by env())
-     add them back under every piece of fixed chrome, and utils/dom.ts's placeInViewport does the
-     same for the panels that are placed by script. -->
+<!-- viewport-fit=cover: without it iOS letterboxes the page into the safe area. The insets are then ours:
+     styles.css --sa-t/r/b/l and utils/dom.ts placeInViewport add them back. -->
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Corkboard</title>
-<!-- App icon. The favicon is an inline SVG data URI so it also works when index.html is
-     opened from a file:// path; the PNG/manifest links (copied from public/) drive the
-     home-screen / PWA-install icon when served over http(s). -->
+<!-- An inline SVG favicon so it also works from file://. -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjExOCAxMTggMTAxOCAxMDE4Ij4KICA8cmVjdCB4PSIxNTgiIHk9IjE1OCIgd2lkdGg9IjkzOCIgaGVpZ2h0PSI5MzgiIHJ4PSIyMjAiIGZpbGw9IiNDMzc0M0IiLz4KICA8cmVjdCB4PSItMTc1IiB5PSItMTYyIiB3aWR0aD0iMzUwIiBoZWlnaHQ9IjMyNCIgcng9IjEyIiBmaWxsPSIjRkZFMDRCIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0NTQgNDc0KSByb3RhdGUoLTExLjUpIi8+CiAgPHJlY3QgeD0iLTE0MyIgeT0iLTEyMCIgd2lkdGg9IjI4NyIgaGVpZ2h0PSIyNDAiIHJ4PSIxMiIgZmlsbD0iIzdFQzRGQiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoODU2IDUwNSkgcm90YXRlKDEwLjYpIi8+CiAgPHJlY3QgeD0iLTE5MyIgeT0iLTEyMSIgd2lkdGg9IjM4NyIgaGVpZ2h0PSIyNDIiIHJ4PSIxMiIgZmlsbD0iI0ZGQTBEMCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjQ5IDg1NCkgcm90YXRlKDgpIi8+CiAgPHBhdGggZD0iTTQ0MiAzNDIgNDI5IDM4OCIgc3Ryb2tlPSIjQzQyRTNEIiBzdHJva2Utd2lkdGg9IjI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8Y2lyY2xlIGN4PSI0NTciIGN5PSIyOTQiIHI9IjUwIiBmaWxsPSIjRUUzMzQ5Ii8+CiAgPHBhdGggZD0iTTg3NCA0MTQgODYxIDQ1MyIgc3Ryb2tlPSIjMTY3QTQ4IiBzdHJva2Utd2lkdGg9IjI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8Y2lyY2xlIGN4PSI4ODgiIGN5PSIzNjkiIHI9IjQ5IiBmaWxsPSIjMUI4QTU1Ii8+CiAgPHBhdGggZD0iTTY0MSA3NzYgNjI2IDgxMiIgc3Ryb2tlPSIjNkUzNkE2IiBzdHJva2Utd2lkdGg9IjI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KICA8Y2lyY2xlIGN4PSI2NTUiIGN5PSI3MzEiIHI9IjQ5IiBmaWxsPSIjODU0N0MwIi8+Cjwvc3ZnPgo=">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#f5f5f5">   <!-- follows the canvas colour (features/canvas-color.ts syncThemeColor) -->
+<meta name="theme-color" content="#f5f5f5">   <!-- follows the canvas colour (syncThemeColor) -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Corkboard">
 </head>
 <body>
-  <!-- a failed save, shown until a write lands (data/save-alert.ts): #status is hidden, so this is
-       the ONE place a lost write can surface; it stays until fixed, where a toast fades -->
   <div id="saveAlert" role="alert" hidden>
     <span id="saveAlertMsg"></span>
     <button id="saveAlertRetry">Retry now</button>
   </div>
-  <!-- home / storage: floating bar in the top-left; the folder name sits beside the button -->
   <div id="homeBar">
     <button id="homeBtn" class="floating-btn" title="Home — recent folders / open another" aria-label="Home — recent folders">
       <span class="ic" data-icon="corkboard"></span></button>
-    <!-- the map name is the FIRST segment of the path (features/breadcrumbs.ts) — a real button, so
-         it's how you get back out to the whole map; inert while nothing is open. Its text is written
-         by data/persistence.ts. -->
+    <!-- the map name: the first path segment, and the way back out to the whole map -->
     <button type="button" id="folderName" class="sc-crumb sc-section"></button>
-    <!-- …and the section levels below it: the ONE way back out of an open section. -->
     <nav id="scopeBar" aria-label="Open section"></nav>
   </div>
 
-  <!-- No toolbar: every action is in the ⌘P palette (features/palette.ts), with its shortcut beside
-       it. #status is the toast setStatus writes (core/state.ts): a pill at the bottom that fades. -->
+  <!-- No toolbar: every action is in the ⌘P palette. -->
   <div id="status" role="status" aria-live="polite"></div>
-  <!-- shown while ONE note or folder is dragged in from the OS: dropped here it opens to be edited in place,
-       dropped on the board it's added as a card (features/open-drop.ts) -->
-  <!-- a newer version has been deployed since this window loaded (features/update.ts): a click saves, then reloads -->
   <button id="updateBtn" type="button" title="A new version of Corkboard is available" hidden>Update</button>
   <button id="openDrop" type="button" hidden><span class="ic" data-icon="document"></span>
     <span class="od-text"><b id="openDropTitle"></b><span id="openDropSub"></span></span></button>
@@ -56,7 +40,6 @@
     </div>
   </div>
 
-  <!-- floating search bar, top centre: opened with ⌘F or /, a #tag, or a click on a tag — see features/search.ts -->
   <div id="searchWrap">
     <span class="ic" data-icon="search"></span>
     <input id="searchBox" type="text" placeholder="Find a card, or #tag…" title="Find (⌘F)" aria-label="Find a card by text or tag" autocomplete="off" spellcheck="false" />
@@ -71,62 +54,34 @@
   </div>
 
   <div id="stage">
-    <!-- an EMPTY map says how to begin, once: gone with the first card (render.ts paintAll, body.empty-map) -->
     <p id="emptyHint"><span class="eh-fine">Double-click or press <kbd>N</kbd> to write a note</span><span
       class="eh-coarse">Double-tap to write a note</span><span class="eh-more"> · <kbd id="emptyHintKey">⌘P</kbd> for everything else</span></p>
-    <!-- background grid (none/dot/mesh/line, set in the map settings): a SCREEN-SPACE layer, sibling of
-         (and painted below) #world — deliberately NOT inside #world. A pattern that inherits the
-         zoom transform scales its own dots/strokes with it, so at any k≠1 the browser resamples
-         a sub-pixel pattern across the whole canvas — that's the moiré. Here the dots/lines are
-         always exactly 1 screen px and only the spacing follows the zoom. Two nested layers:
-         #grid draws the major cell, #gridFine the sub-grid of 4 cells inside it, and the
-         sub-grid's opacity fades out as you zoom out — by the time its cells get too dense the
-         level has stepped up by a factor of 4 with the sub-grid already invisible, so it never
-         pops. See view/grid.ts for the level-of-detail math. Panning only writes #grid's
-         transform (compositor-only); the gradients are rebuilt only when the level changes. -->
+    <!-- Screen-space grid, deliberately NOT inside #world: a pattern under the zoom transform resamples into moiré. -->
     <div id="grid"><div id="gridFine"></div></div>
     <div id="world">
-      <!-- free edges: the relations the user DREW (board.json). The lines are drawn ABOVE the cards (see the layer ladder in
-           styles.css) — a line is followed, so it may not dive under a card in its path.
-           Their invisible CLICK targets are a second layer, kept BEHIND the cards: an edge's hit
-           stroke is 18px wide (HIT_W), and over a card that band would swallow the card's own
-           press. So the stretch of a line that crosses a card is visible there but belongs to the
-           card, exactly as it did when the whole layer sat behind them. -->
+      <!-- Lines above the cards; their click targets in a second layer BEHIND them (see the layer ladder in styles.css). -->
       <svg id="freeEdgeHits"></svg>
       <svg id="freeEdges" class="fe-lines"></svg>
-      <!-- toggles overlay renders ABOVE node divs so collapse dots are always visible -->
       <svg id="toggles"></svg>
-      <!-- drag GROUP layer: while dragging, the dragged cards are moved in here so the whole set
-           composites as ONE translucent group (opacity on the layer, not per item) — you see the
-           canvas below but the dragged items never shine through each other. -->
+      <!-- the cards in hand, composited as ONE translucent group -->
       <div id="dragLayer">
-        <!-- the lines with an end in hand, drawn above the cards in hand (view/free-edges.ts) -->
         <svg id="freeEdgesHeld" class="fe-lines"></svg>
       </div>
     </div>
   </div>
 
-  <!-- starts closed (no "open" class) so it doesn't flash in before syncFloatBar() runs.
-       Floats next to the selected card (features/float-bar.ts). -->
+  <!-- starts closed so it doesn't flash in before syncFloatBar() -->
   <div id="floatBar">
-    <!-- FigJam's colour dropdown: the current colour's dot and a chevron, on a raised chip -->
     <button id="fbColor" class="fb-dd" title="Colour — click for the full palette" aria-label="Colour">
       <span id="fbColorDot" class="fb-swatch swatch inherit"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
     <span class="fb-sep"></span>
-    <!-- lock toggle: icon (open/closed padlock) + title set from the selection in float-bar.ts.
-         While the selection IS locked the bar collapses to just this button (see .locked-sel). -->
-    <!-- go IN: the touch-reachable twin of ↑ / ⋯ → Open, for a section. The float bar is the one action
-         surface that is identical on desktop and on a phone (it docks to the bottom on coarse pointers). -->
-    <!-- a SECTION's title: names an untitled section (seeding "Section") and selects the name to type over -->
+    <!-- the touch-reachable twin of ↑ for a section -->
     <button id="fbTitle" class="fb-icon" title="Title (F2)" aria-label="Title">
       <span class="ic" data-icon="text"></span></button>
-    <!-- several selected: tidy up / align / distribute (features/tidy.ts) — a dropdown -->
     <button id="fbTidy" class="fb-icon fb-dd" title="Tidy up and align" aria-label="Tidy up and align">
       <span class="ic" data-icon="tidy"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
-    <!-- one section selected: lay out the cards inside it (features/tidy.ts tidySection) -->
     <button id="fbTidySection" class="fb-icon" title="Tidy up the section" aria-label="Tidy up the section">
       <span class="ic" data-icon="tidy"></span></button>
-    <!-- collapse / expand the selection: a card to its one-line chip, a section to its label pill -->
     <button id="fbFold" class="fb-icon" title="Collapse (X)" aria-label="Collapse">
       <span class="ic ic-fold" data-icon="fold"></span><span class="ic ic-unfold" data-icon="unfold"></span></button>
     <button id="fbFit" class="fb-icon" title="Resize to fit (⌥⇧⌘R)" aria-label="Resize to fit">
@@ -137,16 +92,12 @@
       <span class="ic" data-icon="wrap-section"></span></button>
     <button id="fbUngroup" class="fb-icon" title="Ungroup (⌘⌫)" aria-label="Ungroup">
       <span class="ic" data-icon="ungroup"></span></button>
-    <!-- a STACK becomes an ordinary section, its cards laid out in the box (features/stacks.ts) -->
     <button id="fbToSection" class="fb-icon" title="Turn into section" aria-label="Turn into section">
       <span class="ic" data-icon="wrap-section"></span></button>
     <button id="fbLock" class="fb-icon" title="Lock (L)" aria-label="Lock"></button>
   </div>
-  <!-- the selected EDGE's bar (features/edge-bar.ts). Its own bar rather than a mode of #floatBar:
-       that one is anchored to a CARD and keyed on state.sel throughout, and an edge shares none of
-       its controls. Starts closed so it doesn't flash in before the first sync. -->
+  <!-- The selected edge's own bar: #floatBar is keyed on cards throughout. Starts closed. -->
   <div id="edgeBar">
-    <!-- every button that opens a picker is a dropdown (.fb-dd): its face, then a chevron -->
     <button id="ebColor" class="fb-dd" title="Colour" aria-label="Line colour">
       <span id="ebColorDot" class="fb-swatch swatch"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
     <button id="ebDash" class="fb-icon fb-dd" title="Line style" aria-label="Line style"></button>
@@ -155,30 +106,21 @@
   <div id="ebColorPop" class="fb-pop"><div id="ebColors" class="swatches"></div></div>
   <div id="ebArrowPop" class="fb-pop"><div id="ebArrowChips" class="capcols"></div></div>
   <div id="ebDashPop" class="fb-pop"><div id="ebDashChips" class="layoutchips"></div></div>
-  <!-- the label editor, opened by DOUBLE-CLICKING an edge; positioned over the line's midpoint -->
   <input id="ebLabelEdit" type="text" spellcheck="false" placeholder="Label…" aria-label="Line label">
 
   <div id="fbColorPop" class="fb-pop">
     <div id="edColors" class="swatches"></div>
   </div>
-  <!-- thin stem bridging an open popover to the bar — see .fb-pop-connector in styles.css -->
 
-  <!-- canvas menu: floating top-right, on touch screens — a permanent kebab so canvas
-       actions (new card, insert image, paste, fit view) are reachable without a right-click / long-press
-       (iOS Safari's synthesized contextmenu on the empty canvas is unreliable). Shares the same entry
-       list as the right-click menu (features/context-menu.ts canvasMenuEntries). -->
+  <!-- Touch only: iOS Safari's synthesized contextmenu on the canvas is unreliable. -->
   <button id="canvasMenuBtn" class="floating-btn" title="Canvas menu — new card, insert image…" aria-label="Canvas menu">
     <span class="ic" data-icon="kebab"></span></button>
 
 
 
-  <!-- map settings, opened from the dock's #settingsBtn (features/canvas-color.ts). The colour edits the
-       canvas you're standing on: the MAP at the top level, the OPEN SECTION inside one. The grid rows
-       are view/grid.ts's. -->
   <div id="settingsPop" class="fb-pop" role="dialog" aria-label="Map settings">
     <span id="setColorHead" class="set-head set-color">Canvas colour</span>
-    <!-- a colour FIELD: the live colour's chip, opening the swatch picker below (nested so a click in it
-         counts as inside the panel) -->
+    <!-- nested so a click in it counts as inside the panel -->
     <button id="canvasColorBtn" class="fb-dd set-color" data-pop="canvasColorPop" aria-label="Canvas colour" aria-expanded="false">
       <span class="fb-swatch swatch inherit"></span><span class="ic fb-chev" data-icon="chevron"></span></button>
     <div id="canvasColorPop" class="fb-pop"><div id="canvasColors" class="swatches"></div></div>
@@ -190,27 +132,17 @@
     <div id="snapPop" class="fb-pop"><div id="gridSizes" class="set-list"></div></div>
   </div>
 
-  <!-- the DOCK, bottom centre — FigJam's main toolbar: the sticky you drag a new card off, the tag
-       tray, then the map's settings and every command. -->
   <div id="dock">
-    <!-- ghost card — drag it onto the canvas to create a new card -->
     <div id="ghostCard" title="Drag to create a new card">+</div>
-    <!-- the tag tray's toggle (features/tag-tray.ts): a sheet of tag stickers to drag onto cards -->
     <button id="trayBtn" class="floating-btn" title="Tag tray (T)" aria-label="Tag tray" aria-pressed="false">
       <span class="ic" data-icon="tag"></span></button>
     <span class="dock-sep"></span>
-    <!-- the map's own settings (canvas colour, grid): one panel, #settingsPop -->
     <button id="settingsBtn" class="floating-btn" title="Map settings" aria-label="Map settings" aria-expanded="false">
       <span class="ic" data-icon="settings"></span></button>
-    <!-- Actions: the command palette's own button (FigJam's quick actions), the way in for touch and the
-         hint that ⌘P exists. The palette opens just above it. -->
     <button id="paletteBtn" class="floating-btn" title="Actions (⌘P)" aria-label="Actions">
       <span class="ic" data-icon="actions"></span></button>
   </div>
 
-  <!-- home sidebar: slides in from the left (home button). Tabs pick the storage backend,
-       "+" creates/opens a map there, the list below shows that backend's maps. Clicking
-       the space right of the sidebar closes it. -->
   <div id="startScreen" class="hidden">
     <aside id="storeSidebar" aria-label="Your maps">
       <div class="side-head">

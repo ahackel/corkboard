@@ -1,12 +1,8 @@
-// Pure file operations over a FileSystemDirectoryHandle. The OPFS and FSA adapters share
-// the same handle-based API and differ ONLY in how they obtain the root handle, so the
-// actual list/write/remove/read logic lives here once (DRY) and both adapters delegate.
+// File operations over a FileSystemDirectoryHandle, shared by the OPFS and FSA adapters.
 import type { NoteFile, TreeListing } from './types.js';
 import { planTree, type FoldTest } from './tree.js';
 
-// Every file under `under` ('' = the whole map), by NAME, with its handle — nothing is read yet, and the
-// handles spare a second walk from the root per note when the notes are. Dot-folders (`.obsidian`,
-// `.trash`) are another app's business and are never walked.
+// Nothing is read yet. Dot-folders (`.obsidian`, `.trash`) are another app's business and never walked.
 async function listPaths(root: FileSystemDirectoryHandle, under: string): Promise<Map<string, FileSystemFileHandle>> {
   const out = new Map<string, FileSystemFileHandle>();
   const walk = async (handle: FileSystemDirectoryHandle, prefix: string): Promise<void> => {
@@ -27,14 +23,11 @@ async function listPaths(root: FileSystemDirectoryHandle, under: string): Promis
       start = await start.getDirectoryHandle(part);
     }
   }
-  catch { return out; }                       // the folder isn't there (any more): nothing under it
+  catch { return out; }                       // the folder isn't there (any more)
   await walk(start, under);
   return out;
 }
-// The notes under `under`, minus the contents of every folder `fold` leaves unread (store/tree.ts).
-// Read READS_AT_ONCE at a time rather than one by one: a map is hundreds of small files, and on a synced
-// folder each read is a round trip. Bounded, so a huge map doesn't open every file at once.
-// `stamp`, when given, is filled with every listed file's stamp (folderStamp) from this same walk.
+// Several at a time: on a synced folder each read is a round trip. `stamp` is filled from the same walk.
 const READS_AT_ONCE = 16;
 export async function listTree(root: FileSystemDirectoryHandle, under: string, fold: FoldTest,
                                stamp?: Map<string, string>): Promise<TreeListing> {
@@ -56,8 +49,7 @@ export async function listTree(root: FileSystemDirectoryHandle, under: string, f
   }
   return { files, lazy: plan.lazy, foreign: plan.foreign, assets: plan.assets };
 }
-// What the folder looks like on disk without reading a byte of it: every file's size and modification
-// time, by path. Two stamps that differ mean something changed outside the app (store/fsa.ts changed).
+// Every file's size and modification time, by path, without reading a byte.
 export async function folderStamp(root: FileSystemDirectoryHandle): Promise<Map<string, string>> {
   const handles = await listPaths(root, '');
   const out = new Map<string, string>();
@@ -67,16 +59,14 @@ export async function folderStamp(root: FileSystemDirectoryHandle): Promise<Map<
 
 export function stampOf(f: File): string { return f.size + ':' + f.lastModified; }
 
-// Remove a folder if it is EMPTY — a section's old folder after its notes moved out. Never recursive:
-// whatever else is still in there (a file another app put there) keeps the folder alive.
+// Never recursive: anything another app left in it keeps the folder alive.
 export async function removeEmptyDir(root: FileSystemDirectoryHandle, dir: string): Promise<void> {
   try {
     const [d, name] = await resolvePath(root, dir.replace(/\/$/, ''));
     await d.removeEntry(name);
-  } catch { /* not empty, or already gone — fine */ }
+  } catch { /* not empty, or already gone */ }
 }
-// Walk to the directory holding the final segment of `path`, returning [that dir, the leaf name].
-// `create` makes the intermediate dirs as it goes (for writes); without it a missing dir throws.
+// [the directory holding the leaf, the leaf name]. Without `create` a missing dir throws.
 async function resolvePath(root: FileSystemDirectoryHandle, path: string, create = false): Promise<[FileSystemDirectoryHandle, string]> {
   const parts = path.split('/'); let d = root;
   for (let i=0;i<parts.length-1;i++) {
@@ -84,22 +74,18 @@ async function resolvePath(root: FileSystemDirectoryHandle, path: string, create
   }
   return [d, parts[parts.length-1]];
 }
-// Create/overwrite a note at a relative path (intermediate dirs created).
-// Returns the file as written.
 export async function writeFile(root: FileSystemDirectoryHandle, path: string, data: string | Blob): Promise<File> {
   const [d, name] = await resolvePath(root, path, true);
   const h = await d.getFileHandle(name, { create:true });
   const w = await h.createWritable(); await w.write(data); await w.close();
   return h.getFile();
 }
-// Delete a note (a missing file is fine).
 export async function removeFile(root: FileSystemDirectoryHandle, path: string): Promise<void> {
   try {
     const [d, name] = await resolvePath(root, path);
     await d.removeEntry(name);
-  } catch { /* already gone — fine */ }
+  } catch { /* already gone */ }
 }
-// Read a binary file (e.g. an image attachment) as a Blob, or null if it's gone.
 export async function readFileBlob(root: FileSystemDirectoryHandle, path: string): Promise<Blob | null> {
   try {
     const [d, name] = await resolvePath(root, path);

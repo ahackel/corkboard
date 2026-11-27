@@ -1,6 +1,4 @@
-// A note (or folder) dragged in from the OS: onto the pill at the top it OPENS, to be edited in place
-// (features/open-drop.ts); anywhere else on the board it's ADDED as a card. The OS drag is played as DOM drag
-// events over a file in the browser's own storage, whose handle the stubbed getAsFileSystemHandle hands over.
+// The OS drag is played as DOM drag events over an OPFS file, handed over by a stubbed getAsFileSystemHandle.
 import { test, expect, type Page } from '@playwright/test';
 import { openBoard, card, clickAway, saved, watchErrors } from './helpers';
 
@@ -42,7 +40,7 @@ async function writeFile(page: Page, path: string, text: string): Promise<void> 
 const readFile = (page: Page, name: string): Promise<string> => page.evaluate(async (name) =>
   (await (await navigator.storage.getDirectory()).getFileHandle(name)).getFile().then(f => f.text()), name);
 
-// Drag `name` in over the board, then let go on the pill or on the board (or not at all: it leaves the window).
+// Let go on the pill, on the board, or not at all (it leaves the window).
 async function dragIn(page: Page, name: string, end: 'pill' | 'board' | 'leave'): Promise<void> {
   await page.evaluate(({ name, end }) => {
     const dt = new DataTransfer();
@@ -105,9 +103,7 @@ test('over a single note, a drop anywhere opens the dragged note in its place', 
   await writeFile(page, 'Other.md', '# Other\n');
   await dragIn(page, 'Audit.md', 'pill');
   await expect(crumb(page)).toHaveText('Audit');
-  // Opening a note looks for it among the notes opened before, which reads their stored handles back out of
-  // IndexedDB — and headless Chromium crashes reading an OPFS handle from there (single-note.spec.ts), so
-  // the list is emptied first.
+  // Headless Chromium crashes reading stored OPFS handles back out of IndexedDB, so empty the recents first.
   await page.evaluate(() => localStorage.setItem('corkboard.maps',
     JSON.stringify(JSON.parse(localStorage.getItem('corkboard.maps')!).filter((m: { kind: string }) => m.kind !== 'note'))));
   await dragIn(page, 'Other.md', 'board');

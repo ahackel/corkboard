@@ -1,20 +1,12 @@
-// ============================================================
-// The ⌘P command palette: the ONE place every action is listed, with its shortcut beside it, so the
-// canvas can carry no permanent toolbar (docs/PRODUCT.md, principle 1) without anything becoming
-// unreachable — and so a shortcut is learned by seeing it, every time the action is run from here.
-//
-// The palette only DISPLAYS commands; features/commands.ts builds the list (paletteCommands), beside
-// the keyboard shortcuts for the same actions. A command's `when` hides it while it can't apply
-// (nothing selected), rather than listing it disabled: a list of things you can't do is
-// noise in a box you type into.
-// ============================================================
+// The ⌘P command palette: it only DISPLAYS commands; features/commands.ts builds the list.
+// A command's `when` hides it while it can't apply, rather than listing it disabled.
 import { byId, keys } from '../utils/dom.js';
 import { esc } from '../utils/markdown.js';
 
 export interface Command {
   label: string;
   shortcut?: string;
-  keywords?: string;           // extra words the filter matches, e.g. 'dark light' for the theme
+  keywords?: string;           // extra words the filter matches
   when?: () => boolean;
   run: () => void;
 }
@@ -30,6 +22,7 @@ let returnFocus: HTMLElement | null = null;
 export function setPaletteSource(fn: () => Command[]): void { source = fn; }
 export function paletteOpen(): boolean { return !root.hidden; }
 
+
 export function openPalette(): void {
   if (paletteOpen()) { input.select(); return; }
   returnFocus = document.activeElement as HTMLElement | null;
@@ -38,6 +31,7 @@ export function openPalette(): void {
   render();
   input.focus();
 }
+
 export function closePalette(): void {
   if (!paletteOpen()) {
     return;
@@ -47,8 +41,7 @@ export function closePalette(): void {
   returnFocus = null;
 }
 
-// Every query word must appear in the label or keywords; a label that STARTS with the query ranks
-// first, so "un" puts Undo above "Collapse / unfold".
+// A label that STARTS with the query ranks first, so "un" puts Undo above "Collapse / unfold".
 function matches(q: string): Command[] {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
   const all = source().filter(c => !c.when || c.when());
@@ -73,12 +66,13 @@ function render(): void {
     : '<div class="pal-empty">No matching command</div>';
   list.querySelector('.pal-item.active')?.scrollIntoView({ block: 'nearest' });
 }
+
 function run(i: number): void {
   const c = shown[i];
   if (!c) {
     return;
   }
-  closePalette();          // first, so the command acts on the canvas rather than on the palette's input
+  closePalette();          // first, so the command acts on the canvas, not the palette's input
   c.run();
 }
 
@@ -101,10 +95,9 @@ export function installPalette(): void {
       run(+item.dataset.i!);
     }
   });
-
-  // A press on the dimmed backdrop (not the box) closes it.
   root.addEventListener('pointerdown', (e) => {
-    if (e.target === root) {
+    const onBackdrop = e.target === root;
+    if (onBackdrop) {
       closePalette();
     }
   });

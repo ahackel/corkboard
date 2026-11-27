@@ -1,8 +1,4 @@
-// Corkboard without a network. The app is ONE html file (plus its icons and manifest), so being offline
-// is a matter of keeping the last copy that loaded: every same-origin GET is asked of the network first —
-// a new deploy is picked up on the next visit, never a stale build while online — and answered from the
-// copy kept here only when the network does not answer. Notes are not involved: they never leave the
-// device (src/store/).
+// Offline copy: network first (so a new deploy is never shadowed), the last good response when offline.
 const KEPT = 'corkboard-v1';
 
 self.addEventListener('install', () => { self.skipWaiting(); });

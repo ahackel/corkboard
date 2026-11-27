@@ -1,12 +1,9 @@
-// ---------- hierarchy helpers ----------
-// The tree is DERIVED from each node's `parent` (no stored edge list). These queries
-// walk that live structure in state.nodes.
+// Tree queries over the live `parent` links in state.nodes.
 import { state, isStack, isImageCard, type MindNode } from '../core/state.js';
 import { firstLineLabel } from './frontmatter.js';
 import { scope } from '../nav/scope.js';
 import { ui } from '../core/ui-state.js';
 
-// The nodes for some ids, skipping any that are gone.
 export function nodesOf(ids: Iterable<string>): MindNode[] {
   const out: MindNode[] = [];
   for (const id of ids) {
@@ -17,7 +14,7 @@ export function nodesOf(ids: Iterable<string>): MindNode[] {
   }
   return out;
 }
-// The node a file path names (a path is a node's identity on disk), if it is in memory.
+
 export function nodeByFile(file: string): MindNode | undefined {
   for (const n of state.nodes.values()) {
     if (n.file === file) {
@@ -26,6 +23,7 @@ export function nodeByFile(file: string): MindNode | undefined {
   }
   return undefined;
 }
+
 export function childrenOf(id: string | null): MindNode[] {
   if (kidIndex) {
     return kidIndex.get(id) ?? [];
@@ -33,10 +31,8 @@ export function childrenOf(id: string | null): MindNode[] {
   return [...state.nodes.values()].filter(n => n.parent === id);
 }
 
-// childrenOf scans the whole map, so anything that asks it per node — the size of each folded section
-// in a repaint, the subtree of each selected card when a drag begins — is quadratic. `withKids` answers
-// from ONE parent → children index for the length of `fn`. Only around code that READS the tree: a
-// parent changed inside `fn` would not show.
+// childrenOf scans the whole map; `withKids` answers from ONE index for the length of `fn`. Only
+// around code that READS the tree: a parent changed inside `fn` would not show.
 let kidIndex: Map<string | null, MindNode[]> | null = null;
 
 export function withKids<T>(fn: () => T): T {
@@ -58,51 +54,36 @@ export function withKids<T>(fn: () => T): T {
     kidIndex = null;
   }
 }
-// A node's parent NODE (`parent` is a file path, and a dangling one means "root"). Every ancestor
-// walk in the app is written `for (let p = parentOf(n); p; p = parentOf(p))` off this, rather than
-// re-spelling the lookup-or-null ternary inline — it was the single most repeated line in the
-// codebase, and the two spellings of "no parent" (null vs undefined) had drifted apart between them.
+
 export function parentOf(n: MindNode): MindNode | null {
   return n.parent ? state.nodes.get(n.parent) ?? null : null;
 }
-// …and the same chain as a sequence, nearest parent first, for the walks that just ITERATE it (no
-// early return keyed on the node in hand). Guarded once, here: a corrupt parent chain has to degrade
-// to a short walk rather than hang the tab, which is what the hand-copied `guard++ < 4096` counters
-// at the call sites were for.
+
+// Nearest first. The guard makes a corrupt parent chain a short walk instead of a hung tab.
+const MAX_DEPTH = 4096;
+
 export function* ancestors(n: MindNode): Generator<MindNode> {
   let guard = 0;
-  for (let p = parentOf(n); p && guard++ < 4096; p = parentOf(p)) {
+  for (let p = parentOf(n); p && guard++ < MAX_DEPTH; p = parentOf(p)) {
     yield p;
   }
 }
-// The OUTERMOST of some nodes: those with no ancestor among them (an inner one rides along with it).
+
+// Those with no ancestor among the given nodes.
 export function outermost(nodes: MindNode[]): MindNode[] {
   const ids = new Set(nodes.map(n => n.id));
   return nodes.filter(n => ![...ancestors(n)].some(a => ids.has(a.id)));
 }
+
 export function isRoot(n: MindNode): boolean { return !n.parent || !state.nodes.has(n.parent); }
 
-// THE ONE VISIBILITY GATE, with three terms — one ancestor walk answering all of them. A new term goes IN
-// here, never beside it.
-//
-//  1. FOLD (persisted, board.json `collapsed`): a FOLDED SECTION is its label pill and nothing else, so a
-//     node is hidden iff one of its ANCESTORS is folded. (A folded card only tucks away its own text —
-//     cards hold no cards — so in practice the ancestor is always a section.)
-//  2. SCOPE (ephemeral, nav/scope.ts): while a section is OPEN, only what's inside it is on the
-//     canvas. Reaching the open section on the way up means we're inside it; running out of
-//     ancestors without reaching it means we're somewhere else in the map — INCLUDING when `n` IS
-//     the open section, which is precisely what stops its box, border, tab and fill from being
-//     painted. No per-kind CSS, no second predicate.
-//  3. PILE (persisted, board.json `stack`): a STACK shows its cards as the pile's own face, so they're
-//     hidden as nodes — unless it's the one FANNED OUT (ephemeral, ui.fan), when they're real cards again.
-//
-// Nothing writes through this function: term 1 is backed by a saved flag while term 2 must never touch
-// disk. The open section is checked BEFORE its own fold: while it's open it IS the canvas, so neither its
-// own collapsed flag nor anything above it can hide what's inside.
+// THE ONE VISIBILITY GATE: a folded ancestor, the open-section scope, an un-fanned stack. New terms go
+// IN here. The open section is checked before any fold: while open it IS the canvas, and reaching no
+// open section on the way up (incl. `n` being it) hides `n`.
 export function isHidden(n: MindNode): boolean {
-  const scopeId = scope.rootId;            // null in the overwhelmingly common case
-  // A plain loop rather than `ancestors`: this is the hottest walk in the app (~38 call sites, every
-  // one of them on the paint path), so it keeps the early returns and skips the generator.
+  const scopeId = scope.rootId;
+
+  // Not `ancestors`: the hottest walk on the paint path keeps early returns and skips the generator.
   for (let p = parentOf(n); p; p = parentOf(p)){
     if (p.id === scopeId) {
       return false;
@@ -111,12 +92,10 @@ export function isHidden(n: MindNode): boolean {
       return true;
     }
   }
-  // Nothing above n is the open section, so n is outside it.
   return scopeId !== null;
 }
-// The visible card standing in for n: n itself when it's shown, otherwise its nearest
-// ancestor that is still visible: the folded section a card is tucked inside. Search highlights it for a
-// match it hides, and a line to a hidden card attaches to it (view/free-edges.ts edgeEnd).
+
+// The visible card standing in for a hidden one: its nearest visible ancestor.
 export function firstVisible(n: MindNode): MindNode {
   if (!isHidden(n)) {
     return n;
@@ -126,19 +105,18 @@ export function firstVisible(n: MindNode): MindNode {
       return p;
     }
   }
-  // A root is always visible, so the walk resolves — EXCEPT for a node outside the open section,
-  // whose ancestors are hidden all the way up. Search filters those out before it ever asks
-  // (features/search.ts), so the fallback is only a backstop, not a case anyone relies on.
+
+  // Only a node outside the open section has no visible ancestor; search filters those out first.
   return n;
 }
-// What a section holds, all the way down, for a FOLDED one's tooltip: "10 Cards, 4 Sections". Counted from
-// the notes in memory and, for a folder never read, from what its listing counted (MindNode.lazy).
+
+// For a folded section's tooltip, including folders not yet read (MindNode.lazy).
 export function heldSummary(n: MindNode): string {
   let cards = 0, sections = 0;
   subtreeIds(n.id).forEach((id, i) => {
     const m = state.nodes.get(id)!;
     if (i) {
-      m.type === 'section' ? sections++ : cards++;   // (i = 0 is n itself)
+      m.type === 'section' ? sections++ : cards++;
     }
     if (m.lazy != null) {
       sections += m.lazySections ?? 0;
@@ -156,8 +134,8 @@ export function descendantCount(id: string): number {
   }
   return c;
 }
-// A node whose lock cascades down: any ANCESTOR (not itself) is locked. Such a node can't even be
-// selected — only the locked card itself remains selectable (see isLockedEffective below).
+
+// Such a node can't even be selected; the locked card itself still can.
 export function hasLockedAncestor(n: MindNode): boolean {
   for (let p = parentOf(n); p; p = parentOf(p)) {
     if (p.locked) {
@@ -166,17 +144,12 @@ export function hasLockedAncestor(n: MindNode): boolean {
   }
   return false;
 }
-// A node protected from move/collapse-toggle/edit/delete: it's locked itself, or a descendant of a
-// locked ancestor. Selection is a narrower check (hasLockedAncestor alone) — the locked card itself
-// stays selectable, just not editable.
+
+// Protected from move, fold, edit and delete.
 export function isLockedEffective(n: MindNode): boolean { return n.locked || hasLockedAncestor(n); }
-// Locked somewhere in id's own subtree (itself or any descendant) — used to refuse deleting a whole
-// branch that contains a locked card, even when the branch's root itself isn't locked.
-// Can something be dropped INTO this card's note — another card ⌥-merged in, text dragged out of an
-// editor, a picture pulled from a card or dropped from the OS? The ONE answer for all four: a plain,
-// unlocked card. Not a section (a box holds cards, its note is its label), and not an IMAGE card: that
-// card IS its picture, and anything added to its note would end that. What can't take the drop is
-// treated as board: the thing lands beside it.
+
+// THE answer for every drop INTO a card's note (merge, text, picture): a plain unlocked card. An image
+// card IS its picture, so adding to it would end that.
 export function takesDrop(n: MindNode | null | undefined): n is MindNode {
   return !!n && n.type === 'card' && !isImageCard(n) && !isLockedEffective(n);
 }
@@ -188,50 +161,30 @@ export function subtreeHasLocked(id: string): boolean {
   }
   return childrenOf(id).some(ch => subtreeHasLocked(ch.id));
 }
-// The name to SHOW for a node ANYWHERE the card itself isn't — the outline, search results, a status
-// line, the move picker. A card may be untitled (no `# ` heading, see utils/frontmatter.ts splitHeading),
-// and on the canvas that's the point: it shows its text and no title row. But a LIST row can't be blank,
-// so it falls back to its first line, and past that to a NUMBER (below).
-// Purely for display: n.title stays '' throughout and nothing here is written. Nothing MATCHES on this
-// either — a [[wikilink]] resolves against n.title and the filename (nav/focus.ts focusByTitle), so a
-// generated label can never be a link target that stops working when the numbering shifts.
+
+// The name to SHOW for a node where the card itself isn't: never written, never matched on.
 export function nodeLabel(n: MindNode): string {
   return n.title.trim() || firstLineLabel(n.body) || namelessLabel(n);
 }
-// Has this node any name OF ITS OWN — the exact condition under which nodeLabel falls through above.
-const nameless = (n: MindNode): boolean => !n.title.trim() && !firstLineLabel(n.body);
-// …and the label for one that hasn't: "No-title 3". Deliberately NOT the filename stem, which is what
-// this used to be. A card the user emptied keeps the slug it was named under (data/persistence.ts
-// desiredFileFor renames nothing when there is nothing to name off), so the stem is the name they just
-// deleted — the one thing a cleared card must not still be called. And a container nobody ever named
-// is `Untitled.md` on disk anyway, so the stem had nothing to offer there either.
-// The number is POSITIONAL — how many nameless nodes come at or before this one in map order (which is
-// load order, i.e. the store's own file order) — so adding or filling in a nameless card renumbers the
-// others. That's the price of inventing a name from nothing rather than persisting one, and it's a price
-// worth paying here: nothing stores or matches on this string, and the alternative is a new frontmatter
-// key holding a number whose only job is to appear in a list. Only ever computed for a node that has
-// nothing to be named off, so the pass costs nothing on an ordinary map.
+
+const hasNoTextToName = (n: MindNode): boolean => !n.title.trim() && !firstLineLabel(n.body);
+
+// "No-title N", POSITIONAL in map order: never the filename stem, which for a cleared card is the very
+// name the user just deleted.
 function namelessLabel(n: MindNode): string {
   let i = 0;
   for (const o of state.nodes.values()){
-    if (nameless(o)) {
+    if (hasNoTextToName(o)) {
       i++;
     }
     if (o.id === n.id) {
       break;
     }
   }
-  return `No-title ${i || 1}`;   // `|| 1`: a node still being created isn't in state.nodes yet
+  return `No-title ${i || 1}`;   // a node still being created isn't in state.nodes yet
 }
-// …and the label with its PARENT appended, but only where the label alone is ambiguous. Two cards may
-// share a title now, and in a FLAT list (search hits) two identical rows give
-// you no way to tell which is which. The outline needs none of this: its indentation already says where
-// a row sits. The suffix is the parent rather than the filename because "which one" is a question about
-// the map, not about the disk — the file's ` 2` would answer it in bookkeeping nobody chose.
-// The set of labels worn by more than one node — ONE pass over the map, where asking
-// `disambiguatedLabel` to answer for itself costs a pass per row. Both callers render a LIST, so they
-// build this once and hand it down; that's the whole reason it's a parameter rather than a cache, which
-// would need invalidating on every mutation that can rename anything (i.e. nearly all of them).
+
+// Labels worn by more than one node; built once per LIST and passed to disambiguatedLabel.
 export function duplicateLabels(): Set<string> {
   const seen = new Set<string>(), dup = new Set<string>();
   for (const o of state.nodes.values()){
@@ -244,6 +197,8 @@ export function duplicateLabels(): Set<string> {
   }
   return dup;
 }
+
+// Only an ambiguous label gets its parent appended (for flat lists like search hits).
 export function disambiguatedLabel(n: MindNode, dup: Set<string> = duplicateLabels()): string {
   const label = nodeLabel(n);
   if (!dup.has(label)) {
@@ -252,7 +207,8 @@ export function disambiguatedLabel(n: MindNode, dup: Set<string> = duplicateLabe
   const p = parentOf(n);
   return p ? `${label} — ${nodeLabel(p)}` : label;
 }
-// guard against cycles when re-parenting
+
+// Guards against cycles when re-parenting.
 export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
   const n = state.nodes.get(nodeId);
   if (!n) {
@@ -266,17 +222,13 @@ export function isAncestor(maybeAncestorId: string, nodeId: string): boolean {
   return false;
 }
 
-// ---------- what a [[wikilink]] names ----------
-// The note a link names, the way Obsidian reads it: a `#heading` or `^block` after the name is a place IN
-// the note, so it's dropped here (a click goes to the card), and `.md` is optional.
+// `#heading`/`^block` is a place IN the note and `.md` is optional, as in Obsidian.
 export function linkName(name: string): string {
   return name.replace(/[#^].*$/, '').trim().replace(/\.md$/i, '');
 }
-// The PATH form first (the node's file — the one name guaranteed unique), then a path that ENDS the file's
-// (`[[Notes]]` for `Ideas/Notes.md`: Obsidian's "shortest path" link to a note in a folder), else every card
-// whose TITLE matches; in map order, so the first hit is the one a click goes to. Two callers share it, and
-// that is the point: nav/focus.ts's jump, and the link lines a selected card draws (view/free-edges.ts).
-// A line that pointed somewhere the click doesn't go would be a lie.
+
+// Exact path, then a path tail (`[[Notes]]` for `Ideas/Notes.md`), then title; in map order. Shared by
+// the click and the link lines, so a line never points where the click doesn't go.
 export function resolveWikilink(name: string): MindNode[] {
   const t = linkName(name).toLowerCase();
   if (!t) {
@@ -292,13 +244,12 @@ export function resolveWikilink(name: string): MindNode[] {
   return byTail.length ? byTail : nodes.filter(n => n.title.trim().toLowerCase() === t);
 }
 
-// The node whose card on the canvas holds `t` (an event target, or what is under a point).
+// The node whose card holds `t` (an event target, or what is under a point).
 export function nodeAtTarget(t: EventTarget | null | undefined): MindNode | null {
   const el = t instanceof Element ? t.closest<HTMLElement>('#world [data-id]') : null;
   return el ? state.nodes.get(el.dataset.id ?? '') ?? null : null;
 }
 
-// `id` and every node inside it.
 export function subtreeIds(id: string): string[] {
   const out = [id];
   for (const ch of childrenOf(id)) {

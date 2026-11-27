@@ -1,12 +1,9 @@
-// A note as FORMATTED text other apps read (features/clipboard.ts copyFormatted): the card's own rendering
-// (renderBodyHTML) with everything only this app understands taken off — classes, data attributes, the
-// image magnifier, wikilinks and tags (plain text there), task checkboxes (☐/☑, which every editor keeps;
-// a pasted <input> is dropped by most). A picture gets the src `imageSrc` gives it (a data URL, so it
-// travels with the text), or its alt text when it can't be read. Tested (tests/rich-html.test.ts).
+// A note as FORMATTED text for other apps: the card's rendering minus what only this app understands.
+// Checkboxes become ☐/☑ (most editors drop a pasted <input>); pictures get `imageSrc`'s data URL or alt text.
 
 const unwrap = (el: Element): void => el.replaceWith(...el.childNodes);
 
-// Inline, since the receiving app has none of our stylesheet: without them a table pastes borderless.
+// Inline, since the receiving app lacks our stylesheet: without them a table pastes borderless.
 const CELL = 'border:1px solid #ccc;padding:4px 8px';
 
 export async function portableHtml(html: string, imageSrc: (src: string) => Promise<string | null>): Promise<string> {

@@ -1,4 +1,4 @@
-// ---------- saving: the autosave, and the write of every changed note ----------
+// The autosave: writing every changed note, renames and all.
 import { state, setStatus } from '../core/state.js';
 import { retargetLinks, desiredFileFor, folderOf, dirOf, prunableDirs, pathKey, slugStem } from '../utils/filenames.js';
 import { ancestorDepth, commitRel } from '../view/layout.js';
@@ -13,11 +13,7 @@ import { setSaving } from './save-flag.js';
 import { foreignDirs, readFolder } from './read.js';
 import { noteNamed, forgetNoteName, forgetNoteNames, keepsName } from './note-names.js';
 
-// The pathKey -> node index the collision test reads. Built ONCE per save rather than
-// re-derived per candidate name: saveAll asks for every node's desired name, so a per-call
-// `[...state.nodes.values()].some(…)` made settling filenames O(n²) with two string allocations per
-// comparison. Keyed the way the filesystem collides (utils/filenames.ts pathKey). A name found on DISK
-// that no node holds (diskTaken) is taken too, by nobody.
+// pathKey → node id, built once per save (per-name lookups were O(n²)). A diskTaken name maps to ''.
 function filesInUse(): Map<string, string> {
   const m = new Map<string, string>();
   for (const key of diskTaken) {
@@ -31,8 +27,7 @@ function filesInUse(): Map<string, string> {
   return m;
 }
 
-// Names that turned out to be on disk although no node holds them: a note another app (or another tab)
-// wrote since the map was read. Writing a new card there would replace it, so the name counts as taken.
+// On disk but held by no node: another app or tab wrote it since the read. Writing there would replace it.
 const diskTaken = new Set<string>();
 const CHECKS_AT_ONCE = 16, WRITES_AT_ONCE = 8;
 
@@ -65,8 +60,7 @@ async function planFreePaths(): Promise<Map<string, string>> {
   }
   return planPaths();
 }
-// Re-point inbound [[wikilinks]] across every note (utils/filenames.ts retargetLinks), returning the
-// ids whose body changed, for phase 2 to write.
+// Returns the ids whose body changed.
 function retargetWikilinks(renames: Map<string, string>): string[] {
   if (!renames.size) {
     return [];
@@ -82,24 +76,18 @@ function retargetWikilinks(renames: Map<string, string>): string[] {
   }
   return touched;
 }
-// Where every node's file SHOULD be, settled top-down: a node's folder is its parent section's folder, so
-// a parent's final path has to be known before its children's (utils/filenames.ts desiredFileFor).
-// Pure — nothing is renamed here; saveAll adopts the result.
+// Where every node's file should be. Pure. Top-down: a parent's folder must be known before its children's.
 function planPaths(): Map<string, string> {
   const out = new Map<string, string>();
-  // Kept in step below, so a name this loop has already handed out is seen as taken by the nodes after it.
   const inUse = filesInUse();
   for (const n of [...state.nodes.values()].sort((a, b) => ancestorDepth(a) - ancestorDepth(b))) {
-    // While the text that names it is being typed (a card's editor, a section's label), keep the current
-    // filename (rename happens when the edit session commits). A note opened ON ITS OWN (store/note.ts)
-    // keeps the name you picked it by for good: there is no folder to rename it in.
+    // Renamed only when the edit commits; a single note opened on its own is never renamed.
     const frozen = frozenFileNodeId() === n.id || state.singleNote ? n.file : null;
     const p = parentOf(n);
     const pFile = p ? out.get(p.id) ?? p.file : null;
     const target = frozen ?? desiredFileFor(n, inUse, pFile ? folderOf(pFile) : '', foreignDirs, keepsName(n));
-    // A node's OLD name stays taken for the rest of this save: phase 3 deletes that file, and on a
-    // case-insensitive disk a node handed `plan.md` for a freed `Plan.md` would be deleted with it.
-    // It suffixes instead (`plan 2.md`) and takes the plain name on the next save, once it is free.
+    // The OLD name stays taken: phase 3 deletes it, and on a case-insensitive disk a node handed `plan.md`
+    // for a freed `Plan.md` would be deleted with it.
     inUse.set(pathKey(target), n.id);
     out.set(n.id, target);
   }
@@ -108,13 +96,10 @@ function planPaths(): Map<string, string> {
 async function saveAll(): Promise<void> {
   if (!store.isOpen) { setStatus('Open a folder first.'); return; }
   if (writesHeld()) {
-    return;   // a map from a newer build is shown, never written (data/board.ts loadBoard)
+    return;
   }
-  // Phase 0 — a FOLDED section whose notes were never read can't move them without reading them: one
-  // that is about to move (renamed, retyped, dropped into another section, or inside one that is) reads
-  // its whole folder first, and one that somehow holds a note in memory reads its own level, so the
-  // rest of the save sees a complete tree under every path it changes (data/lazy.ts).
-  // (Only a board that HAS an unread section pays for the extra plan.)
+  // Phase 0: an unread folded section that is about to move (or holds a note in memory) is read first,
+  // so the save sees a complete tree under every path it changes.
   for (let guard = 0; guard < 16 && [...state.nodes.values()].some(n => n.lazy != null); guard++) {
     const plan = planPaths();
     const moving = [...state.nodes.values()].filter(n => n.lazy != null && n.file && plan.get(n.id) !== n.file);
@@ -129,15 +114,11 @@ async function saveAll(): Promise<void> {
       await readFolder(f, false);
     }
   }
-  commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
-  // Each step below records its progress AS it lands, so a save that throws half-way (quota, a revoked
-  // folder permission) leaves exactly the unfinished part pending, and the retry (data/save-alert.ts)
-  // picks it up — rather than a renamed note's old file surviving it.
+  commitRel();
+  // Each step records progress as it lands, so a save that throws half-way leaves exactly the rest pending.
   while (state.toDelete.length) { const gone = state.toDelete[0]; await store.remove(gone); emptied.add(dirOf(gone)); state.toDelete.shift(); }
 
-  // CONTENT changes rewrite the note; GEOMETRY changes don't — position, size, collapse and child
-  // order live in board.json now, so a move alone is not a reason to touch a .md. Moving a
-  // card therefore writes one small JSON file instead of one .md per moved card.
+  // Geometry lives in board.json, so a move alone doesn't rewrite a .md.
   const needWrite = new Set<string>();
   for (const n of state.nodes.values()) {
     if (n.dirty || !n.file) {
@@ -145,54 +126,47 @@ async function saveAll(): Promise<void> {
     }
   }
 
-  // Phase 1 — settle every note's final path IN MEMORY first (planPaths). A section is a folder, so a
-  // renamed or moved section moves every note inside it: each one is a rename of its own here.
-  const renames = new Map<string, string>();   // old path -> new path, for the wikilink fixup below
-  let pathsMoved = false;   // board.json is keyed by path, so a new or renamed note needs it rewritten
+  // Phase 1: settle every final path in memory. A moved section moves every note inside it.
+  const renames = new Map<string, string>();   // old path → new path
+  let pathsMoved = false;   // board.json is keyed by path
   const plan = await planFreePaths();
   for (const n of state.nodes.values()) {
     const target = plan.get(n.id)!;
     if (n.file && n.file !== target) {
-      // A note renamed AGAIN before its last rename reached the disk: what waited on that write waits on this one.
+      // Renamed again before the last rename reached disk: what waited on that write waits on this one.
       for (const [old, to] of pendingRemovals) {
         if (to === n.file) {
           pendingRemovals.set(old, target);
         }
       }
-      pendingRemovals.set(n.file, target);         // old file to delete once the rename is written
+      pendingRemovals.set(n.file, target);
       renames.set(n.file, target);
       forgetNoteName(n.file);
       boardPathMoved(n.file, target);
     }
-    if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }   // brand-new node, or a rename
-    n.file = target;                               // adopt the final name
+    if (n.file !== target) { needWrite.add(n.id); pathsMoved = true; }
+    n.file = target;
     if (frozenFileNodeId() !== n.id && !keepsName(n)) {
       noteNamed(target, slugStem(n));
     }
   }
 
-  // Phase 1b — a rename drags its INBOUND links along: a path recorded elsewhere in the vault must not
-  // outlive the path it records.
+  // Phase 1b: a rename drags its inbound links along.
   for (const id of retargetWikilinks(renames)) {
     needWrite.add(id);
   }
-  // Everything phase 1 decided must be written is now DIRTY, not just in this call's set: n.file has
-  // already moved to its new name, so a retry would see no rename and forget it had to write it.
+  // n.file already holds the new name, so a retry would see no rename: mark it dirty instead.
   for (const id of needWrite) {
     state.nodes.get(id)!.dirty = true;
   }
 
-  // Phase 2 — write everything that changed, now that all paths are final. One note that can't be
-  // written (a name the disk refuses, a file another app holds) must not keep the others from being
-  // saved: it stays dirty, the rest go on, and the failure is reported once they have.
-  // A few at a time: renaming a section rewrites every note in it, and on a synced folder each write is
-  // a round trip.
+  // Phase 2: write, a few at a time. A note that fails stays dirty without stopping the others.
   const failed = new Set<string>();
   let firstError: unknown;
   const todo = [...state.nodes.values()].filter(n => needWrite.has(n.id));
   for (let i = 0; i < todo.length; i += WRITES_AT_ONCE) {
     await Promise.all(todo.slice(i, i + WRITES_AT_ONCE).map(async n => {
-      // what is written is the note as it is NOW: an edit made while the write is in flight dirties it again
+      // An edit made while the write is in flight dirties it again.
       const path = n.file!, text = serializeMd(n);
       n.dirty = false;
       try {
@@ -204,9 +178,8 @@ async function saveAll(): Promise<void> {
       }
     }));
   }
-  // Phase 3 — drop files left behind by renames, unless some node now legitimately holds the path — on
-  // ANY disk: where case or accents fold, a different spelling is the same file. A rename whose new
-  // file didn't land keeps its old one, which is the only copy on disk.
+  // Phase 3: drop files renames left behind, unless a node holds that path (by pathKey: case and accents
+  // may fold). A rename whose new file didn't land keeps its old one, the only copy.
   const held = new Set([...state.nodes.values()].map(n => n.file ? pathKey(n.file) : ''));
   for (const [old, to] of [...pendingRemovals]) {
     if (failed.has(to)) {
@@ -215,17 +188,14 @@ async function saveAll(): Promise<void> {
     if (!held.has(pathKey(old))) { await store.remove(old); emptied.add(dirOf(old)); }
     pendingRemovals.delete(old);
   }
-  // …and the FOLDERS they leave empty: a section renamed, moved or deleted leaves its old folder behind.
-  // Deepest first, and up the chain, since emptying `A/B/` can empty `A/` too. removeDir only ever
-  // removes an EMPTY folder, so one still holding anything — a live note, another app's file — stays.
+  // …and the folders they leave empty, deepest first (removeDir only removes an empty one).
   const dirs = prunableDirs(emptied, [...state.nodes.values()].map(n => n.file));
   emptied.clear();
   for (const d of dirs) {
     await store.removeDir(d);
   }
 
-  // …and the board follows, AWAITED: it is keyed by path, so after a move it must land before anything
-  // else does — a reload in between would find the notes in their new folders and no layout for them.
+  // Awaited: a reload in between would find moved notes with no layout for their new paths.
   if (pathsMoved) {
     await flushBoard();
   }
@@ -233,17 +203,13 @@ async function saveAll(): Promise<void> {
   if (firstError !== undefined) {
     throw firstError;
   }
-  releaseFolded();   // a folded section whose notes are all safely on disk can let go of them (data/lazy.ts)
+  releaseFolded();
 }
 
-// Old paths of renamed notes, still on disk until phase 3 removes them, each with the path its note
-// moved TO. Module-level so a failed save carries them to its retry; cleared by loadFromDir, since they
-// belong to the map that was open.
+// Old path → new path, still on disk until phase 3. Module-level so a failed save carries them to its retry.
 const pendingRemovals = new Map<string, string>();
-// Folders a removal may have left empty, for phase 3 to prune. Module-level for the same reason.
 const emptied = new Set<string>();
 
-// Forget the removals planned for the map that was open (loadFromDir, on a new map or a reload).
 export function resetSaveState(): void {
   pendingRemovals.clear();
   emptied.clear();
@@ -251,26 +217,24 @@ export function resetSaveState(): void {
   diskTaken.clear();
 }
 
-// ---------- autosave (debounced) ----------
+const SAVE_DELAY_MS = 400;
 let saveTimer: number | undefined, saveAgain = false;
 let savePromise: Promise<void> | null = null;   // non-null while a save chain is in flight
 export function scheduleSave(): void {
   if (!store.isOpen || writesHeld()) {
-    return;          // demo mode, or a map from a newer build: nothing is written
+    return;
   }
-  // Geometry lives in board.json, so the two files settle together: every mutation path in the app
-  // ends in scheduleSave(), and a great many of them move something.
   scheduleSaveBoard();
   setSaving('notes', true);
   clearTimeout(saveTimer);
-  saveTimer = window.setTimeout(flushSave, 400);
+  saveTimer = window.setTimeout(flushSave, SAVE_DELAY_MS);
 }
 export function flushSave(): Promise<void> {
   if (!store.isOpen) {
     return Promise.resolve();
   }
   clearTimeout(saveTimer); saveTimer = undefined;
-  if (savePromise) { saveAgain = true; return savePromise; }   // coalesce overlapping writes
+  if (savePromise) { saveAgain = true; return savePromise; }
   setSaving('notes', true);
   savePromise = (async () => {
     try {
@@ -287,9 +251,7 @@ export function flushSave(): Promise<void> {
   })();
   return savePromise;
 }
-// Write out everything still pending (debounced or in flight, notes AND board.json), awaiting
-// completion. MUST be called before retargeting the store at another map/folder — a straggling
-// autosave firing after the switch would write the old map's files into the new one.
+// MUST run before retargeting the store: a straggling autosave would write the old map into the new one.
 export async function settleSave(): Promise<void> {
   if (boardSavePending()) {
     await flushBoard();
@@ -298,8 +260,6 @@ export async function settleSave(): Promise<void> {
     await flushSave();
   }
 }
-// Is there anything in memory the disk doesn't have yet — queued, in flight, or left over by a write
-// that failed? Demo mode never writes, so it never has anything unsaved.
 function notesUnsaved(): boolean {
   if (!store.isOpen || writesHeld()) {
     return false;
@@ -307,7 +267,6 @@ function notesUnsaved(): boolean {
   if (state.toDelete.length || pendingRemovals.size) {
     return true;
   }
-  // …and the open card editor, until what it holds has been written into its note (inline-edit.ts flushOpenEdit)
   if (ui.bodyEdit && ui.bodyEdit.ta.value !== ui.bodyEdit.saved) {
     return true;
   }
@@ -325,8 +284,7 @@ export function hasUnsavedChanges(): boolean {
   return saveTimer != null || savePromise != null || boardSavePending() || notesUnsaved();
 }
 
-// The autosave debounce would lose an edit made just before the tab closes. Hiding is the dependable
-// signal: it is the last one iOS gives a backgrounded page.
+// Hiding is the dependable signal: the last one iOS gives a backgrounded page.
 export function installSaveOnLeave(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {

@@ -1,10 +1,8 @@
-// The arithmetic of a card drag: how the grid bends the pointer's delta, and how fast the view pans at the
-// window's edge. Pure, and pinned by tests/drag-geometry.test.ts.
+// The arithmetic of a card drag: grid snapping and edge auto-pan.
 import { snapTo } from './num.js';
 import type { Pt } from './rect.js';
 
-// The delta that puts the anchor card ON the grid, measured from `origin` (its section's corner, or the
-// world's): the same correction is applied to every card in the drag, so a group keeps its spacing.
+// The ANCHOR card's correction is applied to every card in the drag, so a group keeps its spacing.
 export function gridDelta(start: Pt, delta: Pt, origin: Pt, grid: number): Pt {
   return {
     x: snapTo(start.x + delta.x - origin.x, grid) + origin.x - start.x,
@@ -14,8 +12,7 @@ export function gridDelta(start: Pt, delta: Pt, origin: Pt, grid: number): Pt {
 
 export interface Edges { left: number; top: number; right: number; bottom: number }
 
-// The view's pan per frame for a pointer near the stage's edge: up to `max` px, ramping in over a `band`
-// px wide strip, toward the edge the pointer is in (the view moves the other way to bring that side in).
+// Up to `max` px per frame, ramping in over a `band`-px strip at the stage's edge.
 export function edgePanVelocity(p: Pt, stage: Edges, band: number, max: number): Pt {
   let vx = 0, vy = 0;
   if (p.x < stage.left + band) {

@@ -1,10 +1,4 @@
-// ============================================================
-// Boot + home screen. boot() opens straight into the last map (local-first, no gate):
-// resume a granted FSA folder if one was last open, else the last on-device map.
-// The home screen (🧠) is ONE unified list of maps — on-device maps and local folders look
-// and behave the same: click a row to open it (the click doubles as the FSA permission
-// gesture), with per-row rename / export / delete actions.
-// ============================================================
+// Boot (straight into the last map, no gate) and the home sidebar's list of maps.
 import { timeAgo } from './utils/time-ago.js';
 import { state, setStatus, type MindNode } from './core/state.js';
 import { applyView, frameBox } from './view/camera.js';
@@ -29,21 +23,17 @@ import { settleSave } from './data/save.js';
 import { exportZip, openImportPicker } from './data/zip-io.js';
 import { loadFromDir } from './data/load.js';
 
-// Chrome/Edge offer opening a real local folder (FSA); iPad/Firefox/Safari use on-device +
-// import/export. ?nofsa hides the folder option for testing the no-FSA layout on desktop.
+// ?nofsa tests the no-FSA layout on desktop.
 const HAS_FSA = !location.search.includes('nofsa') && 'showDirectoryPicker' in window;
 
-// ---- opening maps (each path ends on the canvas with the panel closed) ----
 async function openDeviceMap(ref: MapRef): Promise<void> {
   await switchToDeviceMap(ref);
   await loadFromDir();
 }
-// Recents whose stored handle Chrome no longer honours (permission.ts ensureWrite 'gone'): their next click
-// goes straight to the picker, since asking about them again would only fail again.
+// Recents whose stored handle Chrome no longer honours: their next click goes straight to the picker.
 const dead = new Set<string>();
 
-// A dead entry is found AGAIN with the picker, opened where it was; the pick takes the entry's place. The
-// picker needs the click still fresh, and the failed ask may have used it: then the NEXT click opens it.
+// The picker needs a fresh click, and the failed ask may have used it up: then the NEXT click opens it.
 async function relink(kind: 'folder' | 'note', key: string): Promise<PickResult> {
   dead.add(key);
   const r = await (kind === 'note' ? noteStore.relink(key) : fsaStore.relink(key));
@@ -60,9 +50,9 @@ async function relink(kind: 'folder' | 'note', key: string): Promise<PickResult>
   return r;
 }
 
-// Reopen a remembered FSA folder (the row click is the gesture for the permission prompt).
+// The row click is the gesture for the permission prompt.
 async function openFolderMap(key: string): Promise<boolean> {
-  await settleSave();   // the old map's pending writes must not land in the folder
+  await settleSave();   // the old map's pending writes must not land in the new one
   let r = dead.has(key) ? 'gone' : await fsaStore.openRecent(key);
   if (r === 'gone') {
     r = await relink('folder', key);
@@ -75,7 +65,6 @@ async function openFolderMap(key: string): Promise<boolean> {
   await loadFolder(fsaStore.currentKey!);   // openRecent re-remembers under a fresh key
   return true;
 }
-// Reopen a remembered single note (the row click is the gesture for the permission prompt).
 async function openNoteMap(key: string): Promise<boolean> {
   await settleSave();
   let r = dead.has(key) ? 'gone' : await noteStore.openRecent(key);
@@ -90,9 +79,8 @@ async function openNoteMap(key: string): Promise<boolean> {
   await loadNote(noteStore.currentKey!);
   return true;
 }
-// Pick ONE .md file (Chrome/Edge only) and open it as a map of that single card.
 export async function pickNote(): Promise<void> {
-  await settleSave();   // the old map's pending writes must not land in the picked note
+  await settleSave();
   const r = await noteStore.pick();   // the picker needs this click as its user gesture
   if (r === 'unsupported') { setStatus('This browser can’t open a note in place — use Chrome or Edge.'); return; }
   if (r === 'denied') {
@@ -108,11 +96,9 @@ export async function pickNote(): Promise<void> {
   await loadNote(noteStore.currentKey!);
   hideStart();
 }
-// Open a note or a folder dragged in from the OS to edit it in place (features/open-drop.ts) — the file
-// itself, where a drop on the board adds a copy. 'needs-click' when the drop couldn't ask for write
-// access; the caller offers a click to finish with.
+// Opens the dropped file itself, in place. 'needs-click': the drop couldn't ask for write access.
 export async function openDropped(handle: FileSystemHandle): Promise<'ok' | 'needs-click' | 'failed'> {
-  await settleSave();   // the old map's pending writes must not land in the dropped one
+  await settleSave();
   const isNote = handle.kind === 'file';
   const r = isNote ? await noteStore.adopt(handle as FileSystemFileHandle)
     : await fsaStore.adopt(handle as FileSystemDirectoryHandle);
@@ -131,9 +117,8 @@ export async function openDropped(handle: FileSystemHandle): Promise<'ok' | 'nee
   hideStart();
   return 'ok';
 }
-// Pick a NEW local folder (Chrome/Edge only) and open it right away.
 async function pickFolder(): Promise<void> {
-  await settleSave();   // the old map's pending writes must not land in the picked folder
+  await settleSave();
   const r = await fsaStore.pick();   // the picker needs this click as its user gesture
   if (r === 'unsupported') { setStatus('This browser can’t open a local folder — use Chrome or Edge.'); return; }
   if (r === 'denied') {
@@ -150,16 +135,14 @@ async function pickFolder(): Promise<void> {
   hideStart();
 }
 
-// ---------- the map list ----------
-// the map currently open on the canvas — runtime state, not the persisted last-map key
-// (another tab may rewrite that one)
+// Runtime state, not the persisted last-map key: another tab may rewrite that.
 function isCurrent(m: MapRef): boolean {
   return !!currentMap && currentMap.id === m.id && currentMap.kind === m.kind && store.isOpen;
 }
 
 let renaming: string | null = null;   // map id whose row shows the inline rename input
-let naming: string | null = null;     // …and the one just made, whose first name closes the sidebar
-let activeTab: MapKind = 'device';    // which backend's maps the sidebar shows
+let naming: string | null = null;     // the one just made, whose first name closes the sidebar
+let activeTab: MapKind = 'device';
 
 const NEW_LABEL: Record<MapKind, string> = { device: 'New map', folder: 'Open folder…', note: 'Open a note…' };
 const EMPTY_LABEL: Record<MapKind, string> = { device: 'No maps yet.', folder: 'No recent folders yet.', note: 'No recent notes yet.' };
@@ -169,7 +152,6 @@ function selectTab(tab: MapKind): void {
   byId('tabDevice').classList.toggle('active', tab === 'device');
   byId('tabFolder').classList.toggle('active', tab === 'folder');
   byId('tabNote').classList.toggle('active', tab === 'note');
-  // the "+" action creates where the active tab points
   byId('newBtnLabel').textContent = NEW_LABEL[tab];
   renaming = naming = null;
   renderMapList();
@@ -192,7 +174,7 @@ function renderMapList(): void {
   }).join('');
 
   box.querySelectorAll<HTMLElement>('.map-item').forEach((row, i) => {
-    const m = list[i]!;   // rows are rendered in list order
+    const m = list[i]!;
     row.onclick = e => {
       if ((e.target as HTMLElement).closest('.mi-more, .mi-name-input')) {
         return;
@@ -204,7 +186,6 @@ function renderMapList(): void {
         openRow(m);
       }
     };
-    // map actions live in a context menu: the ⋮ button (tap-friendly) or a desktop right-click
     const more = row.querySelector<HTMLButtonElement>('.mi-more');
     if (more) {
       more.onclick = e => {
@@ -214,14 +195,12 @@ function renderMapList(): void {
       };
     }
     row.oncontextmenu = e => {
-      e.preventDefault(); e.stopPropagation();   // keep the canvas ctx-menu handler out of it
+      e.preventDefault(); e.stopPropagation();   // keep the canvas context menu out of it
       openMapMenu(m, e.clientX, e.clientY);
     };
     const inp = row.querySelector<HTMLInputElement>('.mi-name-input');
     if (inp) {
       inp.focus(); inp.select();
-      // A map made a moment ago is being NAMED, not renamed: once it has its name (or keeps "Untitled"),
-      // the sidebar has done its job and the new board is what you want to see.
       const done = (): void => {
         if (naming === m.id) {
           naming = null;
@@ -240,7 +219,7 @@ function renderMapList(): void {
       };
       inp.onblur = () => {
         if (renaming !== m.id) {
-          return;   // Escape already cancelled (re-render detached us)
+          return;   // Escape already cancelled
         }
         renaming = null;
         void commitRename(m, inp.value).then(done);
@@ -253,7 +232,7 @@ function openMapMenu(m: MapRef, x: number, y: number): void {
   const cur = isCurrent(m);
   openMenu([
     ...(m.kind === 'device' ? [{ label: 'Rename', run: () => { renaming = m.id; renderMapList(); } }] : []),
-    // export packs what's loaded on the canvas, so it exists only for the open map
+    // Export packs what's loaded on the canvas.
     { label: 'Export .zip', run: () => { exportZip(); }, disabled: !cur },
     'sep',
     m.kind === 'device'
@@ -263,7 +242,7 @@ function openMapMenu(m: MapRef, x: number, y: number): void {
 }
 
 async function openRow(m: MapRef): Promise<void> {
-  if (isCurrent(m)) { hideStart(); return; }          // already on the canvas
+  if (isCurrent(m)) { hideStart(); return; }
   if (m.kind === 'device') {
     await openDeviceMap(m);
     hideStart();
@@ -275,7 +254,7 @@ async function openRow(m: MapRef): Promise<void> {
 async function commitRename(m: MapRef, name: string): Promise<void> {
   await renameDeviceMap(await resolveOnDeviceStore(), m.id, name);
   if (isCurrent(m)) {
-    updateMapTitle();   // the open map's name shows in the toolbar + tab title
+    updateMapTitle();
   }
   renderMapList();
 }
@@ -294,34 +273,32 @@ async function deleteMap(m: MapRef): Promise<void> {
   }
   const wasCurrent = isCurrent(m);
   if (wasCurrent) {
-    await settleSave();   // settle any pending autosave before the dir vanishes
+    await settleSave();
   }
   await deleteDeviceMap(await resolveOnDeviceStore(), m.id);
   if (wasCurrent) {
-    await commitDevice();   // fall back to the next map (or a fresh one)
+    await commitDevice();
   }
   renderMapList();
 }
 
-// ---------- home sidebar ----------
 const startScreen = byId('startScreen');
 export function showStart(): void {
   renaming = naming = null;
   byId<HTMLButtonElement>('tabFolder').disabled = !HAS_FSA;
   byId<HTMLButtonElement>('tabNote').disabled = !HAS_FSA;
-  // open on the tab of the map currently on the canvas
   selectTab(HAS_FSA && currentMap ? currentMap.kind : 'device');
   startScreen.classList.remove('hidden');
   startScreen.inert = false;
 }
 
-// Closed, the sidebar is only slid out of sight: `inert` takes its buttons out of the Tab order too.
+// Only slid out of sight, so `inert` takes its buttons out of the Tab order.
 export function hideStart(): void {
   startScreen.classList.add('hidden');
   startScreen.inert = true;
 }
 
-// A fresh on-device map, opened, with its name selected in the sidebar to type over; Enter goes to the board.
+// Opened with its name selected in the sidebar to type over.
 export async function newDeviceMap(): Promise<void> {
   showStart();
   selectTab('device');
@@ -337,7 +314,6 @@ export function installStartScreen(): void {
   byId('tabFolder').onclick = () => selectTab('folder');
   byId('tabNote').onclick = () => selectTab('note');
 
-  // the "+" action: a new on-device map, the FSA folder picker or the note picker — per the active tab
   byId('newBtn').onclick = async () => {
     if (activeTab === 'device'){
       await newDeviceMap();
@@ -350,18 +326,16 @@ export function installStartScreen(): void {
   byId('importBtn').onclick = () => openImportPicker();
   byId('startClose').onclick = () => hideStart();
 
-  // clicking the canvas area beside the sidebar closes it
   startScreen.addEventListener('click', e => {
     if (e.target === startScreen) {
       hideStart();
     }
   });
-  setOnRecentsChanged(renderMapList);   // let the store signal registry changes without rendering UI itself
+  setOnRecentsChanged(renderMapList);
   byId('appVersion').textContent = `v${__APP_VERSION__}`;
 }
 
-// ---------- boot: local-first — open straight into the last map, no gate ----------
-// Open the last-used on-device map; else the most recent one; else create a fresh "My map".
+// The last-used on-device map, else the most recent, else a fresh "My map".
 async function commitDevice(): Promise<void> {
   const s = await resolveOnDeviceStore();
   const device = readMaps().filter(m => m.kind === 'device');
@@ -372,9 +346,7 @@ async function commitDevice(): Promise<void> {
   await openDeviceMap(ref);
 }
 
-// On a phone, fitting the WHOLE map yields unreadably small cards — frame the biggest branch
-// instead so the session opens somewhere legible (search / focus take it from there). Selects
-// nothing, so the edit bottom-sheet stays closed on boot.
+// Fitting the whole map on a phone makes cards unreadable: frame the biggest branch, selecting nothing.
 function orientForPhone(): void {
   if (!phoneMode() || !state.nodes.size) {
     return;
@@ -392,8 +364,7 @@ function orientForPhone(): void {
   }
 }
 
-// Settles once boot has put the last map on the canvas: what arrives at launch (features/launch.ts) waits
-// for it, so the map boot opens can't land on top of the one asked for.
+// What arrives at launch waits for this, so the boot map can't land on top of the one asked for.
 let bootDone: () => void = () => {};
 export const booted = new Promise<void>(resolve => { bootDone = resolve; });
 
@@ -405,7 +376,6 @@ export async function boot(): Promise<void> {
   }
 }
 
-// Show the sidebar on one tab's list — a home-screen shortcut's way in (features/launch.ts).
 export function showStartOn(tab: MapKind): void {
   showStart();
   selectTab(HAS_FSA || tab === 'device' ? tab : 'device');
@@ -414,18 +384,17 @@ export function showStartOn(tab: MapKind): void {
 async function bootMap(): Promise<void> {
   applyView();
   hideStart();
-  // one-time legacy migration / rebuild — the store probe is skipped once the registry exists
   if (!readMaps().length) {
     await ensureMapRegistry(await resolveOnDeviceStore());
   }
-  // resume a local folder only if we can do it silently (permission still granted); else on-device
+  // A folder or note resumes only silently (permission still granted).
   const last = getLastMap();
   if (HAS_FSA && last?.kind === 'folder' && await fsaStore.resume(last.id)) {
     await loadFolder(last.id);
   } else if (HAS_FSA && last?.kind === 'note' && await noteStore.resume(last.id)) {
     await loadNote(last.id);
   } else {
-    await commitDevice();   // the last / most recent on-device map (fresh "My map" on first run)
+    await commitDevice();
   }
   orientForPhone();
   await applyUrlFromHash();

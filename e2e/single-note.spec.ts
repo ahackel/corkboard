@@ -1,8 +1,5 @@
-// A single note opened on its own (store/note.ts) is a map of ONE card: it edits in place, and nothing
-// adds a card beside it or takes it away. The file picker is stubbed with a file in the browser's own
-// storage, which behaves like a picked file apart from the permission prompt. Reopening it on the next
-// visit is NOT covered here: headless Chromium crashes reading a stored OPFS handle back out of
-// IndexedDB after a reload, so that path (boot → noteStore.resume) is checked by hand in Chrome.
+// Reopening on the next visit (noteStore.resume) is checked by hand: headless Chromium crashes reading a
+// stored OPFS handle back out of IndexedDB after a reload.
 import { test, expect, type Page } from '@playwright/test';
 import { openBoard, card, clickAway, palette, saved, settled, watchErrors } from './helpers';
 

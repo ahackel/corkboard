@@ -33,7 +33,6 @@ describe('saveAll', () => {
     expect(store.files.get('notes.md')).toContain('# Notes');
   });
 
-  // A stack is a section drawn as a pile: the folder is the same, and the pile is board.json's to say.
   it('writes a stack as a section folder, flagged `stack` in board.json, its pile order with it', async () => {
     const store = caseInsensitiveStore();
     useStore(store);

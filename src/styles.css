@@ -1,54 +1,38 @@
-/* App styles. Extracted from index.html. Vite bundles this (imported from main.ts) and
-   vite-plugin-singlefile inlines it back into dist/index.html, keeping the single-file build. */
-/* The friendly rounded face (docs/PRODUCT.md, "Look and feel"): the system's own rounded sans where there
-   is one (SF Pro Rounded on Apple), else Nunito — bundled, latin subset (~39 KB, inlined into the single
-   file), so it works offline and from file://. OFL licence beside the file. */
+/* The system's rounded sans, else bundled Nunito (latin subset, so it works offline). OFL licence beside the file. */
 @font-face {
   font-family:'Nunito'; font-style:normal; font-weight:200 1000; font-display:swap;
   src:url(./assets/fonts/nunito-latin-wght-normal.woff2) format('woff2-variations');
   unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
 }
 :root {
-  /* ONE theme, FigJam's (docs/PRODUCT.md, "Look and feel"): a pale grey board, white chrome, Figma
-     blue for selection, pastel stickies. There is no dark mode — a board looks the same everywhere. */
+  /* ONE theme, FigJam's: no dark mode, a board looks the same everywhere. */
   color-scheme: light;
   --bg: #f5f5f5;
   --grid: #e3e3e3;
-  /* the visible canvas grid pattern (view/grid.ts) wants more contrast than --grid's subtle
-     border/divider use elsewhere, so blend it toward --text instead of a second hardcoded hex. */
   --grid-pat: color-mix(in srgb, var(--grid) 55%, var(--text) 45%);
   --node: #ffffff;
   --node-border: #e6e6e6;
   --node-sel: #0d99ff;
-  --edit-ring: color-mix(in srgb, var(--node-sel) 30%, #fff);   /* what's being TYPED in, dimmer than selection */
+  --edit-ring: color-mix(in srgb, var(--node-sel) 30%, #fff);   /* what's being TYPED in */
   --edge: #757575;
   --text: #1e1e1e;
   --muted: #6b6b6b;   /* 4.5:1 on the #f5f5f5 board */
   --accent: #0d99ff;
-  --panel: #ffffff;   /* bar/chrome surface */
-  /* the selection/object TOOLBAR (#floatBar, #edgeBar and their popovers): FigJam's dark island */
+  --panel: #ffffff;
+  /* the dark selection toolbar islands */
   --bar-bg: #2c2c2c;
   --bar-ink: #ffffff;
   --bar-muted: #b3b3b3;
   --bar-hover: #444444;
   --bar-sep: #444444;
-  /* the ONE selection colour is --accent (= --node-sel): solid for the selected thing itself (a card's ring, a
-     menu highlight, an active chip), this tint for the current row in a list or a toggle that's on */
+  /* --accent for the selected thing itself, this tint for a current row or a toggle that's on */
   --row-sel: color-mix(in srgb, var(--accent) 22%, transparent);
-  --hover: color-mix(in srgb, var(--text) 8%, transparent);   /* every light-chrome hover */
+  --hover: color-mix(in srgb, var(--text) 8%, transparent);
   --shadow-ui: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.10);
-  /* a popup that a click on the background closes: lifted clearly above the chrome it opens from */
+  /* a popup a background click closes */
   --shadow-pop: 0 2px 6px rgba(0,0,0,.12), 0 12px 32px rgba(0,0,0,.24);
 
-  /* FigJam's sticky palette (approximated) + grey + white/black. A card's ink is decided once, by the
-     colour itself.
-     The SINGLE SOURCE OF TRUTH for these hexes: view/color.ts's SWATCH_BG reads them straight from
-     here (getComputedStyle) at load, so JS (edges/backgrounds/swatch fills) and CSS (.c-*
-     below, #ghostCard) never drift apart. Change a colour here only. */
-  /* Pastel sticky-note fills (docs/PRODUCT.md): light enough to take DARK ink everywhere, so a board
-     reads like a wall of paper notes. The KEYS are the file format (`color: amber` in a note) and never
-     change; only these hexes do. `amber` is the classic sticky yellow, and the default for a card with
-     no colour of its own (render.ts effectiveColor). */
+  /* The ONLY place these hexes live (view/color.ts reads them). The KEYS are the file format and never change. */
   --pal-slate: #c2cbff;
   --pal-red: #ffafa3;
   --pal-amber: #ffd966;
@@ -60,8 +44,6 @@
   --pal-grey: #d9d9d9;
   --pal-white: #ffffff;
   --pal-black: #1e1e1e;
-  /* the rest of FigJam's picker (view/color.ts PICKER_ROWS): a light orange and grey to complete the pastel
-     row, a mid grey, and the STRONG row — the same hues at full strength */
   --pal-orange: #ffd3a8;
   --pal-silver: #b3b3b3;
   --pal-stone: #757575;
@@ -74,74 +56,41 @@
   --pal-bold-violet: #874fff;
   --pal-bold-pink: #f849c1;
 
-  /* shared roundness scale — keep every surface on one of these steps */
-  --r-card: 3px;   /* board cards (FigJam's near-square stickies), the ghost card, image cards */
-  --pile-dim: .93;   /* every pile card but the top one; a fanned card glides to and from it (features/stacks.ts) */
-  --r-section: 12px; /* a section's box — rounder, like a FigJam section */
-  /* one step INSIDE a card — in-place editors. Anything sitting within a box wants an inner radius,
-     not the outer one, or it bulges against the corners it's supposed to sit inside. */
-  /* a sticky note at rest sits a hair off the board, on FigJam's soft shadow */
+  --r-card: 3px;
+  --pile-dim: .93;   /* every pile card but the top one */
+  --r-section: 12px;
   --lift: 0 1px 2px rgba(0,0,0,.06), 0 3px 10px rgba(0,0,0,.08);
-  --r-panel: 16px;  /* floating panels (editor, start card) */
-  --r-menu: 12px;   /* dropdowns / context menus */
-  --r-ctl: 10px;    /* inputs, list rows, small controls */
-  --r-full: 999px;  /* pills + fully round icon buttons */
+  --r-panel: 16px;
+  --r-menu: 12px;
+  --r-ctl: 10px;
+  --r-full: 999px;
 
-  /* every bar (#floatBar, .floating-btn) shares one icon-button
-     size — redefined below for coarse pointers, so every consumer picks up the bigger touch
-     target automatically with no per-selector overrides. The layout popover's chips use this same
-     scale (see .layoutchip below) so it's the same height as #floatBar itself; the colour popover's
-     swatches stay their own smaller, fixed scale . */
-  /* the NARROW crumb strip's own height (styles.css's @media 700px block): one line of text and a
-     hair. Named because the centred bars have to drop by exactly it. */
-  --crumb-bar-h: 26px;
+  --crumb-bar-h: 26px;   /* the narrow crumb strip: the centred bars drop by exactly it */
+  /* one icon-button size for every bar, bigger on coarse pointers (below) */
   --bar-btn: 32px;
-  --bar-icon: 18px;   /* FigJam's glyphs are light: 18px in a 32px button */
-  --r-bar: 12px;      /* every toolbar island and popover */
+  --bar-icon: 18px;
+  --r-bar: 12px;
 
-  /* ---- the safe area, named once ----
-     index.html asks for `viewport-fit=cover`, so the page runs edge to edge: #stage IS the whole
-     screen, including the strip under an iPhone's notch/Dynamic Island (both sides in landscape)
-     and under the home indicator. That's the point — the CANVAS wants every pixel — but nothing
-     you have to TAP may sit there, so every piece of fixed chrome adds the matching inset back on
-     top of its own 10-12px margin. Read these four rather than spelling env() out per rule: they
-     are the one place a fallback lives, and they're zero on every device without a cutout, so the
-     calc()s below are exact everywhere else. `env()` inside a custom property substitutes fine at
-     use time (it resolves like var() does) — but getComputedStyle hands it back UNRESOLVED, which
-     is why the JS side (utils/dom.ts's safeInsets) measures .safe-probe instead of reading these. */
+  /* The safe area: every fixed control adds these back (see "The page runs EDGE TO EDGE"). getComputedStyle
+     returns env() unresolved here, hence .safe-probe for JS. */
   --sa-t: env(safe-area-inset-top, 0px);
   --sa-r: env(safe-area-inset-right, 0px);
   --sa-b: env(safe-area-inset-bottom, 0px);
   --sa-l: env(safe-area-inset-left, 0px);
 }
-/* The probe utils/dom.ts measures the insets off (see safeInsets): a zero-size, invisible box whose
-   PADDING is the four values — a real property, so getComputedStyle resolves it to px. */
+/* Measured by utils/dom.ts safeInsets: padding is a real property, so it resolves to px. */
 .safe-probe { position:fixed; top:0; left:0; width:0; height:0;
   visibility:hidden; pointer-events:none;
   padding:var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l); }
 @media (pointer: coarse) {
   :root { --bar-btn: 36px; --bar-icon: 22px; }
 }
-/* Each palette key hands a surface three things: its FILL (--card), the INK that fill demands
-   (--ink, the text colour) and the SCRIM an in-place editor paints behind that ink (--scrim).
-   Only --card is authored. The other two are COMPUTED from it — view/color.ts's deriveInk measures the
-   fill's WCAG contrast and injects a --pal-ink-* plus --pal-scrim-* pair per key (utils/ink.ts) —
-   so ink is a property of the CARD's colour, not of the theme and not of an enumerated exception
-   list. That's why nothing below this line ever names a colour key to fix its text: one
-   `color: var(--ink)` on each surface that wears a .c-* class (.node) replaces the four per-surface "which keys are exceptions" lists that used to have to
-   agree with each other, and an off-palette colour gets legible text for free. */
-/* .c-<key> for every palette key is GENERATED (view/color.ts deriveInk), alongside the ink it derives. */
-/* "none" = no colour at all: truly transparent, not just canvas-bg-coloured (border returns when
-   selected). The one key whose ink can't be computed — there's no fill to measure, the CANVAS shows
-   through — so it's the one that follows the theme instead, and its scrim has to be flipped by hand
-   to stay on the far side of that. */
+/* --card is authored; --ink and --scrim are DERIVED from it (view/color.ts deriveInk generates every .c-<key>).
+   Nothing below may name a colour key to fix its text. */
+/* "none" has no fill to derive ink from, so it follows the theme. */
 .c-none   { --card:transparent; --ink:var(--text); --scrim:rgba(255,255,255,.62); }
 
-/* A colour picked from OUTSIDE the palette (`color: "#ff8800"` in the note). Same three variables,
-   but there's no key to hang them on, so view/color.ts's applyColorVars writes them inline per
-   node — an inline custom property beats any selector, so the values below are only the safety net
-   for an element that got the class without them. Everything else in this file reads the variables
-   and never the key, which is what lets a custom colour take every path a palette one does. */
+/* An off-palette hex: applyColorVars sets the three inline; these are only the safety net. */
 .c-custom { --card:var(--node); --ink:#ffffff; --scrim:rgba(0,0,0,.5); }
 
 * { box-sizing: border-box; }
@@ -149,14 +98,11 @@ html, body { margin:0; height:100%; overflow:hidden;
   font-family: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif;
   background: var(--bg); color: var(--text);
   user-select:none; -webkit-user-select:none;
-  /* pan-x pan-y (not manipulation): blocks pinch-zoom AND double-tap zoom page-wide on iOS
-     (user-scalable=no is ignored since iOS 10) while keeping panel scrolling; #stage's
-     touch-action:none overrides for the canvas, where we drive gestures ourselves */
+  /* pan-x pan-y, not manipulation: blocks pinch and double-tap zoom on iOS (which ignores user-scalable=no). */
   touch-action:pan-x pan-y; }
-/* re-enable selection inside form controls and editable elements */
 input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text; outline:none; }
 
-/* a failed save (data/save-alert.ts) — loud on purpose, and above every other chrome */
+/* loud on purpose, above every other chrome */
 #saveAlert { position:fixed; bottom:calc(16px + var(--sa-b)); left:50%; transform:translateX(-50%);
   z-index:60; max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r));
   display:flex; align-items:center; gap:12px; padding:8px 8px 8px 16px; border-radius:12px;
@@ -164,8 +110,7 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
 #saveAlert[hidden] { display:none; }
 #saveAlertRetry { flex:none; border:0; border-radius:8px; padding:6px 12px; font:inherit; font-weight:600;
   background:rgba(255,255,255,.2); color:inherit; cursor:pointer; }
-/* The toast (core/state.ts setStatus): a quiet pill that fades. A floating thing, so it may cast a
-   shadow; it sits where #saveAlert does and hides while that is up — the failure outranks it. */
+/* The toast hides while #saveAlert is up: the failure outranks it. */
 #status { position:fixed; bottom:calc(64px + var(--sa-b)); left:50%; z-index:55;
   max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r)); box-sizing:border-box;
   padding:8px 16px; border-radius:var(--r-full); background:var(--text); color:var(--bg);
@@ -173,7 +118,6 @@ input, textarea, [contenteditable] { user-select:text; -webkit-user-select:text;
   box-shadow:0 4px 16px rgba(0,0,0,.2); opacity:0; transform:translate(-50%, 8px);
   transition:opacity .2s ease, transform .2s ease; }
 #status.show { opacity:1; transform:translate(-50%, 0); }
-/* The first-run hint: one quiet line in the middle of a map with nothing on it (render.ts paintAll). */
 #emptyHint { display:none; position:absolute; left:50%; top:50%; transform:translate(-50%, -50%); margin:0;
   max-width:calc(100% - 48px); text-align:center; font-size:15px; color:var(--muted); pointer-events:none; }
 body.empty-map #emptyHint { display:block; }
@@ -186,14 +130,12 @@ body.empty-map #emptyHint { display:block; }
 }
 body.save-failing #status { display:none; }
 #saveAlertRetry:hover { background:rgba(255,255,255,.3); }
-/* A newer version is out (features/update.ts): one accent pill in the top-right corner, nothing else there. */
 #updateBtn { position:fixed; top:calc(16px + var(--sa-t)); right:calc(16px + var(--sa-r)); z-index:55;
   padding:8px 16px; border:0; border-radius:var(--r-full); font:inherit; font-size:13px; font-weight:600;
   background:var(--accent); color:#fff; box-shadow:var(--shadow-ui); }
 #updateBtn[hidden] { display:none; }
 #updateBtn:hover { filter:brightness(1.08); }
-/* Open-in-place drop target (features/open-drop.ts): a dark pill at the top centre while a note is dragged in,
-   which lights up in the accent when the drag is over it (.hot) — a drop anywhere else adds a card. */
+/* Open-in-place drop target: elsewhere a drop adds a card. */
 #openDrop { position:fixed; top:calc(16px + var(--sa-t)); left:50%; z-index:55; transform:translateX(-50%);
   display:flex; align-items:center; gap:12px; padding:12px 22px 12px 18px; border-radius:16px;
   max-width:calc(100% - 32px - var(--sa-l) - var(--sa-r)); box-sizing:border-box;
@@ -207,9 +149,6 @@ body.save-failing #status { display:none; }
 #openDrop .od-text > span { font-size:12px; opacity:.75; }
 #openDrop.hot .od-text > span, #openDrop.ask:hover .od-text > span { opacity:.9; }
 
-/* The group dividers are .fb-sep (see the floating bars) — the same 1px rule, so a group of
-   buttons is marked the same way wherever it appears. It used to be `.sep { flex:1 }`, which in a
-   width:max-content bar has no free space to claim and so drew nothing at all. */
 button {
   background: var(--node); color: var(--text); border:1px solid var(--node-border);
   border-radius:var(--r-full); padding:5px 12px; font-size:12px; cursor:pointer;
@@ -217,10 +156,8 @@ button {
 button:hover { border-color: var(--accent); }
 button.active { border-color: var(--accent); color: var(--accent); }
 button:disabled { opacity:.45; cursor:default; }
-/* The ⌘P palette, FigJam's quick actions: a popover rising from the dock's Actions button, bottom centre.
-   #palette itself is a clear full-page layer only so a press outside the box closes it (no scrim: the
-   board stays in view). The box is pinned by its BOTTOM with the input last, so the input sits still next
-   to the dock and the list grows and shrinks ABOVE it while typing filters it. */
+/* The ⌘P palette: a clear full-page layer so a press outside closes it. Pinned by its BOTTOM with the input
+   last, so the input stays still while the list above it filters. */
 #palette { position:fixed; inset:0; z-index:45; }
 #palette[hidden] { display:none; }
 .pal-box { position:absolute; left:50%; transform:translateX(-50%); bottom:calc(68px + var(--sa-b));
@@ -235,7 +172,6 @@ button:disabled { opacity:.45; cursor:default; }
 .pal-item.active { background:var(--row-sel); }
 .pal-item kbd { font-family:inherit; font-size:12px; color:var(--muted); }
 .pal-empty { padding:12px; color:var(--muted); font-size:14px; }
-/* floating buttons pinned to the canvas corners */
 .floating-btn {
   position:fixed; z-index:20;
   width:var(--bar-btn); height:var(--bar-btn); display:inline-flex; align-items:center; justify-content:center;
@@ -245,42 +181,22 @@ button:disabled { opacity:.45; cursor:default; }
 }
 .floating-btn:hover { color:var(--text); background:color-mix(in srgb, var(--text) 8%, var(--panel)); }
 .floating-btn svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
-/* canvas kebab — the ONLY thing in the top-right corner. Unlike them it stays
-   visible at every width. Still below true modals (#ctxMenu/#startScreen/etc: z:40+). */
+/* the canvas kebab, below true modals (z:40+) */
 #canvasMenuBtn { top:calc(12px + var(--sa-t)); right:calc(12px + var(--sa-r)); z-index:30; }
-/* …and it is a TOUCH affordance only. It exists because iOS Safari's synthesized contextmenu on the
-   empty canvas is unreliable (see index.html), which a mouse never needs: a right-click on the canvas
-   already opens the same list (features/context-menu.ts canvasMenuEntries). So on a fine pointer the
-   corner stays empty — one fewer permanent control floating over the board (and over the page panel,
-   which owns that corner while it is open). */
+/* Touch only: iOS Safari's synthesized contextmenu on the canvas is unreliable; a mouse right-clicks. */
 @media (pointer: fine) { #canvasMenuBtn { display:none; } }
-/* home / storage — floating bar in the top-left; the loaded-folder name sits BESIDE the button.
-   Below true modals (#ctxMenu/#startScreen: z:40+). */
-/* ONE PILL: a single --panel capsule holding the home button and every path segment,
-   all of them borderless and transparent until hovered. Not a capsule per segment — nothing else in
-   the app looks like that, and a path is one thing. The pill also does real work now the canvas can be
-   any colour (syncCanvasBackground): text drawn straight onto a teal canvas has no dependable contrast. */
+/* Home and path in ONE pill, below true modals (z:40+): the canvas can be any colour, so bare text has no
+   dependable contrast. */
 #homeBar { position:fixed; top:calc(12px + var(--sa-t)); left:calc(12px + var(--sa-l)); z-index:30;
   display:flex; align-items:center; gap:2px;
   max-width:calc(100% - 24px - var(--sa-l) - var(--sa-r)); padding:4px 6px;
   background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
-/* .floating-btn styles the box and the bar owns positioning — but inside the pill the button drops its
-   own background, so it reads as one item in a bar rather than a capsule inside a capsule. */
 #homeBar #homeBtn { position:static; flex:none; background:transparent; box-shadow:none; width:28px; }
-#homeBar #homeBtn svg { width:20px; height:20px; }   /* the Corkboard icon itself, in its own colours */
+#homeBar #homeBtn svg { width:20px; height:20px; }
 #homeBar #homeBtn:hover { background:var(--hover); }
-#folderName:empty { display:none; }   /* icon-only until a map is loaded */
-/* The icon and the map's name read as one item: the button is only a little wider than its icon, and the name's
-   hover pill gives up most of its lead-in, so at rest there's no hole between the two. */
+#folderName:empty { display:none; }
 #folderName { padding-left:4px; }
-/* ---------- the open-section path (features/breadcrumbs.ts) ----------
-   Segments are like the corner buttons: no border, no fill, hover-highlight only, muted until they're the
-   level you're actually in. The map name is the first of them (#folderName), so going into a section ADDS
-   segments rather than swapping loose text for pills.
-   NOT touched by `zoom-far`: that rule drops PER-CARD badges, of which there is one per card on screen.
-   This is a single piece of app chrome, and being zoomed out is exactly when you most need to know
-   which section you're standing in. Nor does it hide under 480px the way the map name may — on a phone
-   the map name is expendable, a one-way door is not. */
+/* The open-section path. Not hidden by `zoom-far`: zoomed out is when you most need to know where you are. */
 #scopeBar { display:none; align-items:center; gap:2px; min-width:0; }
 body.scoped #scopeBar { display:flex; }
 .sc-sep { flex:none; color:var(--muted); font-size:13px; opacity:.65; }
@@ -289,14 +205,9 @@ body.scoped #scopeBar { display:flex; }
   background:transparent; color:var(--muted); font:inherit; font-size:13px; font-weight:500;
   cursor:pointer; }
 .sc-crumb:hover { background:var(--hover); color:var(--text); }
-/* The level you're IN is a label, not a control: you're already there, so a click has nothing to do
-   and a hover highlight would promise one. pointer-events kills both at once, and it covers the map
-   segment unscoped for the same reason (nothing sits above the whole map). */
+/* The level you're IN is a label, not a control. */
 .sc-crumb.sc-cur { color:var(--text); pointer-events:none; }
 .sc-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* A SECTION's segment is a pill in that section's colour holding its folder (a page, for a single note) and its
-   name, both in the ink that colour demands — an outline icon, so it reads as part of the label. Every level
-   is drawn alike; the one you're IN is ringed in that ink. */
 .sc-crumb.sc-section { padding:2px 4px; color:var(--ink, var(--text)); }
 .sc-pill { display:inline-flex; align-items:center; gap:5px; min-width:0; padding:1px 7px 1px 6px; border-radius:6px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); }
@@ -304,50 +215,37 @@ body.scoped #scopeBar { display:flex; }
 .sc-cur .sc-pill { box-shadow:0 0 0 1px color-mix(in srgb, var(--ink, var(--text)) 30%, transparent); }
 .sc-pill > .fold-icon { flex:none; width:14px; height:14px; color:inherit; }
 .sc-pill > .fold-icon svg path { fill:none; }
-.sc-more { font-size:14px; letter-spacing:1px; }   /* the folded middle: `…` */
-/* The pill stops short of the CENTRED search bar (~260px wide, hence half of it plus a gap). */
+.sc-more { font-size:14px; letter-spacing:1px; }
+/* stops short of the centred search bar */
 @media (min-width:701px){ body.scoped #homeBar { max-width:calc(50% - 162px); } }
-/* NARROW: the pill becomes a full-width strip one line of text tall with a rule under it — a document
-   header, which is what a path is. The centred bars drop by exactly its height (--crumb-bar-h). */
+/* NARROW: a full-width strip one line tall; the centred bars drop by --crumb-bar-h. */
 @media (max-width:700px){
   body.scoped #homeBar {
     top:0; left:0; right:0; max-width:none; box-sizing:border-box; gap:0;
     height:calc(var(--crumb-bar-h) + var(--sa-t));
     padding:var(--sa-t) calc(8px + var(--sa-r)) 0 calc(8px + var(--sa-l));
     border-radius:0; border-bottom:1px solid var(--node-border); }
-  /* A --bar-btn circle (32px, 36 on touch) can't sit in a strip the height of its text, so the home
-     button becomes the line's height too — still the same target, just no longer a capsule. */
   body.scoped #homeBar #homeBtn { width:var(--crumb-bar-h); height:var(--crumb-bar-h); }
   body.scoped #homeBar #homeBtn svg { width:15px; height:15px; }
-  /* …and the segments give up the vertical padding that made them capsules. */
   body.scoped #homeBar .sc-crumb { padding:2px 7px; }
   body.scoped #searchWrap { top:calc(8px + var(--sa-t) + var(--crumb-bar-h)); }
 }
-/* Narrower still: drop the map name (the expendable segment) and let the rest ellipsise. Nothing
-   collapses to an icon-only segment — the segments carry no icon, so that would leave empty buttons;
-   the `…` fold is what keeps a deep path short. */
+/* Narrower still: drop the map name; the `…` fold keeps a deep path short. */
 @media (max-width:480px){
   #folderName { display:none; }
-  /* …and with the map name gone, the path's leading separator has nothing to separate FROM — it would
-     hang off the home button. Every other separator still earns its place. */
+  /* …and the leading separator, which would hang off the home button. */
   #scopeBar > .sc-sep:first-child { display:none; }
   .sc-crumb { max-width:130px; }
 }
-/* find — by text and #tags (features/search.ts), opened with ⌘F or /, top centre. #searchClear stays visible
-   unconditionally: empty, it closes the bar (like Esc), so the mode never becomes a one-way door. No padding, either: the
-   field IS the bar (see #searchBox), not an inset box floating in one. Shaped and lifted like every other bar
-   (#homeBar, the dock): the control radius and the UI shadow, not a pill of its own. */
+/* Search, top centre. #searchClear always shows: empty, it closes the bar, so the mode is never a one-way door. */
 #searchWrap { position:fixed; top:calc(12px + var(--sa-t)); left:50%; transform:translateX(-50%); z-index:20;
   display:none; align-items:center; width:300px; max-width:calc(100% - 20px - var(--sa-l) - var(--sa-r));
   background:var(--panel); border-radius:var(--r-ctl); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 #searchWrap.open { display:flex; }
-/* the pill wears the focus its field hides */
 #searchWrap:focus-within { box-shadow:var(--shadow-ui), 0 0 0 2px var(--accent); }
 #searchWrap > .ic svg, #searchWrap > [data-icon] svg { position:absolute; left:13px; width:14px; height:14px;
   display:block; color:var(--muted); pointer-events:none; flex:none; }
-/* The field FILLS the bar — transparent, no fill of its own and no focus ring, so the whole pill
-   reads as one surface (and clicking anywhere in it lands in the input). The bar being the only
-   surface is also why the height is spelled out here. */
+/* The field IS the bar: transparent and ringless, so the pill reads as one surface. */
 #searchBox { flex:1; min-width:0; box-sizing:border-box; height:calc(var(--bar-btn) + 8px);
   padding:0 34px; border-radius:var(--r-ctl); font-size:13px;
   background:transparent; border:none; color:var(--text); }
@@ -357,7 +255,6 @@ button#searchClear { display:flex; align-items:center; justify-content:center;
   border:none; border-radius:50%; background:transparent; color:var(--muted); cursor:pointer; }
 button#searchClear:hover { color:var(--text); background:var(--hover); }
 #searchClear svg { width:11px; height:11px; display:block; }
-/* FigJam's "1/3" and its chevrons, between the field and the × (features/search.ts stepHit) */
 #searchNav { display:none; flex:none; align-items:center; gap:2px; margin-right:34px;
   font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
 #searchWrap.has-nav #searchNav { display:flex; }
@@ -370,7 +267,6 @@ button#searchClear:hover { color:var(--text); background:var(--hover); }
 #searchNav svg { width:12px; height:12px; display:block; }
 #searchPrev svg { transform:rotate(-90deg); }
 #searchNext svg { transform:rotate(90deg); }
-/* placeholder hint reads as a faint label, not real input */
 input::placeholder { color:var(--muted); opacity:1; }
 #searchResults { position:absolute; top:calc(100% + 4px); left:0; right:0; max-height:50vh; overflow:auto;
   background:var(--panel); border:none; border-radius:var(--r-menu); box-shadow:var(--shadow-pop); padding:4px;
@@ -384,7 +280,6 @@ input::placeholder { color:var(--muted); opacity:1; }
 #searchResults .sr-count { padding:4px 9px 2px; font-size:11px; font-weight:700; color:var(--muted); }
 #searchResults .sr-tag { display:flex; align-items:center; gap:8px; padding:6px 9px; }
 #searchResults .sr-meta { margin-left:auto; font-size:12px; color:var(--muted); }
-/* the query's tag CHIPS, inside the field before the text; a click takes one out */
 #searchChips { display:flex; flex:none; gap:4px; margin-left:32px; max-width:60%; overflow:hidden; }
 #searchChips:empty { display:none; }
 #searchWrap.has-chips { width:auto; min-width:300px; max-width:min(560px, calc(100% - 20px - var(--sa-l) - var(--sa-r))); }
@@ -395,20 +290,12 @@ input::placeholder { color:var(--muted); opacity:1; }
 .sc-tag .sc-x { font-size:9px; color:var(--muted); }
 .sc-tag:hover .sc-x { color:var(--text); }
 
-/* custom right-click context menu — same surface language as the search dropdown.
-   max-height + overflow-y:auto is the standard fix for "more entries than fit on screen" (same
-   pattern VS Code/Figma/Notion/native OS menus use): the menu scrolls internally instead of
-   spilling off-screen with no way to reach the rest. 8px margin on each side matches the 4px
-   position clamp in openMenuAt (context-menu.ts) — together they guarantee the WHOLE menu (not
-   just its anchor point) stays on-screen even on a short landscape phone with many entries. */
+/* Context menu. Scrolls rather than spill off-screen; the 8px margins pair with openMenuAt's 4px clamp. */
 .cm-panel { position:fixed; min-width:220px; padding:8px 0; display:none; z-index:40;
   max-height:calc(100vh - 8px); overflow-y:auto; overscroll-behavior:contain;
   background:var(--bar-bg); border-radius:var(--r-bar);
-  box-shadow:var(--shadow-pop); }   /* FigJam's menus are dark islands, like its toolbar */
+  box-shadow:var(--shadow-pop); }
 .cm-panel.open { display:block; }
-/* A row is FigJam's: 24px tall, its text 16px in from the edges, the shortcut in grey at the far right —
-   and the hover a rounded row INSET 8px from each side, in the selection blue. No red for Delete:
-   FigJam's menu doesn't shout either. */
 .cm-panel .cm-item { display:flex; width:calc(100% - 16px); margin:0 8px; align-items:center; justify-content:space-between;
   gap:32px; height:24px; padding:0 8px; border-radius:5px; font-size:13px; color:var(--bar-ink);
   background:transparent; border:none; cursor:default; white-space:nowrap; text-align:left;
@@ -419,306 +306,163 @@ input::placeholder { color:var(--muted); opacity:1; }
   background:none; border:none; padding:0; }
 .cm-panel .cm-item:hover:not(:disabled) kbd { color:#fff; }
 .cm-panel .cm-item:disabled kbd { color:rgba(255,255,255,.2); }
-/* inset from both edges, with room above and below (FigJam's groups breathe) */
 .cm-panel .cm-sep { height:1px; margin:8px 8px; background:rgba(255,255,255,.1); }
-/* An entry that opens a SUBMENU wears a chevron where a shortcut would sit, and stays lit while its submenu
-   is open (context-menu.ts openSub), as macOS menus do. */
+/* A submenu entry stays lit while its submenu is open, as macOS menus do. */
 .cm-panel .cm-item.cm-open { background:rgba(255,255,255,.12); }
 .cm-panel .cm-chev svg { width:10px; height:10px; display:block; opacity:.6; }
 .cm-panel .cm-item:hover:not(:disabled) .cm-chev svg { opacity:1; }
 
-/* touch-action:none → the browser never steals pan/zoom gestures; we drive them ourselves */
+/* we drive pan and zoom ourselves */
 #stage { position:fixed; inset:0; overflow:hidden; cursor:default; touch-action:none;
-  /* The canvas's own fill — --canvas-bg, written inline by features/canvas-color.ts's syncCanvasBackground from
-     canvasFill, the ONE resolver: the MAP's own colour at the top level, and while a section is OPEN
-     that section's fill instead (the canvas IS its interior then), through the same effectiveColor its
-     box used. On #stage rather than <body> so the theme's --bg is untouched, and BELOW #grid (a child
-     of this) so the grid still draws over it. Transitioned so going in and out reads as the canvas
-     taking the section's colour rather than a hard cut; 500ms is animateReflow's card glide, so the two
-     land together. Unset → transparent, and the theme's background shows through as before. */
+  /* --canvas-bg is set inline by canvas-color.ts: the map's colour, or the open section's. On #stage, under
+     #grid; its transition matches the 500ms card glide so the two land together. */
   background-color: var(--canvas-bg, transparent); transition: background-color 500ms ease; }
-/* …except when the scope came from the URL — a reload or a back/forward step — where the colour must
-   simply BE there (withoutScopeFade in nav/sections.ts). See its comment for why. */
+/* …except when the scope came from the URL (nav/sections.ts withoutScopeFade). */
 body.scope-instant #stage { transition: none; }
 #stage.panning { cursor:grabbing; }
-/* The hand only appears while actually dragging a card; default everywhere else. It is worn by the cards
-   IN HAND (`.grabbed`, render.ts paintNode) — they are what the pointer is over — and not by a rule on
-   every element under <body>: that one restyled the whole board at each pick-up and each drop. A tag or
-   a picture pulled out of a card rides a ghost that takes no pointer events, so those two still ask
-   everything under the pointer for the hand (rare gestures, and short ones). */
+/* The hand is worn only by the cards in hand: a rule on every element under <body> restyled the whole
+   board at each pick-up and drop. */
 .node.grabbed, .node.grabbed * { cursor:grabbing !important; }
 body.tag-dragging, body.tag-dragging *, body.grab-all, body.grab-all * { cursor:grabbing !important; }
-/* will-change:transform keeps a pan/pinch compositor-only. It also pins the layer's raster scale,
-   which would leave the cards blurry after a zoom — view/camera.ts's refreshRaster releases the
-   hint for two sections once the zoom settles, so this declaration is the RESTING value it comes
-   back to (camera.ts clears the inline override rather than re-asserting the keyword here). */
+/* The RESTING value: view/camera.ts refreshRaster drops it briefly after a zoom, or the cards stay blurry. */
 #world { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; touch-action:none; }
 
 svg#toggles { position:absolute; top:0; left:0; overflow:visible; }
-/* Screen-space background grid (view/grid.ts), behind #world and everything in it. view/grid.ts
-   overrides `inset` with one major cell of overhang so panning can be a pure translate of an
-   already-rasterized tile — the layer stays wider than the viewport, so no uncovered strip ever
-   scrolls in. will-change keeps the per-frame transform / crossfade opacity compositor-only, so a
-   pan or zoom never repaints the cards painted alongside it. It sits below #world purely by DOM
-   order — NOT z-index:-1, which would drop it behind #stage's own (non-stacking-context) box and
-   out of sight under the body background.
-   --grid-ink is declared HERE rather than at :root so its var(--grid-pat) substitutes against
-   whichever theme is live on this element (see the light-theme note above); grid.ts's inline
-   gradients just reference it. Deliberately faint — the grid is a hint you read past, not a layer
-   that competes with the cards. It's the full strength of whatever the MAJOR level draws; a sub-grid
-   that has to be told apart from it (mesh, line) scales it down again by SUB_MAX in grid.ts, while
-   the flat dot field uses it at full strength — being one level, painted once. Note it's TRANSLUCENT,
-   which is why that field is a single layer: coincident dots from both levels would composite to
-   about twice the alpha and every 4th dot would come out darker (see paintLayer). */
+/* Screen-space grid (view/grid.ts), below #world by DOM order: z-index:-1 would sink it under the body
+   background. --grid-ink is TRANSLUCENT, which is why the dot field is drawn once (see paintLayer). */
 #grid { position:absolute; inset:0; pointer-events:none; will-change:transform;
   --grid-ink: color-mix(in srgb, var(--grid-pat) 21%, transparent); }
 #gridFine { position:absolute; inset:0; will-change:opacity; }
-/* ---------- THE LAYER LADDER inside #world — the one place it is spelled ----------
-   Read it top to bottom before adding a z-index anywhere in this file; every rule below that carries
-   one points back here rather than restating the ordering.
-     auto  a section/stack BOX          — under the cards it holds (and not a stacking context, so the
-                                        parts of a section that must lift can)
-     2     every .node                — the cards themselves
-     3     a card's own chrome        — tag row, add-note bubble, fold arrow, resize handles
-     4     a section's TAB              — its title tab, lock badge: still the card
-     6     EVERY LINE THE APP DRAWS   — free edges (#freeEdges)
-     7     the port overlay (#toggles)— the ports a new line starts from, a selected line's end handles,
-                                        the drop target's outline: above every card AND line, so a
-                                        handle sits ON the line it moves and is always grabbable
-     7     the SELECTION FRAME (#selFrame) — round a multi-selection: its outline and corner squares (its
-                                        interior and edge bands are at -1, under EVERY card and box, so
-                                        they only ever take the presses nothing else wants)
-     8     drag GHOSTS                — landing ghost, insert bar, marquee: previews of a pending drop
-     9     the DRAG LAYER             — the cards actually in hand (#dragLayer / .dragging)
-                                        and, above them in it, every line with an end in hand (#freeEdgesHeld)
-   EDGES ABOVE CARDS (6 > 4) is the rule that shapes the middle of the ladder: a line is the thing the
-   reader is following, and one that dives under a card in its path loses them at exactly the moment
-   they were tracing it. So what sits ABOVE the lines is only what a line may not cover: the drag
-   ghosts and the cards in hand, which say what a drop is about to do and would be unreadable with
-   resting lines drawn over them. */
-/* The free edges (the ones the user DREW — view/free-edges.ts) sit in ONE band, ABOVE the cards:
-   they are lines to be followed. The layer takes NO pointer events at all: the clicks belong to the hit layer below the
-   cards (next rule), which is what keeps a line drawn over a card from swallowing that card's press. */
+/* ---------- THE LAYER LADDER inside #world: read it before adding a z-index ----------
+     auto  a section/stack BOX        under the cards it holds (no stacking context, so its label can lift)
+     2     every .node
+     3     a card's own chrome        tag row, fold arrow, resize handles
+     4     a section's label, lock badge
+     6     every line (#freeEdges)    above cards: a line under a card loses the reader tracing it
+     7     the port overlay (#toggles) and the selection frame's outline (its bands are at -1)
+     8     drag ghosts                landing ghost, insert bar, marquee
+     9     the drag layer             cards in hand, and above them the lines with an end in hand */
+/* No pointer events: the clicks belong to the hit layer BEHIND the cards, so a line can't steal a card's press. */
 svg#freeEdges { position:absolute; top:0; left:0; overflow:visible; z-index:6; pointer-events:none; }
-/* Inside #dragLayer the in-hand lines sit above the cards in hand, as resting lines sit above resting cards. */
 svg#freeEdgesHeld { position:absolute; top:0; left:0; overflow:visible; z-index:10; pointer-events:none; }
-/* …and the CLICK targets for those same edges, on their own layer BEHIND the cards (1). An edge's hit
-   stroke is 18 world px wide (HIT_W in view/free-edges.ts), so over a card it would swallow that
-   card's press — a card would stop being draggable in a band either side of every line crossing it.
-   Split in two, the line is visible over the card and the card still owns the pixels: exactly the
-   behaviour from when the whole layer sat behind them. */
+/* An 18px hit stroke above a card would make it undraggable in a band along every crossing line. */
 svg#freeEdgeHits { position:absolute; top:0; left:0; overflow:visible; z-index:1; pointer-events:none; }
-.node { z-index:2; }                               /* the cards */
-/* The port overlay (view/free-edges.ts: ports, endpoint handles, the drop target): above every card and
-   every line (see the ladder). The layer takes no events; the ports and handles re-enable their own. */
+.node { z-index:2; }
+/* Takes no events itself; the ports and handles re-enable their own. */
 svg#toggles { z-index:7; pointer-events:none; }
-/* --- free edges: the curve, its hit target, and the handles/sockets on the overlay above --- */
-/* 3px (STROKE_W, view/free-edges.ts): FigJam's connector weight against a sticky — a deliberate line,
-   not a hairline, and lighter than the notes it joins. */
+/* = STROKE_W (view/free-edges.ts) */
 svg.fe-lines path.fe { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
-/* Selected: the same ring a card wears (--node-sel, 2px around the box) expressed as a line — the
-   edge's own path drawn thicker and solid beneath it. Solid deliberately: a dashed edge's ring has to
-   be continuous or the "outline" reads as just more dashes. */
+/* Solid even under a dashed edge, or the ring reads as more dashes. */
 svg.fe-lines path.fe-selring { fill:none; stroke:var(--node-sel); stroke-width:7;
   stroke-linecap:round; stroke-linejoin:round; }
-/* `visibility:hidden`, NOT a transparent stroke: `pointer-events:stroke` takes the press either way, and a
-   hidden path is never painted — a transparent one is, and its wide band under every card made the
-   compositor re-sort the whole board's layers on each frame of a pan. */
+/* `visibility:hidden`, NOT a transparent stroke: a painted transparent band under every card made the
+   compositor re-sort the board's layers each frame of a pan. */
 svg#freeEdgeHits path.fe-hit { fill:none; stroke:transparent; visibility:hidden; pointer-events:stroke; cursor:pointer; }
-/* Open head: stroked, never filled, at the line's own weight so the two read as one drawing. */
 svg.fe-lines path.fe-arrow { fill:none; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
-/* A draft edge (mid-draw) is painted onto the LINE layer with the finished ones — it IS an edge, and
-   it is styled as the finished one rather than as a ghost, so the rules above already cover it. */
-/* An end DOT is centred ON the card's border, which used to mean the card ate half of it while the
-   lines ran behind the cards; above them, both caps simply ride with their line. Never a click target:
-   the line under it is what you grab (path.fe-hit, on the layer below the cards). */
 svg.fe-lines circle.fe-dot { stroke:none; pointer-events:none; }
-/* FigJam's PORTS (free-edges.ts socketPoints): a small pale-blue dot in a white rim, floating outside
-   each side, that turns into a ⊕ — white disc, blue rim and plus — under the pointer. The invisible
-   disc around it is the hit target. They appear only on a SELECTED card, never on hover — an
-   always-live dot turns every drag past a shape into a maybe-connector. */
+/* Ports show only on a SELECTED card: always-live dots turn every drag past a card into a maybe-connector. */
 svg#toggles g.fe-socket { pointer-events:auto; cursor:crosshair; }
 svg#toggles .fe-port-hit { fill:transparent; }
 svg#toggles .fe-port-dot { fill:#7cc4fa; stroke:#fff; stroke-width:2; }
 svg#toggles .fe-port-plus { display:none; }
-/* while a line end is being dragged, the TARGET card's ports — the one it would pin to filled in blue */
 svg#toggles .fe-drop-port { fill:#fff; stroke:var(--node-sel); stroke-width:2; pointer-events:none; }
 svg#toggles .fe-drop-port.on { fill:var(--node-sel); stroke:#fff; }
 svg#toggles .fe-port-plus circle { fill:#fff; stroke:var(--node-sel); stroke-width:2; }
 svg#toggles .fe-port-plus path { fill:none; stroke:var(--node-sel); stroke-width:2; stroke-linecap:round; }
 svg#toggles g.fe-socket:hover .fe-port-dot { display:none; }
 svg#toggles g.fe-socket:hover .fe-port-plus { display:inline; }
-/* A line end shifted along a face: the card's rim traced thick, notched white at each port (free-edges.ts) */
 svg#toggles rect.fe-rim { fill:none; stroke:var(--node-sel); stroke-width:3; pointer-events:none; }
 svg#toggles circle.fe-rim-gap { fill:#fff; pointer-events:none; }
 svg#toggles circle.fe-handle { fill:#fff; stroke:var(--accent, #6ea8fe); stroke-width:3;
   pointer-events:auto; cursor:grab; }
 
-/* A card SHRINKS TO FIT its text — it is its content and nothing more, so a one-line note is a one-line
-   card. There is no minimum: the 10px/12px padding is the floor (a card can't measure 0, which matters,
-   because nodeH reads a zero offsetHeight as "not rendered yet" and substitutes 64). Only the WIDTH is
-   fixed, and only until the user drags an edge (n.w). The `min-height:64px` this replaces predated
-   untitled cards and had already been switched off for the bodyless case (`.node.no-body`), so the two
-   halves of a card now behave the same way: whatever is in it decides how tall it is. */
+/* A card shrinks to fit its text; only the WIDTH is fixed until dragged (n.w). The padding keeps it above 0,
+   which nodeH would read as "not rendered yet". */
 .node {
   position:absolute; width:200px;
   background: var(--card, var(--node)); border:none;
-  /* text colour = the ink this card's own fill demands (see the .c-* block up top). The literal
-     fallback is only for a .node that somehow carries no .c-* class; paintNode always writes one. */
-  /* Padding as a PAIR OF VARIABLES, not literals: a folded card and a checklist's bar change them, and
-     everything that lines up with the content reads the same two. Kinds that own their whole interior
-     (.section, image cards) set `padding` outright. */
+  /* Variables, since a folded card and a checklist's bar change them and aligned content reads the same two. */
   border-radius:var(--r-card); padding:var(--pad-y) var(--pad-x); cursor:default; color:var(--ink, #ffffff);
   user-select:none; -webkit-touch-callout:none; touch-action:none;
-  /* fade opacity (search dim) only; NOT left/top — keeps dragging crisp — and NOT box-shadow:
-     the selection ring must appear INSTANTLY, so that a section's ring (on its box) and its title
-     tab's ring (styles.css .node.section.sel > .title-row) land in the same section instead of the box
-     fading in behind an already-ringed tab. `scale` is the lift a card in hand gets (.dragging). */
+  /* Never left/top (dragging must stay crisp) nor box-shadow (a section's ring and its label's must land together). */
   transition: opacity .2s ease, scale .12s ease;
 }
-/* …and meanwhile the ports and resize handles stand down (layout-anim.ts animateReflow): they'd sit at the
-   cards' stale spots and sizes until the glide ends */
+/* Ports and resize handles would sit at stale spots until the glide ends. */
 body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
-/* only while expanding/collapsing: glide cards to their new spots (added/removed in JS) */
-.section-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* its box's glide, below */
+.section-content.lt-anim { transition: left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }
 .node.lt-anim { transition: opacity .2s ease, scale .12s ease, rotate .5s cubic-bezier(.45,0,.25,1), translate .5s cubic-bezier(.45,0,.25,1), filter .5s cubic-bezier(.45,0,.25,1),
-  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* LAYOUT_ANIM_MS (layout-anim.ts); rotate: a fanned card's tilt */
-/* A bodyless card drops the title's trailing gap too — every card shrink-wraps now (see `.node` above),
-   so the only thing left to remove here is the space that was separating the title from a body that
-   isn't there. The `min-height:0` this rule used to carry is what `.node` itself does now. */
+  left .5s cubic-bezier(.45,0,.25,1), top .5s cubic-bezier(.45,0,.25,1); }   /* = LAYOUT_ANIM_MS (layout-anim.ts) */
 .node.no-body .title { margin-bottom:0; }
-/* direct-child combinator only — a child card nested inside this one (see render.ts paintNode's
-   DOM nesting) has its OWN .tag-row further down the tree and must stay unaffected by its
-   ancestor's no-tags state. */
 .node.no-tags > .top-edge > .tag-row { display:none; }
-/* --h1-size is THE heading size, and every label in the app is one heading: a card's leading `# ` line,
-   a section's folder tab. One variable so they cannot drift — they were
-   three separate declarations that happened to agree, which is not the same thing as being the same, and
-   the one time they stopped agreeing it took four rounds to find.
-   It matches the BODY size: on a dense board a heading marks its line by WEIGHT (600 against the body's
-   400), not by taking up more room. So `# Name` reads as a heading without a card growing to hold it.
-   The two line boxes below are spelled out rather than computed: `em` inside .title-row resolves against
-   the CARD's font-size, not the body's. --h1-lh is --h1-size × the 1.2 pinned on `.node .body h1`;
-   --body-lh is 14px × the 1.4 pinned on `.node .body`. The collapsed clamp takes the TALLER of the two
-   with max() rather than naming one, since which is taller flips with --h1-size — at 16px the heading's
-   was, at 12px the paragraph's is. */
+/* --h1-size is THE heading size, for every label in the app, and matches the body: a heading is marked by
+   weight, not room. Line boxes are spelled out because `em` in .title-row resolves against the card's size;
+   the collapsed clamp takes max() since which is taller flips with --h1-size. */
 .node { --pad-y:12px; --pad-x:14px; --h1-size:14px; --h1-lh:16.8px; --body-lh:19.6px; --title-gap:8px; }
 .node .title-row { display:flex; align-items:flex-start; gap:var(--title-gap); }
 .node .title-row .title { flex:1 1 auto; min-width:0; }
-/* locked card: a small padlock badge at the upper-LEFT corner. That badge is the ONLY cue — no dashed
-   outline: it read as noise on every locked card. See isLockedEffective (utils/model.ts).
-   Filled glyph (no circle backing), colour inherited from the card so it always matches the
-   title text exactly (see .node's color / .c-* overrides above). */
+/* The padlock is the ONLY locked cue; it takes the card's ink. */
 .node .lock-badge { position:absolute; left:-8px; top:-8px;
   box-sizing:border-box; width:16px; height:16px;
   color:inherit;
   display:none; align-items:center; justify-content:center; }
 .node .lock-badge svg { width:100%; height:100%; }
 .node.locked .lock-badge { display:inline-flex; }
-/* The card's TOP EDGE, at the right: its tags, then a checklist's progress — one row straddling the
-   border, outside the text so neither ever moves a line, and clear of the resize corner (bottom-right)
-   and the ports (mid-edge). One row so the two can't land on each other. z-index:3, over the card's
-   own resize bands. Centred on the edge: 26px tall, half of it outside. */
+/* The top edge row (tags, then a checklist's progress), straddling the border so neither moves a line. */
 .node > .top-edge { position:absolute; right:10px; top:-13px; height:26px; z-index:3;
   display:flex; align-items:center; gap:4px; pointer-events:none; }
 .node > .top-edge > * { pointer-events:auto; }
 .node.resizing > .top-edge { visibility:hidden; }
-/* A note that just came in from outside — the phone inbox (render.ts flashArrived) — pulses a ring three
-   times, on itself or on the folded pill it landed in. */
+/* Just arrived from outside (render.ts flashArrived). */
 .node.arrived { animation:arrived .8s ease-out 3; }
 @keyframes arrived { from { box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
   to { box-shadow:0 0 0 14px color-mix(in srgb, var(--accent) 0%, transparent); } }
-/* a checklist's progress (paintNode): a rounded green bar across the top of the card, inset to the text's
-   margins, filled to --done over a faint track of the card's own ink. The card makes room for it above
-   the title. The element is a taller strip than the bar it draws, so its "3/5" tooltip is easy to find. */
+/* Taller than the bar it draws, so its "3/5" tooltip is easy to find. */
 .node > .task-bar { display:none; position:absolute; top:9px; left:var(--pad-x); right:var(--pad-x); height:14px; }
 .node.has-tasks > .task-bar { display:block; }
 .node.has-tasks { padding-top:calc(var(--pad-y) + 12px); }
 .node > .task-bar::after { content:''; position:absolute; left:0; right:0; top:5px; height:4px; border-radius:2px;
   background:linear-gradient(#2f9e5b, #2f9e5b) 0 0 / var(--done, 0%) 100% no-repeat, color-mix(in srgb, currentColor 13%, transparent); }
-/* ---------- section: a FigJam-style SECTION — a pale box, its name on a pill ABOVE it ---------- */
-/* The element is the box and nothing else: n.x/n.y/w/h are the box (render.ts), and the label hangs
-   outside it, above the top-left corner, the way a FigJam section's name does. So naming, renaming or
-   un-naming a section never moves the box or the cards in it.
-   z-index:auto paints the box BELOW every line and below normal cards (z-index:2) — a positioned `auto`
-   element paints in the same step as z-index:0, in tree order. Its children aren't DOM-descendants of
-   this box — they live in the sibling .section-content wrapper — so lowering the box doesn't hide them.
-   `auto` rather than 0 deliberately: it keeps the section from becoming a STACKING CONTEXT, which is what
-   lets its own label (below) lift above the edges/cards that would otherwise cover it.
-   The FILL is the section's colour (--card, from its .c-* class) washed most of the way to white, and the
-   2px rim a step darker than the colour itself — pale enough that the stickies it holds, in the full
-   colour, read clearly on it. Width 2px = SECTION_BORDER (view/geometry.ts). */
+/* ---------- section ---------- */
+/* The element is the box only; its label hangs above. z-index:auto paints it below lines and cards without
+   becoming a stacking context, which lets its label lift above them. Border = SECTION_BORDER. */
 .node.section { z-index:auto; min-height:0; padding:0; border-radius:var(--r-section);
   background:color-mix(in srgb, var(--card, #fff) 32%, #fff);
   border:2px solid color-mix(in srgb, var(--card, #fff), #000 10%); }
-/* ---------- a section's label: a pill above the box ---------- */
-/* FigJam's section name: a borderless pill a step darker than the section's own colour (a white section's
-   is light grey), its text the ink that colour demands (--ink) like any card's. It grows UPWARD from 7px
-   above the box (SECTION_LABEL_GAP, view/layout.ts), so a long name never moves anything.
-   Direct-child combinators throughout: a section's own label only, never some descendant card's title.
-   An absolutely positioned child's containing block is the PADDING box, inside the 2px border, so the
-   left offset adds it back to sit flush with the box's outer edge. */
-/* Zoomed out it is scaled up by --ls (1/zoom below 100%, view/camera.ts applyLabelScale) from its bottom-left
-   corner, so the name keeps its screen size; the gap and the width cap are divided out so it still sits 7
-   screen px above the box and never runs past the box's right edge. A transform, so nothing re-lays out. */
+/* The label grows UPWARD from SECTION_LABEL_GAP above the box, so a long name never moves anything; `left` adds
+   the border back (an abs child's containing block is the padding box). --ls keeps its screen size, by transform. */
 .node.section > .title-row {
   position:absolute; left:-2px; bottom:calc(100% + 7px * var(--ls, 1));
-  z-index:4;                    /* over the box and over cards; see the ladder */
+  z-index:4;                    /* see the ladder */
   transform:scale(var(--ls, 1)); transform-origin:0 100%;
   max-width:calc((100% + 4px) / var(--ls, 1)); }
-/* The label itself — the pill and the text on it — is the SAME folded (.node.section-folded, below), where it
-   sits beside the folder instead of above a box: every rule from here to the editing one says so. */
+/* The label rules from here to the editing one apply folded too (.section-folded). */
 .node.section > .title-row, .node.section-folded > .title-row { align-items:center;
   padding:3px 10px; border-radius:8px;
   background:color-mix(in srgb, var(--card, #fff), #000 9%); color:var(--ink, var(--text)); }
 .node.section > .title-row > .title, .node.section-folded > .title-row > .title {
-  /* The label renders MARKDOWN (paintNode), so its own metrics are the PLAIN-text ones — a section whose
-     text is `Name` reads as body text, and one whose text is `# Name` gets the heading size from the h1
-     rule below, exactly as a card does. */
   margin-bottom:0; padding-right:0; font-size:12px; font-weight:600; line-height:20px;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-/* The markdown a label renders has to become ONE line: every block markdown produces goes inline with its
-   margins dropped, and anything after the first block is left off (a label shows a name, not a note — the
-   text is still all there in the file and in the editor). */
+/* A label is ONE line: blocks go inline and anything after the first is left off. */
 .node.section > .title-row > .title > *, .node.section-folded > .title-row > .title > * { display:inline; margin:0; }
 .node.section > .title-row > .title > :not(:first-child),
 .node.section-folded > .title-row > .title > :not(:first-child) { display:none; }
-/* the label's NAME is bigger and bolder than a card's, as FigJam's section names are */
 .node.section > .title-row > .title, .node.section-folded > .title-row > .title { font-size:16px; line-height:24px; font-weight:600; }
 .node.section > .title-row > .title h1, .node.section-folded > .title-row > .title h1 { font-size:16px; font-weight:600; }
-/* while renaming, let a long title wrap and spill out of the pill instead of being ellipsised */
 .node.section > .title-row > .title.editing, .node.section-folded > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
-/* locked: the padlock sits on the box's top-RIGHT corner — the top-left one is where the label hangs */
+/* top-RIGHT: the top-left is where the label hangs */
 .node.section > .lock-badge { left:auto; right:-8px; top:-8px; z-index:4; color:var(--text); }
-/* real CSS containment for a section's contents: a plain overflow:hidden box (render.ts sectionContentEl)
-   sized to the section's INTERIOR (inside its border — see SECTION_BORDER), holding every card (and
-   nested section) it hosts as flat DOM children — same "everyone flat under one container" model the
-   app already uses for #world, just re-rooted here, so nested sections/grandchildren clip for free
-   too. No z-index (so it never creates its own stacking context — descendants still compete for
-   z-order directly against everything outside it, e.g. a dragged card still floats above all via
-   .dragging's z-index:9); pointer-events:none so clicking the section's empty interior still reaches
-   the section's own element underneath instead of this invisible wrapper. */
-/* the box's radius less its 2px border, so the clip follows the INSIDE of the border */
+/* The section's clip (render.ts sectionContentEl). No z-index, so its cards still compete in z-order with
+   everything outside; no pointer events, so the box beneath takes clicks on empty space. */
 .section-content { position:absolute; overflow:hidden; border-radius:calc(var(--r-section) - 2px); pointer-events:none; }
 .section-content > .node { pointer-events:auto; }
-/* a section's NAME is drawn on its LABEL, never in the box, which holds cards; the rest of its note isn't drawn. */
 .node.section > .body { display:none; }
-/* drop-into-a-section preview: the box rings in the selection blue, so it reads as "the card lands in
-   here" (see drag.ts updateDropTarget). */
 .node.section.drop-target { border-color:var(--node-sel); box-shadow:0 0 0 1px var(--node-sel); }
-/* a folded pill or a path crumb that a drop would FILE the cards into (features/drag.ts chuteAt) */
 .node.section-folded.drop-target, .sc-crumb.drop-target { outline:2px solid var(--node-sel); outline-offset:1px; }
-/* A section with nothing written on it shows NO LABEL — see paintNode, which sets `no-title` for exactly
-   that case. The float bar's title button (T) brings one back. */
+/* A section with nothing written on it shows no label. */
 .node.section.no-title > .title-row { display:none; }
-/* ---------- a FOLDED section: a folder, and its label ---------- */
-/* Folding hides the box: the element is a FOLDER ICON with the section's label beside it — the same pill, the
-   same name, as an open section wears above its box (no .section class, so none of the box
-   rules above apply), at the box's top-left corner. It shrink-wraps, so view/geometry.ts nodeW and nodeH MEASURE it.
-   What it holds is in its tooltip (render.ts paintNode, utils/model.ts heldSummary), not on it. An unnamed one is
-   just the folder. */
-/* A section's FOLDER — folded on the canvas, or its segment of the path — is coloured like its BOX
-   (.node.section): the outline is the box's rim, the section's own colour; the inside is its pale wash. */
+/* ---------- a FOLDED section ---------- */
+/* A folder icon with the same label beside it (no .section class, so no box rules); nodeW/nodeH MEASURE it.
+   The folder, on the canvas or in the path, is coloured like the box. */
 .fold-icon { color:color-mix(in srgb, var(--card, #fff), #000 10%); }
 .fold-icon svg { width:100%; height:100%; display:block; }
 .fold-icon svg path { fill:color-mix(in srgb, var(--card, #fff) 32%, #fff); }
@@ -726,49 +470,39 @@ body.layout-anim svg#toggles, body.layout-anim .node > .fh { display:none; }
 .node.section-folded { display:flex; align-items:center; gap:6px; width:max-content; max-width:360px; min-height:0;
   padding:0; border:none; border-radius:8px; background:transparent; color:var(--ink, var(--text)); }
 .node.section-folded > .fold-icon { display:block; order:-1; flex:none; width:26px; height:26px; }
-.node.section-folded > .title-row { min-width:0; margin:0; }   /* its look: the section label rules above */
+.node.section-folded > .title-row { min-width:0; margin:0; }
 .node.section-folded.no-title > .title-row { display:none; }
 .node.section-folded > .body { display:none; }
-/* while the search is on, how many of what it holds match (features/search.ts) — in the accent, since it's
-   the search talking, not the section */
+/* in the accent: it's the search talking, not the section */
 .node.section-folded > .title-row > .title > .section-hits { display:inline-block; margin-left:6px; padding:0 7px;
   border-radius:var(--r-full); font-size:11px; line-height:18px; font-weight:700; background:var(--accent); color:#fff; }
-/* ---------- a STACK: a section drawn as a PILE of its cards (features/stacks.ts) ---------- */
-/* The element is the pile's footprint — its bottom card's box — and nothing of its own:
-   no fill, no padding. What you see is .stack-face: the top cards as drawings, the pin, the selection ring. Its
-   cards aren't nodes on the board while piled (utils/model.ts isHidden), so these are plain divs. */
+/* ---------- a STACK (features/stacks.ts) ---------- */
+/* The element is the bottom card's footprint and nothing of its own; .stack-face draws the pile. */
 .node.stack { padding:0; background:transparent; min-height:0; }
 .node.stack > .body, .node.stack > .fold-more, .node.stack > .task-bar { display:none; }
 .stack-face { position:relative; }
 .stack-face > .pile { position:relative; }
-/* Each card as a card looks — its fill and ink from its own .c-* class, a card's padding and corner, its own
-   height. The BOTTOM one is in flow, so it is what the pile measures; the ones on it lie centred over it
-   (paintPile sets `left`), askew (`rotate`/`translate`), the top one last. A shade darker underneath reads as depth without a shadow
-   (board nodes never cast one). */
+/* The BOTTOM card is in flow, so it is what the pile measures; the rest lie askew over it. Darker underneath
+   reads as depth: board nodes never cast shadows. */
 .pile-card { position:absolute; left:0; top:0; box-sizing:border-box; overflow:hidden;
   background:var(--card, var(--node)); color:var(--ink, #fff); border-radius:var(--r-card);
   padding:var(--pad-y) var(--pad-x); }
 .pile-card:first-child { position:relative; }
 .pile-card.under { filter:brightness(var(--pile-dim)); }
-.pile-card.image-card { padding:0; background:transparent; }   /* the picture itself: the image-card .body rules further down */
+.pile-card.image-card { padding:0; background:transparent; }
 .pile-card .img-zoom { display:none !important; }
-/* THE PIN: a plain disc in the STACK's colour — bold red until one is picked (paintPile sets it inline) — the size
-   of a tag label (.tag.label, 18px), just reaching over the pile's top edge at its centre. It is the stack's handle — grab it to move the whole stack (features/drag.ts: a press on
-   the pile's body lifts the top card instead). It keeps its screen size zoomed out, like a section's name
-   (--ls, view/camera.ts). */
+/* THE PIN: the stack's handle (a press on the pile lifts the top card instead). Keeps its screen size via --ls. */
 .stack-pin { position:absolute; left:50%; top:-5px; width:18px; height:18px; margin-left:-9px; z-index:3;
-  border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.16);   /* its fill: the stack's colour, set inline */
+  border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.16);
   cursor:grab; transform:scale(var(--ls, 1)); transform-origin:50% 5px; }
 .stack-pin:hover { filter:brightness(.92); }
 body.grabbing .stack-pin { cursor:grabbing; }
-/* SELECTED, a stack is ringed round the whole pile as it lies (features/stacks.ts ringPile), rather than round
-   its element — the top card's footprint, unrotated: a DASHED line */
+/* Selected, the ring follows the pile as it lies (stacks.ts ringPile), not the element. */
 .node.stack.sel { box-shadow:none; }
 .stack-ring { position:absolute; display:none; pointer-events:none; border-radius:var(--r-card);
   outline:2px dashed var(--node-sel); outline-offset:2px; }
 .node.stack.sel > .stack-face > .stack-ring { display:block; }
-/* a NAMED stack wears its name on a small tab above the pile, the way a section does; unnamed, none. Neutral
-   grey whatever the stack's colour, which is its pin's alone. */
+/* Neutral whatever the stack's colour, which is its pin's alone. */
 .node.stack > .title-row { position:absolute; left:0; bottom:calc(100% + 10px * var(--ls, 1)); z-index:4;
   transform:scale(var(--ls, 1)); transform-origin:0 100%; max-width:calc(100% / var(--ls, 1));
   padding:2px 9px; border-radius:8px; align-items:center;
@@ -780,60 +514,39 @@ body.grabbing .stack-pin { cursor:grabbing; }
 .node.stack > .title-row > .title.editing { white-space:pre-wrap; overflow:visible; }
 .node.stack.no-title > .title-row { display:none; }
 .node.stack > .lock-badge { left:auto; right:14px; top:-8px; z-index:4; }
-/* a drop would put the dragged cards ON this pile — a stack, or a card held over long enough to become one:
-   it LIFTS to meet them (features/drag.ts updateDropTarget), and a lifted thing casts a soft shadow — the one
-   time a board node does. `drop-shadow`, so it follows the pile's askew cards rather than its box. */
+/* A pile a drop would land ON lifts: the one time a board node casts a shadow. `drop-shadow` follows its askew cards. */
 .node.drop-pile { scale:1.06; filter:drop-shadow(0 8px 12px rgba(0,0,0,.16)); }
 .node.drop-pile.sel { box-shadow:none; }
 .node.drop-pile > .stack-face > .stack-ring { display:none; }
-/* FANNED OUT: the stack itself — pile, name — is gone from the board while its cards are held up over a
-   dimmed board, above every line and card, and the cards in hand above them. The PIN is pulled up with them:
-   it swells and fades out as the cards spread, and the other way round as they go home (body.fan-closing). */
-.node.stack.fan-open { visibility:hidden; z-index:8998; }   /* the pin rides above the fanned cards (1000+) and the scrim, all through the glide */
+/* FANNED OUT: the stack itself leaves the board while its cards are held up over a dimmed board. */
+.node.stack.fan-open { visibility:hidden; z-index:8998; }   /* the pin rides above the fanned cards (1000+) and the scrim */
 .node.stack.fan-open > .stack-face > .stack-pin { visibility:visible; pointer-events:none; opacity:0;
   transform:scale(calc(var(--ls, 1) * 1.5));
   transition:transform .5s cubic-bezier(.45,0,.25,1), opacity .5s cubic-bezier(.45,0,.25,1); }
 body.fan-closing .node.stack.fan-open > .stack-face > .stack-pin { opacity:1; transform:scale(var(--ls, 1)); }
-/* The dimming and the cards' shadows come and go WITH the glide (LAYOUT_ANIM_MS, layout-anim.ts): in by a keyframe as
-   the fan opens, out by a transition while it closes (body.fan-closing, features/stacks.ts closeFan). */
+/* Dimming and shadows ride the glide: in by keyframe, out by transition (body.fan-closing). */
 #fanScrim { position:absolute; left:-100000px; top:-100000px; width:200000px; height:200000px; z-index:60;
   background:rgba(40,40,46,.16); animation:fan-fade .5s cubic-bezier(.45,0,.25,1);
   transition:opacity .5s cubic-bezier(.45,0,.25,1); }
 #fanScrim.grid { background:rgba(40,40,46,.28); }
 body.fan-closing #fanScrim { opacity:0; }
 @keyframes fan-fade { from { opacity:0; } }
-/* A fanned card keeps its place in the PILE (syncFan sets --fan-z, bottom card 0): they all start a glide out
-   on one spot, and end one back on it, so the top card has to be on top of the others the whole way. The range
-   (1000 + one per card) sits between the scrim and the insert line / the hand's layer below. The image-card
-   selector is there for specificity alone: `.node.image-card { z-index:2 }` comes later and would otherwise put a
-   picture UNDER the scrim, out of reach (a press went to the scrim, which closed the fan). */
-/* Held up over the board, a fanned card casts a shadow on it — a `filter`, so it never fights the selection
-   ring's box-shadow. The flat value keeps the same two shadows, so the change between them interpolates. */
+/* --fan-z keeps the pile order through the glide, between the scrim and the hand. The image-card selector is
+   only for specificity: `.node.image-card { z-index:2 }` would put a picture under the scrim. The shadow is a
+   `filter`, so it never fights the selection ring's box-shadow. */
 .node.fanned, .node.image-card.fanned { z-index:calc(1000 + var(--fan-z, 0)); rotate:var(--tilt, 0deg); filter:brightness(var(--fan-dim, 1)) var(--fan-shadow); animation:fan-lift .5s cubic-bezier(.45,0,.25,1);
   --fan-shadow:drop-shadow(0 2px 3px rgba(0,0,0,.12)) drop-shadow(0 8px 18px rgba(0,0,0,.18)); }
 body.fan-closing .node.fanned { --fan-shadow:drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0)); }
-/* …and it starts turned, nudged and dimmed the way it lay on the pile (syncFan), so nothing snaps as the pile gives way */
 @keyframes fan-lift { from { filter:brightness(var(--pile-card-dim, 1)) drop-shadow(0 0 0 rgba(0,0,0,0)) drop-shadow(0 0 0 rgba(0,0,0,0));
   rotate:var(--pile-tilt, 0deg); translate:var(--pile-nudge, 0 0); } }
-/* dragging a fanned card within the fan: a line down the gap it would drop into (features/stacks.ts
-   showFanInsert) — over the fanned cards, under the one in hand */
 #fanInsert { position:absolute; width:4px; margin-left:-2px; border-radius:2px; background:var(--node-sel);
   z-index:8999; pointer-events:none; }
 body.fan-open #dragLayer { z-index:9000; }
-/* ---------- resize hit-zones (ensureResizeHandles in features/resize.ts) ---------- */
-/* Invisible bands over the node's edges — no visible grip; the resize cursor IS the affordance. A 2D
-   box (section / image card) gets all 8: 4 edge bands inset from the corners, plus 4
-   corner squares at the very corners, which is what those insets leave un-contested. A width-only
-   kind (a card) gets just fh-e/fh-w, restyled further down.
-   `>` throughout, and no per-kind prefix: handles only exist on a node that was given them, and
-   child cards are DOM-nested inside their parent, so a descendant selector would style (and a
-   descendant QUERY would find — see ensureResizeHandles) a nested card's handles as if they were
-   this card's own. */
+/* ---------- resize hit-zones (features/resize.ts) ---------- */
+/* Invisible bands; the cursor IS the affordance. A box gets 8, a card only fh-e/fh-w. `>` throughout: a
+   descendant selector would reach a nested node's handles. */
 .node > .fh { position:absolute; z-index:2; touch-action:none; }
-/* …but a SECTION is not a stacking context (z-index:auto above), so a z-index:2 handle would escape
-   into #world's stacking order and start winning presses against cards that overlap the section's
-   border. `auto` pins the handles back into the section's own paint level — still above its fill (a
-   positioned child paints after its parent's background), still below every card, as before. */
+/* A section is no stacking context, so a z-index:2 handle would escape and beat overlapping cards. */
 .node.section > .fh { z-index:auto; }
 .node > .fh-n { top:-5px;    left:12px; right:12px; height:11px; cursor:ns-resize; }
 .node > .fh-s { bottom:-5px; left:12px; right:12px; height:11px; cursor:ns-resize; }
@@ -843,97 +556,50 @@ body.fan-open #dragLayer { z-index:9000; }
 .node > .fh-nw { top:-8px;    left:-8px;   width:16px; height:16px; cursor:nwse-resize; }
 .node > .fh-se { bottom:-8px; right:-8px;  width:16px; height:16px; cursor:nwse-resize; }
 .node > .fh-sw { bottom:-8px; left:-8px;   width:16px; height:16px; cursor:nesw-resize; }
-/* FigJam's selection handles: a small white square with a blue rim on each corner of a LONE selection,
-   centred on the corner (the 16px zone above is centred there too). Drawn on the zone itself, so the
-   square is exactly what you grab. (The corner zones are `z-index:auto` on a section, which is not a
-   stacking context — the square still paints over its own fill.) */
 .node.solo > .fh-ne::after, .node.solo > .fh-nw::after,
 .node.solo > .fh-se::after, .node.solo > .fh-sw::after {
   content:''; position:absolute; inset:2px; box-sizing:border-box;
   background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
-/* the fold chevron would sit on the top-right handle — on a lone-selected card it steps inside it */
-/* The WIDTH-ONLY kind — a card. Two differences from a box's side bands:
-   · the band sits entirely OUTSIDE the border (right:-9px, not -5px). A card is grabbed by its face
-     constantly, and a zone reaching 6px inside would make 11% of a 200px card undraggable.
-   · a taller band (4px inset, not 12px): there are no corner squares here to leave room for, and on
-     a one-line card a 12px inset either side would leave an 8px strip nobody can hit. */
+/* A card's width bands sit wholly OUTSIDE the border (it's grabbed by its face constantly), and run taller:
+   there are no corner squares to leave room for. */
 .node:not(.section):not(.image-card) > .fh-e { right:-9px; width:9px; top:4px; bottom:4px; }
 .node:not(.section):not(.image-card) > .fh-w { left:-9px;  width:9px; top:4px; bottom:4px; }
-/* Nothing to grab while a section's name is typed into or while it's locked. A card being edited
-   keeps its edges: typing never grows it, so dragging one is how it gets room. */
+/* A card being edited keeps its edges: typing never grows it, so dragging is how it gets room. */
 .node.title-editing > .fh,
 .node.locked > .fh { display:none; }
-/* ---------- image card: a resizable leaf that shows nothing but one image ---------- */
-/* no title/body chrome at all — just the image filling the box (see isImageBox in view/geometry.ts).
-   Background is the same --card variable every card's own colour swatch sets (.c-blue etc. at
-   the top of this file) — an image card with no image reference in its body (e.g. freshly
-   flipped from another layout type) shows as a plain colour rect instead of empty transparency;
-   once an image loads it covers the whole box, so the colour never actually shows through except
-   at transparent pixels or before the image resolves. `none` is truly transparent (.c-none above),
-   so an image card with alpha shows whatever's behind the canvas, not a solid bg-coloured patch. */
-/* z-index:2 (same as any card) — NOT the section's 1: an image card inside a section must sit ABOVE
-   the section's own element so clicks land on the image, not the section beneath (which would tie at 1
-   and win the hit-test, making the image unselectable — regular cards avoid this by being 2).
-   background:transparent — the picture IS the card, so a PNG's transparent pixels show the board, never
-   the card's colour (the same for its pile-card twin). */
-/* overflow:hidden lives on .body (below), NOT on the node itself — the tag row and the add-note
-   float outside the card's own border (see .node .tag-row) and
-   would otherwise get clipped along with the image. The image is rounded by its own .body wrapper
-   instead (border-radius:inherit + overflow:hidden, below), so nothing relies on the node clipping. */
+/* ---------- image card ---------- */
+/* z-index:2 like any card, above a section's box; transparent, so a PNG's alpha shows the board. overflow:hidden
+   lives on .body, not here: the tag row floats outside the border. */
 .node.image-card { z-index:2; background:transparent; min-height:0; border-radius:var(--r-card);
   border:none; padding:0; }
-/* The row is EMPTY on an image card (untitled by definition): zero height, so the picture starts at the
-   card's top edge. */
 .node.image-card > .title-row { height:0; }
 .node.image-card > .title-row > .title { display:none; }
-/* FOLDED, an image card is an icon of itself: a 40px square of the picture (view/geometry.ts IMAGE_FOLD, which
-   nodeW/nodeH declare and paintNode leaves un-inlined), rather than the empty shell a card with no
-   title folds to. So the body stays visible here — `.node.collapsed .body { display:none }` is (0,3,0)
-   and this is (0,4,0) — and object-fit:cover below crops the square out of any aspect. */
+/* FOLDED: a 40px square of the picture (IMAGE_FOLD), so the body stays visible: this beats
+   `.node.collapsed .body { display:none }` on specificity. */
 .node.image-card.collapsed { width:40px; height:40px; }
-/* max-height:none undoes the one-line cap every other collapsed body wants (`.node.collapsed > .body`
-   below): that cap is for TEXT — the first line of a folded note — and here it left the picture
-   letterboxed across the top of the square instead of filling it. With the cap gone the body is back
-   to inset:0 and the img's own width/height:100% + object-fit:cover crop the square out of whatever
-   aspect the picture has, which is what an icon is. */
+/* undoes the one-line cap a folded TEXT body wants */
 .node.image-card.collapsed > .body { display:block; max-height:none; }
-/* The magnifier stays on a folded icon (a thumbnail is exactly when "show me this properly" is worth
-   offering) but has to fit one: 26px at the same 6px inset would cover the whole 40px square. Smaller,
-   and moved to the TOP-LEFT — the other three corners are spoken for on an icon this size, by the
-   unfold chip (top-right, 8px outside) and the add-child + (bottom-centre). */
+/* The other corners are taken on a 40px icon. */
 .node.image-card.collapsed .img-zoom { top:3px; left:3px; right:auto; width:18px; height:18px; border-radius:5px; }
 .node.image-card.collapsed .img-zoom svg { width:12px; height:12px; }
-/* No tags on the icon: a 26px stamp on a 40px square reads as chrome with a picture behind it, rather
-   than a thumbnail. They come back the moment it unfolds, where there's room for them. */
 .node.image-card.collapsed > .top-edge > .tag-row { display:none; }
-/* explicit width/height (not just inset:0) — a percentage height on the .md-img descendant only
-   resolves against a containing block whose OWN height is set via the `height` property itself,
-   not one merely implied by top+bottom insets (CSS2.1 10.5).
-   `border-radius:inherit` HERE (the .body's parent is the node, so it picks up --r-card) plus the
-   overflow:hidden already on it is what rounds the picture off: an image card wears exactly the
-   corner every other card does, with the image clipped to it rather than squaring it off. Putting
-   the inherit on .md-img instead cannot work — its parents are <p>/.img-wrap, which carry no radius
-   of their own, so it inherits a 0 and the picture keeps its corners. */
+/* Explicit width/height, not just inset:0: a percentage height below only resolves against a set `height`
+   (CSS2.1 10.5). border-radius:inherit here, with overflow:hidden, rounds the picture; .md-img's parents carry none. */
 .node.image-card > .body, .pile-card.image-card > .body { position:absolute; inset:0; width:100%; height:100%; margin:0;
   overflow:hidden; border-radius:inherit; }
-/* renderBodyHTML wraps a standalone image in a <p>, and imgTag wraps the <img> in .img-wrap —
-   both, not .body, are the img's real containing blocks, so the explicit height passes down. */
+/* the <p> and .img-wrap are the img's real containing blocks */
 .node.image-card > .body > p, .node.image-card > .body > p > .img-wrap,
 .pile-card.image-card > .body > p, .pile-card.image-card > .body > p > .img-wrap { width:100%; height:100%; margin:0; }
 .node.image-card > .body .md-img, .pile-card.image-card > .body .md-img { width:100%; height:100%; margin:0; object-fit:cover; display:block; }
-/* image wrapper: anchors the magnifier button over each image; block so it stacks like the img did */
 .img-wrap { position:relative; display:block; }
-/* magnifier button — hidden until the card is selected, then floats top-right over each image */
 .img-zoom { position:absolute; top:6px; right:6px; display:none; align-items:center; justify-content:center;
   width:26px; height:26px; padding:0; border:none; border-radius:6px; cursor:pointer;
   background:rgba(20,24,33,.62); color:#fff; -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
 .img-zoom:hover { background:rgba(20,24,33,.85); }
 .node.sel .img-zoom { display:flex; }
-/* floating thumbnail that rides the cursor while an image is being ripped out of a card */
 .image-extract-preview { position:fixed; z-index:9998; pointer-events:none; border-radius:8px; overflow:hidden;
   box-shadow:0 6px 22px rgba(0,0,0,.45); opacity:.9; }
 .image-extract-preview img { width:100%; height:100%; object-fit:cover; display:block; }
-/* full-screen image viewer (magnifier click) */
 #imgViewer { position:fixed; inset:0; z-index:10000; display:none; place-items:center;
   padding:calc(32px + var(--sa-t)) calc(32px + var(--sa-r)) calc(32px + var(--sa-b)) calc(32px + var(--sa-l));
   background:rgba(8,10,14,.88); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px); }
@@ -943,10 +609,7 @@ body.fan-open #dragLayer { z-index:9000; }
   width:40px; height:40px; border:none; cursor:pointer;
   border-radius:50%; background:rgba(255,255,255,.12); color:#fff; font-size:24px; line-height:1; }
 #imgViewer .iv-close:hover { background:rgba(255,255,255,.24); }
-/* ‹ / › page through the images of every card sharing this one's parent (features/image-viewer.ts).
-   Hidden unless there IS a run: `.iv-paged` is set on open, so a lone picture shows no arrows rather
-   than two dead buttons. Fixed to the viewport edges (not the image) so they don't jump about as
-   pictures of different shapes come and go, and vertically centred against the whole backdrop. */
+/* Fixed to the viewport edges, so they don't jump with each picture's shape. */
 #imgViewer .iv-nav { position:fixed; top:50%; transform:translateY(-50%); display:none;
   width:44px; height:44px; border:none; cursor:pointer; border-radius:50%;
   background:rgba(255,255,255,.12); color:#fff; font-size:28px; line-height:1; padding:0 0 3px; }
@@ -954,12 +617,8 @@ body.fan-open #dragLayer { z-index:9000; }
 #imgViewer .iv-prev { left:calc(20px + var(--sa-l)); }
 #imgViewer .iv-next { right:calc(20px + var(--sa-r)); }
 #imgViewer .iv-nav:hover { background:rgba(255,255,255,.24); }
-/* The SELECTION FRAME round a multi-selection (features/sel-frame.ts), FigJam's: one blue box round
-   all of it with the lone selection's corner squares. #selFrame itself is NOT a stacking context
-   (z-index auto), so its parts take two different rungs of the ladder: the outline and the corners at 7,
-   above everything; the interior (drags the selection) and the edge bands (scale it) at -1, below every
-   card and section — they catch only the gaps between them, and a member's own edge band scales the
-   group where it lies on the frame (memberEdgeResize). Bands are laid out like a card's (.fh above). */
+/* The selection frame isn't a stacking context: its outline and corners sit at 7, its interior and edge bands
+   at -1, catching only the gaps between members. */
 #selFrame { position:absolute; pointer-events:none; }
 #selFrame > .sf-box { position:absolute; inset:0; z-index:7; outline:2px solid var(--node-sel); }
 #selFrame > .sf-fill { position:absolute; inset:0; z-index:-1; pointer-events:auto; }
@@ -975,80 +634,44 @@ body.fan-open #dragLayer { z-index:9000; }
 #selFrame > .sf-ne::after, #selFrame > .sf-nw::after, #selFrame > .sf-se::after, #selFrame > .sf-sw::after {
   content:''; position:absolute; inset:2px; box-sizing:border-box;
   background:#fff; border:2px solid var(--node-sel); border-radius:3px; }
-/* nothing to scale with a locked card in it; nothing at all while a fold glides */
 #selFrame.locked > .sf-h { display:none; }
 body.layout-anim #selFrame { display:none; }
-/* Board nodes NEVER cast a shadow — at rest, selected or in hand. Selection is the ring alone. */
+/* Board nodes NEVER cast a shadow. Selection is the ring alone. */
 .node.sel { box-shadow:0 0 0 2px var(--node-sel); }
-/* While a section's label is being renamed, drop the section's ring so only the label's own outline shows.
-   While a CARD is being edited, the card itself is the field (FigJam): no box inside it, the ring goes
-   to a DIMMED blue round the card's border, and the corner handles stand down. */
+/* A card being edited is itself the field (FigJam): a dimmed ring, no box inside it. */
 .node.sel.title-editing { box-shadow:none; }
 .node.sel.card-editing:not(.section):not(.image-card) {
   box-shadow:0 0 0 3px var(--edit-ring); }
 .node.card-editing > .fh::after { display:none; }
-/* the dragged card (and its subtree) floats above every other card, above every line, and above the
-   landing ghost / insert bar (8). Translucency is applied to the whole #dragLayer as ONE group
-   (below), not per card, so overlapping dragged items don't shine through each other. */
+/* Translucency goes on #dragLayer as ONE group, so overlapping dragged items don't shine through each other. */
 .node.dragging { z-index:9; }
-/* ---- motion: a new card POPS in, a card in hand LIFTS ----
-   `scale` (the individual property) rather than `transform`, which the drag and the relayout animation
-   own. The pop is a data attribute, not a class: paintNode rewrites className wholesale, which would
-   cut the animation short on the very next paint (features/crud.ts createNode sets it). */
+/* `scale`, not `transform` (the drag and relayout own that). The pop is a data attribute because paintNode
+   rewrites className wholesale. */
 @keyframes card-pop { from { scale:.8; opacity:0; } 65% { scale:1.04; opacity:1; } to { scale:1; } }
 .node[data-pop] { animation:card-pop .24s cubic-bezier(.2,.8,.3,1.1); }
-/* A card in hand keeps its exact size and stays flat, so the smart guides (features/guides.ts) line up
-   with the edges you actually see; a selected card keeps its ring while it travels. */
-/* …but NOT a dragged container: its cards aren't DOM-descendants of the box, they live in the sibling
-   .section-content wrapper at the ordinary card z-index:2 (see the .node.section comment above), so
-   raising the box to 6 made its own opaque fill swallow everything it holds the moment you started
-   dragging it. `auto` keeps the resting order — box below, contents above — and it still floats over
-   the rest of the canvas, because #dragLayer (below) is itself a z-index:9 stacking context. */
+/* No lift scale on a card in hand: the smart guides must match the edges you see. */
+/* A dragged section stays auto: raised, its fill would cover its cards (they live in the sibling wrapper). */
 .node.section.dragging { z-index:auto; }
-/* the drag layer: while dragging, render.ts moves the dragged cards in here, above everything. Opaque, as in
-   FigJam — a card in hand is held over the board, not a ghost of itself; its shadow says it's lifted. */
 #dragLayer { position:absolute; top:0; left:0; z-index:9; pointer-events:none; }
 #dragLayer > .node, #dragLayer > .section-content { pointer-events:auto; }
-/* The DRAG IMAGE for a body-text drag (features/text-drag.ts buildGhost): a card, so it's plain that
-   a card is what the drop makes — not the browser's default snapshot of the dragged letters. It's in
-   the document only for the tick the browser needs to snapshot it, which is why it's parked off to the
-   LEFT rather than hidden (display:none / visibility:hidden snapshot as nothing) and why only the
-   horizontal axis is moved: the snapshot has to keep the card's real width. `position:fixed` overrides
-   .node's absolute, since this one is not in #world; the shadow is what the snapshot renders as a
-   lifted card, and the body is clamped so a long selection can't make a ghost taller than the screen. */
+/* The drag image for a body-text drag: parked off to the LEFT, not hidden (a hidden element snapshots as
+   nothing), and only moved horizontally so the snapshot keeps the card's real width. */
 .node.drag-ghost { position:fixed; left:-9999px; top:0; pointer-events:none;
   white-space:pre-line; box-shadow:0 10px 28px rgba(0,0,0,.4); }
 .node.drag-ghost .body { max-height:96px; overflow:hidden; }
-/* .drop-merge: ⌥-dragging a card over a plain card — the dashed outline is the whole affordance. */
-/* (outline, not border, so no layout shift) */
 .node.drop-merge { outline:2px dashed var(--node-sel); outline-offset:3px; border-radius:var(--r-card); }
-/* Smart guides while dragging (features/guides.ts): one-screen-pixel rules in a bright pink that reads
-   on every card colour and both canvases. Above the cards, under nothing interactive. */
 #guides { position:absolute; left:0; top:0; pointer-events:none; z-index:9; }
 #guides .guide { position:absolute; background:#ff3b8b; }
-/* break long words / URLs and clip anything that still overflows the card horizontally */
-/* A card's title IS the leading `# ` line of its note, so it must LOOK like one: this metric is shared
-   verbatim with `.node .body h1` below (the same heading, rendered by renderBodyHTML when it appears
-   anywhere further down the note), and the two must not drift — a card whose name is styled unlike the
-   `# heading` it literally is reads as a separate field, which is exactly what this format stopped
-   having. h2–h6 step down from it. `padding-right` is the fold chip's room and belongs to the title
-   alone; a section's label pins its own font-size/line-height/weight, so nothing here can move it. */
+/* A card's title IS its `# ` line, so this is shared verbatim with `.node .body h1` and must not drift.
+   `padding-right` is the fold chip's room. */
 .node .title, .node .body h1 { font-weight:750; font-size:var(--h1-size); }
 .node .title { margin-bottom:9px; padding-right:16px; overflow-wrap:anywhere; overflow:hidden; }
-/* Only a SECTION's label is ever `.editing` now — its tab (ui-state.ts TitleEdit). A card's name is the leading `# ` line of its one text field, so it
-   is renamed in .body-edit below like the rest of its text. user-select:text overrides .node's own
-   `none` for the one element that IS text being edited. */
+/* Only a section's label is ever `.editing`: a card's name is edited in its body. */
 .node .title.editing { outline:none; cursor:text; white-space:pre-wrap; overflow:visible;
   -webkit-user-select:text; user-select:text; }
-/* …and, as for a card, it's the PILL that shows the edit, not a box inside it: the same dimmed 3px blue
-   ring (--edit-ring) round the label — or round the whole element when folded, since that IS the pill. */
 .node.section.title-editing > .title-row { box-shadow:0 0 0 3px var(--edit-ring); }
-/* A card's TAGS (features/tags.ts tagChipHTML), stuck on its top edge like things pinned to a corkboard:
-   an EMOJI is a round white STAMP, a WORD a small paper LABEL, each at its own slight tilt (--tilt, from
-   the tag itself). The first tag sits rightmost (row-reverse), so adding one never moves the others. A
-   tag written in the note's TEXT has a dashed edge instead of a shadow: it's the text's. `.lit`: in the
-   search. On a card the chips are buttons — a click searches by the tag (features/search.ts), a drag moves
-   or removes it (features/tag-drag.ts). The same faces fill the tag tray and the search's suggestions. */
+/* Tags on a card's top edge: an emoji a round stamp, a word a paper label, each at its own --tilt. First tag
+   rightmost (row-reverse), so adding one never moves the others; one written in the TEXT is dashed. */
 .node .tag-row { display:flex; flex-direction:row-reverse; align-items:center; gap:4px; }
 .tag {
   flex:none; box-sizing:border-box; margin:0; cursor:pointer; color:#1e1e1e;
@@ -1064,11 +687,8 @@ body.layout-anim #selFrame { display:none; }
 .tag.in-text { box-shadow:none; border:1px dashed rgba(0,0,0,.35); }
 .tag.stamp.in-text { border:2px dashed rgba(0,0,0,.3); }
 .tag.lit { box-shadow:0 0 0 2px var(--accent), 0 1px 2px rgba(0,0,0,.18); }
-/* …and a `#tag` written in the note's text (utils/markdown.ts): set apart, and a click searches by it */
 .node .body .md-tag { font-weight:700; opacity:.75; cursor:pointer; }
 .node .body .md-tag:hover { opacity:1; text-decoration:underline; text-underline-offset:2px; }
-/* a dragged tag (features/tag-drag.ts): the chip it left stays as a faint outline of itself, a copy rides
-   the pointer, the card under it rings, and one dropped off onto the canvas goes in a puff */
 .tag.lifted { opacity:.3; }
 .tag-ghost { position:fixed; left:0; top:0; z-index:60; pointer-events:none; margin:-13px 0 0 -13px; }
 .tag-ghost .tag { transform:rotate(var(--tilt, 0deg)) scale(1.15); box-shadow:0 4px 12px rgba(0,0,0,.25); }
@@ -1076,8 +696,6 @@ body.layout-anim #selFrame { display:none; }
 .tag-puff { position:fixed; z-index:60; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%; pointer-events:none;
   background:radial-gradient(circle, rgba(160,160,160,.55) 0 30%, transparent 62%); animation:tag-puff .45s ease-out forwards; }
 @keyframes tag-puff { from { transform:scale(.4); opacity:1; } to { transform:scale(2.2); opacity:0; } }
-/* the TAG TRAY (features/tag-tray.ts): a sheet of stickers just above the dock, toggled from its tag button
-   or T. Room above each sticker for its tilt; the last slot makes a new one. */
 #tagTray { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + 48px + 10px + var(--sa-b)); z-index:20;
   display:none; align-items:center; gap:10px; max-width:min(720px, calc(100% - 32px - var(--sa-l) - var(--sa-r)));
   padding:10px 12px; box-sizing:border-box; touch-action:none;
@@ -1085,17 +703,14 @@ body.layout-anim #selFrame { display:none; }
 #tagTray.open { display:flex; }
 #tagTray .tray-tags { display:flex; flex-wrap:wrap; align-items:center; gap:8px; min-width:0; max-height:96px; overflow:auto; padding:3px; }
 #tagTray .tag { cursor:grab; touch-action:none; }
-/* a size up from a card's edge: the tray is where they're picked up, so they're made to be grabbed */
 #tagTray .tag.stamp { width:32px; height:32px; font-size:18px; }
 #tagTray .tag.label { height:23px; padding:0 8px; font-size:13px; max-width:180px; }
 #tagTray .tray-none { font-size:12px; color:var(--muted); }
 #tagTray .tray-make { position:relative; flex:none; }
-/* what the slot would make — the word, or emoji found by name — in a list that opens ABOVE it */
 #tagTray .tray-suggest { position:absolute; bottom:calc(100% + 8px); right:0; width:220px; display:none; flex-direction:column;
   padding:6px; box-sizing:border-box; background:var(--panel); border-radius:var(--r-menu); box-shadow:var(--shadow-pop); }
 #tagTray .tray-suggest.open { display:flex; }
-/* The names offered while a `[[link` or `#tag` is typed in a card (features/complete.ts): a light list under
-   the caret, at screen size whatever the zoom, rows like the tag picker's. */
+/* At screen size whatever the zoom. */
 .md-complete { position:fixed; z-index:45; display:none; flex-direction:column; min-width:180px; max-width:320px;
   max-height:260px; overflow-y:auto; padding:6px; box-sizing:border-box; background:var(--panel);
   border-radius:var(--r-menu); box-shadow:var(--shadow-pop); font-size:13px; }
@@ -1109,59 +724,32 @@ body.layout-anim #selFrame { display:none; }
   border:1px dashed var(--node-border); border-radius:var(--r-full); background:transparent; color:var(--text); }
 #tagTray .tray-new:focus { outline:none; border:1px solid var(--accent); }
 #dock #trayBtn[aria-pressed="true"] { background:var(--row-sel); color:var(--accent); }
-/* No `opacity` here. It used to sit at .9, which de-emphasised the note against its title — but `--ink`
-   is already the MINIMUM contrast this fill can carry (utils/ink.ts measures it against a 2.5 floor, and
-   a card inside a section then steps its fill 93% toward that same ink), so trimming another 10% off
-   came straight out of the thinnest margin in the app. */
+/* No `opacity`: --ink is already the minimum contrast this fill can carry (utils/ink.ts). */
 .node .body  { font-size:14px; color:inherit; line-height:1.4;
   overflow-wrap:anywhere; overflow:hidden; }
-/* The note's first and last blocks give up their outer margins. Every block in here carries one (a `<p>`
-   is .3em/.75em — see below), and at the EDGES of the body those margins are not spacing BETWEEN
-   anything: they're a gap under the title and a gap above the card's bottom edge. Both were invisible
-   while a card had a 64px floor to hide them in; now that a card shrink-wraps its text, they are the
-   card's own padding twice over. */
-/* --text-drop is an OPTICAL nudge, not spacing: a line of text carries its weight above the middle of
-   its line box (the descender space under the baseline is mostly empty), so text set flush against the
-   padding reads a shade high, and this pays that back. One value, easy to retune — the only thing in this file that is a matter of eye
-   rather than arithmetic. */
+/* An OPTICAL nudge: text sits high in its line box. The one value here set by eye. */
 .node { --text-drop:2px; }
+/* At the edges a block's margin is just extra padding, not spacing between anything. */
 .node .body > :first-child { margin-top:var(--text-drop); }
 .node .body > :last-child { margin-bottom:0; }
-/* A card is ONE text field, so while its editor is open the rendered title row stands down: the name is
-   the `# ` line inside the textarea, and showing it in both places would read as two fields (and let
-   them disagree mid-edit). The row — not just the label — because its checkbox and fold chip aren't
-   controls you can use while typing anyway. Containers never take this class; they rename on the label
-   itself (.title.editing above). */
+/* While a card's editor is open its title row stands down: the name is the `# ` line inside the textarea. */
 .node.card-editing > .title-row { display:none; }
-/* An UNTITLED card shows no name at all — it IS its text (render.ts paintNode writes `no-title`), and it
-   must reserve NO space for the name it hasn't got: visually such a card is its body and nothing else.
-   The row itself stays, because the fold chip hangs off it, but with the label gone every remaining child
-   is absolutely positioned, so the row collapses to nothing — as long as it contributes no box of its
-   own, hence the explicit zeroing. */
+/* An untitled card reserves NO space for a name; the row stays for the fold chip, zeroed so it adds no box. */
 .node.no-title > .title-row > .title { display:none; }
 .node.no-title > .title-row { margin:0; min-height:0; }
-/* in-place card editor (double-click, F2, E, the pen): the whole note as raw markdown in a textarea —
-   bare, so the text stays exactly where it was; the CARD shows it's being edited (.node.sel:has above).
-   MONOSPACE, the face `code` renders in below: what's in here is the note's SOURCE, not its rendering,
-   and a fixed pitch lines up list markers, nesting indents and table pipes. 12px, a size under the
-   card's 14px rounded text, since a monospace glyph is wider: it fits more of each line on a narrow card. The line pitch is
-   the TITLE's (--h1-lh, 16.8px), the shortest line a card draws: at the body's 19.6px a card holding only
-   `# Title` grew 3px the moment it opened (e2e "opening a card for editing does not change its size"). */
-/* The card keeps its height while edited (render.ts paintNode caps the body), so a note longer than it SCROLLS. */
+/* The card keeps its height while edited, so a longer note scrolls. */
 .node .body.editing { overflow:hidden auto; overscroll-behavior:contain; opacity:1; position:relative; }
+/* The card editor: bare, so the text stays where it was. Monospace (it's the SOURCE), and the TITLE's line
+   pitch, the shortest a card draws, so opening a `# Title` card doesn't grow it (an e2e pins this). */
 .node .body-edit, .node .body .body-hl { display:block; width:100%; box-sizing:border-box; margin:0;
   font:inherit; font-family:ui-monospace,Menlo,monospace; font-size:12px; line-height:var(--h1-lh); color:inherit;
   caret-color:var(--accent);
   background:transparent; border:none; border-radius:0; padding:0;
   outline:none; resize:none; overflow:hidden;
   white-space:pre-wrap; overflow-wrap:anywhere; letter-spacing:normal; tab-size:8; }
-/* The SYNTAX HIGHLIGHT (utils/md-highlight.ts): the same text, painted in a <pre> under the textarea, whose
-   own glyphs are transparent — so the caret, selection and spellcheck stay the browser's, over coloured
-   text. Both boxes share every metric above. Each mark below copies how the RENDERED note draws it (the
-   `.node .body` rules further down), so opening the editor looks like the note with its markers showing.
-   Weight and italic are safe in a monospace face (every weight has the same advance); a SIZE is not, so
-   a heading is bold here rather than bigger. Markers fade; everything else is a shade of the card's ink. */
-.node .body .body-hl { position:absolute; left:0; right:0; pointer-events:none; }   /* top: paintHighlight */
+/* The syntax highlight: a <pre> under a transparent-glyph textarea, so caret and spellcheck stay native.
+   Monospace weights share an advance but sizes don't, so a heading is bold here, not bigger. */
+.node .body .body-hl { position:absolute; left:0; right:0; pointer-events:none; }
 .node .body-edit.with-hl { position:relative; z-index:1; color:transparent; }
 .node .body-edit::selection { color:transparent; background:color-mix(in srgb, var(--accent) 35%, transparent); }
 .body-hl .hl-mk   { opacity:.4; font-weight:400; font-style:normal; }
@@ -1174,78 +762,41 @@ body.layout-anim #selFrame { display:none; }
 .body-hl .hl-link { text-decoration:underline; text-underline-offset:2px; }
 .body-hl .hl-tag  { font-weight:700; opacity:.75; }
 .body-hl .hl-q    { opacity:.85; }
-/* FOCUS: the blocks the caret isn't in fade back, so a long note reads as the paragraph being written. */
 .body-hl .hl-far  { opacity:.35; }
-/* markdown elements inside a card body — tight spacing, clipped preview */
 .node .body > :last-child  { margin-bottom:0; }
 .node .body ul, .node .body ol,
 .node .body blockquote, .node .body pre { margin:.3em 0; }
-/* The ONLY gap between two paragraphs: .75em of a 12px/1.4 body is 9px, half a line. It has to come
-   from here, because the renderer collapses any run of blank lines in the note into one paragraph
-   break (utils/markdown.ts) — the file's Returns don't set the spacing, this does. */
+/* The ONLY gap between paragraphs: the renderer collapses blank lines, so the file's Returns don't set it. */
 .node .body p { margin:.3em 0 .75em; }
-/* h2–h6 only. h1 is deliberately NOT in this group: it's the card's own name (the leading `# ` line) and
-   takes the shared heading metric instead — see the rule below. It USED to be listed here, and because
-   this rule sits after the shared one with the same specificity, it silently won: every card's h1 came
-   out at 12px while a section's tab rendered the same heading at --h1-size, which is exactly the "section
-   headers are bigger than card headers" that this pair of rules kept producing. */
+/* h2–h6 only: h1 is the card's name and takes the shared title metric (this rule comes later and would win). */
 .node .body h2,.node .body h3,
 .node .body h4,.node .body h5,.node .body h6 { margin:.3em 0; font-size:14px; font-weight:700; }
-/* …and h1 takes the card TITLE's metric instead (shared rule above), since on a card the leading `# ` line
-   IS the title — there is no separate title element any more, this rule is what draws a card's name.
-   `line-height` is PINNED rather than left at `normal`, and that's load-bearing twice over: it makes 14px
-   text occupy exactly one --body-lh (14 × 1.2 = 16.8px, the same box a 12px/1.4 paragraph occupies), which
-   is what lets the collapsed clamp above cut either kind of first line to one line without clipping
-   descenders off a heading — and it takes the card's height off the font's own metrics, which vary by
-   platform. `margin-bottom` is the gap the title used to carry below itself. */
+/* line-height is PINNED: it lets the collapsed clamp cut either first line cleanly, and keeps a card's
+   height off platform font metrics. */
 .node .body h1 { margin:.3em 0 9px; line-height:1.2; }
-/* An OUTSIDE list marker is painted to the LEFT of the li's content box, in the ul's own padding —
-   and .body clips at its content edge (overflow:hidden above), so the padding has to be wide enough
-   to hold the whole marker or the browser draws it half off the card. At this 12px body font Chrome
-   needs 14px for a disc and 16.75px for a two-digit ordered marker, so 1.1em (13.2px) was shaving
-   the left edge off every bullet — they read as tiny arrowheads. 1.5em (18px) clears both.
-   li.task's negative margin cancels that indent (its checkbox stands in for the marker, hence
-   list-style:none) and has to move with it, or task rows step right when the padding grows. */
+/* An outside marker paints in the ul's padding and .body clips, so 1.5em clears a two-digit marker.
+   li.task's negative margin cancels it and must move with it. */
 .node .body ul,.node .body ol { padding-left:1.5em; }
-/* A small gap between items (.2em of the 14px body ≈ 3px; adjacent items' margins collapse, so that IS
-   the gap): enough to put an item boundary a hair above a wrapped line's, so a long bullet still reads
-   as one item, without the half-line gap that spread a short list out into a column of islands. On the
-   item, so every list kind gets it: bullets, ordered, tasks. */
 .node .body li { margin:.2em 0; }
 .node .body li.task { list-style:none; margin-left:-1.4em; display:flex; flex-wrap:wrap; align-items:flex-start; gap:0 .4em; }
-/* The task's text takes the row beside its box (basis 0, so a long line wraps INSIDE it rather than
-   dropping under the box), and a list nested in a task takes a row of its own below — flex-wrap above.
-   That nested list is indented from the task's TEXT, as a bullet's children are from its text. */
+/* basis 0, so a long task line wraps inside its row rather than dropping under the box */
 .node .body li.task > .task-text { flex:1 1 0; min-width:0; }
 .node .body li.task > :is(ul, ol) { flex-basis:100%; padding-left:calc(14px + 1.9em); }
-/* A NUMBERED task keeps its number: an ordinary list item, the box sitting inline before its text. */
 .node .body ol > li.task { display:list-item; list-style:decimal; margin-left:0; }
 .node .body ol > li.task .taskbox { margin:0 .4em 0 0; vertical-align:-2px; }
 .node .body ol > li.task > :is(ul, ol) { padding-left:1.5em; }
-/* A nested list's spacing is its items' own; the block margin above is for a list among paragraphs. */
 .node .body li > :is(ul, ol) { margin:0; }
-/* A checkbox is a FILLED square in the card's own ink, never a fixed colour, and with no border: 20% of
-   the ink, ticked or not. The ink is by construction the colour with contrast against the fill
-   (utils/ink.ts), so the box reads on any card, pale or dark. The tick is the ink at FULL strength on
-   top of it — a translucent fill, not an element opacity, so the tick never fades with the box. The
-   tick is the whole "done" signal: a done item's text stays at full strength. */
+/* A filled square in the card's own ink (which always contrasts with the fill), the tick at full strength. */
 .node .body li.task .taskbox { -webkit-appearance:none; appearance:none; width:14px; height:14px; border:none; outline:none; border-radius:4px; background:color-mix(in srgb, var(--ink, #fff) 20%, transparent); cursor:pointer; flex:none; position:relative; }
-/* Sits 1px below the line box's top, which centres the 14px box on the first line's CAP BAND — the
-   band the eye reads as "the text". flex-start (not center) is what keeps it on line ONE when the
-   item wraps. px, not em: a checkbox's em is the
-   UA's control font (13.333px Arial), NOT the card's body. (19.6px line − 14px box) / 2 ≈ 3px. */
+/* px, not em: a checkbox's em is the UA control font. 1px down centres it on the first line's cap band. */
 .node .body li.task .taskbox { margin:3px 0 0; }
 .node .body li.task .taskbox:checked::after { content:""; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid var(--ink, #fff); border-width:0 2px 2px 0; transform:rotate(45deg); }
 .node .body strong { font-weight:700; }
 .node .body em { font-style:italic; }
 .node .body del { opacity:.7; }
-/* Every mark below tints with the card's own INK rather than a fixed white or black: on a card that
-   took dark ink, a white-ish code patch or a white rule was a bright hole in the middle of dark
-   text. Mixing toward --ink keeps each one a faint shade of the text it decorates, so all of them
-   follow the fill automatically — the same reason .node's `color` is var(--ink). */
+/* Every mark tints toward --ink, never a fixed white or black, so it follows the fill. */
 .node .body code { font-family:ui-monospace,Menlo,monospace; font-size:12.5px;
   background:color-mix(in srgb, var(--ink) 16%, transparent); padding:0 3px; border-radius:3px; }
-/* a shade weaker than an inline code span: `pre` covers whole lines, so the same 16% read as a slab */
 .node .body pre { background:color-mix(in srgb, var(--ink) 11%, transparent);
   padding:6px 8px; border-radius:6px; overflow:hidden; }
 .node .body pre code { background:none; padding:0; }
@@ -1253,11 +804,8 @@ body.layout-anim #selFrame { display:none; }
   padding-left:8px; margin-left:0; opacity:.85; }
 .node .body hr { border:none; border-top:1px solid color-mix(in srgb, var(--ink) 35%, transparent);
   margin:.7em 0; }
-/* A rule or a table runs EDGE TO EDGE of the card, past its padding. The body clips at its box
-   (overflow:hidden), so a negative margin on the rule alone would be cut off: the body itself spans the
-   card's full width and pads its text back in (the text column does not move), and only a body-level
-   `hr`/`table` pulls its margins back out. Not while editing (the textarea is the text column), nor on a
-   folded chip or an image card, whose bodies own their box. */
+/* A rule or table runs edge to edge: the body spans the card's full width and pads its text back in,
+   because a negative margin alone would be clipped. */
 .node:not(.collapsed):not(.image-card) > .body:not(.editing), .pile-card:not(.image-card) > .body {
   margin-inline:calc(-1 * var(--pad-x)); padding-inline:var(--pad-x); }
 .node:not(.collapsed):not(.image-card) > .body:not(.editing) > hr, .pile-card:not(.image-card) > .body > hr {
@@ -1268,97 +816,52 @@ body.layout-anim #selFrame { display:none; }
 .pile-card:not(.image-card) > .body > table :is(th, td):first-child { padding-left:var(--pad-x); }
 .node:not(.collapsed):not(.image-card) > .body:not(.editing) > table :is(th, td):last-child,
 .pile-card:not(.image-card) > .body > table :is(th, td):last-child { padding-right:var(--pad-x); }
-/* ==highlight== (Obsidian's): a band of the SCRIM behind the text, for the same reason as the checkbox —
-   a highlighter's yellow vanishes on the yellow sticky, the colour on the far side of the ink never does. */
+/* The SCRIM, not yellow: a highlighter's yellow vanishes on the yellow sticky. */
 .node .body mark { background:var(--scrim, rgba(255,255,255,.62)); color:inherit; padding:0 2px; border-radius:3px; }
-/* pipe tables: ONE rule, under the header — no row separators, no outer border, no vertical
-   lines (a small card can't afford that many lines, and the row gaps already separate rows).
-   Mixed toward --ink like the marks above so it follows the fill.
-   A card is narrow and a table can be far wider than it, so the table always FITS instead of
-   scrolling: width:100% with `auto` layout so columns still size to their content. A cell wraps
-   BETWEEN WORDS only (break-word leaves its min-content at its longest word): with `anywhere` on
-   the whole cell, the short columns gave way first and `A1` / `Cost` broke between letters. When
-   even that is wider than the card, the table is squeezed instead (below).
-   Only a link or inline code may break anywhere — the one unbroken run that could outgrow the
-   card's clip edge. Widen the card (drag its side) to give the columns more room. */
+/* A table always FITS a card: cells wrap only between words, then a too-wide table is squeezed (below).
+   Only a link or inline code may break anywhere. */
 .node .body table { width:100%; margin:.3em 0; border-collapse:collapse; table-layout:auto; }
-/* The body's own size: a table is part of the note, not a footnote to it (it used to be 11px). */
 .node .body th, .node .body td { padding:3px 8px; text-align:left; vertical-align:top;
   overflow-wrap:break-word; }
 .node .body :is(th, td) :is(.lk, code) { overflow-wrap:anywhere; }
-/* …and a table whose longest words are still wider than the card is SQUEEZED (render.ts squeezeTables):
-   then any cell may break inside a word, which is what lets it fit at all. */
+/* render.ts squeezeTables */
 .node .body table.squeezed :is(th, td) { overflow-wrap:anywhere; }
-/* flush with the body's text column at both edges */
 .node .body th:first-child, .node .body td:first-child { padding-left:0; }
 .node .body th:last-child,  .node .body td:last-child  { padding-right:0; }
-/* A HAIRLINE, not a 1px rule: the table is the only body mark with a horizontal line running
-   its full width (an `hr` is a deliberate divider, this one is just a header break), so at 1px
-   it read heavier than the text it separates. Sub-pixel is safe here because #world is scaled
-   by the zoom — at k >= 1 this is a real 0.5px+ device line on retina, and Chrome floors a
-   non-zero border to one device pixel rather than dropping it, so it survives zooming out too. */
+/* A hairline: Chrome floors a non-zero border to one device pixel, so it survives zooming out. */
 .node .body th { font-weight:700; padding-bottom:3px;
   border-bottom:0.5px solid color-mix(in srgb, var(--ink) 40%, transparent); }
-.node .body tbody tr:first-child td { padding-top:3px; }   /* keep the first row off the rule */
-/* The UNDERLINE is the whole signal — a link takes the body's own weight (no 600), since a card's
-   ink already carries its colour and a bolded run reads as emphasis the author didn't write. */
+.node .body tbody tr:first-child td { padding-top:3px; }
 .node .body .lk { color:inherit; text-decoration:underline; text-underline-offset:2px;
   cursor:pointer; opacity:1; }
 .node .body .lk:hover { text-decoration-thickness:2px; }
-/* inline images: always full card width, aspect ratio kept; never intercept card drag. No background: a
-   transparent PNG shows the card's own colour, untinted. */
 .node .body img.md-img { display:block; width:100%; height:auto; margin:.45em 0; border-radius:6px;
   pointer-events:none; -webkit-user-drag:none; user-select:none; }
-.node .body img.md-img[data-img-src] { min-height:14px; }   /* slot before it resolves */
+.node .body img.md-img[data-img-src] { min-height:14px; }
 .node .body img.md-img-missing { min-height:0; padding:6px 8px; box-sizing:border-box;
   border:1px dashed color-mix(in srgb, var(--ink) 40%, transparent); border-radius:6px; }
-/* a card being targeted by an image file drag, and the body editor while dragging onto it */
 .node.img-drop { outline:2px dashed #5ac978; outline-offset:3px; box-shadow:0 0 0 2px #5ac978; }
 .node .body-edit.img-drop { outline:2px dashed var(--accent); outline-offset:-2px; }
-.node.search-dim { opacity:.2; }         /* dimmed while a find query excludes this card */
-.node.search-active { box-shadow:0 0 0 2px #fff; }   /* the active dropdown option's card */
-/* ---------- ZOOMED FAR OUT: no overlay chrome at all ---------- */
-/* Under FAR_ZOOM (view/camera.ts, 50%) the canvas is an overview — you're reading the SHAPE of the map,
-   not any one card. Every badge that hangs off a card is a few pixels wide there: the lock padlock, the tag stamps and labels. All of
-   them go, which also keeps their layout + paint out of the section budget at exactly the zoom level that
-   has the most cards on screen. The card itself keeps its title, body and colour — that IS the overview. */
+.node.search-dim { opacity:.2; }
+.node.search-active { box-shadow:0 0 0 2px #fff; }
+/* ---------- ZOOMED FAR OUT ---------- */
+/* Under FAR_ZOOM every badge hanging off a card is a few pixels: all go, which also saves frame time. */
 body.zoom-far .node > .lock-badge,
 body.zoom-far .node > .top-edge { display:none; }
-/* a folded card (mm_collapsed) shows only its title: body hidden, count bubble in the corner.
-   covers both branches-with-children and leaf cards whose body is folded away. */
-.node.collapsed { min-height:0; }   /* shrink to the title, like a bodyless card */
-/* A COLLAPSED card is its FIRST LINE, cut by CSS. It used to be `display:none` on the whole body, which
-   worked only while a card had a separate title element to fall back on — with the note being the only
-   thing a card draws now, hiding it folded the card down to a blank stub.
-   So the cut is CSS, never a rewrite of the text in JS: a folded card shows the same text in the same
-   style it shows unfolded, just less of it — `# Heading` folds to a heading, plain text to plain text,
-   and nothing is bold that wasn't already.
-   WHICH text is shown, and the `…` that says more follows, are decided in utils/frontmatter.ts (collapsedMarkdown):
-   only the first line's markdown is rendered here at all. That is not a preference — `text-overflow` and
-   `-webkit-line-clamp` can only ellipsise WITHIN one element, and what a fold hides is usually a SIBLING
-   block (a heading then a paragraph, or several short lines that become separate `<p>`s), so neither ever
-   marked the case that mattered.
-   What's left for CSS is the other case, a single line too WIDE for the card: `nowrap` + `text-overflow`
-   puts an ellipsis on that one, and `max-height` caps the box at the taller of the two possible first
-   lines (a 16px heading's, or a 12px paragraph's) so nothing can spill however it renders. The two levels
-   of "first" cover a leading LIST, whose text is really in its `<li>`. */
+.node.collapsed { min-height:0; }
+/* A folded card is its FIRST LINE, cut by CSS. Which text is decided in collapsedMarkdown (CSS can only
+   ellipsise within one element); CSS caps a too-WIDE line and the box at the taller of the two first lines. */
 .node.collapsed > .body { max-height:max(var(--h1-lh), var(--body-lh)); overflow:hidden; }
 .node.collapsed > .body > :first-child,
 .node.collapsed > .body > :first-child > li:first-child {
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .node.collapsed .title { margin-bottom:0; }
-/* An UNTITLED folded card has no name to show, so its first line stands in for one — greyed, so it reads
-   as "the start of a longer note" rather than as a title. */
 .node.collapsed:not(.titled):not(.image-card) > .body { opacity:.7; }
-/* …and under it, how much the fold is hiding (paintNode: "4 more lines"). Empty = not folded. */
-/* PEEK (features/peek.ts): a folded card's whole note, floating beside it in the card's colour. A `.node`
-   for the text styles, pulled out of the canvas's positioning and given a reading width. */
 #peek.node { position:fixed; z-index:30; display:none; left:0; top:0; width:auto; min-width:200px; max-width:340px;
   max-height:60vh; overflow:auto; box-shadow:var(--shadow-pop); cursor:default; user-select:text; -webkit-user-select:text;
   touch-action:auto; }
 #peek.node.open { display:block; }
-/* A FOLDED card is a CHIP: one line in a row with its count, shrink-wrapped to its text (up to the width
-   it has open — paintNode's inline max-width) with tighter padding, so a board of folded cards packs. */
+/* A folded card is a chip, shrink-wrapped up to its open width, so a board of them packs. */
 .node.collapsed:not(.image-card) { --pad-y:0px; display:flex; align-items:center; gap:8px; width:max-content;
   height:40px; }
 .node.collapsed:not(.image-card) > .title-row { flex:none; }
@@ -1368,38 +871,30 @@ body.zoom-far .node > .top-edge { display:none; }
 .node.collapsed > .fold-more:not(:empty) { display:block; flex:none; padding:0 6px; border-radius:var(--r-full);
   font-size:11px; line-height:18px; font-weight:700; font-variant-numeric:tabular-nums; cursor:pointer;
   background:color-mix(in srgb, currentColor 12%, transparent); }
-.node.collapsed > .fold-more:hover { background:color-mix(in srgb, currentColor 22%, transparent); }   /* tap/click: peek (features/peek.ts) */
+.node.collapsed > .fold-more:hover { background:color-mix(in srgb, currentColor 22%, transparent); }
 
-/* ---------- the dock: FigJam's main toolbar, bottom centre ----------
-   One white island on the soft shadow holding the new-card sticky, the board's own settings (canvas
-   colour, grid) and the ⌘P button, in groups split by hairlines. The buttons inside drop their own
-   floating-button chrome (shadow, fixed position) and become items in the bar. */
+/* ---------- the dock, bottom centre ---------- */
 #dock { position:fixed; left:50%; transform:translateX(-50%); bottom:calc(12px + var(--sa-b)); z-index:20;
   display:flex; align-items:center; gap:4px; height:48px; padding:0 8px;
   background:var(--panel); border-radius:var(--r-bar); box-shadow:var(--shadow-ui); touch-action:pan-x pan-y; }
 #dock .floating-btn { position:static; box-shadow:none; background:transparent; border-radius:8px; }
 #dock .floating-btn:hover { background:var(--hover); }
 .dock-sep { flex:none; width:1px; align-self:stretch; margin:0 6px; background:var(--node-border); }
-/* ghost card — drag it onto the canvas to create a new card. Styled like the card it actually creates
-   (a sticky in the default yellow), so it previews the real result. */
+/* Styled like the card it creates. */
 #ghostCard {
   position:relative; z-index:20;
   width:40px; height:32px;
   display:flex; align-items:center; justify-content:center;
-  /* a little sticky note: what it makes is what it looks like (new cards are yellow — render.ts
-     effectiveColor). It has no .c-* class to carry --ink, so it names the fill's computed ink directly. */
+  /* No .c-* class to carry --ink, so it names the fill's ink directly. */
   background:var(--pal-amber); border:none; border-radius:var(--r-card); box-shadow:var(--lift);
   color:var(--pal-ink-amber); font-size:18px; font-weight:400;
   cursor:grab; user-select:none; touch-action:none;
   transition:box-shadow .15s, opacity .15s;
 }
 #ghostCard:hover { box-shadow:0 0 0 2px var(--accent); }
-/* A single note is a map of ONE card (store/note.ts): there is no new-card sticky to drag off. */
 body.single-note #ghostCard { display:none; }
 
 
-/* the `#` field (features/tag-picker.ts): a field, then one list — matches, then the selection's own
-   tags, ticked. Over everything but the palette. */
 #tagPop { position:fixed; top:0; left:0; z-index:25; display:none; flex-direction:column; gap:2px;
   width:280px; max-height:min(420px, calc(100vh - 24px)); padding:10px; box-sizing:border-box;
   background:var(--panel); border-radius:var(--r-menu); box-shadow:var(--shadow-pop); }
@@ -1423,17 +918,12 @@ body.single-note #ghostCard { display:none; }
 .tp-meta { flex:none; font-size:12px; color:var(--muted); }
 .tp-none { padding:10px 8px 4px; font-size:13px; color:var(--muted); }
 .tp-hint { margin:8px 4px 0; font-size:11px; color:var(--muted); flex:none; }
-/* rubber-band marquee drawn over the canvas while drag-selecting */
-#marquee { position:absolute; display:none; z-index:8; pointer-events:none;   /* the ghost band: a pending selection, over the lines */
+#marquee { position:absolute; display:none; z-index:8; pointer-events:none;
   border:1px dotted var(--accent); background:color-mix(in srgb, var(--accent) 15%, transparent); }
 
-/* ---- floating selection bar: a compact pill of icon buttons anchored next to the selected
-   card (position set by features/float-bar.ts's rAF follow loop, tracking pan/zoom/drag) ---- */
-/* FigJam's object toolbar: a DARK rounded island with white icons (--bar-*), floating over the light
-   board on a soft shadow — the one piece of chrome that isn't white, so it reads as "acting on what's
-   selected" rather than as part of the board's furniture. */
+/* ---------- the floating selection bar (features/float-bar.ts) ---------- */
 #floatBar {
-  position:fixed; top:0; left:0; z-index:20;   /* left/top overwritten per-frame in JS */
+  position:fixed; top:0; left:0; z-index:20;
   display:flex; align-items:center; gap:2px; padding:4px 6px;
   background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-ui);
   opacity:0; pointer-events:none; transition:opacity .15s ease, visibility 0s .15s;
@@ -1441,9 +931,7 @@ body.single-note #ghostCard { display:none; }
   touch-action:pan-x pan-y;
 }
 #floatBar.open { opacity:1; pointer-events:auto; visibility:visible; transition:opacity .15s ease; }
-/* The EDGE bar IS #floatBar's chrome — same island, same .fb-icon buttons (see the shared sizing rule
-   below). It anchors to the midpoint of its curve instead of to a card, and it never docks to the
-   bottom on a narrow screen: an edge has no on-screen "self" to be covered by a docked bar. */
+/* The edge bar shares #floatBar's chrome but never docks: an edge has nothing a docked bar could cover. */
 #edgeBar {
   position:fixed; z-index:60; display:flex; align-items:center; gap:2px; padding:4px 6px;
   background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-ui);
@@ -1453,32 +941,20 @@ body.single-note #ghostCard { display:none; }
 }
 #edgeBar.open { opacity:1; pointer-events:auto; visibility:visible; transition:opacity .12s ease; }
 #edgeBar.hide-interact { opacity:0; pointer-events:none; transition:none; }
-/* The in-place label editor: floats over the line's midpoint, sized to its own text. */
-/* `all:unset` FIRST: it resets every property declared before it, `display` included — putting it
-   after the display:none below is what made the field show up on load. */
+/* `all:unset` FIRST: it resets everything declared before it, `display` included. */
 #ebLabelEdit { all:unset; position:fixed; z-index:62; display:none; box-sizing:border-box;
   padding:2px 6px; border-radius:6px; text-align:center; font-size:14px; font-weight:600;
   background:var(--panel); color:var(--text);
   border:1px solid var(--accent); box-shadow:0 4px 14px rgba(0,0,0,.35); }
 #ebLabelEdit.open { display:block; }
-/* The label a curve carries, drawn on the line itself (view/free-edges.ts). A plate behind the text
-   so it stays readable where the curve runs under it. */
 svg.fe-lines .fe-label-plate { fill:var(--bg); stroke:none; }
 svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text-anchor:middle;
   dominant-baseline:middle; paint-order:stroke; pointer-events:none; }
-/* hides instantly the moment a drag/pan/zoom starts (features/float-bar.ts's follow loop),
-   then fades back in via the base transition above once the pointer lifts */
+/* hides instantly while a drag/pan/zoom runs, fades back via the base transition */
 #floatBar.hide-interact { opacity:0; pointer-events:none; transition:none; }
-/* …and the same treatment when the bar has nothing to anchor to (float-bar.ts's positionBar): a
-   selection whose card is HIDDEN under a fold, or carried over from before a reload so its node/element
-   is gone. Both used to park the bar in the top-left corner of the screen (a zero rect clamps to the
-   viewport margin; an un-placed bar keeps its static position) with no card under it at all. The follow
-   loop re-checks every section, so it fades back in as soon as its card is measurable again. */
+/* …and when the bar has nothing measurable to anchor to (the follow loop re-checks every frame). */
 #floatBar.unanchored { opacity:0; pointer-events:none; transition:none; visibility:hidden; }
-/* shared sizing only — background/colour live on .fb-icon so they never fight .swatch's own
-   background on the colour trigger (an ID+type rule here would otherwise beat a plain class).
-   Both bars, one rule: a button in the card bar and the edge bar is the same object, so it is sized
-   in one place rather than re-stated per bar. */
+/* Sizing only: colour lives on .fb-icon, where this ID rule can't beat .swatch's background. */
 #floatBar button, #floatBar label, #edgeBar button {
   flex:none; width:var(--bar-btn); height:var(--bar-btn); padding:0; display:flex;
   align-items:center; justify-content:center;
@@ -1487,22 +963,12 @@ svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text
 .fb-icon { background:transparent; color:var(--bar-ink); }
 .fb-icon svg { width:var(--bar-icon); height:var(--bar-icon); display:block; }
 .fb-icon:hover { color:var(--bar-ink); background:var(--bar-hover); }
-/* stretches past the bar's own padding (align-self:stretch + negative margin) so it runs the bar's
-   full height, as FigJam's dividers do, with the same breathing room either side */
 .fb-sep { flex:none; width:1px; align-self:stretch; margin:-4px 6px; background:var(--bar-sep); }
-/* locked selection: nothing about the card can be changed, so the bar shrinks to just the lock
-   button (float-bar.ts's markLock) — one obvious way back out, no dead controls. The ID+class
-   prefix is what out-specifies `#floatBar button, #floatBar label` above (markChips only ever
-   CLEARS its inline display, so it can't fight this). Red padlock: same cue as #roBtn.locked. */
+/* Locked: only the lock button remains. The ID+class prefix out-specifies `#floatBar button` above. */
 #floatBar.locked-sel > *:not(#fbLock) { display:none; }
 #floatBar.locked-sel #fbLock { color:#e0564f; }
-/* the colour trigger is the same chip as the ones in its popover, so it's the same 22px they are —
-   NOT --bar-btn (which the rule above would give it, and which read as an oversized bubble next to
-   the icon buttons). The margin keeps the row's spacing even now that it's narrower than they are. */
+/* the colour trigger is a 22px chip like those in its popover, not a --bar-btn */
 #floatBar .fb-swatch, #edgeBar .fb-swatch { width:20px; height:20px; margin:0 4px 0 6px; }
-/* A DROPDOWN: every toolbar button that opens a menu or a popover — the colour dot, the line style, the
-   ends, ⋯, the dock's canvas colour and grid — is its face followed by a small grey chevron, flat on
-   the bar until hovered (FigJam's). One rule for both dark bars and the light dock. */
 #floatBar button.fb-dd, #edgeBar button.fb-dd { width:auto; gap:0; padding:0 8px 0 4px; background:transparent; color:var(--bar-ink); }
 #floatBar button.fb-dd:hover, #edgeBar button.fb-dd:hover { background:var(--bar-hover); }
 #dock .floating-btn.fb-dd { width:auto; gap:0; padding:0 8px 0 7px; }
@@ -1510,32 +976,20 @@ svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text
 #floatBar .fb-dd .fb-swatch, #edgeBar .fb-dd .fb-swatch { pointer-events:none; margin-right:0; }
 .fb-dd:hover .fb-chev svg { opacity:1; }
 .fb-chev svg { width:10px; height:10px; display:block; margin-left:6px; opacity:.6; transform:rotate(90deg); }   /* .ic is display:contents: spacing goes on the svg */
-/* the fold button shows what a click would DO: chevrons closing while anything is open, opening once
-   everything is folded (float-bar.ts markOpen) */
+/* shows what a click would DO */
 #fbFold .ic-unfold, #fbFold.expand .ic-fold { display:none; }
 #fbFold.expand .ic-unfold { display:block; }
 
-/* small popover anchored under/over its trigger button (colour / layout / arrow pickers) —
-   borderless, same "floating island" style as #floatBar, on the popup shadow. It sizes to its
-   CONTENT and is a rounded panel rather than a pill: every one of these now holds a column of items
-   or a grid of swatches, so it reads as a menu dropped from its button instead of a second bar
-   sitting beside the first. (--r-full clamps to half the SHORTER side, which on a tall box paints a
-   lozenge; --r-panel is the roundness step that keeps it on the shared scale.) */
+/* A rounded panel, not a pill: --r-full on a tall box paints a lozenge. */
 .fb-pop { position:fixed; top:0; left:0; display:none; z-index:23; padding:8px;
   background:var(--bar-bg); color:var(--bar-ink); border-radius:var(--r-bar); box-shadow:var(--shadow-pop);
   transition:opacity .15s ease; }
 .fb-pop.open { display:flex; }
-/* The colour pickers are FigJam's grid: rows of ELEVEN (view/color.ts PICKER_ROWS). The explicit width is
-   what makes .swatch-break's row breaks land where they should (a shrink-to-fit flex container
-   resolves a 100% basis against nothing and lays every chip out on one line instead); a break's own
-   empty line would add a second gap, which its negative margin takes back. Three popovers, one rule:
-   the card bar's, the edge bar's and the canvas one. */
+/* The explicit width is what lets .swatch-break land: a shrink-to-fit flex container lays every chip on one line. */
 #fbColorPop .swatches, #canvasColorPop .swatches, #ebColorPop .swatches {
   width:calc(11 * 24px + 10 * 8px); gap:8px; }
-/* FigJam's picker: bigger chips on a roomier island */
 .fb-pop .swatch { width:24px; height:24px; }
 #fbColorPop, #canvasColorPop, #ebColorPop { padding:14px; border-radius:var(--r-bar); }
-/* the map settings panel: a label column and a control column */
 #settingsPop.open { display:grid; grid-template-columns:auto auto; align-items:center; column-gap:20px; row-gap:6px;
   padding:10px 10px 10px 16px; }
 #settingsPop .set-head { font-size:13px; color:var(--bar-muted); }
@@ -1548,7 +1002,6 @@ svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.22); }
 #canvasColorPop, #gridPop, #snapPop { z-index:24; }
 #gridPop, #snapPop { padding:6px; }
-/* a dropdown's list: a tick column, then the choice */
 .set-list { display:flex; flex-direction:column; gap:2px; min-width:120px; }
 .set-item { display:flex; align-items:center; gap:8px; height:var(--bar-btn); padding:0 10px 0 6px; border:0; border-radius:5px;
   background:transparent; color:var(--bar-ink); font:inherit; font-size:13px; font-variant-numeric:tabular-nums; text-align:left; }
@@ -1556,63 +1009,38 @@ svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text
 .set-item svg { width:var(--bar-icon); height:var(--bar-icon); flex:none; }
 .set-tick { width:12px; flex:none; text-align:center; }
 .fb-pop .swatches .swatch-break { margin-top:-8px; }
-/* hides instantly while #floatBar itself does (see float-bar.ts's followLoop) — a stale popover
-   position mid-pan/drag/zoom would otherwise float away from its (now-moved) trigger button. */
+/* hides while #floatBar does, or it would float away from its moved trigger */
 .fb-pop.hide-interact { opacity:0; pointer-events:none; transition:none; }
 
-/* colour picker = rows of individual round bubbles; the selection outline sits AROUND one.
-   TWO rows, in one flex container: the fixed palette, then the custom picker + recently-used custom
-   colours (features/color-recents.ts). One container rather than two, so every chip stays a sibling
-   and the delegated click handler / markSwatch / the float bar's `.swatch.active` lookup each keep
-   covering the whole picker. */
+/* One flex container for both rows, so every chip stays a sibling for the delegated handlers. */
 .swatches { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
-/* the row break: a zero-height item that eats a whole flex line, so the wrap lands exactly here
-   instead of wherever the container's width happens to run out. Needs the container to have a
-   DEFINITE width to resolve against — see #fbColorPop's .swatches below. */
+/* Needs a DEFINITE container width to resolve against. */
 .swatch-break { flex:0 0 100%; height:0; margin:0; }
-/* colour chips: a fixed size */
 .swatch { flex:none; width:22px; height:22px; border-radius:50%; cursor:pointer;
   border:0; background:var(--sw); }
 .swatch:hover  { box-shadow:0 0 0 2px color-mix(in srgb, var(--text) 45%, transparent); }
 .swatch.active { box-shadow:0 0 0 2px var(--text); }
-/* …on the dark toolbar islands the rings are white */
 .fb-pop .swatch:hover, #floatBar .swatch:hover, #edgeBar .swatch:hover { box-shadow:0 0 0 2px rgba(255,255,255,.45); }
-.fb-pop .swatch.active { box-shadow:0 0 0 2px var(--bar-bg), 0 0 0 4px var(--accent); }   /* the selection blue */
-/* …and every chip on them carries a faint rim, so the black one doesn't vanish into the island */
+.fb-pop .swatch.active { box-shadow:0 0 0 2px var(--bar-bg), 0 0 0 4px var(--accent); }
 .fb-pop .swatch:not(:hover):not(.active), #floatBar .swatch:not(:hover) { box-shadow:inset 0 0 0 1px rgba(255,255,255,.22); }
-/* the bar's own buttons are rounded squares (FigJam's), but its colour trigger stays a dot */
 #floatBar .fb-swatch, #edgeBar .fb-swatch { border-radius:50%; }
-/* inherit (the default): striped chip = "take the parent's colour" */
+/* striped: take the parent's colour */
 .swatch.inherit { background:repeating-linear-gradient(45deg,#fff,#fff 5px,#e6e6e6 5px,#e6e6e6 10px); }
-/* custom colour: the chip a native <input type="color"> hides inside (features/properties.ts). It's
-   a spectrum wheel until a colour has actually been picked, then it shows that colour like any other
-   chip (.picked, which just lets --sw through). The input is stretched over the whole chip at
-   opacity 0 — a <label>-wrapped input is what opens the system colour sheet from one tap on every
-   platform (iOS included), and hiding it keeps the round-bubble look its neighbours have; a
-   `display:none` input, by contrast, is unreachable on iOS. */
+/* The <input type="color"> is stretched over the chip at opacity 0: a label-wrapped input opens the system
+   sheet in one tap everywhere, while a `display:none` one is unreachable on iOS. */
 .swatch.custom { position:relative; overflow:hidden; padding:0; display:block;
   background:conic-gradient(#ff5252, #ffd147, #4ade80, #22d3ee, #3f8cff, #a855f7, #ff5252); }
 .swatch.custom.picked { background:var(--sw); }
 .swatch.custom input[type=color] { position:absolute; inset:0; width:100%; height:100%; margin:0;
   padding:0; border:none; background:none; opacity:0; cursor:pointer;
   -webkit-appearance:none; appearance:none; }
-/* explicit no-colour: a blank chip with a diagonal slash — does NOT inherit */
+/* explicit no-colour: does NOT inherit */
 .swatch.nofill { background:
   linear-gradient(to top right, transparent calc(50% - 1.2px), #e0564a calc(50% - 1.2px),
     #e0564a calc(50% + 1.2px), transparent calc(50% + 1.2px)), var(--bg); }
-/* layout picker: separate icon buttons (no joined/grey group background), same size + look as
-   the floating bar's own icon buttons (--bar-btn/--bar-icon) — just the selected one reads
-   blue/white. Its popover is the same height as the colour popover (and #floatBar itself) via
-   .fb-pop's explicit height above, despite the chips being a bigger scale than the swatches. */
-/* The two cap pickers side by side: one column for the line's START, one for its END, each a normal
-   column of chips. Two columns rather than one list of nine, because the two ends are two questions. */
 .capcols { display:flex; gap:6px; align-items:flex-start; }
-/* A picker's chips run DOWN, not across: these popovers are menus of alternatives (which kind of
-   card, which layout, which direction), and a column is how a menu of alternatives reads. */
 .layoutchips { display:flex; flex-direction:column; gap:4px; align-items:stretch; }
-/* padding:0 and a non-shrinking icon: a chip is a fixed 32px square with the glyph centred in it,
-   and the generic button padding it would otherwise inherit eats the box from both sides — 32px
-   less 2×12px leaves 8px for a 21px icon, which is what squashed the arrow picker's glyphs. */
+/* padding:0: inherited button padding squashed the glyph out of a 32px chip. */
 .layoutchip { width:var(--bar-btn); height:var(--bar-btn); cursor:pointer; flex:none; padding:0;
   display:flex; align-items:center; justify-content:center; border-radius:6px;
   background:transparent; color:var(--bar-muted); border:0; }
@@ -1623,15 +1051,12 @@ svg.fe-lines .fe-label { fill:var(--text); font-size:14px; font-weight:600; text
 kbd { background:var(--node); border:1px solid var(--node-border); border-radius:6px;
   padding:0 5px; font-size:11px; }
 
-/* home sidebar — slides in from the left edge, full window height, flat (deliberately NOT
-   the rounded floating-panel style of the editor sidebar) and dark like the toolbars. Clicking beside it closes it. */
+/* ---------- home sidebar ---------- */
 #startScreen { position:fixed; inset:0; z-index:40; }
 #startScreen.hidden { pointer-events:none; }
-/* Width GROWS by the left inset rather than the panel being pushed inward: the surface still runs
-   to the physical screen edge (a drawer with a gap of canvas showing beside it reads as a bug),
-   and it's the PADDING that keeps its rows clear of the cutout. */
+/* Grows by the left inset rather than moving inward: a gap of canvas beside a drawer reads as a bug. */
 #storeSidebar { position:absolute; top:0; left:0; bottom:0; width:calc(290px + var(--sa-l)); max-width:85vw;
-  /* dark, like the toolbars: the light tokens re-pointed here, so every rule below reads them unchanged */
+  /* dark: the light tokens re-pointed here, so every rule below reads them unchanged */
   --panel: var(--bar-bg); --text: var(--bar-ink); --muted: var(--bar-muted); --hover: var(--bar-hover);
   --node-border: var(--bar-sep); --bg: #1e1e1e; --row-sel: color-mix(in srgb, var(--accent) 35%, transparent);
   background:var(--panel); color:var(--text); box-shadow:var(--shadow-pop);
@@ -1641,8 +1066,6 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 #startScreen.hidden #storeSidebar { transform:translateX(calc(-100% - 30px)); }
 .side-head { display:flex; align-items:center; justify-content:space-between; }
 .side-title { margin:0; padding-left:4px; font-size:15px; font-weight:600; }
-/* storage-backend tabs — a segmented control the sidebar's full width, three equal segments of an icon and ONE
-   word each, so no label ever wraps; the active one is a raised segment on the dark track */
 .store-tabs { display:grid; grid-template-columns:repeat(3, 1fr); gap:2px; padding:3px; margin-bottom:4px;
   border-radius:12px; background:var(--bg); }
 .store-tab { display:flex; align-items:center; justify-content:center; gap:6px; min-width:0; padding:7px 4px;
@@ -1651,36 +1074,30 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
 .store-tab:hover:not(.active, :disabled) { color:var(--text); }
 .store-tab.active { color:var(--text); background:var(--hover); box-shadow:0 1px 2px rgba(0,0,0,.35); }
 .store-tab:disabled { opacity:.35; cursor:default; }
-/* plain sidebar rows (the "+ New" action and the footer buttons) — Claude-desktop style */
 .side-row { display:flex; align-items:center; gap:8px; width:100%; padding:8px 10px;
   background:transparent; border:0; border-radius:var(--r-ctl); color:var(--text);
   font-size:13px; text-align:left; cursor:pointer; }
 .side-row:hover { background:var(--hover); }
-.side-row .btn-icon { margin:0; }   /* the flex gap spaces the icon; drop its inline margin */
-/* full-bleed hairline divider — escape the sidebar's 12px padding on both sides */
+.side-row .btn-icon { margin:0; }
 .side-footer { border-top:1px solid var(--node-border); margin:0 -12px; padding:6px 12px 0; }
-/* about line under the footer actions: repo link left, build version right */
 .side-about { display:flex; align-items:center; justify-content:space-between;
   padding:6px 10px 2px; color:var(--muted); font-size:11px; }
 .side-about a { display:inline-flex; align-items:center; gap:5px; color:var(--muted); text-decoration:none; }
 .side-about a:hover { color:var(--text); }
 .side-about .ic { width:13px; height:13px; display:inline-flex; }
 .side-empty { margin:6px 10px; color:var(--muted); font-size:12px; }
-/* the map list — flat rows, one per map of the active tab */
 #mapList { flex:1; overflow:hidden auto; }
 .map-item { display:flex; align-items:center; gap:10px; width:100%; text-align:left;
   padding:8px 10px; cursor:pointer; font-size:13px; color:var(--text); border-radius:var(--r-ctl); }
 .map-item:hover:not(.current) { background:var(--hover); }
-/* the map currently open on the canvas */
 .map-item.current { background:var(--row-sel); }
 .mi-icon { width:16px; height:16px; flex:none; color:var(--muted); }
 .mi-icon svg { width:16px; height:16px; display:block; }
 .mi-name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.mi-when { font-size:11px; color:var(--muted); flex:none; margin-left:auto; }   /* right-aligned */
-/* inline rename input, swapped in for the name span */
+.mi-when { font-size:11px; color:var(--muted); flex:none; margin-left:auto; }
 .mi-name-input { flex:1; min-width:0; font:inherit; font-size:13px; color:var(--text);
   background:var(--bg); border:1px solid var(--accent); border-radius:6px; padding:3px 6px; }
-/* per-row ⋮ opens the map context menu — always visible (no hover UI: iPad) */
+/* always visible: no hover on iPad */
 .mi-more { flex:none; width:24px; height:24px; padding:0; margin:-3px 0;
   background:transparent; border:0; border-radius:6px; color:var(--muted);
   cursor:pointer; display:flex; align-items:center; justify-content:center; }
@@ -1690,54 +1107,42 @@ kbd { background:var(--node); border:1px solid var(--node-border); border-radius
   background:transparent; border:none; border-radius:var(--r-full); color:var(--muted); cursor:pointer; }
 .start-close svg { width:16px; height:16px; }
 .start-close:hover { color:var(--text); background:var(--hover); }
-/* inline icon inside text buttons (open / import / export) */
 .btn-icon { width:16px; height:16px; vertical-align:-3px; margin-right:5px; display:inline-block; }
-/* icon placeholders (filled by mountIcons): transparent to layout so the injected <svg> sits where it would have */
+/* filled by mountIcons; transparent to layout */
 .ic { display:contents; }
 
 
-/* ---- coarse pointer (touch) : slightly larger hit targets than desktop ----
-   Bar/icon-button sizing itself comes from --bar-btn/--bar-icon being redefined at :root above —
-   every bar (#floatBar, .floating-btn, .layoutchip) picks that up for free. */
+/* ---------- coarse pointer (touch) ---------- */
 @media (pointer: coarse) {
   #searchBox { height:calc(var(--bar-btn) + 10px); }
   .node .tag-row { gap:6px; }
-  /* explicit flex:none so flex-basis doesn't override width and stretch them tall */
+  /* flex:none, or flex-basis overrides width and stretches them tall */
   .swatch { flex:none; width:22px; height:22px; }
-  /* wrap so swatches never escape the sidebar on narrow panels */
   .swatches { flex-wrap:wrap; }
-  /* context-menu rows big enough for a finger */
   .cm-panel .cm-item { height:40px; font-size:14px; }
-  /* A width-only kind's side bands, widened for a fingertip. They still sit entirely outside the
-     border, so the extra width costs no card surface — and there's no resize CURSOR to hint with on
-     touch, so the zone being generous is the only affordance there is. */
+  /* Wider for a fingertip; still outside the border, and touch has no resize cursor to hint with. */
   .node:not(.section):not(.image-card) > .fh-e { right:-16px; width:16px; }
   .node:not(.section):not(.image-card) > .fh-w { left:-16px;  width:16px; }
 }
 
-/* ---- narrow screens: the floating bar docks to the BOTTOM EDGE instead of floating next to
-   the card (floating next to a small card on a touch screen clips off-screen too easily) ----
-   The 700px breakpoint MUST match NARROW_MQ in core/ui-state.ts (float-bar.ts skips the JS
-   position math here and lets this block own left/top/bottom; frameBox also treats the docked
-   bar as a bottom obstruction instead of a right one — see view/camera.ts). */
+/* ---------- narrow screens: the float bar docks to the bottom edge ----------
+   700px MUST match NARROW_MQ in core/ui-state.ts. */
 @media (max-width: 700px) {
   #floatBar {
     top:auto; bottom:0; left:calc(10px + var(--sa-l)); right:calc(10px + var(--sa-r)); width:auto; justify-content:center;
     border-radius:var(--r-panel) var(--r-panel) 0 0;
     padding-bottom:calc(4px + var(--sa-b));
-    transform:translateY(calc(100% + 10px));   /* parked BELOW the screen when closed */
+    transform:translateY(calc(100% + 10px));
   }
-  /* above the corner ghost-card/canvas buttons (z 20) — they'd float over the bar otherwise */
+  /* above the corner buttons (z 20) */
   #floatBar.open { transform:translateY(0); z-index:25; }
-  /* the map name sits beside the home button in the top-left — it would overlap other UI on a
-     narrow bar, so hide it here (the home sidebar still shows which map is open). */
+  /* would overlap other UI; the home sidebar still says which map is open */
   #folderName { display:none; }
 }
 
 
 
-/* Motion switched off (utils/motion.ts — the e2e specs only): every CSS transition and animation lands
-   at once. A 0s animation still fires animationend, which crud.ts's pop relies on. */
+/* Motion off (e2e only, utils/motion.ts). A 0s animation still fires animationend, which crud.ts's pop relies on. */
 html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after {
   transition-duration:0s !important; transition-delay:0s !important;
   animation-duration:0s !important; animation-delay:0s !important;

@@ -1,8 +1,5 @@
-// A window can stay open for days — the installed app most of all — and a page only picks up a new deploy
-// when it loads. So the window asks `version.json` (written by the build, vite.config.js) whether a newer
-// version is out: when it regains focus, and every half hour while open, never more than every few minutes.
-// A different version shows the Update button; its click saves what is pending, then reloads, and the
-// service worker (public/sw.js) asks the network first, so the reload is the new version.
+// Asks `version.json` (written by the build) whether a newer deploy is out, and offers the Update button.
+// See "A window left open is told when a newer version is out" in docs/architecture.md.
 import { byId } from '../utils/dom.js';
 import { settleSave } from '../data/save.js';
 
@@ -22,7 +19,7 @@ async function check(): Promise<void> {
     const latest = res.ok ? ((await res.json()) as { version?: unknown }).version : undefined;
     button.hidden = typeof latest !== 'string' || latest === __APP_VERSION__;
   } catch {
-    // offline, or not deployed: nothing to say
+    // offline, or not deployed
   }
 }
 

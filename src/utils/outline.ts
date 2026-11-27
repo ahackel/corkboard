@@ -1,6 +1,4 @@
-// Copied cards as text OTHER apps read (features/clipboard.ts): a nested bullet list. A card's first
-// line is its bullet and the rest of its note hangs under it; a section's cards nest under its name.
-// Pasted back onto a board it splits into cards again (paste-list.ts). Pure, so tests pin it down.
+// Copied cards as a nested bullet list for other apps; paste-list.ts splits it back into cards.
 export interface OutlineItem { text: string; kids: OutlineItem[] }
 
 export function outlineText(items: OutlineItem[]): string {

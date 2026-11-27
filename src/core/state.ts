@@ -1,31 +1,20 @@
-// ============================================================
-// Central mutable app state + the shared DOM handles every module renders into.
-// `state` is a single object whose PROPERTIES are mutated in place (never reassign the
-// binding) so the live view is shared across modules. DOM nodes live under #world /
-// #stage; the lines in the #freeEdges SVG, ports and handles in #toggles.
-// ============================================================
+// The shared mutable `state` (mutate its properties, never reassign it) and the DOM handles.
 import { byId } from '../utils/dom.js';
 import { soleImage } from '../utils/markdown.js';
 
-// A node's KIND — the whole of it (docs/PRODUCT.md, "cards are flat, sections are the only container"):
-//   · card  — a note. It never has children: structure inside a thought is written into the note.
-//   · section — a resizable box (mm_w/mm_h) with a name on its label; the cards dropped inside it
-//             are its children, and they sit wherever they were put. Sections nest.
-// Persisted as `mm_type` (omitted for the `card` default).
+// A card never holds cards; a section is a box whose children are the cards inside it.
 export type NodeType = 'card' | 'section';
-// Node kinds that carry their own resizable box size (w/h persisted as mm_w/mm_h) rather than
-// sizing from title/body content — a section. An IMAGE card authors a height too, but
-// it isn't a kind: it's a card that happens to hold nothing but a picture, so the height gate that
-// reads this asks isImageCard beside it (utils/frontmatter.ts serializeMd).
+
+// Kinds with an authored box size. An image card authors a height too, but isn't a kind (isImageCard).
 export const isBoxType = (t: NodeType): boolean => t === 'section';
 export type GridStyle = 'none' | 'dot' | 'mesh' | 'line';
 export type GridSize = 0 | 20 | 40 | 80 | 160 | 320;
-// The grid button's cycle order (least ink → most) and the size picker's choices, kept here beside
-// their types because they're also the lists data/persistence.ts validates settings.json against —
-// two copies of either would drift the moment a style or step is added.
+
+// Also what data/persistence.ts validates settings.json against.
 export const GRID_STYLES: GridStyle[] = ['none', 'dot', 'mesh', 'line'];
 export const GRID_SIZES: GridSize[] = [0, 20, 40, 80, 160, 320];
 
+// A top-level `key:` line plus its continuation lines; `key` is null for keyless content.
 // One ordered frontmatter entry: a top-level `key:` line plus its continuation lines.
 // `key` is null for leading content with no key (preserved verbatim on save).
 export interface FmEntry {
@@ -33,149 +22,96 @@ export interface FmEntry {
   lines: string[];
 }
 
-// A board node. One .md file per node; the filename is its identity on disk. In-memory
-// `id`s are ephemeral (minted per load). `parent` is CONTAINMENT (the section it sits in); the lines
-// drawn between cards are `state.edges`.
+// One .md file per node, identified on disk by its path; `id`s are minted fresh per load.
 export interface MindNode {
   id: string;
-  file: string | null;             // relative path on disk; null until first save
-  // Position, two forms. x/y is the WORKING form (absolute world coords) — the layout and drag
-  // engines read and mutate this. rx/ry is the PERSISTED form (offset from the parent, world
-  // origin for a root), written as mm_position_x/y. commitRel() (view/layout.ts) derives rx/ry
-  // from x/y just before a save; loadFromDir does the reverse. Between those, rx/ry may be stale.
+  file: string | null;             // null until first save
+
+  // x/y: absolute world coords, the working form. rx/ry: offset from the parent, derived by
+  // commitRel() before a save and possibly stale in between.
   x: number;
   y: number;
-  rx: number;                      // persisted as mm_position_x/y
+  rx: number;
   ry: number;
-  parent: string | null;           // parent node id (resolved from the file's FOLDER at load)
-  // A FOLDED section whose notes are still on disk, unread (data/lazy.ts): how many there are, for its
-  // pill. Undefined once they're in memory. Ephemeral — what's read is a property of this session.
-  lazy?: number;
-  lazySections?: number;           // …and how many of those are SECTIONS, for the pill's tooltip
-  _parentPath?: string;            // transient: the parent's path (its folder), resolved to `parent` post-load
+  parent: string | null;           // the containing section's id
+  lazy?: number;                   // a folded section's unread note count (data/lazy.ts)
+  lazySections?: number;           // …of which sections
+  _parentPath?: string;            // resolved to `parent` after load
   collapsed: boolean;
-  locked: boolean;                 // this card can be selected but not moved, (un)collapsed, or
-                                    // edited (rename/body/color/delete); the
-                                    // lock cascades to every descendant, which additionally can't
-                                    // even be selected — see utils/model.ts hasLockedAncestor.
-                                    // Persisted as mm_locked.
-  type: NodeType;                  // card | section (persisted as mm_type)
-  // Resizable box size (world px). `w` is authored by every kind; `h` only by a section (the box
-  // whose interior adopts cards dropped in) and an IMAGE card — a card holding nothing but one `![alt](src)`,
-  // which is its picture and so owns both axes (isImageCard above). Persisted as mm_w/mm_h.
-  w?: number;
+  locked: boolean;                 // cascades: descendants can't even be selected (hasLockedAncestor)
+  type: NodeType;
+  w?: number;                      // world px; `h` is authored only by sections and image cards
   h?: number;
-  // A plain card dragged SHORTER than its text: `h` is then its exact height and the rest of the note is
-  // clipped under a fade (render.ts paintNode), instead of a minimum the text grows past. Persisted as
-  // `clip` in board.json; Fit (float bar ↔) clears it.
-  clip?: boolean;
-
-  // A SECTION drawn as a PILE (isStack below): its cards lie on top of each other, the last one added on
-  // top, instead of sitting in a box. Still a folder on disk; persisted as `stack` in board.json.
-  stack?: boolean;
+  clip?: boolean;                  // dragged shorter than its text: `h` is exact and the rest clipped
+  stack?: boolean;                 // a section drawn as a pile (isStack)
   title: string;
-  color: string;                   // palette key, e.g. 'blue', or '' for none
+  color: string;
   tags: string[];
   body: string;
-  titleGap?: boolean;              // false = the note's first line sits directly under the `# ` line,
-                                    // with no blank line between (utils/frontmatter.ts splitHeading).
-                                    // NOT a frontmatter key — it's implicit in the file's own text,
-                                    // and read back by joinHeading so a round-trip invents nothing.
-                                    // Absent means the default, spaced form.
-  titleLevel?: number;             // how many `#` the title's heading is written with (absent = 1):
-                                    // a note that opens on `## Notes` is saved as it was
-  fmEntries?: FmEntry[];           // original frontmatter, preserved verbatim on save
-  dirty: boolean;                  // needs a disk write
-  kidOrder?: string[];             // this parent's child ORDER — seeded from position the first time
-                                    // it's needed, spliced by a drag, and persisted to board.json as
-                                    // paths (data/board.ts). Reconciled by orderedKids, which drops
-                                    // unknown ids and appends unlisted children: the stored list is a
-                                    // sort HINT, never a record of membership — the folder is that.
-  el?: HTMLElement | null;         // the rendered card (added during paint)
-  sectionContentEl?: HTMLElement | null;   // this section's overflow:hidden content wrapper (sections only)
-  hostSectionId?: string | null;     // which section's content wrapper el/sectionContentEl currently live
-                                    // in, DOM-wise (null = directly under #world) — transient render
-                                    // bookkeeping, settled outside gestures (see render.ts settledHost)
+  titleGap?: boolean;              // see splitHeading; absent = spaced
+  titleLevel?: number;             // the title heading's `#` count; absent = 1
+  fmEntries?: FmEntry[];
+  dirty: boolean;
+
+  // A sort HINT, never membership (the folder is that): orderedKids drops unknown ids and appends the rest.
+  kidOrder?: string[];
+  el?: HTMLElement | null;
+  sectionContentEl?: HTMLElement | null;
+  hostSectionId?: string | null;   // whose content wrapper `el` lives in (null = #world); see settledHost
 }
 
-// An IMAGE card is a card that IS its picture: untitled, and its whole note is one `![alt](src)`.
-// DERIVED from the note, not a kind of its own — there is no `mm_type: image` any more (the legacy
-// value folds to `card`, utils/frontmatter.ts foldType). So it's an ordinary card in every
-// other respect: it renames, merges, sits in sections. What it gets for being one is
-// the render (no padding, the picture flush to its corners), an authored HEIGHT as well as a width,
-// and an aspect-locked resize — see isImageBox in view/geometry.ts, which adds "…and isn't folded or open in
-// an editor", the two states where a card shows something other than its picture.
+// Derived from the note, never a kind: see "A card whose whole note is one image IS that image".
 export function isImageCard(n: MindNode | null | undefined): boolean {
   return !!n && n.type === 'card' && !n.title.trim() && !!soleImage(n.body);
 }
 
-// A STACK is a section shown as a pile of its cards rather than as a box (docs/architecture.md, "A STACK
-// is a section drawn as a PILE"). Not a third kind: `type` stays 'section', and this flag is how it looks.
+// Not a third kind: `type` stays 'section'.
 export function isStack(n: MindNode | null | undefined): boolean {
   return !!n && n.type === 'section' && !!n.stack;
 }
 
 export interface View { x: number; y: number; k: number; }
 
-// A free EDGE between two nodes — an object the user drew, not a rendering of `parent`.
-// It means nothing structural: it moves nothing, collapses nothing, places no file. Stored (as
-// pure data, not a node) in the vault's board.json — see data/board.ts.
-//
-// Its `id` is PERSISTED, unlike a node's — a node's identity is its file path, and an edge has no
-// file to be identified by. Its ENDPOINTS are node ids at runtime but paths on disk, for exactly
-// the reason a node is known by its path: in-memory ids are minted fresh every load. `fromPath`/`toPath`
-// are the transient carriers between reading the file and resolving them (data/board.ts
-// resolveEdges), mirroring MindNode's `_parentPath`.
-// What each END of an edge WEARS. Two independent caps rather than one three-way direction setting:
-// "an arrow at this end, a dot at that one" is an ordinary thing to want to say, and a single
-// `none|to|both` axis can't say it at all. `dot` is the terminator a diagram uses for "attaches
-// here, no direction implied" — it marks the endpoint without claiming a flow.
+// A free EDGE means nothing structural. Its `id` is persisted (it has no file to be known by); its
+// endpoints are node ids at runtime and paths on disk (`fromPath`/`toPath`).
 export type EdgeCap = 'none' | 'dot' | 'arrow';
-// One of a card's four faces — where its PORTS sit (view/free-edges.ts). A line end dropped on a port is
-// PINNED to that face (BoardEdge.fromPort/toPort); an end dropped on the card's body has none, and its
-// face is chosen afresh on every paint from where the two cards are.
+
+// A face a line end can be PINNED to; an unpinned end picks its face afresh on every paint.
 export type EdgeSide = 'up' | 'down' | 'left' | 'right';
 export interface BoardEdge {
   id: string;
-  from: string;                    // node id (resolved from fromPath at load)
+  from: string;
   to: string;
-  fromPath?: string;               // the on-disk path, resolved to `from` post-load — and KEPT while
-                                    // that end is a note inside a folded section nobody has read yet:
-                                    // `from` is then that section (it stands in, the way a pill does),
-                                    // and the path is what goes back to disk (data/board.ts)
+
+  // Kept while that end is inside an unread folded section, which `from` then stands in for.
+  fromPath?: string;
   toPath?: string;
-  color: string;                   // palette key, an authored '#rrggbb', or '' for the default ink
+  color: string;                   // '' = the default ink
   dashed: boolean;
-  fromCap: EdgeCap;                // the cap at each end — see EdgeCap above
+  fromCap: EdgeCap;
   toCap: EdgeCap;
-  fromPort?: EdgeSide;             // the face each end is pinned to; absent = auto (see EdgeSide)
+  fromPort?: EdgeSide;             // absent = auto
   toPort?: EdgeSide;
-  // Where along its pinned face an end sits, 0 → 1 from the face's top/left; absent = the middle, where
-  // the port dot is. FigJam's SHIFTED connection: drop an end anywhere on a face and it stays there.
-  fromAt?: number;
+  fromAt?: number;                 // 0..1 along the pinned face; absent = the middle
   toAt?: number;
   label: string;
 }
 
 export interface AppState {
-  nodes: Map<string, MindNode>;    // id -> node
-  view: View;                      // pan/zoom
-  selId: string | null;            // primary selection — drives the single-node editor fields
-  // The selected free EDGES — a SET, like `sel`, so several lines can be restyled in one go. Never
-  // non-empty at the same time as a card selection: an edge and a card can't share the one floating
-  // bar, so selecting either clears the other (features/edge-tools.ts).
+  nodes: Map<string, MindNode>;
+  view: View;
+  selId: string | null;            // the primary selection
+
+  // Never non-empty alongside a card selection: they share the one floating bar.
   selEdges: Set<string>;
-  sel: Set<string>;                // full selection set (⌘-click / marquee)
-  gridStyle: GridStyle;            // restored per-map from board.json — see data/board.ts
-  gridSize: GridSize;               // pattern cell size in world px — restored per-map from board.json
-  // The MAP's own canvas colour — a colour VALUE like a node's (a palette key or an authored hex,
-  // '' = the theme's background), restored per-map from settings.json. Only the TOP level: inside an
-  // open section the canvas wears that section's fill instead. See features/canvas-color.ts's canvasFill, the one resolver.
-  canvasColor: string;
-  edges: BoardEdge[];              // free edges the user drew (loaded from / saved to board.json)
-  searchMatch: Set<string> | null; // ids to highlight for the find query (matches' visible reps), or null when not searching
-  searchActiveId: string | null;   // visible rep of the active dropdown option → gets a white outline
-  singleNote: boolean;             // ONE note file opened on its own (store/note.ts): see singleNoteRefuses
+  sel: Set<string>;
+  gridStyle: GridStyle;
+  gridSize: GridSize;
+  canvasColor: string;             // top level only; '' = the theme's (see canvasFill)
+  edges: BoardEdge[];
+  searchMatch: Set<string> | null; // the visible reps of find's matches, or null when not searching
+  searchActiveId: string | null;
+  singleNote: boolean;             // see singleNoteRefuses
   idSeq: number;
   toDelete: string[];
   lastSelfWrite?: number;          // guards the external-change reload against our own writes
@@ -200,33 +136,29 @@ export const state: AppState = {
 
 export const world = byId('world');
 export const stage = byId('stage');
-// The free edges the user drew — see BoardEdge above and view/free-edges.ts.
 export const freeEdgesSvg = byId<SVGSVGElement>('freeEdges');
 export const freeEdgesHeldSvg = byId<SVGSVGElement>('freeEdgesHeld');
-// …and the layer BEHIND the cards that holds nothing but those edges' click targets — see index.html
-// and view/free-edges.ts for why the two halves of one edge live on opposite sides of the cards.
+
+// Behind the cards: only the edges' click targets (see view/free-edges.ts).
 export const freeEdgeHitsSvg = byId<SVGSVGElement>('freeEdgeHits');
 export const togglesSvg = byId<SVGSVGElement>('toggles');
-// Group-opacity layer for the CURRENTLY DRAGGED items: while a drag is live the dragged cards are
-// re-parented in here so the whole set composites as one translucent group
-// (see #dragLayer in styles.css / dragRoot() in render.ts).
+
+// The dragged cards are re-parented here so they composite as ONE translucent group.
 export const dragLayer = byId('dragLayer');
 const statusEl = byId('status');
-// A toast is for what the canvas can't say itself — a refusal ("Locked — can't delete"), the result of
-// an action with nothing to see (Copied, Exported, Nothing to undo), a warning. What only narrates what
-// just happened on screen is not said at all: no caller reports a move, a paste or a save.
+const TOAST_BASE_MS = 1600;
+const TOAST_MS_PER_CHAR = 60;
+
+// A toast says what the canvas can't (a refusal, a result with nothing to see), never narrates.
 let toastTimer = 0;
 export const setStatus = (t: string): void => {
   statusEl.textContent = t;
   statusEl.classList.add('show');
   window.clearTimeout(toastTimer);
-  // long enough to read: ~2s, plus a beat per extra word for the longer warnings
-  toastTimer = window.setTimeout(() => statusEl.classList.remove('show'), 1600 + 60 * t.length);
+  toastTimer = window.setTimeout(() => statusEl.classList.remove('show'), TOAST_BASE_MS + TOAST_MS_PER_CHAR * t.length);
 };
 
-// Single-note mode (store/note.ts) opens ONE .md file as a map of one card: there is no folder to write
-// a second card into, and its own file must not go. So this is the ONE gate on every path that adds a
-// node or removes one — it says why, and the caller backs out.
+// The ONE gate on every path that adds or removes a node while a single note is open.
 export function singleNoteRefuses(): boolean {
   if (!state.singleNote) {
     return false;

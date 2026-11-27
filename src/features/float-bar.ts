@@ -1,10 +1,4 @@
-// ---------- floating selection bar ----------
-// Replaces the old #editor right-hand sidebar: a compact row of icon buttons anchored right
-// next to the selected card (Miro/Figma-style), instead of a persistent docked panel. Colour
-// collapses to one trigger button that opens a small popover with the full picker. No kebab, as in
-// FigJam: the card's full action list is the right-click menu (features/context-menu.ts).
-// On narrow/touch widths (NARROW_MQ) styles.css docks the bar to the bottom edge instead —
-// this module skips the floating position math there and lets CSS own it.
+// The floating selection bar over the selected card; on NARROW_MQ widths CSS docks it to the bottom.
 import { state, stage, world, setStatus, singleNoteRefuses, isImageCard, isStack, type MindNode } from '../core/state.js';
 import { NARROW_MQ, ui, canvasMoving } from '../core/ui-state.js';
 import { touch } from './history.js';
@@ -49,18 +43,13 @@ const fbToSection = byId<HTMLButtonElement>('fbToSection');
 const colorPop = byId('fbColorPop');
 const edColors = byId('edColors');
 
-// colour wiring lives in features/properties.ts. Tags are omitted: no room in the bar.
 let props: PropertyControls;
 
-// Fit a section's box snugly around its children: the same margin on every side, snapped to the grid
-// and clamped to the min size. Children keep their positions (the box moves to enclose them). With
-// no children it's left as-is, or given the default size when `orDefault`. Shared by the Auto-size
-// action and the load migration that turns a card's old children into a section's
-// (data/persistence.ts).
-// The section's label hangs outside the box (above it), so the margin is the same on all four sides.
+// The label hangs outside the box, so the margin is the same on all four sides.
 export const SECTION_FIT_PAD = 16;
 const MIN_SECTION_SIZE = { w: MIN_SECTION_W, h: MIN_SECTION_H };
 
+// Children keep their positions; the box moves to enclose them. Childless: unchanged, or default-sized.
 export function fitSectionToContent(n: MindNode, orDefault = false): void {
   const fit = fitAround(subtreesBox(childrenOf(n.id)), SECTION_FIT_PAD, gridSnap(), MIN_SECTION_SIZE);
   if (fit) {
@@ -69,13 +58,11 @@ export function fitSectionToContent(n: MindNode, orDefault = false): void {
     n.w = SECTION_W; n.h = SECTION_H;
   }
 }
-// FIT — the float bar's ↔, ⌥⇧⌘R and the menu's "Resize to fit": every selected section hugs its cards
-// (fitSectionToContent), every selected card drops its authored height — a minimum it was dragged out to,
-// or a CLIP it was dragged in to — and measures its text again. Width stays (it's what the text wraps at),
-// except that a card WIDENS to its widest table, up to TABLE_FIT_W: a table is the one thing in a note
-// that needs width rather than wrapping. Only ever on request — nothing resizes on its own.
+
+// A table is the one thing in a note that needs width rather than wrapping, so FIT widens to it.
 const TABLE_FIT_W = 960;
-// The width a card's tables want — laid out at their natural width, unwrapped — or 0 when they fit as is.
+
+// The width a card's unwrapped tables want, or 0 when they fit as is.
 function tableFitW(n: MindNode): number {
   const body = n.el?.querySelector<HTMLElement>('.body');
   const tables = body ? [...body.querySelectorAll('table')] : [];
@@ -99,18 +86,21 @@ function tableFitW(n: MindNode): number {
   const w = Math.min(TABLE_FIT_W, Math.ceil(((n.w ?? n.el!.offsetWidth) + extra) / step) * step);
   return w > (n.w ?? n.el!.offsetWidth) ? w : 0;
 }
+
 function canFit(n: MindNode): boolean {
   if (isLockedEffective(n)) {
     return false;
   }
   return isSection(n) || (!isImageCard(n) && !isStack(n) && (n.h != null || tableFitW(n) > 0));
 }
+
+// FIT (↔, ⌥⇧⌘R, "Resize to fit"): sections hug their cards; cards drop their authored height and widen
+// to their tables. Only ever on request.
 export function autoSizeSelection(): void {
   const ids = selectedIds().filter(id => { const n = state.nodes.get(id); return !!n && canFit(n); });
   if (!ids.length) {
     return;
   }
-  // animated, like a fold: the box glides to its new size (layout-anim.ts animateLayout)
   mutate(ids, () => animateLayout(() => {
     for (const id of ids){
       const n = state.nodes.get(id);
@@ -128,12 +118,7 @@ export function autoSizeSelection(): void {
     }
   }), { reflow: 'none' });
 }
-// Wrap the selected cards in a fresh section: the section lands as a child of the nearest
-// NON-selected ancestor of the first selected card (walking up past any selected ancestor —
-// grouping a parent together with its own child would otherwise reparent the parent under the
-// section while the section sits under that same parent, a cycle), sized to enclose the selection's
-// current positions (same fit math as fitSectionToContent). Every selected card is reparented
-// under the new section, which ends up selected. Shared by ⌘S, the bar and the context menu.
+
 export function groupSelectionIntoSection(): void {
   if (singleNoteRefuses()) {
     return;
@@ -141,6 +126,7 @@ export function groupSelectionIntoSection(): void {
   const ids = selectedIds().filter(id => !isLockedEffective(state.nodes.get(id)!));
   const nodes = nodesOf(ids);
   if (!nodes.length) { setStatus('Locked — can’t group'); return; }
+  // The nearest NON-selected ancestor, or wrapping a parent with its own child makes a cycle.
   const selectedSet = new Set(ids);
   let parentId: string | null = nodes[0].parent;
   while (parentId && selectedSet.has(parentId)) {
@@ -155,25 +141,21 @@ export function groupSelectionIntoSection(): void {
       ?? { x: 0, y: 0, w: SECTION_W, h: SECTION_H };
     const section = mkNode({
       ...fit, parent: parentId,
-      // A section is one kind that keeps a required title: its folder tab is the only thing you can
-      // grab it by, and a blank tab reads as broken.
       title: nextSectionTitle(), type: 'section',
     });
     sectionId = section.id;
     state.nodes.set(sectionId, section);
     for (const n of nodes) { touch(n.id); n.parent = sectionId; n.dirty = true; }
-    settleSections([sectionId]);   // …and whatever else its box now covers
+    settleSections([sectionId]);
   }, { reflow: 'relayout' });
   selectNode(sectionId);
-  // …with its name open to type over, as a new section's is. Esc or a click away keeps "Section N".
   startInlineEdit(state.nodes.get(sectionId));
 }
-// Open (→]) go IN: shown only when the selection can be opened (see fbOpen's click handler below).
+
 function markOpen(): void {
   fbOpen.style.display = canEnter(anchorNode()) ? '' : 'none';
   fbFit.style.display = selectedIds().some(id => { const k = state.nodes.get(id); return !!k && canFit(k); }) ? '' : 'none';
-  // Collapse / expand: THE fold button (cards carry none of their own). It shows the state it would make:
-  // expand once everything foldable in the selection is folded, collapse otherwise — what X does.
+  // Shows the state a click would make, as X does.
   const foldable = nodesOf(selectedIds()).filter(canToggleFold);
   fbFold.style.display = foldable.length ? '' : 'none';
   const expand = foldable.length > 0 && foldable.every(k => k.collapsed);
@@ -188,7 +170,6 @@ function markOpen(): void {
   fbWrap.style.display = state.sel.size > 1 ? '' : 'none';
   fbUngroup.style.display = nodesOf(selectedIds()).some(k => k.type === 'section') ? '' : 'none';
 
-  // On a stack, Ungroup is UNSTACK (crud.ts deleteSelectionKeepChildren), and a stack can become a section.
   const stacks = hasStackSelected();
   const onlyStacks = stacks && !nodesOf(selectedIds()).some(k => k.type === 'section' && !isStack(k));
   fbUngroup.title = keys(onlyStacks ? 'Unstack (⌘⌫)' : 'Ungroup (⌘⌫)');
@@ -205,10 +186,7 @@ export function colorSelection(color: string): void {
   markColorTrigger();
 }
 
-// ---------- colour trigger ----------
-// The trigger button reuses the SAME .swatch/.inherit/.nofill CSS look as the popover's chips
-// (see index.html: fbColorDot starts with class "fb-swatch swatch inherit") — just mirror whichever
-// swatch is currently active.
+// The trigger wears the popover's swatch classes; mirror the active one.
 function markColorTrigger(): void {
   const active = edColors.querySelector<HTMLElement>('.swatch.active');
   fbColorDot.classList.remove('inherit', 'nofill');
@@ -222,11 +200,7 @@ function markColorTrigger(): void {
   }
 }
 
-// ---------- lock toggle ----------
-// Replaces the old Lock/Unlock context-menu entry. A locked card can't be moved, folded, renamed,
-// re-coloured or deleted (isLockedEffective), so every OTHER control in the bar would be
-// a no-op — hence `.locked-sel`, which collapses the bar down to this one button (styles.css). A
-// mixed selection counts as locked — anyLocked (features/lock.ts) owns that rule, shared with the L shortcut.
+// Every other control is a no-op on a locked selection, so `.locked-sel` shrinks the bar to this button.
 function markLock(): void {
   const locked = anyLocked(state.sel);
   bar.classList.toggle('locked-sel', locked);
@@ -242,50 +216,42 @@ function syncControls(): void {
   markLock();
 }
 
-// ---------- the colour popover ----------
 let activePopover: { pop: HTMLElement; anchor: HTMLElement } | null = null;
+
 function closePopovers(): void {
   colorPop.classList.remove('open');
   activePopover = null;
 }
+
 function togglePopover(pop: HTMLElement, anchor: HTMLElement): void {
   const willOpen = activePopover?.pop !== pop;
   closePopovers();
   if (willOpen){ pop.classList.add('open'); activePopover = { pop, anchor }; placePopover(pop, anchor, bar); }
 }
 
-// ---------- card actions menu: rename / edit note / duplicate / export / delete / … ----------
-// Shared by the kebab button here AND the right-click context menu (features/context-menu.ts) —
-// ONE list of entries so the two never drift apart. `n` is the menu's TARGET card: the kebab's
-// target is always the (sole) selection anchor; the context menu's is whatever was clicked, which
-// may or may not be part of the current multi-selection. `sx`/`sy` only matter for "Paste inside"
-// (where the pasted card lands) — the kebab has no cursor position, so it passes the
-// button's own screen position instead.
+// The right-click menu of `n`, which may or may not be in the selection; `sx`/`sy` place a paste.
+// FigJam's order: clipboard, Delete, actions, outside the map, lock last.
 export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] {
-  // FigJam's order: the clipboard, Delete, what you can DO with it, where it goes outside the map, and
-  // the lock last. Only actions with no other easy home are here — a new card next to this one is the
-  // port's ⊕, a new card inside a section is a double-click in it, zooming is F.
   const multi = state.sel.has(n.id) && state.sel.size > 1;
   const targetIds = multi ? [...state.sel] : [n.id];
   const anySection = targetIds.some(id => state.nodes.get(id)?.type === 'section');
   const isSection = n.type === 'section';
-  // group actions (Duplicate/Cut/Copy/Export/Share/Auto-size) act on state.sel via selectedIds();
-  // when the target isn't already part of the selection, select it first so they act on IT.
+  // Group actions act on the selection, so a target outside it is selected first.
   const selectTargetFirst = () => {
     if (!multi) {
       selectNode(n.id);
     }
   };
-  const locked = isLockedEffective(n);                 // n itself: locked, or a locked descendant
+  const locked = isLockedEffective(n);
   const someLocked = targetIds.some(id => isLockedEffective(state.nodes.get(id)!));
   const anySubtreeLocked = targetIds.some(id => subtreeHasLocked(id));
   const entries: MenuEntry[] = [];
   entries.push({ label:'Copy', shortcut:'⌘C', run: () => { selectTargetFirst(); void copySelection(); } });
   entries.push({ label:'Copy as formatted text', run: () => { selectTargetFirst(); void copyFormatted(); } });
   entries.push({ label:'Cut', shortcut:'⌘X', run: () => { selectTargetFirst(); void cutSelection(); }, disabled: anySubtreeLocked });
-  // on a section, what's pasted lands INSIDE it; on a card, beside it at the pointer
-  entries.push({ label: isSection && !multi ? 'Paste inside' : 'Paste', shortcut:'⌘V',
-    run: () => { void pasteFromClipboard(sx, sy, isSection && !multi ? n.id : null); }, disabled: isSection && locked });
+  const pastesInside = isSection && !multi;
+  entries.push({ label: pastesInside ? 'Paste inside' : 'Paste', shortcut:'⌘V',
+    run: () => { void pasteFromClipboard(sx, sy, pastesInside ? n.id : null); }, disabled: isSection && locked });
   entries.push({ label:'Duplicate', shortcut:'D', run: () => { selectTargetFirst(); duplicateSelection(); } });
   entries.push({ label:'Duplicate as the next one', shortcut:'⇧D', run: () => { selectTargetFirst(); duplicateSelection({ next: true }); } });
   entries.push('sep');
@@ -322,45 +288,38 @@ export function buildCardMenu(n: MindNode, sx: number, sy: number): MenuEntry[] 
   return entries;
 }
 
-// ---------- anchoring: float the bar right above/below the selected card ----------
-const GAP = 36;   // clear of the top port (free-edges.ts SOCKET_OUT) and its ⊕
+// Clears the top port (free-edges.ts SOCKET_OUT) and its ⊕.
+const GAP = 36;
+const SAFE_TOP_MARGIN = 4;
+const MIN_LABEL_W = 4;
+const WHEEL_IDLE_MS = 150;
 
 function anchorNode(): MindNode | undefined {
   const n: MindNode | undefined = state.selId ? state.nodes.get(state.selId) : undefined;
   return n?.el ? n : undefined;
 }
-// A node's TITLE: the bar stays clear of it (a section's label hangs above its box), but centres on the box.
-// labelEl (render.ts) owns WHICH element that is, so the folded case needs no second spelling here; an image
-// card renders its title row empty, hence the width guard falling back to the whole box.
+
+// The bar stays clear of a node's title; an image card's title row is empty, hence the width guard.
 function labelRect(n: MindNode): DOMRect {
   const el = n.el!;
   const lr = labelEl(n)?.getBoundingClientRect();
-  return (lr && lr.width > 4) ? lr : el.getBoundingClientRect();
+  return (lr && lr.width > MIN_LABEL_W) ? lr : el.getBoundingClientRect();
 }
-// Put the bar over its anchor card. Returns whether it could actually be placed — false when the
-// selection has nothing MEASURABLE behind it, which is not a theoretical case:
-//   · the anchor id resolves to no node, or to a node with no element yet — a selection carried over
-//     from before a (re)load, whose ids are all minted fresh (see loadFromDir);
-//   · the anchor is HIDDEN (an ancestor folded under it, a tab closed over it) — `display:none`, so
-//     every rect it reports is 0×0.
-// Both used to leave the bar visible in the top-left corner of the SCREEN: the first because it bailed
-// before writing left/top, so a bar that had never been placed kept its static position; the second
-// because a zero rect lands at the world origin and then gets clamped to the 4px viewport margin. The
-// caller hides it instead (`unanchored`) and keeps polling, so it comes back the moment the card does —
-// unfolding the branch, or the next real selection, puts it right back over its card.
+
+// False when nothing MEASURABLE is behind the selection (stale ids after a reload, or a hidden anchor
+// with 0×0 rects); the caller then hides the bar rather than leave it in the screen corner.
 function positionBar(): boolean {
-  if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return true; }   // CSS docks it to the bottom
+  if (NARROW_MQ.matches){ bar.style.left = ''; bar.style.top = ''; return true; }
   const n = anchorNode(); const el = n?.el;
   if (!n || !el) {
     return false;
   }
   let r: DOMRect | { left: number; top: number; right: number; bottom: number; width: number; height: number } = el.getBoundingClientRect();
   if (!r.width && !r.height) {
-    return false;   // hidden (display:none) — nothing to hang off
+    return false;
   }
   let lr: { top: number } = labelRect(n);
-  // Several selected: over the WHOLE selection (labels included), centred on it — FigJam's — so the
-  // bar never sits on one of the cards it acts on.
+  // Several selected: over the WHOLE selection, labels included, so it never sits on one of them.
   if (state.sel.size > 1) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const id of state.sel) {
@@ -381,14 +340,10 @@ function positionBar(): boolean {
     }
   }
   const bw = bar.offsetWidth, bh = bar.offsetHeight;
-  const left = r.left + r.width / 2 - bw / 2;   // centred on the box, however wide a section's is
-  // Over whichever is higher, the box or its label: a section's label hangs ABOVE its box (outside its
-  // bounds), and the bar mustn't sit on top of the name it's about to edit.
+  const left = r.left + r.width / 2 - bw / 2;
   let top = Math.min(r.top, lr.top) - bh - GAP;
-  // …flipping below the card when there isn't room above it. Measured from the SAFE top edge, not
-  // the window's: under `viewport-fit=cover` the first rows of pixels can be behind the status bar
-  // / notch, and a bar that "fits" there would only be clamped back down over its own card.
-  if (top < safeInsets().top + 4) {
+  // The SAFE top, not the window's: under `viewport-fit=cover` the notch hides the first rows.
+  if (top < safeInsets().top + SAFE_TOP_MARGIN) {
     top = r.bottom + GAP;
   }
   placeInViewport(bar, left, top);
@@ -397,40 +352,31 @@ function positionBar(): boolean {
   }
   return true;
 }
-// ---------- hide during drag / pan / zoom ----------
-// The bar gets in the way while the card underneath (or the whole canvas) is moving, so it hides
-// for the duration of any interaction and reappears once the pointer lifts. Node drag / canvas
-// pan / pinch / marquee all flow through the shared `ui` holder (core/ui-state.ts canvasMoving) and
-// clear on pointerup, so polling it from the follow loop below covers all of those with no extra hooks
-// into drag.ts/gestures.ts. Wheel-driven pan/zoom has no pointer at all — those set `ui.wheeling`
-// here and clear it after a short idle debounce instead.
+
+// The bar hides while the canvas moves (canvasMoving); a wheel has no pointerup, so it idles out.
 let wheelIdleTimer: number | null = null;
+
 function markWheelBusy(): void {
   ui.wheeling = true;
   if (wheelIdleTimer != null) {
     clearTimeout(wheelIdleTimer);
   }
-  wheelIdleTimer = window.setTimeout(() => { ui.wheeling = false; wheelIdleTimer = null; }, 150);
+  wheelIdleTimer = window.setTimeout(() => { ui.wheeling = false; wheelIdleTimer = null; }, WHEEL_IDLE_MS);
 }
-// ONE placement pass plus its visibility consequence — every caller that moves the bar goes through
-// here, so it can never paint a section sitting in the screen corner with nothing behind it. Reports
-// whether it's anchored, for the popovers that hang off it (they'd float alone otherwise).
+
+// Every caller that moves the bar goes through here, so it is hidden whenever it can't be anchored.
 function placeBar(): boolean {
   const placed = positionBar();
   bar.classList.toggle('unanchored', !placed);
   placedOk = placed;
   return placed;
 }
-// Tracks the anchor card across camera pan/zoom and node drag without threading a hook through
-// drag.ts/camera.ts, and only runs while open. It LOOKS every frame but MEASURES only when something
-// can have moved the anchor: the camera (the world's transform), a repaint (ui.paintTick), the
-// selection, the window, or a glide in progress. Measuring is two rect reads per selected card — after
-// ⌘A on a big board that was thousands of reads a frame with nothing moving. While the canvas is being
-// interacted with the bar is hidden, so it isn't measured at all, and is placed afresh when that ends.
-// It's also what un-hides an `unanchored` bar again: unfolding the branch that swallowed its card
-// repaints, and the next frame puts it straight back.
+
+// Runs every frame while open but MEASURES only when the anchor can have moved: measuring is two rect
+// reads per selected card, thousands a frame after ⌘A on a big board.
 let raf: number | null = null;
 let placedFor = '', placedOk = false;
+
 function followLoop(): void {
   const interacting = canvasMoving();
   if (interacting) {
@@ -444,25 +390,25 @@ function followLoop(): void {
   }
   const placed = placedOk;
   bar.classList.toggle('hide-interact', interacting);
-  // an open colour/layout popover would otherwise sit at a stale position mid-pan/drag/zoom —
-  // hide it right along with the bar it hangs off, same rule, same class.
   if (activePopover){
     activePopover.pop.classList.toggle('hide-interact', interacting || !placed);
   }
   raf = bar.classList.contains('open') ? requestAnimationFrame(followLoop) : null;
 }
 
-// ---------- visibility ----------
-// Showing the bar is debounced a touch (SHOW_DELAY) — hiding is not. A double-click both selects
-// (click 1) AND folds the card (the dblclick itself, which doesn't touch selection) in quick
-// succession; without the delay the bar would flash on right on click 1 only to have nothing
-// change it back off, which reads as a flicker since it appears for a beat and then the fold
-// yanks the layout under it. Any hide/re-show request within the delay window (including a
-// genuine selection change) just reschedules or cancels this timer, so only the settled state
-// after a short pause ever actually shows the bar — repositioning/control updates on an ALREADY
-// open bar stay instant, so switching the selected card never feels laggy.
+// SHOWING is debounced (hiding and updating an open bar are not): a double-click's first click would
+// otherwise flash the bar just before the fold moves the layout under it.
 let showTimer: number | null = null;
 const SHOW_DELAY = 180;
+
+function showOpenBar(): void {
+  syncControls();
+  placeBar();
+  if (raf == null) {
+    followLoop();
+  }
+}
+
 export function syncFloatBar(): void {
   closePopovers();
   const visible = state.sel.size > 0;
@@ -472,26 +418,17 @@ export function syncFloatBar(): void {
     if (raf != null) { cancelAnimationFrame(raf); raf = null; }
     return;
   }
-  if (bar.classList.contains('open')) {   // already showing — update in place, no delay needed
-    syncControls();
-    placeBar();
-    if (raf == null) {
-      followLoop();
-    }
+  if (bar.classList.contains('open')) {
+    showOpenBar();
     return;
   }
   showTimer = window.setTimeout(() => {
     showTimer = null;
-    // the selection this was scheduled for may already be gone by the time the delay elapses
     if (!(state.sel.size > 0)) {
       return;
     }
     bar.classList.add('open');
-    syncControls();
-    placeBar();
-    if (raf == null) {
-      followLoop();
-    }
+    showOpenBar();
   }, SHOW_DELAY);
 }
 
@@ -501,9 +438,7 @@ export function installFloatBar(): void {
   fbUngroup.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); deleteSelectionKeepChildren(); });
   fbToSection.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); stackToSection(); });
 
-  // T — a section's TITLE. An untitled section shows no label at all (its text was deleted, FigJam-style),
-  // so this is how one comes back: it seeds a name and selects it, ready to type over. A named section just
-  // opens its label with the name selected — the same editor F2 and a double-click on the label open.
+  // How an untitled section, which shows no label, gets one back.
   fbTitle.addEventListener('click', (e) => {
     e.stopPropagation();
     closePopovers();
@@ -519,8 +454,7 @@ export function installFloatBar(): void {
   });
   fbColor.addEventListener('click', (e) => { e.stopPropagation(); togglePopover(colorPop, fbColor); });
 
-  // a colour pick updates the trigger's own swatch look and closes the popover. Runs after properties.ts's own listener has already
-  // set the new .active swatch (bubble phase fires the target's listener before this ancestor one).
+  // Bubbles here after properties.ts has set the new .active swatch.
   colorPop.addEventListener('click', (e) => {
     const sw = (e.target as HTMLElement).closest('.swatch');
     if (!sw) {
@@ -528,16 +462,13 @@ export function installFloatBar(): void {
     }
     markColorTrigger();
 
-    // …except the custom chip, whose click OPENS the native colour sheet rather than picking anything:
-    // closing here would tear the swatch row down while the user is still choosing, and the trigger
-    // has nothing to mirror yet. It closes the ordinary way — a tap outside, or Esc.
+    // The custom chip opens the native colour sheet; closing now would tear it down mid-choice.
     if (sw.classList.contains('custom')) {
       return;
     }
     closePopovers();
   });
 
-  // …and while that sheet is open, keep the trigger's swatch in step with the live preview.
   colorPop.addEventListener('input', (e) => {
     if ((e.target as HTMLElement).closest('.swatch.custom')) {
       markColorTrigger();
@@ -545,7 +476,6 @@ export function installFloatBar(): void {
   });
   closeOnOutside(colorPop, fbColor, closePopovers);
 
-  // ▦ — several selected: Tidy up, align, distribute, same width (features/tidy.ts)
   fbTidy.addEventListener('click', (e) => {
     e.stopPropagation();
     closePopovers();
@@ -553,10 +483,7 @@ export function installFloatBar(): void {
     openMenu(tidyMenuEntries(), r.left, r.bottom + 8);
   });
 
-  // Open (→]) go IN — the touch-reachable twin of ↑, since the float bar is the one action surface identical on
-  // desktop and on a phone. Acts on the ANCHOR, exactly as ↑ does (features/commands.ts navArrow): you can only stand
-  // in one place, so the two must not disagree about which node a multi-selection means. Hidden for the
-  // kinds with no interior and for the card you are already inside, both of which openSection would refuse.
+  // The touch twin of ↑, so it acts on the ANCHOR exactly as navArrow does.
   fbOpen.addEventListener('click', (e) => { e.stopPropagation(); openSection(anchorNode()); });
   fbFold.addEventListener('click', (e) => { e.stopPropagation(); closePopovers(); toggleCollapseSelection(state.sel); syncFloatBar(); });
   fbTidySection.addEventListener('click', (e) => {
@@ -572,7 +499,5 @@ export function installFloatBar(): void {
   stage.addEventListener('gesturestart', () => { ui.wheeling = true; });
   stage.addEventListener('gestureend', () => { ui.wheeling = false; });
   window.addEventListener('resize', () => { closePopovers(); placeBar(); });
-
-  // Crossing the narrow breakpoint (resize/rotate) docks or undocks the bar — re-place it directly.
   NARROW_MQ.addEventListener('change', syncFloatBar);
 }

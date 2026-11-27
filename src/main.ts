@@ -1,7 +1,5 @@
-// The entry point: wires every module up, in order, then boots. No module wires itself up on import —
-// each exports an install…() called here. The render core is render.ts.
-
-import './styles.css';   // app styles (Vite bundles + singlefile inlines into dist/index.html)
+// The entry point: no module wires itself up on import, so every install…() is called here, in order.
+import './styles.css';
 import { migrateLegacyKeys } from './utils/legacy-keys.js';
 import { installMotionSwitch } from './utils/motion.js';
 import { keys, installSafeInsets } from './utils/dom.js';
@@ -76,7 +74,7 @@ installPalette();
 installTagTray();
 installCommands();
 
-// After every install above: their markup's titles get the platform's shortcut spelling and icons too.
+// After every install above, so their markup gets the platform's shortcut spelling and icons too.
 document.querySelectorAll<HTMLElement>('[title]').forEach(el => { el.title = keys(el.title); });
 mountIcons();
 installGrid();
@@ -85,7 +83,7 @@ installCanvasColor();
 onViewApplied(scheduleUrlSync);
 onGridChanged(scheduleSaveBoard);
 
-// What data/ calls back up into the UI (data/hooks.ts). Function declarations only: hoisted, so no TDZ.
+// Function declarations only: hoisted, so no TDZ.
 installDataHooks({
   paintNode,
   remeasure,
@@ -105,14 +103,13 @@ installDataHooks({
 
 installClickCount();
 syncFloatBar();
-installEdgeTools();   // socket / handle / edge-hit grabs, claimed ahead of card-drag and canvas-pan
-installPeek();        // hover a folded card to read it (features/peek.ts)
-restoreTray();        // the tag tray, if it was out last time (features/tag-tray.ts)
+installEdgeTools();   // its grabs are claimed ahead of card-drag and canvas-pan
+installPeek();
+restoreTray();
 
-boot();   // local-first: open straight into the last map
+boot();
 
-// Keep the last copy of the page for when there is no network (public/sw.js). The built app only: the
-// dev server's modules are not something to keep.
+// The offline copy (public/sw.js), for the built app only.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* file://, or a browser that refuses: the app works without */ });
 }

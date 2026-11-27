@@ -1,7 +1,4 @@
-// ---------- where a drop LANDS, and what it does there ----------
-// The drop rule (view/layout.ts sectionAt): one dragged card belongs to the section its centre is in, a
-// multi-selection ALL to the section under the POINTER — or the top level. Also the live preview of what a
-// release would do (merge, pile, file away through a crumb or pill), and a section collecting what it covers.
+// Where a drop lands, the live preview of what a release would do, and a section collecting what it covers.
 import { state, setStatus, type MindNode } from '../core/state.js';
 import { nodeLabel, isHidden, isAncestor, isLockedEffective, childrenOf, subtreeIds, takesDrop } from '../utils/model.js';
 import { detachParentId, scope } from '../nav/scope.js';
@@ -21,19 +18,13 @@ import { scheduleSave } from '../data/save.js';
 import type { FanInsert } from '../view/pile.js';
 import { pileTarget, fanSlot, showFanInsert, PILE_HOVER_MS } from './stacks.js';
 
-// The section a drop lands in: for a MULTI-selection the one under the pointer, so the whole group goes
-// where you aim it; for one card the one its centre is in. Null = the top level (or the open section).
+// A multi-selection goes by the POINTER, one card by its centre. Null: the top level.
 export function dropSection(drag: NonNullable<typeof ui.drag>, dragged: MindNode): MindNode | null {
   const p = drag.selRoots.length > 1 ? screenToWorld(drag.cx, drag.cy) : centreOf(nodeRect(dragged));
   return sectionAt(p.x, p.y, new Set(drag.targets.keys()));
 }
 
-// ---------- the drop preview ----------
-// What a release right now would do, shown while it's still a choice: with ⌥ held over a plain card,
-// a MERGE into it (a dashed outline on that card); otherwise the section the dragged card would land in
-// lights up — only when that's a change, i.e. the card is about to go INTO a section it isn't in yet.
-// `drag.dropTarget` records the resolved new parent (null = the top level) for effectiveColor, so an
-// inheriting card previews the colour it's about to take.
+// `drag.dropTarget` is the would-be parent, so an inheriting card previews the colour it's about to take.
 export function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: number }): void {
   const drag = ui.drag;
   if (!drag) {
@@ -45,7 +36,6 @@ export function updateDropTarget(dragged: MindNode, e: { clientX: number; client
   const mergeDrag = drag.alt && drag.selRoots.length > 0
     && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
   if (mergeDrag) {
-    // the CARD under the pointer (what may take a merge: utils/model.ts takesDrop), first hit wins
     const p = { x: (e.clientX - state.view.x) / state.view.k, y: (e.clientY - state.view.y) / state.view.k };
     for (const [id, m] of state.nodes) {
       if (sub.has(id) || isHidden(m) || m.type !== 'card') {
@@ -60,10 +50,7 @@ export function updateDropTarget(dragged: MindNode, e: { clientX: number; client
     }
   }
 
-  // What else a release right now would do — the FIRST of these that applies: a card of the open fan dragged
-  // within it takes another place in the pile; over a stack, or held over a card long enough, the cards go
-  // onto a pile (features/stacks.ts); over a crumb or a folded pill they're filed (chuteAt); else they land by the
-  // drop rule (dropSection).
+  // The FIRST that applies wins.
   let insert: FanInsert | null = null, pile: Drag['pile'] = null, chute: ReturnType<typeof chuteAt> = null;
   let f: MindNode | null = null, target: string | null;
   if (fuse) {
@@ -102,8 +89,7 @@ export function updateDropTarget(dragged: MindNode, e: { clientX: number; client
   }
 }
 
-// The ONE element wearing a drop hint, remembered so that clearing it — which every frame of a drag
-// does first — is not a search of the whole document.
+// Remembered so clearing it, every frame of a drag, is not a search of the whole document.
 let dropMark: Element | null = null;
 
 function markDrop(el: Element | null | undefined, cls: string): void {
@@ -119,8 +105,7 @@ export function clearDropTarget(): void {
   showFanInsert(null);
 }
 
-// The pointer resting on a card ARMS a stack after PILE_HOVER_MS, whether or not the mouse moves again in
-// the meantime: re-ask then, so the target lifts while the card is simply held there.
+// Re-ask once PILE_HOVER_MS is up, so the target lifts while the card is held still.
 let pileTimer = 0;
 
 function armPileHover(drag: Drag): void {
@@ -136,16 +121,14 @@ function armPileHover(drag: Drag): void {
   }, Math.max(0, wait) + 10);
 }
 
-// What the POINTER is over that files a drop somewhere off the canvas: a crumb of the open-section path
-// (out to that level, beside the section you came out of) or a folded section's pill (into it). The
-// pointer decides rather than the card's centre: both are small targets you aim at.
+// A path crumb (out to that level) or a folded section's pill (into it), by the POINTER: small targets.
 function chuteAt(cx: number, cy: number, sub: Set<string>): (Chute & { el: HTMLElement }) | null {
   const over = (el: Element): boolean => {
     const r = el.getBoundingClientRect();
     return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
   };
 
-  // the CURRENT crumb is where the cards already are; `…` has no single level
+  // The current crumb is where the cards already are; `…` has no single level.
   for (const el of document.querySelectorAll<HTMLElement>('#homeBar .sc-crumb[data-depth]:not(.sc-cur)')) {
     if (over(el)) {
       const d = Number(el.dataset.depth);
@@ -162,10 +145,7 @@ function chuteAt(cx: number, cy: number, sub: Set<string>): (Chute & { el: HTMLE
   return null;
 }
 
-// File the dragged roots into a chute's section (or the top level). Into a folded section they join its
-// cards in a column of their own beside them (arrange.ts arrangeSections, the inbox's rule) — reading its
-// folder first if it was never read; out through a crumb they land in a column right of the section they
-// came out of. Either way they leave the canvas you're looking at, so the toast says where they went.
+// The cards leave the canvas you're looking at, so the toast says where they went.
 export function fileAway(roots: string[], chute: Chute): void {
   const p = chute.parent ? state.nodes.get(chute.parent) ?? null : null;
   const go = (): void => {
@@ -182,7 +162,7 @@ export function fileAway(roots: string[], chute: Chute): void {
       touch(p.id, ...ids.flatMap(id => subtreeIds(id)));
       arrangeSections([p], new Set(ids));
     } else if (beside) {
-      // shortcut: the column may overlap whatever already sits right of that section; ⌃⌥T tidies it.
+      // A column right of the section they came out of; it may overlap what's there.
       let y = beside.y;
       for (const id of ids) {
         const r = state.nodes.get(id)!;
@@ -201,13 +181,7 @@ export function fileAway(roots: string[], chute: Chute): void {
   }
 }
 
-// A section COLLECTS what it covers — the drop rule run from the section's side, FigJam-style. After a section
-// is moved, resized or made, every card whose centre is now in it belongs to it (sectionAt: the
-// innermost section wins, so a card sitting in a smaller section inside it stays there), and every card of
-// its own whose centre is now OUTSIDE it goes to whatever it's over instead (a shrink lets go of what
-// it no longer covers, rather than hiding it under the clip). A SECTION is collected only when its whole
-// box is inside — by its centre alone, a big section could be swallowed by a small one laid across it.
-// Locked and hidden things stay where they are. Returns the ids it reparented. It never resizes a section.
+// See "A section COLLECTS what it covers" in docs/architecture.md. Returns the ids it reparented.
 export function settleSections(sectionIds: Iterable<string>): string[] {
   const moved: string[] = [];
   for (const id of sectionIds) {
@@ -216,7 +190,6 @@ export function settleSections(sectionIds: Iterable<string>): string[] {
       continue;
     }
     const b = containerBox(f);
-    // let go of its own cards that left it…
     for (const k of childrenOf(f.id)) {
       if (isHidden(k) || isLockedEffective(k) || centreInSection(k, f)) {
         continue;
@@ -227,14 +200,15 @@ export function settleSections(sectionIds: Iterable<string>): string[] {
         moved.push(k.id);
       }
     }
-    // …and take in what it now covers.
     for (const n of state.nodes.values()) {
       if (n === f || n.parent === f.id || isHidden(n) || isLockedEffective(n)) {
         continue;
       }
       if (isAncestor(n.id, f.id) || isAncestor(f.id, n.id)) {
-        continue;   // its own sections, or inside it already
+        continue;
       }
+
+      // A section only whole: by its centre, a big one could be swallowed by a small one laid across it.
       if (n.type === 'section' ? !encloses(b, nodeRect(n)) : !centreInSection(n, f)) {
         continue;
       }
@@ -250,9 +224,7 @@ export function settleSections(sectionIds: Iterable<string>): string[] {
   return moved;
 }
 
-// Move one card into a section, or out to the top level (null). Mutates the parent only — no paint or
-// status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or
-// section, and a section into its own contents. Returns whether it moved.
+// The parent only, no paint: the caller settles the canvas once for the whole group.
 export function reparentOnly(childId: string, newParentId: string | null): boolean {
   const child = state.nodes.get(childId);
   const newParent = newParentId ? state.nodes.get(newParentId) : null;
@@ -263,11 +235,11 @@ export function reparentOnly(childId: string, newParentId: string | null): boole
     return false;
   }
   if (newParent && isAncestor(childId, newParent.id)) {
-    return false;   // would create a cycle
+    return false;
   }
   touch(childId, child.parent, newParentId);
   child.parent = newParentId;
-  // The parent is the note's FOLDER, so a reparent moves the file (the save works out where); the offset is the board's.
+  // The parent is the note's FOLDER, so the save moves the file.
   child.dirty = true;
   return true;
 }

@@ -1,6 +1,4 @@
-// File System Access API adapter (Chrome/Edge only): a real local folder, with permission
-// prompts and IndexedDB-persisted handles for silent resume at boot. File ops delegate to
-// the shared handle-store helpers (DRY); only handle acquisition is FSA-specific.
+// File System Access adapter (Chrome/Edge): a real local folder, its handle kept in IndexedDB.
 import { idbGet, idbPut } from '../utils/idb.js';
 import { listTree, removeEmptyDir, writeFile, removeFile, readFileBlob, folderStamp, stampOf } from './handle-store.js';
 import type { FoldTest } from './tree.js';
@@ -13,8 +11,7 @@ import { ensureWrite, hasWrite, reachable } from './permission.js';
 type DirectoryPicker = (opts?: { mode?: string; startIn?: FileSystemHandle }) => Promise<FileSystemDirectoryHandle>;
 const showDirectoryPicker = (window as Window & { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
 
-// The folder picker, opened at `near` if it still resolves (a dead handle can make `startIn` itself throw;
-// then it opens where Chrome likes). A string is the outcome when nothing was picked.
+// A dead handle can make `startIn` itself throw: then the picker opens where Chrome likes.
 async function pickAgain(near: FileSystemDirectoryHandle | undefined): Promise<FileSystemDirectoryHandle | PickResult> {
   const pick = (startIn?: FileSystemHandle): Promise<FileSystemDirectoryHandle> =>
     showDirectoryPicker!({ mode: 'readwrite', ...(startIn ? { startIn } : {}) });
@@ -45,22 +42,16 @@ async function rememberedHandle(key: string): Promise<FileSystemDirectoryHandle 
 }
 
 export const fsaStore = {
-  _dir: null as FileSystemDirectoryHandle | null,   // FSA directory handle
-  _key: null as string | null,                      // the open folder's registry/handle key
-  // The folder as this app last saw it (handle-store folderStamp): taken before each full load, kept up
-  // to date by our own writes, so a refocus can tell whether anything ELSE touched the folder.
+  _dir: null as FileSystemDirectoryHandle | null,
+  _key: null as string | null,                      // registry/handle key
+  // Kept up to date by our own writes, so a refocus can tell whether anything ELSE touched the folder.
   _stamp: null as Map<string, string> | null,
   get isOpen(){ return !!this._dir; },
   get name(){ return this._dir ? this._dir.name : ''; },
-  // The registry key distinguishes two folders with the same display name. It is assigned before
-  // loading, so first-open layout state cannot leak from one "notes" folder into another.
-  // Which map (registry id) the last pick/openRecent/resume landed on — callers use this
-  // as the MapRef id instead of guessing it back out of the registry.
+  // Assigned before loading, so two folders with one name can't share layout state.
   get currentKey(){ return this._key; },
 
-  // Adopt a picked, remembered or DROPPED folder as the live root, once read-write access is confirmed (the
-  // picker's mode:'readwrite' asks, but the grant can sit in 'prompt' until requested — without it every write
-  // silently fails), and remember it for the recents list.
+  // The picker's mode:'readwrite' can still leave the grant at 'prompt', where every write silently fails.
   async adopt(handle: FileSystemDirectoryHandle): Promise<PickResult> {
     const r = await ensureWrite(handle);
     if (r !== 'ok') {
@@ -71,7 +62,6 @@ export const fsaStore = {
     return 'ok';
   },
 
-  // Pick a NEW source (needs a user gesture — the toolbar / start-screen click).
   async pick(): Promise<PickResult> {
     if (!showDirectoryPicker) {
       return 'unsupported';
@@ -82,9 +72,7 @@ export const fsaStore = {
     return this.adopt(handle);
   },
 
-  // Find a remembered folder AGAIN: the picker, opened where the old handle points when Chrome still knows
-  // where that is, and the folder chosen takes the old entry's place. What a dead handle (permission.ts
-  // ensureWrite 'gone') needs — Chrome won't ask about it, but a fresh pick is a fresh grant.
+  // Chrome won't ask about a dead handle, but a fresh pick is a fresh grant.
   async relink(key: string): Promise<PickResult> {
     if (!showDirectoryPicker) {
       return 'unsupported';
@@ -102,7 +90,6 @@ export const fsaStore = {
     return adopted;
   },
 
-  // Reopen a REMEMBERED source by its recents key (the click is the gesture).
   async openRecent(key?: string): Promise<PickResult> {
     const handle = key ? await rememberedHandle(key) : undefined;
     if (!handle) {
@@ -111,7 +98,6 @@ export const fsaStore = {
     return this.adopt(handle);
   },
 
-  // Silent reopen at boot — only succeeds if permission is ALREADY granted (no prompt/gesture).
   async resume(key: string): Promise<boolean> {
     const handle = await rememberedHandle(key);
     if (!handle) {
@@ -124,7 +110,6 @@ export const fsaStore = {
   },
 
   async listTree(under: string, fold: FoldTest){
-    // A full load restamps the folder from the files it reads, so a later change shows at the next focus.
     if (!under) {
       const stamp = new Map<string, string>();
       const tree = await listTree(this._dir!, '', fold, stamp);
@@ -139,7 +124,6 @@ export const fsaStore = {
     this._stamp?.set(path, stampOf(f));
   },
   async remove(path: string){ await removeFile(this._dir!, path); this._stamp?.delete(path); },
-  // Has anything outside this app changed the folder since the last load? Unknown counts as yes.
   async changed(): Promise<boolean> {
     const before = this._stamp, now = await folderStamp(this._dir!);
     this._stamp = now;
@@ -147,17 +131,14 @@ export const fsaStore = {
   },
   readBlob(path: string){ return readFileBlob(this._dir!, path); },
 
-  // Fire cb when the source may have changed underneath us (window-focus / tab-visible).
-  // An Obsidian/Tauri build would register a real file watcher here instead.
   watch(cb: () => void){ installWatch(cb); },
 
-  // ---- recent sources: handles in IndexedDB, folder-kind MapRefs in the unified registry ----
   async _remember(handle: FileSystemDirectoryHandle){
     const key = 'dir:' + handle.name + ':' + Date.now();
-    await idbPut(key, handle);                 // store the actual handle
-    await rememberFolder(key, handle.name, handle); // registry entry (de-dupes by handle identity)
+    await idbPut(key, handle);
+    await rememberFolder(key, handle.name, handle); // de-dupes by handle identity
     this._key = key;
-    notifyRecentsChanged();                    // main re-renders the recents UI
+    notifyRecentsChanged();
   },
 };
-fsaStore satisfies Store;   // compile-time contract check (extra _dir/_remember allowed on a reference)
+fsaStore satisfies Store;

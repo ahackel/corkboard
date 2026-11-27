@@ -1,7 +1,5 @@
-// ---------- image attachments ----------
-// Images are real files in the vault's attachments/ folder; the note just gets ![alt](attachments/…).
-// Added by pasting into the in-card body editor, dropping a file on a card (or the editor), or by
-// typing the markdown. `installAttachments` registers the document-level drag/drop listeners.
+// Images, text and notes pasted or dropped onto the board. An image is a real file in attachments/;
+// the note just gets ![alt](attachments/…).
 import { state, setStatus, isImageCard } from '../core/state.js';
 import { isLockedEffective, nodeAtTarget, takesDrop } from '../utils/model.js';
 import { ui, isTypingInField } from '../core/ui-state.js';
@@ -27,25 +25,26 @@ function imgExt(file: File): string {
   const m = (file.name || '').match(/\.[a-z0-9]+$/i);
   return m ? m[0].toLowerCase() : imageExtFor(file.type);
 }
-// …or by NAME when the drop hands us no MIME type, which some file managers do — an .svg dragged out
-// of Finder/Explorer is the usual one, and it would otherwise be silently ignored.
+
+// By NAME too: some file managers drop an .svg with no MIME type.
 const isImageFile = (f: File): boolean =>
   !!f && (( !!f.type && f.type.startsWith('image/')) || IMAGE_FILE_RE.test(f.name || ''));
-// Pull just the image files out of a FileList / array (paste, drop, drag all hand us a mix).
+
 const imageFiles = (src: FileList | File[] | null | undefined): File[] => [...(src || [])].filter(isImageFile);
 const addedMsg = (n: number): string => `Added ${n} image${n === 1 ? '' : 's'}`;
 const dragHasFiles = (e: DragEvent): boolean => !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
-// Write one image file into attachments/ under a collision-proof name; return its vault path.
+
 async function storeImage(file: File): Promise<string> {
   const name = 'img-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + imgExt(file);
   const path = 'attachments/' + name;
-  await store.write(path, file);          // a Blob writes straight through createWritable
-  state.lastSelfWrite = Date.now();        // our own write — don't let focus-reload react to it
+  await store.write(path, file);
+
+  // Our own write: focus-reload must not react to it.
+  state.lastSelfWrite = Date.now();
   return path;
 }
-// The image's natural pixel size, used to give a fresh image card the same aspect ratio as its
-// image instead of the generic IMAGE_W×IMAGE_H box. Falls back to that default box if decoding fails
-// (e.g. an unsupported format) — the card still gets created, just without a matched aspect ratio.
+
+// The default box when the image can't be decoded.
 async function imageSize(file: File): Promise<{ w: number; h: number }> {
   try {
     const bmp = await createImageBitmap(file);
@@ -55,11 +54,7 @@ async function imageSize(file: File): Promise<{ w: number; h: number }> {
       return { w, h };
     }
   } catch { /* fall through to the <img> decode */ }
-  // SVG: createImageBitmap REFUSES an SVG blob (it decodes raster formats), so without this every
-  // vector image landed as a generic IMAGE_W×IMAGE_H box instead of its own shape. An <img> decodes
-  // one happily, and reports the intrinsic size off its width/height or viewBox — falling back, as
-  // the browser does, to 300×150 for an SVG that declares neither. Also covers any raster format the
-  // bitmap decoder happens not to take.
+  // createImageBitmap refuses an SVG blob; an <img> decodes one and reports its intrinsic size.
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
@@ -71,20 +66,17 @@ async function imageSize(file: File): Promise<{ w: number; h: number }> {
   finally { URL.revokeObjectURL(url); }
   return { w: IMAGE_W, h: IMAGE_H };
 }
-// Fit a natural image size into a card box: keep the image's aspect ratio, capped to IMAGE_W so a
-// huge photo doesn't land as an oversized card (it can still be resized up afterwards).
+
 function imageCardSize(size: { w: number; h: number }): { w: number; h: number } {
   const w = Math.min(IMAGE_W, size.w);
   const h = w * (size.h / size.w);
   return { w: Math.round(w), h: Math.round(h) };
 }
-// Strip the extension (and any path separators, for names that came in as a full path) from a
-// file's name to use as markdown alt text / an image card's title. Shared by markdownForImages
-// and createImageCards so the two paths can't drift.
+
 function altFromFile(f: File): string {
   return (f.name || 'image').replace(/\.[^.]*$/, '').replace(/[/\\]/g, '-').trim() || 'image';
 }
-// Store each image, returning the markdown that references them (one per line).
+
 async function markdownForImages(files: File[]): Promise<string> {
   const out: string[] = [];
   for (const f of files){
@@ -93,12 +85,13 @@ async function markdownForImages(files: File[]): Promise<string> {
   }
   return out.join('\n');
 }
+
 function canAttach(): boolean {
   if (!store.isOpen){ setStatus('Open a folder to add images'); return false; }
   if (state.singleNote){ setStatus('A single note has no folder to keep images in'); return false; }
   return true;
 }
-// Append images to the end of a card's body (used by drops onto a card).
+
 async function appendImagesToNode(id: string, files: FileList | File[]): Promise<void> {
   const imgs = imageFiles(files);
   if (!imgs.length || !canAttach()) {
@@ -119,19 +112,21 @@ async function appendImagesToNode(id: string, files: FileList | File[]): Promise
     syncOpenEditor(n);
   }, { reflow: 'remeasure', status: addedMsg(imgs.length) });
 }
-// Insert images at the caret in the in-card body editor (used by paste / drop onto it).
+
 async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
   const imgs = imageFiles(files);
   if (!imgs.length || !canAttach()) {
     return;
   }
-  if (!ui.bodyEdit){ return; }                          // only meaningful while editing a body in place
+  if (!ui.bodyEdit){ return; }
   const n = state.nodes.get(ui.bodyEdit.id);
   if (!n) {
     return;
   }
   const ta = ui.bodyEdit.ta;
-  touch(n.id);   // inside an open body-edit session — merges into (and commits with) that step
+
+  // Merges into the open body-edit's history step.
+  touch(n.id);
   const md = await markdownForImages(imgs);
   const s = ta.selectionStart, e = ta.selectionEnd, v = ta.value;
   const ins = (s > 0 && v[s-1] !== '\n' ? '\n' : '') + md + '\n';
@@ -139,15 +134,12 @@ async function insertImagesAtCursor(files: FileList | File[]): Promise<void> {
   ta.selectionStart = ta.selectionEnd = s + ins.length;
   autosizeBody(ta);
   n.body = ta.value; n.dirty = true;
-  relayout(); scheduleSave();        // reflow; the editing textarea is preserved
+  relayout(); scheduleSave();
   setStatus(addedMsg(imgs.length));
 }
 
-// Make one IMAGE CARD per file — a resizable leaf that shows nothing but that image (see
-// isImageBox in view/geometry.ts). No title/body UI, no rename prompt; its title exists purely so it has a
-// readable, stable filename on disk (desiredFileFor suffixes a collision) — the name itself is
-// never shown or editable. Shared by a canvas/card drop AND a clipboard paste (⌘V or the context
-// menu's Paste) — both land an image as a card of its own rather than inline body markdown.
+const CASCADE_STEP = 24;
+
 async function createImageCards(imgs: File[], sx: number | null, sy: number | null, parent: string | null): Promise<void> {
   if (!imgs.length || !canAttach()) {
     return;
@@ -159,10 +151,8 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
     const alt = altFromFile(f);
     const { w, h } = imageCardSize(natural);
     createNode({
-      x: p.x - w / 2 + i * 24, y: p.y - h / 2 + i * 24,
-      // UNTITLED, deliberately: a card whose whole note is one image IS that image (core/state.ts
-      // isImageCard), and a title would both draw a row over the picture and end image mode. The alt
-      // still names the FILE — utils/filenames.ts slugStem reads it straight off the markdown.
+      x: p.x - w / 2 + i * CASCADE_STEP, y: p.y - h / 2 + i * CASCADE_STEP,
+      // UNTITLED: a title would end image mode (isImageCard). The alt still names the file (slugStem).
       parent, title: '', body: imageMd(alt, path),
       color: 'none', w, h, edit: false,
     });
@@ -171,20 +161,17 @@ async function createImageCards(imgs: File[], sx: number | null, sy: number | nu
   setStatus(addedMsg(imgs.length));
 }
 
-// Paste an image straight into the in-card body editor (bound per-textarea in startBodyEdit).
+// Bound per-textarea in startBodyEdit.
 export function onBodyPaste(e: ClipboardEvent): void {
   const imgs = imageFiles(e.clipboardData?.files);
   if (imgs.length){ e.preventDefault(); insertImagesAtCursor(imgs); }
 }
 
-// ---------- file-picker fallback (iOS/iPadOS: no OS drag-drop, clipboard image-paste is flaky) ----------
-// A hidden <input type="file"> is the one attach mechanism every mobile browser supports — on iOS it
-// opens the Photos library / Camera / Files share sheet. Routes into the exact same storage/rendering
-// pipeline as paste and drop; the canvas menu's Insert image… (context-menu.ts) triggers it.
+// The one attach mechanism every mobile browser supports (iOS has no OS drag-drop, and image paste is flaky).
 interface PickTarget { sx: number | null; sy: number | null; parent: string | null }
 let pickTarget: PickTarget | null = null;
 const filePicker = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', multiple: true });
-// Drop a new image card at a canvas point.
+
 export function pickImagesAt(sx: number | null, sy: number | null, parent: string | null): void {
   if (!canAttach()) {
     return;
@@ -193,38 +180,32 @@ export function pickImagesAt(sx: number | null, sy: number | null, parent: strin
   filePicker.click();
 }
 
-// ---------- global paste = new card ----------
-// ⌘V outside any text field (or the context menu's Paste) makes a card from the clipboard — text
-// (first non-empty line becomes the title, the rest the body) or image files. It lands at the
-// given screen point (⌘V: the mouse position, viewport centre before the mouse ever moved); with
-// a parent section it goes inside it. Created as-is — no rename editor opens.
 function cardOptsAt(sx: number | null, sy: number | null, parent: string | null):
     { x?: number; y?: number; parent: string | null; edit: false } {
   const pn = parent ? state.nodes.get(parent) : undefined;
-  if (pn?.collapsed){ touch(pn.id); pn.collapsed = false; }   // reveal so the new card is visible
+  if (pn?.collapsed){ touch(pn.id); pn.collapsed = false; }
   const p = sx != null && sy != null ? screenToWorld(sx, sy) : null;
   return { ...(p ? centredAt(p) : {}), parent, edit: false };
 }
-// Does this URL load as an image? <img> load/error fires cross-origin without CORS headers.
+
+// <img> load/error fires cross-origin without CORS headers. A hanging host stays a link.
+const PROBE_TIMEOUT_MS = 8000;
+
 function probeImage(url: string): Promise<boolean> {
   return new Promise(res => {
     const im = new Image();
     const done = (ok: boolean) => { clearTimeout(t); res(ok); };
-    const t = setTimeout(() => done(false), 8000);   // offline/hanging host → stay a link
+    const t = setTimeout(() => done(false), PROBE_TIMEOUT_MS);
     im.onload = () => done(true);
     im.onerror = () => done(false);
     im.src = url;
   });
 }
-// Make the card from whatever the clipboard held. Titles are filenames: no slashes, kept short, unique.
-// `sx`/`sy` are the raw screen point (same one `opts` was built from) — images want it centred on
-// an image-card-sized box, not the text-card offset baked into `opts.x`/`opts.y`.
+
+// `sx`/`sy` are the raw screen point: images centre on their own box, not `opts`' text-card offset.
 function createCardFromClipboard(imgs: File[], text: string, sx: number | null, sy: number | null, opts: ReturnType<typeof cardOptsAt>): void {
   if (imgs.length){ void createImageCards(imgs, sx, sy, opts.parent); return; }
-  // A lone URL isn't a name — it goes into the BODY (image URLs as an inline image, others as a
-  // link, both handled by the markdown renderer) and the card gets a standard fresh-card title.
-  // Many image URLs carry no file extension (CDNs), so those are pasted as a link first and
-  // probed in the background: if the URL actually loads as an image, the link upgrades to ![](…).
+  // Many image URLs (CDNs) have no extension: pasted as a link, then upgraded if it loads as an image.
   if (/^https?:\/\/\S+$/i.test(text)){
     const isImg = IMAGE_URL_RE.test(text);
     const n = createNode({ ...opts, body: isImg ? `![](${text})` : text });
@@ -235,7 +216,7 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
       void probeImage(text).then(ok => {
       const cur = state.nodes.get(n.id);
       if (!ok || !cur || cur.body !== text) {
-        return;   // gone or edited meanwhile → leave it alone
+        return;
       }
       mutate([cur.id], () => { cur.body = `![](${text})`; cur.dirty = true; },
         { reflow: 'relayout', status: 'Pasted image link' });
@@ -243,22 +224,18 @@ function createCardFromClipboard(imgs: File[], text: string, sx: number | null, 
     }
     return;
   }
-  // A LIST — bullets, numbers, or bare short lines — is many thoughts: one card per item, in a column
-  // whose top-left sits where a single card would have (utils/paste-list.ts says what counts).
+  // A list is one card per item, in a column whose top-left sits where a single card would have.
   const items = splitPastedList(text);
   if (items){
     const at = opts.x != null && opts.y != null ? { x: opts.x, y: opts.y } : centredAt(worldAtOrCentre());
     createCards(items, at, opts.parent);
     return;
   }
-  // Pasted text is a card's text, so it splits the way a card's own does (splitHeading): a leading
-  // `# ` line becomes the title, and without one the card is untitled and this is all body. It used to
-  // hand-roll its own first-line-as-title read here, complete with a second copy of the marker strip.
   const { title, body } = splitHeading(text);
   createNode({ ...opts, title, body });
 }
-// Context-menu Paste: no ClipboardEvent to read from, so ask the async clipboard API (may prompt
-// for permission; Safari requires it be called directly in the user gesture — a menu click is one).
+
+// Context-menu Paste. Safari allows the async clipboard API only directly in a user gesture.
 export async function pasteFromClipboard(sx: number, sy: number, parent: string | null): Promise<void> {
   const imgs: File[] = []; let text = '';
   try {
@@ -272,25 +249,21 @@ export async function pasteFromClipboard(sx: number, sy: number, parent: string 
       }
     }
   } catch {
-    try { text = await navigator.clipboard.readText(); }        // read() unsupported → text-only fallback
+    try { text = await navigator.clipboard.readText(); }
     catch { setStatus('Clipboard not available'); return; }
   }
   text = text.trim();
   if (!imgs.length && !text){ setStatus('Clipboard is empty'); return; }
   if (text && tryPasteCards(text, { sx, sy, parent })) {
-    return;   // copied cards reconstruct as cards
+    return;
   }
   createCardFromClipboard(imgs, text, sx, sy, cardOptsAt(sx, sy, parent));
 }
 
-// Drag an image file from the OS onto a card (or the body editor). We handle this at the document
-// level so we can both highlight the target and stop the browser from navigating to the dropped file.
+// At the document level, so the browser never navigates to a dropped file.
 const setImgDropTarget = classMarker('img-drop');
 
-// ---------- text and links dragged in from OTHER apps ----------
-// A selection from a web page, Mail or Notes, or a link off a page, dropped on the board becomes a card the
-// way pasting it would (a list becomes one card per item), in the section under the pointer. A drag that
-// began in THIS page — a card's text, a card ⌥-dragged out — is someone else's (text-drag.ts, clipboard.ts).
+// Text dropped from OTHER apps pastes as cards; a drag begun in this page is text-drag.ts's or clipboard.ts's.
 let ownDrag = false;
 
 function isTextDrop(e: DragEvent): boolean {
@@ -304,7 +277,9 @@ export function installAttachments(): void {
   document.body.appendChild(filePicker);
   filePicker.addEventListener('change', () => {
     const files = imageFiles(filePicker.files);
-    filePicker.value = '';                              // allow re-picking the same file next time
+
+    // So the same file can be picked again.
+    filePicker.value = '';
     const req = pickTarget; pickTarget = null;
     if (!req || !files.length) {
       return;
@@ -313,7 +288,7 @@ export function installAttachments(): void {
   });
   document.addEventListener('paste', (e) => {
     if (isTypingInField()) {
-      return;                 // field/editor pastes keep their native behaviour
+      return;
     }
     const cd = e.clipboardData;
     if (!cd) {
@@ -326,8 +301,7 @@ export function installAttachments(): void {
     }
     e.preventDefault();
 
-    // copied CARDS (our own marker format) reconstruct as cards; anything else becomes a new card. Either
-    // way it lands where the pointer is — in the section under it, like a drop (view/layout.ts sectionAt).
+    // Lands in the section under the pointer, like a drop.
     const mx = ui.lastMouse?.x ?? null, my = ui.lastMouse?.y ?? null;
     const w = mx != null && my != null ? screenToWorld(mx, my) : null;
     const into = w ? sectionAt(w.x, w.y, new Set())?.id ?? null : null;
@@ -342,11 +316,10 @@ export function installAttachments(): void {
     }
     e.preventDefault();
 
-    // a single note takes nothing dropped into it (core/state.ts singleNoteRefuses)
     if (state.singleNote){ setImgDropTarget(null); return; }
     const t = e.target as HTMLElement;
     const cardNode = nodeAtTarget(t);
-    if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }   // locked: no drop hint
+    if (cardNode && isLockedEffective(cardNode)) { setImgDropTarget(null); return; }
     setImgDropTarget(t.closest?.('.body-edit') || cardNode?.el || null);
   });
   document.addEventListener('dragleave', (e) => {
@@ -365,16 +338,12 @@ export function installAttachments(): void {
     const cardEl   = cardNode?.el ?? null;
     const cardId   = cardNode?.id ?? null;
 
-    // an image card is a card that IS its picture (core/state.ts isImageCard): dropping notes or a
-    // second image ONTO it would end that — so those land beside it, on the canvas, instead
+    // Dropping onto an image card would end image mode, so drops land beside it instead.
     const cardIsImage = !!cardNode && isImageCard(cardNode);
     const cardIsSection = !!cardNode && isSection(cardNode);
     const cardIsLocked = !!cardNode && isLockedEffective(cardNode);
     setImgDropTarget(null);
 
-    // dropped .md notes reconstruct as cards (parent links WITHIN the dropped set are kept);
-    // dropped on a section (or a card in one) they go in that section, on the canvas at the drop point — never
-    // into a locked one (createNode itself also refuses a locked parent, this just skips the attempt).
     const mds = [...e.dataTransfer!.files].filter(f => /\.md$/i.test(f.name));
     if (mds.length){
       const cards = await Promise.all(mds.map(async f => ({ name: f.name, text: await f.text() })));
@@ -386,18 +355,14 @@ export function installAttachments(): void {
     }
     if (onEditor && ui.bodyEdit) {
       await insertImagesAtCursor(imgs);
-    }   // drop on the open editor → at the caret
-
-    // a section is a container, not a text card — its body never renders, so dropped images become
-    // new image-card CHILDREN of the section instead of (invisibly) appending to its hidden body
-    else if (cardEl && cardIsSection && !cardIsLocked) {
+    } else if (cardEl && cardIsSection && !cardIsLocked) {
       selectNode(cardId);
       await createImageCards(imgs, e.clientX, e.clientY, cardId);
     } else if (cardEl && takesDrop(cardNode)) {
       selectNode(cardId);
       await appendImagesToNode(cardId!, imgs);
     } else if (!cardEl || !cardIsLocked) {
-      await createImageCards(imgs, e.clientX, e.clientY, null);   // empty canvas (or onto an image card) → new card(s) at the drop point
+      await createImageCards(imgs, e.clientX, e.clientY, null);
     }
   });
   document.addEventListener('dragstart', () => { ownDrag = true; });

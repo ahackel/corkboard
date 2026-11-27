@@ -1,6 +1,4 @@
-// ---------- view camera: pan / zoom / fit / frame ----------
-// Pure camera math over state.view (the {x,y,k} pan+zoom). No painting — callers repaint
-// if needed. nodeW/nodeH come from main.js (render) for measuring; isHidden from model.
+// Pan, zoom, fit and frame over state.view. No painting: callers repaint if needed.
 import { state, world, stage, type MindNode } from '../core/state.js';
 import { isHidden } from '../utils/model.js';
 import { NARROW_MQ } from '../core/ui-state.js';
@@ -10,24 +8,12 @@ import { clamp } from '../utils/num.js';
 import { nodeW, nodeH } from './geometry.js';
 import { MOTION } from '../utils/motion.js';
 
-// Zoomed out past this, the map is an OVERVIEW: the small chrome hanging off each card — the fold
-// chip, the lock badge, the tags on its top edge — is a handful of unreadable pixels
-// there, and there are as many of them as there are cards. So `body.zoom-far` drops the lot
-// (styles.css), which also takes their layout and paint work out of every frame of a pinch/pan at the
-// zoom level where the most cards are on screen at once. Purely a CSS switch: nothing about a node's
-// own geometry depends on it, so crossing the line needs no repaint of the canvas.
+// Below this `body.zoom-far` drops each card's small chrome (CSS only: crossing it needs no repaint).
 const FAR_ZOOM = 0.5;
+const MIN_ZOOM = 0.2, MAX_ZOOM = 2.5;
 
-// #world carries `will-change:transform` (styles.css) so a pan/pinch is a compositor-only move and
-// never repaints the cards. The cost is that Chrome then PINS that layer's raster scale: it keeps
-// re-using the texture it already rasterized and simply magnifies it, so zooming in leaves every
-// card soft and pixellated at exactly the moment you wanted more detail. (Intermittently — Chrome
-// re-rasters on its own often enough that the blur comes and goes, which is what makes it look like
-// a fluke.) So once the zoom SETTLES we hand the hint back for two frames: dropping it forces the
-// layer to be re-painted at the scale we actually landed on, and restoring it puts the fast path
-// back for the next gesture. Only the SCALE needs this — a pan doesn't change the raster scale, so
-// panning never gives the hint up and pays nothing. The two rAFs are load-bearing: set and unset
-// within one frame and the style change coalesces to a no-op, and no re-raster happens.
+// Chrome pins a `will-change:transform` layer's raster scale, so zooming in leaves cards blurry. Once
+// the zoom settles, drop the hint for two frames to force a re-raster (within one frame it coalesces away).
 const RASTER_SETTLE = 180;
 let rasterK = -1, rasterTimer: number | null = null;
 function refreshRaster(): void {
@@ -45,23 +31,10 @@ function refreshRaster(): void {
   }, RASTER_SETTLE);
 }
 
-// Snap the pan to whole DEVICE pixels. `state.view.x/y` are floats — a fit, a glide and a zoom anchor all
-// produce fractions — and a fractional translate lands every glyph in the world off the pixel grid. On a
-// 2x screen half a CSS pixel IS a whole device pixel, so it costs nothing and nobody notices; on a 1x
-// screen it smears each glyph across a pixel boundary and throws away the subpixel (LCD) rendering that
-// makes small text look sharp there. That is what "the text looks pixellated on a non-retina screen" is,
-// and it is NOT anti-aliasing being off: `-webkit-font-smoothing:antialiased` would make it worse, since
-// it replaces subpixel AA with the grayscale kind — thinner and softer at 1x, which is the opposite of
-// what's wanted.
-// The TRANSFORM is snapped, never `state.view` itself: the model stays exact, so a zoom anchor can't
-// drift and screenToWorld keeps its arithmetic — and a disagreement of under half a device pixel between
-// hit-testing and paint is invisible by definition. The SCALE is never snapped (that would quantise zoom).
+// A fractional pan blurs text on a 1x screen. Only the transform is snapped; state.view stays exact.
 const snapPx = (v: number): number => { const d = window.devicePixelRatio || 1; return Math.round(v * d) / d; };
-// Zoomed out, a section's NAME keeps its screen size: below 100% its label is scaled up by 1/k (FigJam's
-// section titles do the same), so an overview of a month of sections still reads as a list of names. The
-// factor goes on each section's own element as `--ls` (styles.css scales its .title-row by it) rather than
-// on #world: a custom property set on the world would restyle every card under it on every zoom frame,
-// and there are far fewer sections than cards. paintNode stamps it on a section painted later.
+// Zoomed out, a section's name keeps its screen size. Set per section, not on #world: a custom property
+// there would restyle every card on every zoom frame.
 export const labelScale = (): number => Math.max(1, 1 / state.view.k);
 let paintedLs = 1;
 function applyLabelScale(): void {
@@ -76,7 +49,6 @@ function applyLabelScale(): void {
     }
   }
 }
-// Told after every change of view; the URL keeps the camera in it (nav/url-state.ts, wired in main.ts).
 let viewApplied: () => void = () => {};
 
 export function onViewApplied(listener: () => void): void {
@@ -91,12 +63,10 @@ export function applyView(): void {
   paintGrid();
   viewApplied();
 }
-// Smoothly glide the view to (tx,ty) instead of snapping. Any direct pan/zoom cancels it
-// (cancelViewAnim) so the animation never fights the user's own input.
+// Any direct pan/zoom cancels a glide, so it never fights the user's input.
 let viewAnim: number | null = null;
 export function cancelViewAnim(): void { if (viewAnim){ cancelAnimationFrame(viewAnim); viewAnim = null; } }
 const GLIDE_MS = 420;
-// The same move with no glide — stepping into or out of a section is a cut, not a pan.
 export function jumpViewTo(tx: number, ty: number, tk: number = state.view.k): void {
   cancelViewAnim();
   state.view.x = tx; state.view.y = ty; state.view.k = tk;
@@ -119,8 +89,7 @@ export function animateViewTo(tx: number, ty: number, tk: number = state.view.k)
     const p = Math.min(1, (now - t0)/GLIDE_MS), e = ease(p);
     state.view.x = sx + (tx-sx)*e;
     state.view.y = sy + (ty-sy)*e;
-    // zoom is perceptually multiplicative, so interpolate k geometrically — with the eased
-    // parameter this gives a smooth ease-in/ease-out zoom rather than a linear ramp.
+    // Zoom is perceptually multiplicative: interpolate k geometrically.
     state.view.k = sk * Math.pow(tk/sk, e);
     applyView();
     viewAnim = p < 1 ? requestAnimationFrame(step) : null;
@@ -133,33 +102,28 @@ export function screenToWorld(sx: number, sy: number): { x: number; y: number } 
   return { x:(sx - r.left - state.view.x)/state.view.k, y:(sy - r.top - state.view.y)/state.view.k };
 }
 
-// The world point under screen (sx, sy) — or under the middle of the screen when there is no point.
 export function worldAtOrCentre(sx?: number | null, sy?: number | null): { x: number; y: number } {
   return sx != null && sy != null ? screenToWorld(sx, sy) : screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
 }
 
-// zoom toward a screen point (mx,my are relative to the stage) by a multiplier
+// (mx,my) relative to the stage.
 export function zoomAt(mx: number, my: number, factor: number): void {
   cancelViewAnim();
   const k0 = state.view.k;
-  const k1 = clamp(k0 * factor, 0.2, 2.5);
+  const k1 = clamp(k0 * factor, MIN_ZOOM, MAX_ZOOM);
   state.view.x = mx - (mx - state.view.x) * (k1 / k0);
   state.view.y = my - (my - state.view.y) * (k1 / k0);
   state.view.k = k1;
   applyView();
 }
 
-// Stage dimensions for camera math. The stage is position:fixed inset:0, so the window size is
-// exactly what its rect would be — and is right even before the stage has laid out.
+// The stage is fixed inset:0, so the window size stands in before it has laid out.
 export function stageSize(): { width: number; height: number } {
   const r = stage.getBoundingClientRect();
   return { width: r.width || window.innerWidth, height: r.height || window.innerHeight };
 }
 
-// A lone card TALLER than the screen would be framed whole at a zoom nobody can read (a 120-line note
-// came out at 7%). It is framed by its WIDTH instead, its TOP at the top of the screen — a document is read
-// from its start, and the wheel scrolls on down. Only for one card: framing a group still shows all of it.
-// Returns the view, or null when the box fits at a readable zoom anyway.
+// A lone card too tall to read whole is framed by its width, top first. Null when it fits readably.
 function frameTop(box: { x: number; y: number; w: number; h: number }, availW: number, availH: number,
                   pad: number, maxK: number): { x: number; y: number; k: number } | null {
   const kW = (availW - 2 * pad) / box.w, kH = (availH - 2 * pad) / box.h;
@@ -170,13 +134,15 @@ function frameTop(box: { x: number; y: number; w: number; h: number }, availW: n
   return { x: availW / 2 - (box.x + box.w / 2) * k, y: pad - box.y * k, k };
 }
 
+const FIT_PAD = 60, FIT_MAX_K = 1.4;
+
 export function fit(): void {
   const ns = [...state.nodes.values()].filter(n => !isHidden(n));
   if (!ns.length) {
     return;
   }
   const one = ns.length === 1 ? ns[0] : null;
-  const top = one && frameTop({ x: one.x, y: one.y, w: nodeW(one), h: nodeH(one) }, stageSize().width, stageSize().height, 60, 1.4);
+  const top = one && frameTop({ x: one.x, y: one.y, w: nodeW(one), h: nodeH(one) }, stageSize().width, stageSize().height, FIT_PAD, FIT_MAX_K);
   if (top) {
     state.view.x = top.x; state.view.y = top.y; state.view.k = top.k;
     applyView();
@@ -188,25 +154,19 @@ export function fit(): void {
     maxX = Math.max(maxX, n.x + nodeW(n)); maxY = Math.max(maxY, n.y + nodeH(n));
   }
   const r = stageSize();
-  const k = Math.min(1.4, Math.min(r.width/(maxX-minX+120), r.height/(maxY-minY+120)));
+  const k = Math.min(FIT_MAX_K, Math.min(r.width/(maxX-minX+2*FIT_PAD), r.height/(maxY-minY+2*FIT_PAD)));
   state.view.k = k;
   state.view.x = (r.width - (maxX-minX)*k)/2 - minX*k;
   state.view.y = (r.height - (maxY-minY)*k)/2 - minY*k;
   applyView();
 }
 
-// How much of the stage's HEIGHT the floating edit bar takes away. On a wide screen it floats
-// directly over the selected card and reserves nothing (so no width term is ever needed); on a
-// narrow one styles.css docks it along the bottom edge (same 700px breakpoint NARROW_MQ mirrors)
-// and it eats height. Every camera move that has to land a node in the VISIBLE canvas subtracts
-// this — frameBox — so it lands nodes above the docked bar.
+// The height the float bar takes when docked along the bottom on a narrow screen.
 export function bottomInset(): number {
   const fb = byId('floatBar');
   return (fb.classList.contains('open') && NARROW_MQ.matches) ? fb.offsetHeight : 0;
 }
 
-// Zoom + glide so a set of nodes fits, honouring the space the editor sidebar takes from the
-// right. Zoom is clamped so we never blow things up huge. Shared by focus-selected and fit-all.
 const FOCUS_MIN_K = 0.2, FOCUS_MAX_K = 1.0, FOCUS_PAD = 80;
 export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, instant = false): void {
   const group = nodes.filter((n): n is MindNode => !!n && !isHidden(n));
@@ -219,7 +179,7 @@ export function frameBox(nodes: ReadonlyArray<MindNode | undefined>, instant = f
     maxX = Math.max(maxX, n.x + nodeW(n));   maxY = Math.max(maxY, n.y + nodeH(n));
   }
   const bw = maxX - minX, bh = maxY - minY, cx = (minX+maxX)/2, cy = (minY+maxY)/2;
-  const r = stageSize();   // available canvas = stage minus the docked edit bar (bottomInset)
+  const r = stageSize();
   const availW = r.width;
   const availH = r.height - bottomInset();
   const top = group.length === 1 ? frameTop({ x: minX, y: minY, w: bw, h: bh }, availW, availH, FOCUS_PAD, FOCUS_MAX_K) : null;

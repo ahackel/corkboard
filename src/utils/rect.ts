@@ -1,5 +1,4 @@
-// Plain rectangle arithmetic: which box holds a point, which box lies inside another. Pure, and pinned by
-// tests/rect.test.ts.
+// Plain rectangle arithmetic.
 export interface Rect { x: number; y: number; w: number; h: number }
 
 export interface Pt { x: number; y: number }
@@ -21,7 +20,7 @@ export function inflate(r: Rect, by: number): Rect {
   return { x: r.x - by, y: r.y - by, w: r.w + by * 2, h: r.h + by * 2 };
 }
 
-// The box round all of them (infinite extents when there are none).
+// Infinite extents when there are none.
 export function unionRect(rects: Iterable<Rect>): Rect {
   let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
   for (const q of rects) {
@@ -31,8 +30,7 @@ export function unionRect(rects: Iterable<Rect>): Rect {
   return { x: l, y: t, w: r - l, h: b - t };
 }
 
-// The DEEPEST of the items whose box holds `p` — nested sections overlap, and the innermost wins; on a tie,
-// the first. `boxOf` returns null for an item that can't be hit at all.
+// The DEEPEST (nested sections overlap; innermost wins), the first on a tie. `boxOf` null = unhittable.
 export function deepestAt<T>(items: Iterable<T>, p: Pt, boxOf: (t: T) => Rect | null, depthOf: (t: T) => number): T | null {
   let best: T | null = null, bestDepth = -1;
   for (const t of items) {

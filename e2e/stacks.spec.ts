@@ -1,6 +1,4 @@
-// STACKS — a section drawn as a pile (features/stacks.ts): hold a dragged card over another to make one, drop
-// on a pile to add to it, drag the pile's body to lift its top card off, drag its pin to move it whole, click
-// it to fan it out. Down to one card, it's no stack any more.
+// A stack is a section drawn as a pile (features/stacks.ts).
 import { test, expect, type Page, type Locator } from '@playwright/test';
 import { openBoard, seedBoard, note, card, makeCard, watchErrors, diskFiles, palette, select, centre, dragTo, settled } from './helpers';
 

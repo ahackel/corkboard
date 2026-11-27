@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
 
-// Injected at build time by the `define` block in vite.config.js:
-// "major.minor" from package.json + git commit count as the patch number.
+// From vite.config.js `define`: package.json's major.minor, git commit count as the patch.
 declare const __APP_VERSION__: string;

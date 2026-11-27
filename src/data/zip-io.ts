@@ -1,4 +1,4 @@
-// ---- import / export as .zip (move a map between devices / back it up) ----
+// Import and export of a map as a .zip.
 import { IMAGE_ACCEPT, IMAGE_FILE_RE } from '../utils/image-types.js';
 import { unzip, zipBlob, entryPath } from '../utils/zip.js';
 import { setStatus, state } from '../core/state.js';
@@ -50,30 +50,25 @@ async function importFiles(files: File[]): Promise<void> {
       entries.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
     }
   }
-  // What Finder's Compress adds (`__MACOSX/._Note.md`) and other hidden files are not notes — and a
-  // stray one would stop the common top folder below from being found.
+  // Finder's `__MACOSX/._Note.md` and other hidden files would also hide the common top folder below.
   const junk = (name: string): boolean => name.split('/').some(p => p.startsWith('.') || p === '__MACOSX');
   entries = entries.filter(e => !junk(e.name))
     .flatMap(e => { const name = entryPath(e.name); return name ? [{ ...e, name }] : []; });
   let md  = entries.filter(e => /\.(md|markdown)$/i.test(e.name) && !e.name.endsWith('/'));
   let img = entries.filter(e => e.bytes && IMAGE_FILE_RE.test(e.name) && !e.name.endsWith('/'));
   if (!md.length){ setStatus('No Markdown files found to import.'); return; }
-  // An import always ADDS a new on-device map, never merges into the current one — named
-  // after the .zip when there is one.
+  // Always a new on-device map, never merged into the current one.
   const zipBase = files.find(f => /\.zip$/i.test(f.name))?.name.replace(/\.zip$/i, '').trim();
   const ref = await createDeviceMap(await resolveOnDeviceStore(), zipBase || 'Imported map');
   await switchToDeviceMap(ref);
-  // strip a single common top-level folder (e.g. a zip of "MyNotes/…") from notes AND attachments,
-  // so the relative ![](attachments/…) links still resolve after import — unless that folder is a
-  // SECTION of a zip this app wrote (its board.json at the root says so): then it is part of the map.
+  // Strip a common top folder so relative image links resolve, unless a root board.json says it's a section.
   const slash = md[0].name.indexOf('/');
   const top = slash >= 0 ? md[0].name.slice(0, slash + 1) : '';
   if (top && md.every(e => e.name.startsWith(top)) && !entries.some(e => e.name === BOARD_FILE)){
     md  = md.map(e => ({ ...e, name: e.name.slice(top.length) }));
     img = img.map(e => e.name.startsWith(top) ? { ...e, name: e.name.slice(top.length) } : e);
   }
-  // The store already points at the new map, so the canvas MUST follow it whatever happens below: an
-  // entry the store refuses is skipped and counted, and the map is read in either way.
+  // The store already points at the new map, so the canvas must follow it whatever fails below.
   let skipped = 0;
   const put = async (name: string, data: string | Blob): Promise<void> => {
     try {
@@ -89,7 +84,6 @@ async function importFiles(files: File[]): Promise<void> {
   for (const e of img) {
     await put(e.name, new Blob([e.bytes! as BlobPart]));
   }
-  // carry over the board file if the archive included one (matching the note top-folder strip)
   const board = entries.find(e => e.text != null && (e.name === BOARD_FILE || e.name === top + BOARD_FILE));
   if (board?.text != null) {
     await put(BOARD_FILE, board.text);
@@ -100,18 +94,14 @@ async function importFiles(files: File[]): Promise<void> {
     + (skipped ? ` — ${skipped} file${skipped === 1 ? '' : 's'} could not be written.` : '.'));
 }
 
-// download every current note (plus the image attachments they reference) packed into a .zip
 export async function exportZip(): Promise<void> {
-  await readAll();   // the zip is the WHOLE map, folded sections' notes included
+  await readAll();   // folded sections' notes included
   const nodes = [...state.nodes.values()];
   if (!nodes.length){ setStatus('Nothing to export yet.'); return; }
-  commitRel();   // serializeMd persists rx/ry — refresh it from the live x/y first
-  // Lowercased, because the folder this unpacks into collides case-insensitively on macOS/Windows —
-  // same reason desiredFileFor tests that way.
+  commitRel();
+  // Lowercased: the folder this unpacks into may collide case-insensitively.
   const used = new Set<string>();
   const files: Array<{ name: string; data?: string; bytes?: Uint8Array }> = nodes.map(n => {
-    // A node that has never been saved has no file yet; name it the way desiredFileFor would, off
-    // its title or (untitled) off its first line — hence the shared slugStem.
     let name = n.file || (slugStem(n) + '.md');
     while (used.has(name.toLowerCase())) {
       name = name.replace(/(\.md)?$/, '') + '-1.md';
@@ -119,9 +109,7 @@ export async function exportZip(): Promise<void> {
     used.add(name.toLowerCase());
     return { name, data: serializeMd(n) };
   });
-  // collect every vault-relative image referenced in a body, and pack the files alongside the notes
-  // (by where each was FOUND — beside its note, or by name, as Obsidian writes them — so the zip holds the
-  // file the note shows, at the path it lives at)
+  // Packed at the path each picture was FOUND at, so the zip holds the file the note shows.
   const refs = new Map<string, { src: string; file: string | null | undefined }>();
   for (const n of nodes) {
     for (const { src } of bodyImages(n.body)) {
@@ -130,7 +118,6 @@ export async function exportZip(): Promise<void> {
       }
     }
   }
-  // read every referenced image concurrently, then pack the ones that resolved
   const found = await Promise.all([...refs.values()].map(r => readImage(r.src, r.file)));
   const packed = new Set<string>();
   for (const img of found) {
@@ -140,10 +127,8 @@ export async function exportZip(): Promise<void> {
     }
   }
   const attached = packed.size;
-  // Always: the board file now carries every node's position and size, so a zip without it would
-  // unpack as a pile of notes with no layout.
   files.push({ name: BOARD_FILE, data: boardJSON() });
-  const zipName = safeName(store.name || 'corkboard') + '.zip';   // the map's name, not a generic one
+  const zipName = safeName(store.name || 'corkboard') + '.zip';
   downloadBlob(zipBlob(files), zipName);
   setStatus(`Exported ${nodes.length} notes${attached ? ` + ${attached} image${attached === 1 ? '' : 's'}` : ''} → ${zipName}`);
 }
