@@ -27,9 +27,6 @@ import { contains, inflate } from '../utils/rect.js';
 // How long a dragged card rests on another before letting go makes the two a stack.
 export const PILE_HOVER_MS = 400;
 
-// What an uncoloured stack's pin wears.
-export const STACK_DEFAULT_COLOR = 'bold-red';
-
 const PILE_SHOWN = 3;
 
 // ---------- the pile ----------

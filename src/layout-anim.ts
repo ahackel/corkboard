@@ -6,8 +6,8 @@ import { applyLayouts, sectionInterior } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import { isScopeRoot } from './nav/scope.js';
 import { ui, type Pt } from './core/ui-state.js';
-import { syncSelFrame } from './features/sel-frame.js';
 import { paintAll, placeSelf, settledHost } from './render.js';
+import { renderHooks } from './render-hooks.js';
 
 // Newly revealed cards emanate from the nearest ancestor already on screen.
 function ancestorStart(node: MindNode, before: Map<string, Pt>): Pt {
@@ -194,7 +194,7 @@ export function animateReflow(before: Map<string, Pt>): void {
     }
     document.body.classList.remove('layout-anim');
     paintFreeEdges();
-    syncSelFrame();
+    renderHooks.syncSelFrame();
   }, DUR + 60);
 }
 

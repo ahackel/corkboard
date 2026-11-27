@@ -1,33 +1,19 @@
 // The render core: painting nodes, where their elements sit, and settling the canvas after a change.
-import { renderBodyHTML, taskProgress, toggleTaskAt } from './utils/markdown.js';
+import { renderBodyHTML, taskProgress } from './utils/markdown.js';
 import { joinHeading, collapsedMarkdown, cardMarkdown, hiddenLineCount } from './utils/frontmatter.js';
-import { isHidden, nodeLabel, isLockedEffective, parentOf, ancestors, heldSummary, withKids } from './utils/model.js';
+import { isHidden, nodeLabel, parentOf, ancestors, withKids } from './utils/model.js';
 import { state, world, dragLayer, isStack, type MindNode } from './core/state.js';
 import { LOCK_BADGE_SVG, FOLDER_SVG } from './view/icons.js';
 import { labelScale } from './view/camera.js';
 import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionName } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
-import { endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
-import { bindNodeDrag } from './features/node-press.js';
-import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
-import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
-import { bindCardFileDrag } from './features/clipboard.js';
-import { bindCardTags, tagChipHTML } from './features/tags.js';
-import { refreshTray } from './features/tag-tray.js';
 import { noteTags, wearsTags } from './utils/tags.js';
-import { mutate } from './features/mutate.js';
-import { hydrateImages } from './features/images.js';
 import { readOpenUnread } from './data/lazy.js';
 import { store } from './data/active-store.js';
-import { peekCard } from './features/peek.js';
 import { ui, inPlaceEditActive, type Pt } from './core/ui-state.js';
-import { applyColorVars, colorClass } from './view/color.js';
+import { applyColorVars, colorClass, STACK_DEFAULT_COLOR } from './view/color.js';
 import { canFold, isSectionFold, imageLook, heightIsDeclared, isBoxNode, nodeW, nodeH, isImageFold, NODE_W } from './view/geometry.js';
-import { ensureResizeHandles, clearResizeHandles } from './features/resize.js';
-import { syncSelFrame } from './features/sel-frame.js';
-import { syncScopeChrome } from './nav/sections.js';
-import { focusByTitle } from './nav/focus.js';
-import { onNodeDblClick, openImageAt } from './features/activate.js';
+import { renderHooks } from './render-hooks.js';
 
 function nodeEl(n: MindNode): HTMLElement {
   if (n.el) {
@@ -41,57 +27,7 @@ function nodeEl(n: MindNode): HTMLElement {
     <span class="lock-badge" title="Locked">${LOCK_BADGE_SVG}</span><span class="fold-icon">${FOLDER_SVG}</span>`;
   world.appendChild(el);
   n.el = el;
-  // Built on hover, not per paint: heldSummary walks the folder.
-  el.addEventListener('pointerenter', () => {
-    if (isSectionFold(n)) {
-      el.title = (sectionLabelled(n) ? sectionName(n) + '\n' : '') + heldSummary(n);
-    }
-  });
-  bindNodeDrag(n);
-  bindCardFileDrag(n);
-  // Tapping the "+4" badge peeks: touch has no hover.
-  const foldMore = el.querySelector(':scope > .fold-more')!;
-  foldMore.addEventListener('pointerdown', (e)=>{ e.stopPropagation(); });
-  foldMore.addEventListener('click', (e)=>{ e.stopPropagation(); peekCard(el); });
-  const bodyEl = el.querySelector('.body')!;
-  // Clicks on links/tags/zoom must not bubble to the card and select it.
-  bodyEl.addEventListener('click', (e)=>{
-    const zoom = (e.target as HTMLElement).closest('.img-zoom') as HTMLElement | null;
-    if (zoom){
-      e.stopPropagation();
-      const img = zoom.closest('.img-wrap')?.querySelector('img.md-img') as HTMLImageElement | null;
-      openImageAt(n, img);
-      return;
-    }
-    const tag = (e.target as HTMLElement).closest('.md-tag') as HTMLElement | null;
-    if (tag){ e.stopPropagation(); toggleSearchTag(tag.dataset.tag!); return; }
-    const a = (e.target as HTMLElement).closest('a.lk') as HTMLElement | null;
-    if (!a) {
-      return;
-    }
-    e.stopPropagation();
-    if (a.classList.contains('wikilink')){
-      e.preventDefault();
-      focusByTitle(a.dataset.target ?? '', n);
-    }
-  });
-  bodyEl.addEventListener('change', (e)=>{
-    const cb = (e.target as HTMLElement).closest('input.taskbox') as HTMLInputElement | null;
-    if (!cb) {
-      return;
-    }
-    e.stopPropagation();
-    toggleTask(n, +(cb.dataset.ti ?? 0));
-  });
-  const titleEl = el.querySelector('.title') as HTMLElement;
-  titleEl.addEventListener('input',   ()  => onTitleInput(n));
-  titleEl.addEventListener('keydown', (e) => onTitleKeydown(e as KeyboardEvent, n));
-  titleEl.addEventListener('blur',    ()  => {
-    if (ui.titleEdit && ui.titleEdit.id === n.id) {
-      endTitleEdit();
-    }
-  });
-  el.addEventListener('dblclick', (e) => onNodeDblClick(n, e));
+  renderHooks.bindNode(n, el);
   return el;
 }
 
@@ -225,21 +161,21 @@ export function paintNode(n: MindNode): void {
   if (isStack(n)) {
     el.style.width = nodeW(n) + 'px';
     el.style.height = ''; el.style.maxWidth = '';
-    clearResizeHandles(el);
+    renderHooks.showResizeHandles(n, false);
   } else if (isBoxNode(n)) {
     el.style.width = nodeW(n) + 'px';
     el.style.height = nodeH(n) + 'px';
-    ensureResizeHandles(n);
+    renderHooks.showResizeHandles(n, true);
     if (isSection(n)) {
       sectionContentEl(n);
     }
   } else if (isSectionFold(n)) {
     if (el.style.width) { el.style.width = ''; el.style.height = ''; }
-    clearResizeHandles(el);
+    renderHooks.showResizeHandles(n, false);
   } else if (isImageFold(n)) {
     // Keeps its handles: scaling the folded icon up unfolds it.
     el.style.width = ''; el.style.height = '';
-    ensureResizeHandles(n);
+    renderHooks.showResizeHandles(n, true);
   } else {
     // Never an inline height: the authored one is the min-height above. Folded, the chip shrink-wraps its line.
     const authored = n.w != null && !collapsed;
@@ -251,11 +187,7 @@ export function paintNode(n: MindNode): void {
     if (el.style.height) {
       el.style.height = '';
     }
-    if (collapsed) {
-      clearResizeHandles(el);
-    } else {
-      ensureResizeHandles(n);
-    }
+    renderHooks.showResizeHandles(n, !collapsed);
   }
   // Don't clobber a section's label while the user is typing into this very element.
   if (!(ui.titleEdit && ui.titleEdit.id === n.id)) {
@@ -264,7 +196,7 @@ export function paintNode(n: MindNode): void {
     if (isSection(n) || isSectionFold(n) || isStack(n)) {
       const sect = isSection(n) || isSectionFold(n);
       const md = sect ? joinHeading(sectionName(n), '') : joinHeading(n.title, '', false) || collapsedMarkdown(n);
-      const hits = isSectionFold(n) ? searchHitsIn(n.id) : 0;
+      const hits = isSectionFold(n) ? renderHooks.searchHitsIn(n.id) : 0;
       const full = sect ? sectionName(n) : nodeLabel(n);
       // Keyed on the source text: paintAll runs per frame during a resize.
       const key = md + '\u0000' + hits;
@@ -297,7 +229,7 @@ export function paintNode(n: MindNode): void {
     if (fresh){
       bodyEl.dataset.md = md;
       bodyEl.innerHTML = renderBodyHTML(md);
-      hydrateImages(bodyEl, n.file);
+      renderHooks.hydrateImages(bodyEl, n.file);
     }
     const tw = String(nodeW(n));
     if ((fresh || bodyEl.dataset.tw !== tw) && md.includes('|')) {
@@ -307,11 +239,11 @@ export function paintNode(n: MindNode): void {
   }
   // Keyed, so a repaint mid-drag can't destroy a chip under the pointer.
   const tagRowEl = el.querySelector('.tag-row') as HTMLElement;
-  const tagsKey = tags.map(t => (t.inText ? '~' : '') + t.tag).join(' ') + (tags.length && searchTags().length ? '\u0000' + searchTags().join(' ') : '');
+  const searched = tags.length ? renderHooks.searchTags() : [];
+  const tagsKey = tags.map(t => (t.inText ? '~' : '') + t.tag).join(' ') + (searched.length ? '\u0000' + searched.join(' ') : '');
   if (tagRowEl.dataset.tagsKey !== tagsKey) {
     tagRowEl.dataset.tagsKey = tagsKey;
-    tagRowEl.innerHTML = tags.map(tagChipHTML).join('');
-    bindCardTags(tagRowEl, n.id);
+    renderHooks.paintTagRow(tagRowEl, n.id, tags);
   }
   const more = el.querySelector(':scope > .fold-more') as HTMLElement;
   const hidden = collapsed && !imageLook(n) ? hiddenLineCount(n) : 0;
@@ -328,7 +260,7 @@ export function paintNode(n: MindNode): void {
     bar.title = barTitle;
     bar.style.setProperty('--done', `${tp.total ? Math.round(tp.done / tp.total * 100) : 0}%`);
   }
-  paintPile(n, el);
+  renderHooks.paintPile(n, el);
 
   // Typing never changes a card's height: an edited card scrolls inside the height it opened at.
   const clipH = editingBody && !n.collapsed && !heightIsDeclared(n) ? ui.bodyEdit!.holdH ?? null : clipHeight(n);
@@ -459,18 +391,16 @@ function squeezeTables(): void {
 
 export function paintAll(): void {
   readOpenUnread();
-  refreshSearch();
+  renderHooks.beforePaint();
   withKids(() => {
     for (const n of state.nodes.values()) {
       paintNode(n);
     }
   });
   squeezeTables();    // before anything measures a card's height
-  refreshTray();
-  syncFan();
+  renderHooks.afterNodes();
   paintFreeEdges();
-  syncSelFrame();
-  syncScopeChrome();
+  renderHooks.afterLines();
   document.body.classList.toggle('empty-map', !state.nodes.size && store.isOpen && !state.singleNote);
 }
 
@@ -483,16 +413,3 @@ export function remeasure(): void {
     paintAll();
   }
 }
-
-function toggleTask(n: MindNode, idx: number): void {
-  if (isLockedEffective(n)) {
-    return;
-  }
-  mutate([n.id], () => {
-    n.body = toggleTaskAt(n.body, idx);
-    n.dirty = true;
-    syncOpenEditor(n);
-    paintNode(n);
-  }, { reflow: 'none' });
-}
-

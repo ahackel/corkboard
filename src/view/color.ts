@@ -10,6 +10,8 @@ export const PICKER_ROWS: string[][] = [
   ['black','stone','bold-red','bold-orange','bold-yellow','bold-green','bold-teal','bold-blue','bold-violet','bold-pink','white'],
   ['silver','grey','red','orange','amber','green','teal','blue','violet','pink'],
 ];
+// What an uncoloured stack's pin wears.
+export const STACK_DEFAULT_COLOR = 'bold-red';
 const pal = (name: string): string => getComputedStyle(document.body).getPropertyValue(`--pal-${name}`).trim();
 // No prototype: a colour comes from a file, and `constructor` or `toString` must not read as a palette key.
 export const SWATCH_BG: Record<string, string> = Object.assign(Object.create(null) as Record<string, string>,

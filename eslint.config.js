@@ -42,7 +42,17 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': ['error', { patterns: [{
         group: ['**/features/*', '**/nav/*', '!**/nav/scope.js', '**/render.js', '**/layout-anim.js', '**/main.js', '**/boot.js'],
-        message: 'A lower layer never imports the UI: add a hook (data/hooks.ts, view callbacks) instead.',
+        message: 'A lower layer never imports the UI: add a hook (data/hooks.ts, render-hooks.ts, view callbacks) instead.',
+      }] }],
+    },
+  },
+  // The render core sits above data/ and view/ and below every feature: render-hooks.ts is how it asks them.
+  {
+    files: ['src/render.ts', 'src/render-hooks.ts', 'src/layout-anim.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [{
+        group: ['**/features/*', '**/nav/*', '!**/nav/scope.js', '**/main.js', '**/boot.js'],
+        message: 'The render core never imports a feature: add a hook to render-hooks.ts instead.',
       }] }],
     },
   },

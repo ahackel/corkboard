@@ -13,6 +13,12 @@ import { installSaveOnLeave } from './data/save.js';
 import { installSaveAlert } from './data/save-alert.js';
 import { installImportPicker } from './data/zip-io.js';
 import { paintNode, remeasure, flashArrived } from './render.js';
+import { installRenderHooks } from './render-hooks.js';
+import { bindNodeEvents } from './features/node-events.js';
+import { ensureResizeHandles, clearResizeHandles } from './features/resize.js';
+import { hydrateImages } from './features/images.js';
+import { tagChipHTML, bindCardTags } from './features/tags.js';
+import { syncSelFrame } from './features/sel-frame.js';
 import { installClickCount } from './features/activate.js';
 import { installGestures } from './features/gestures.js';
 import { installAttachments } from './features/attachments.js';
@@ -31,19 +37,48 @@ import { installPalette } from './features/palette.js';
 import { installBreadcrumbs, paintMapCrumb } from './features/breadcrumbs.js';
 import { installInlineEdit } from './features/inline-edit.js';
 import { installDragModifiers } from './features/drag.js';
-import { installStacks } from './features/stacks.js';
-import { installSearch, searchHolds } from './features/search.js';
+import { installStacks, paintPile, syncFan } from './features/stacks.js';
+import { installSearch, searchHolds, searchTags, searchHitsIn, refreshSearch } from './features/search.js';
 import { syncFloatBar, installFloatBar } from './features/float-bar.js';
 import { installCanvasColor } from './features/canvas-color.js';
-import { restoreTray, installTagTray } from './features/tag-tray.js';
+import { restoreTray, installTagTray, refreshTray } from './features/tag-tray.js';
 import { installPeek } from './features/peek.js';
 import { clearHistory, historyRefs } from './features/history.js';
 import { selectNode } from './features/selection.js';
 import { updateDocumentTitle, scheduleUrlSync, installUrlState } from './nav/url-state.js';
-import { installScopeResize } from './nav/sections.js';
+import { installScopeResize, syncScopeChrome } from './nav/sections.js';
 import { hideStart, boot, installStartScreen } from './boot.js';
 
 migrateLegacyKeys();   // FIRST: before anything reads a setting
+// Before anything paints.
+installRenderHooks({
+  bindNode: bindNodeEvents,
+  showResizeHandles(n, on) {
+    if (on) {
+      ensureResizeHandles(n);
+    } else {
+      clearResizeHandles(n.el!);
+    }
+  },
+  paintPile,
+  hydrateImages,
+  paintTagRow(row, id, tags) {
+    row.innerHTML = tags.map(tagChipHTML).join('');
+    bindCardTags(row, id);
+  },
+  searchTags,
+  searchHitsIn,
+  beforePaint: refreshSearch,
+  afterNodes() {
+    refreshTray();
+    syncFan();
+  },
+  afterLines() {
+    syncSelFrame();
+    syncScopeChrome();
+  },
+  syncSelFrame,
+});
 installSaveOnLeave();
 installSaveAlert();
 installImportPicker();

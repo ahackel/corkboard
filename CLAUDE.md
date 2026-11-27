@@ -41,7 +41,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
   resize, sel-frame (the multi-selection frame), stacks, text-drag, attachments, clipboard, search, guides, float-bar, edge-tools/edge-bar (lines), palette, context-menu, tags, history, …
   `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `main.ts` — the entry ONLY: each module's `install…()` in a deliberate order (NO module wires itself up on import), the data hooks, `boot()` (`boot.ts`: local-first boot, the home screen). Nothing imports it.
-- `render.ts` — the render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`/`relayout`/`remeasure`); `layout-anim.ts` the animated relayout; `features/activate.ts` what a click/double-click on a node does.
+- `render.ts` — the render core (`paintNode`/`paintAll`/`placeSelf`/`effectiveColor`/`relayout`/`remeasure`); `layout-anim.ts` the animated relayout; it imports NO feature, asking through `render-hooks.ts` ("The render core never imports a feature"); `features/node-events.ts` wires a node's events, `features/activate.ts` what a click/double-click does.
 
 ## Non-negotiable invariants
 

@@ -895,7 +895,7 @@ folder; making a card inside an open section is `Space`, `Tab` and the canvas ri
 that section (`detachParentId`). Four things hold it together:
 
 - **The INNERMOST node owns the gesture, including the ones it declines.** Child cards are DOM-nested, so both
-  handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/node-press.ts`) `stopPropagation` BEFORE their
+  handlers (the `dblclick` in `features/node-events.ts`, the touch double-tap in `features/node-press.ts`) `stopPropagation` BEFORE their
   bails, not after — otherwise a gesture this card refuses bubbles to its host card, which reads it as a
   double-click on itself, opening the HOST's editor and sending the rest of the typing into the parent's note.
   On touch it's worse, since each ancestor keeps its OWN tap counter. A container's children are exempt by
@@ -1372,8 +1372,14 @@ before `boot()`; until then each hook does nothing, which is all a test of `data
 one layer down: `view/` takes what it needs from a feature by being told (`onViewApplied` in `view/camera.ts`,
 `useCanvasSurface` in `view/free-edges.ts`, `onGridChanged` in `view/grid.ts`), not by importing it. Without this, every module that touched
 storage sat inside one import cycle with `main.ts` and half of `features/`. Add a hook rather than an import.
-`npm run lint` enforces it (`eslint.config.js`): `core/`, `utils/`, `view/`, `store/`, `data/` and `nav/scope.ts` may
-not import `features/`, the rest of `nav/` or the render core, and may form no import cycle.
+**The render core never imports a feature, either.** `render.ts` and `layout-anim.ts` paint and place
+nodes; `features/` and `nav/` decide what a press does. Where a paint needs a feature (a node's event wiring in
+`features/node-events.ts`, resize handles, the pile, tag chips, search hits, the tray, the fan, the selection
+frame, the crumbs) it calls `renderHooks` (`render-hooks.ts`), which `main.ts` fills in before anything paints.
+`nav/` (but `scope.ts`) sits WITH `features/`: it selects, records undo and creates cards.
+`npm run lint` enforces both (`eslint.config.js`): `core/`, `utils/`, `view/`, `store/`, `data/` and `nav/scope.ts` may
+not import `features/`, the rest of `nav/` or the render core, and may form no import cycle; the render core may
+not import `features/` or `nav/` (but `scope.ts`). `features/` still import each other in a cycle: a known debt.
 Inside `data/` the imports run one way too, bottom up: `active-store.ts` (the open `store`) and
 `note-names.ts`; `images`, `board`; `arrange` (lays out what arrived unplaced); `read` (a listing → nodes,
 `readFolder`); `lazy`; `save`; `migrate`, `load`; and `persistence` (switching maps, the reload) on top.

@@ -50,7 +50,7 @@ export function section(page: Page, text: string): Locator {
   return page.locator('#world .node.section', { hasText: text }).first();
 }
 
-// A folded section writes its tooltip as the pointer comes in (main.ts nodeEl), so come in from elsewhere.
+// A folded section writes its tooltip as the pointer comes in (features/node-events.ts), so come in from elsewhere.
 export async function tooltip(page: Page, l: Locator): Promise<string | null> {
   await page.mouse.move(AWAY.x, AWAY.y);
   await l.hover();
