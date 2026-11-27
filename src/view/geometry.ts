@@ -2,6 +2,7 @@
 import { state, type MindNode, isImageCard, isStack } from '../core/state.js';
 import { type Pt, ui } from '../core/ui-state.js';
 import { snapTo } from '../utils/num.js';
+import type { Rect } from '../utils/rect.js';
 import { hiddenLineCount } from '../utils/frontmatter.js';
 import { isLockedEffective } from '../utils/model.js';
 import { isScopeRoot } from '../nav/scope.js';
@@ -9,6 +10,9 @@ import { isSection } from './layout.js';
 import { pileW } from './pile.js';
 
 export const NODE_W = 200;
+
+// A node's footprint as a plain rect, for the pure geometry in utils/.
+export function nodeRect(n: MindNode): Rect { return { x: n.x, y: n.y, w: nodeW(n), h: nodeH(n) }; }
 
 // a section is never narrower than a normal card
 export const MIN_SECTION_W = NODE_W, MIN_SECTION_H = 120;

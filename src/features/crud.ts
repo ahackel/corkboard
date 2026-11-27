@@ -16,8 +16,10 @@ import { startInlineEdit, dropBodyEdit, syncOpenEditor } from './inline-edit.js'
 import { touch, touchEdges, commitStep } from './history.js';
 import { mutate } from './mutate.js';
 import { SPACING, slidePast } from '../utils/guides.js';
+import { nextInRow, belowContents } from '../utils/placement.js';
+import { mergedText, mergedTags } from '../utils/merge-notes.js';
 import { boxOf } from './guides.js';
-import { settleSections } from './drag.js';
+import { settleSections } from './drop.js';
 import { scheduleSaveBoard } from '../data/board.js';
 import { afterReading } from '../data/lazy.js';
 import { nodeH, nodeW, snapPt, NODE_W, SECTION_W, SECTION_H } from '../view/geometry.js';
@@ -195,14 +197,8 @@ function copyNode(s: MindNode): MindNode {
 // keeps (from its left neighbour), past anything already there. Its section grows to hold it, the way a
 // drop does. A card with no heading advances its first line instead.
 function copyNext(s: MindNode): MindNode {
-  const w = nodeW(s), h = nodeH(s);
   const sibs = childrenOf(s.parent).filter(o => o !== s && !isHidden(o));
-  const inRow = (o: MindNode, y: number): boolean => o.y < y + h && o.y + nodeH(o) > y;
-  const left = sibs.filter(o => inRow(o, s.y) && o.x + nodeW(o) <= s.x)
-    .sort((a, b) => (b.x + nodeW(b)) - (a.x + nodeW(a)))[0];
-  const gap = left ? s.x - (left.x + nodeW(left)) : LIST_GAP;
-  const { x } = slidePast({ x: s.x + w + gap, y: s.y, w, h }, sibs.map(o => boxOf(o)), 'x', gap);
-  const at = snapPt({ x, y: s.y });
+  const at = snapPt(nextInRow(boxOf(s), sibs.map(o => boxOf(o)), LIST_GAP));
   const c = cloneNodeAt(s, at.x, at.y);
   if (c.title.trim()) {
     c.title = advanceTitle(c.title);
@@ -267,10 +263,7 @@ export function addCardInside(sectionId: string, at?: Pt): void {
   if (at) {
     pos = centredAt(at);
   } else {
-    const box = sectionInterior(f);
-    const kids = childrenOf(sectionId);
-    const bottom = kids.reduce((y, k) => Math.max(y, k.y + nodeH(k)), -Infinity);
-    pos = snapPt({ x: box.x + LIST_GAP, y: kids.length ? bottom + LIST_GAP : box.y + LIST_GAP });
+    pos = snapPt(belowContents(sectionInterior(f), childrenOf(sectionId).map(k => boxOf(k)), LIST_GAP));
   }
   createNode({ ...pos, parent: sectionId });
 }
@@ -452,26 +445,8 @@ export function mergeCardsInto(targetId: string, sourceIds: Iterable<string>): n
     return 0;
   }
   touch(targetId);
-  // An UNTITLED card contributes just its text: `n.title` is empty exactly when the
-  // note carries no `# ` line, and inventing a heading here (from its first line, say) would put words
-  // in the note that nobody wrote. A titled card contributes `## Title` — one level under the `# ` line
-  // that is now the target's own title, which is what makes the merged note a correctly nested document.
-  const part = (c: MindNode): string => {
-    const body = (c.body || '').trim();
-    const title = c.title.trim();
-    if (!title) {
-      return body;
-    }
-    return body ? `## ${title}\n\n${body}` : `## ${title}`;
-  };
-  appendToBody(target, cards.map(part).filter(Boolean).join('\n\n'));
-  const tags = new Set(target.tags);
-  for (const c of cards) {
-    for (const t of c.tags) {
-      tags.add(t);
-    }
-  }
-  target.tags = [...tags];
+  appendToBody(target, mergedText(cards));
+  target.tags = mergedTags(target.tags, cards);
   target.dirty = true;
   deleteNodes(cards.map(c => c.id));
   return cards.length;

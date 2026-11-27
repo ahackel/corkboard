@@ -39,6 +39,7 @@ import { downloadBlob } from '../utils/download.js';
 import { worldAtOrCentre } from '../view/camera.js';
 import { readAll, afterReading } from '../data/lazy.js';
 import { snapPt } from '../view/geometry.js';
+import { pasteShift } from '../utils/placement.js';
 import { setSelectionSet, selectedIds } from './selection.js';
 
 const MARK = '<!-- corkboard-card: ';
@@ -252,14 +253,7 @@ export function tryPasteCards(pasted: string, at: { sx: number | null; sy: numbe
   // On the grid (view/geometry.ts snapPt), like every other card the user places: the payload keeps its own
   // internal spacing, so snapping the ANCHOR puts the whole pasted group on the grid together.
   const target = snapPt(worldAtOrCentre(at.sx, at.sy));
-  let ax = Infinity, ay = Infinity;
-  for (const c of cards) {
-    if (isPayloadRoot(c) && c.p.mm.x != null && c.p.mm.y != null){
-      ax = Math.min(ax, c.p.mm.x); ay = Math.min(ay, c.p.mm.y);
-    }
-  }
-  const dx = target.x - (ax === Infinity ? target.x : ax) + 16;
-  const dy = target.y - (ay === Infinity ? target.y : ay) + 16;
+  const { x: dx, y: dy } = pasteShift(target, cards.filter(isPayloadRoot).map(c => c.p.mm), 16);
   const dest = holderOf(at.parent) ?? detachParentId();
   const destNode = dest ? state.nodes.get(dest) : undefined;
   if (destNode && isLockedEffective(destNode)) {

@@ -8,20 +8,21 @@
 import { type MindNode, state, world, isStack } from '../core/state.js';
 import { ui } from '../core/ui-state.js';
 import { isHidden, isLockedEffective, outermost, childrenOf } from '../utils/model.js';
-import { isBoxNode, imageLook, isImageFold, isSectionFold, nodeW, nodeH, gridSnap } from '../view/geometry.js';
+import { isBoxNode, imageLook, isImageFold, isSectionFold, nodeW, nodeH, nodeRect, gridSnap } from '../view/geometry.js';
 import { isSection } from '../view/layout.js';
-import { snapTo } from '../utils/num.js';
+import { unionRect, type Rect } from '../utils/rect.js';
+import { sidesOf, frameEdgeDir, frameScale } from '../utils/resize-geometry.js';
 import { touch, commitStep } from './history.js';
 import { paintNode, relayout } from '../render.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { settleSections, startSelectionDrag } from './drag.js';
+import { startSelectionDrag } from './drag.js';
+import { settleSections } from './drop.js';
 import { syncFloatBar } from './float-bar.js';
 import { trackPointer } from '../utils/dom.js';
 import { scheduleSave } from '../data/save.js';
 import { SECTION_DIRS, minWOf, minHOf, CLIP_MIN_H, imageAspect, naturalH, settleCardSize } from './resize.js';
 
 type Dir = typeof SECTION_DIRS[number];
-interface Rect { x: number; y: number; w: number; h: number }
 
 let frame: HTMLElement | null = null;
 
@@ -66,12 +67,7 @@ function members(): MindNode[] {
 }
 
 function boundsOf(ns: MindNode[]): Rect {
-  let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
-  for (const n of ns) {
-    l = Math.min(l, n.x); t = Math.min(t, n.y);
-    r = Math.max(r, n.x + nodeW(n)); b = Math.max(b, n.y + nodeH(n));
-  }
-  return { x: l, y: t, w: r - l, h: b - t };
+  return unionRect(ns.map(nodeRect));
 }
 
 // Redraw the frame round the selection as it is now. Called wherever the selection or the geometry of
@@ -135,10 +131,7 @@ export function memberEdgeResize(e: PointerEvent, n: MindNode, dir: Dir): boolea
   if (ns.length < 2) {
     return false;
   }
-  const f = boundsOf(ns), on = (a: number, b: number): boolean => Math.abs(a - b) < 1;
-  const y = dir.includes('n') && on(n.y, f.y) ? 'n' : dir.includes('s') && on(n.y + nodeH(n), f.y + f.h) ? 's' : '';
-  const x = dir.includes('w') && on(n.x, f.x) ? 'w' : dir.includes('e') && on(n.x + nodeW(n), f.x + f.w) ? 'e' : '';
-  const groupDir = (y + x) as Dir | '';
+  const groupDir = frameEdgeDir(nodeRect(n), boundsOf(ns), dir) as Dir | '';
   if (!groupDir) {
     return false;
   }
@@ -161,8 +154,8 @@ function startGroupResize(e: PointerEvent, dir: Dir): boolean {
   }
   touch(...plans.map(p => p.n.id));
   const f0 = boundsOf(ns);
-  const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
-  const hasX = east || west, hasY = north || south;
+  const sides = sidesOf(dir);
+  const hasX = sides.east || sides.west, hasY = sides.north || sides.south;
   let minSx = 0, minSy = 0;
   for (const p of plans) {
     if (p.mode !== 'move') {
@@ -177,21 +170,7 @@ function startGroupResize(e: PointerEvent, dir: Dir): boolean {
 
   const apply = (ev: PointerEvent): void => {
     const dx = (ev.clientX - sx0) / state.view.k, dy = (ev.clientY - sy0) / state.view.k;
-    const l0 = f0.x, t0 = f0.y, r0 = f0.x + f0.w, b0 = f0.y + f0.h;
-    let sx = west ? (r0 - snapTo(l0 + dx, g)) / f0.w : east ? (snapTo(r0 + dx, g) - l0) / f0.w : 1;
-    let sy = north ? (b0 - snapTo(t0 + dy, g)) / f0.h : south ? (snapTo(b0 + dy, g) - t0) / f0.h : 1;
-    if (hasX) {
-      sx = Math.max(sx, minSx);
-    }
-    if (hasY) {
-      sy = Math.max(sy, minSy);
-    }
-    if (hasX && hasY && ev.shiftKey) {
-      sx = sy = Math.max(sx, sy);
-    }
-
-    // The fixed corner: the edges NOT being dragged.
-    const ax = west ? r0 : l0, ay = north ? b0 : t0;
+    const { sx, sy, anchor: { x: ax, y: ay } } = frameScale(f0, sides, { x: dx, y: dy }, g, { x: minSx, y: minSy }, ev.shiftKey);
     const mapX = (x: number): number => ax + (x - ax) * sx, mapY = (y: number): number => ay + (y - ay) * sy;
     for (const p of plans) {
       const n = p.n;

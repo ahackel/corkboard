@@ -163,7 +163,7 @@ keep that property when touching `parseFM`/`fmSet`/`fmRemove`.
 `annotation`, `query`) to `card` and a legacy `mm_layout: frame*` to `section`. A card never has children —
 structure inside a thought is written into the note (`- [ ]` tasks tick in place) — and a section's children
 sit wherever they were put: there are no arrangements, no outliner, no checklist mode. Four rules hold it:
-- **One drop rule** (`view/layout.ts sectionAt`, `dropSection` in features/drag.ts): on release, a lone dragged
+- **One drop rule** (`view/layout.ts sectionAt` over `utils/rect.ts deepestAt`, `dropSection` in features/drop.ts; pinned by tests/drop-rule.test.ts): on release, a lone dragged
   card belongs to the INNERMOST expanded, unlocked section its centre is in, and a MULTI-selection all goes to
   the one under the POINTER (where you aim the group, even for its cards whose centres land outside), else the
   top level (the open section while one is open). The
@@ -173,7 +173,7 @@ sit wherever they were put: there are no arrangements, no outliner, no checklist
 - **Cards can't hold cards, however it's asked** — `holderOf(id)` turns any "create in X" request into X's
   section (X itself if it is one), and every create/paste path goes through it.
 - **A section is NEVER resized automatically** — only by the user's resize handles or Fit / "Resize to fit"
-  (`autoSizeSelection`). A drop, create, paste, edit, tidy or arrival that leaves a card past its section's
+  (`autoSizeSelection`; its box is `utils/placement.ts fitAround`). A drop, create, paste, edit, tidy or arrival that leaves a card past its section's
   edge leaves it there, clipped (`overflow:hidden`) until the user resizes: a section's size is the user's call.
 - **A card with children on disk is MIGRATED on load** (`data/migrate.ts foldCardsIntoSections`): it
   becomes a section holding them (only `mm_type` changes), and each converted section — plus any section that was
@@ -185,7 +185,7 @@ sit wherever they were put: there are no arrangements, no outliner, no checklist
 Inheriting made a section nested in a blue section blue, and so invisible. Cards still inherit from the section
 they sit in, in its FULL colour — which reads because the box wears a PALE wash of it (below).
 
-**A section COLLECTS what it covers** (`settleSections`, features/drag.ts) — the drop rule run from the section's
+**A section COLLECTS what it covers** (`settleSections`, features/drop.ts) — the drop rule run from the section's
 side, the way a FigJam section behaves. After a section is moved, resized or made (createNode, Group), every
 card whose centre is now in it is reparented to it (`sectionAt`, so the innermost section still wins), and every
 card of its own whose centre is now outside goes to whatever it is over — a shrink lets go of a card rather
@@ -193,7 +193,7 @@ than hiding it under the clip. A SECTION is only collected when its whole box is
 big section could be swallowed by a small one laid across it. Locked and hidden things stay put. A move or a
 create never resizes the section that took a card in, nor the one a let-go card lands in.
 
-**A drop can FILE cards somewhere off the canvas** (`chuteAt`/`fileAway`, features/drag.ts): let go with the
+**A drop can FILE cards somewhere off the canvas** (`chuteAt`/`fileAway`, features/drop.ts): let go with the
 POINTER over a folded section's pill and the dragged cards go into it, in a column of their own right of its
 cards (`arrangeSections` with `fresh`, the inbox's rule — its folder read first if it never was); over a crumb
 of the open-section path and they go up to that level (the map crumb: the top level), in a column right of the
@@ -274,7 +274,7 @@ the drop and a fold strands an empty `overflow:hidden` div at the box's old size
 
 ## Stacks
 
-**A STACK is a section drawn as a PILE** (`features/stacks.ts`, `view/pile.ts`), after the macOS Dock's stacks.
+**A STACK is a section drawn as a PILE** (`features/stacks.ts`, `view/pile.ts`; the fan's arc, grid and insertion gap are `utils/fan.ts`), after the macOS Dock's stacks.
 Not a third kind: `type` stays `section`, so it is a folder on disk like any section (`Stack/_index.md` plus its
 cards), and `isStack` is a flag beside the kind — `stack: true` in board.json (`StoredGeom`), the same place a
 fold lives, since how a folder is DRAWN is arrangement, not content. A new, unnamed one's folder is `Stack`,
@@ -456,7 +456,7 @@ is all `isScopeRoot` means in the layout code.
 ## Sizing
 
 **`n.w` and `n.h` are always AUTHORED; a card's `n.h` is a MINIMUM.** Every kind gets the same 8 resize
-zones (`SECTION_DIRS`, `ensureResizeHandles` in `features/resize.ts`), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
+zones (`SECTION_DIRS`, `ensureResizeHandles` in `features/resize.ts`; the edge arithmetic — floors, grid, guide pull, aspect lock, the icon fold — is `utils/resize-geometry.ts`, tested), and `n.w`/`n.h` (→ `board.json` `w`/`h`) are the
 dragged size and nothing else — never a value a layout pass computed. What the height MEANS splits:
 
 - `section` is a **2D box** — 8 hit-zones, authoring both `n.w` and `n.h` (→ `mm_h`, gated by
@@ -763,7 +763,7 @@ unsnapped: the point where a line is split —
 that one is snapped at creation but has to be able to sit anywhere along its edge afterwards. A Shift
 drag was the one gesture that slipped through: it swaps the drag to a CLONE (`applyDragClone` re-keys
 `drag.targets`), so a delta snapped for the original card found nothing and fell back to the raw pointer
-delta — `snappedDelta` keys off `drag.active` for that reason.
+delta — `snappedDelta` (its arithmetic `utils/drag-geometry.ts gridDelta`) keys off `drag.active` for that reason.
 
 **Smart guides PULL a drag by a few pixels, and win over the grid when they do.** `snapBox`
 (`utils/guides.ts`, pinned by `tests/guides.test.ts`) takes the union box of the drag's roots at the
@@ -880,7 +880,7 @@ otherwise it is one rule in place of a per-kind table. Editing is what the
 gesture means on text nearly everywhere and is far and away the commonest thing anyone does here, so it keeps
 the cheap gesture; going IN is held apart by the MODIFIER rather than by which part of the card was hit, which
 and only a section opens: on a card ⌥-double-click is a plain double-click. Its touch spelling is a TWO-FINGER
-double-tap (`features/drag.ts`), gated on a short tap so a pinch never registers as one; `⌘↓`, the float bar's
+double-tap (`features/node-press.ts`), gated on a short tap so a pinch never registers as one; `⌘↓`, the float bar's
 Open and `⋯ → Open` are the same verb without a gesture.
 Everything else is still dispatched by WHAT WAS HIT, so it covers every kind without a per-kind entry point: on a
 CARD it edits the note with ALL of it selected, wherever it landed — the title is just the note's first line, so
@@ -895,7 +895,7 @@ folder; making a card inside an open section is `Space`, `Tab` and the canvas ri
 that section (`detachParentId`). Four things hold it together:
 
 - **The INNERMOST node owns the gesture, including the ones it declines.** Child cards are DOM-nested, so both
-  handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/drag.ts`) `stopPropagation` BEFORE their
+  handlers (`nodeEl`'s `dblclick`, the touch double-tap in `features/node-press.ts`) `stopPropagation` BEFORE their
   bails, not after — otherwise a gesture this card refuses bubbles to its host card, which reads it as a
   double-click on itself, opening the HOST's editor and sending the rest of the typing into the parent's note.
   On touch it's worse, since each ancestor keeps its OWN tap counter. A container's children are exempt by
@@ -920,7 +920,7 @@ why it was cut. A double-click is then select-all wherever it starts, by two rou
   the browser's word select, as before.
 - **Not for** a folded node, an image card, a locked one, `NODE_CONTROLS`, or a press with a modifier
   or from the selection frame — those keep "a click selects", and their double-click falls through to `activateNode`.
-- **Touch** is the same with taps (`features/drag.ts`): a tap opens it, and that tap's `touchend` is cancelled,
+- **Touch** is the same with taps (`features/node-press.ts`): a tap opens it, and that tap's `touchend` is cancelled,
   since the browser's emulated mousedown that follows lands on the card and would blur the new textarea shut. The
   double-tap counter makes the select-all one.
 - **Clicking empty canvas while editing DESELECTS too** (`features/gestures.ts`), as FigJam's does: a card left
@@ -1024,7 +1024,7 @@ stays plain text (monospace, since it shows SOURCE); styling the text while edit
   (`features/images.ts candidates`; every non-note file is listed with the tree, `TreePlan.assets`). The app writes
   a path with a space in the `<…>` form (`imageMd`). A backslash escape (`\*`) prints its character.
 
-**A SMART duplicate makes the NEXT card of a series** (⇧D; `crud.ts copyNext`). A daily log, sprints, versions: the copy's title steps to its next value
+**A SMART duplicate makes the NEXT card of a series** (⇧D; `crud.ts copyNext`, the slot `utils/placement.ts nextInRow`). A daily log, sprints, versions: the copy's title steps to its next value
 (`utils/advance.ts advanceTitle`, tested — a `YYYY-MM-DD` date by one day with any weekday name beside it,
 else the last number up, keeping its padding; a card with no heading advances its first line), and it lands in
 the next slot of its ROW — to the right, at the gap the row already keeps from its left neighbour, past
@@ -1077,8 +1077,8 @@ list commands on a multi-selection, a canvas has a place to point at. No menu en
 adding one is a decision, not a gap. Neither writes a new frontmatter key — a merge is a body edit plus a
 delete, a break is a body edit plus a create.
 
-- **⌥-drop card(s) onto a card MERGES them into it** (`mergeDrag`/`cardMerge` in `features/drag.ts`,
-  `mergeCardsInto` in `crud.ts`). The card you dropped ONTO survives — its id, file, colour, size and flags —
+- **⌥-drop card(s) onto a card MERGES them into it** (`mergeDrag`/`cardMerge` in `features/drop.ts`,
+  `mergeCardsInto` in `crud.ts`, its text `utils/merge-notes.ts`). The card you dropped ONTO survives — its id, file, colour, size and flags —
   and each dragged note folds into its body as `## Title` then its text, in selection order. Tags are unioned
   in. `canMerge` says what can be folded IN (a card, an image card included; never a section, a box whose
   shape is the point). What can RECEIVE is `takesDrop` (`utils/model.ts`), the one rule for every drop into a
@@ -1211,7 +1211,7 @@ card, its tags and a section's tab keep theirs (a frame edge band ABOVE the card
 press). Pressing the interior drags the whole selection (`startSelectionDrag` → drag.ts `beginDrag`, anchored
 on the primary unlocked member; a plain click there keeps the selection, `Drag.fromFrame`). Where the frame's
 edge runs along a member's own edge, that member's resize band scales the GROUP (`memberEdgeResize`, called
-first in `startNodeResize`); an inner edge still resizes only its card. A corner or edge SCALES the lot about
+first in `startNodeResize`; `utils/resize-geometry.ts frameEdgeDir`); an inner edge still resizes only its card. A corner or edge SCALES the lot about
 the opposite side, as one undo step: an open section, a card or a picture maps its rect through the frame
 (its contents with it, unselected or not; a picture keeps its aspect), while anything sized by what it shows
 — a folded chip or pill, a pile, a folded picture — keeps its size and is carried, subtree and all, by its

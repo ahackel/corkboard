@@ -1,38 +1,29 @@
-// ---------- node dragging & reparent-by-drop ----------
-// Per-node pointer gestures: drag moves the whole subtree (or the multi-selection, as one group);
-// Shift clones while dragging, ⌥-dropping onto a card merges into it, and on release one dragged card
-// belongs to the section its centre is in, and a multi-selection ALL to the section under the POINTER —
-// or the top level. That is the whole drop rule (view/layout.ts sectionAt, dropSection below). Edge
-// auto-pan keeps the dragged subtree glued under the cursor while the view scrolls. All transient
-// drag state lives in `ui.drag`. `installDragModifiers` registers the global Alt/Shift modifier
-// listeners; bindNodeDrag is called by the render core (nodeEl) for each card.
-import { state, stage, setStatus, isImageCard, isStack, type MindNode } from '../core/state.js';
-import { nodeLabel, isHidden, isAncestor, hasLockedAncestor, isLockedEffective, parentOf, childrenOf, subtreeIds, withKids, takesDrop } from '../utils/model.js';
-import { detachParentId, scope } from '../nav/scope.js';
-import { isSection, collectsCards, sectionAt, ancestorDepth, containerBox, centreInSection, moveSubtreeTo } from '../view/layout.js';
-import { cancelViewAnim, applyView, screenToWorld } from '../view/camera.js';
-import { ui, inPlaceEditOn, type Pt, type Drag, type Chute } from '../core/ui-state.js';
+// ---------- node dragging ----------
+// Drag moves the whole subtree (or the multi-selection, as one group); Shift clones while dragging; edge
+// auto-pan keeps the dragged cards glued under the cursor while the view scrolls. Where a release lands is
+// features/drop.ts; which gesture a press starts is features/node-press.ts. All transient drag state lives in
+// `ui.drag`; `installDragModifiers` registers the global Alt/Shift listeners.
+import { state, stage, setStatus, type MindNode } from '../core/state.js';
+import { nodeLabel, isLockedEffective, parentOf, subtreeIds, withKids } from '../utils/model.js';
+import { detachParentId } from '../nav/scope.js';
+import { isSection, sectionAt } from '../view/layout.js';
+import { cancelViewAnim, applyView } from '../view/camera.js';
+import { ui, type Pt, type Drag } from '../core/ui-state.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { snapTo } from '../utils/num.js';
-import { beginMarqueeFromNode } from './gestures.js';
-import { paintAll, paintNode, relayout, remeasure, flashArrived } from '../render.js';
-import { activateNode, editOnClick, openedSince, isNodeControlAt } from './activate.js';
-import { endBodyEdit, endTitleEdit, selectAllInEditor } from './inline-edit.js';
-import { leaveClone, mergeCardsInto, canMerge } from './crud.js';
-import { startImageExtractDrag } from './image-extract.js';
+import { gridDelta, edgePanVelocity } from '../utils/drag-geometry.js';
+import { centreOf } from '../utils/rect.js';
+import { paintAll, paintNode, relayout, remeasure } from '../render.js';
+import { editOnClick } from './activate.js';
+import { leaveClone, mergeCardsInto } from './crud.js';
 import { touch, commitStep } from './history.js';
-import { bodyImageAt } from './images.js';
 import { guidePull, hideGuides } from './guides.js';
 import { trackPointer } from '../utils/dom.js';
-import { nodeW, nodeH, gridSnap } from '../view/geometry.js';
+import { nodeRect, gridSnap } from '../view/geometry.js';
 import { selectNode, setSelectionSet, toggleSel } from './selection.js';
-import { afterReading } from '../data/lazy.js';
-import { arrangeSections } from '../data/arrange.js';
-import { SPACING } from '../utils/guides.js';
 import { scheduleSave } from '../data/save.js';
-import type { FanInsert } from '../view/pile.js';
-import { beginPileGesture, pileTarget, pileInto, fanSlot, showFanInsert, reorderPile, settleStacks, PILE_HOVER_MS } from './stacks.js';
+import { pileInto, reorderPile, settleStacks } from './stacks.js';
 import { syncSelFrame } from './sel-frame.js';
+import { dropSection, updateDropTarget, clearDropTarget, fileAway, reparentOnly, settleSections } from './drop.js';
 
 // True roots of a drag-selection set: a member whose own parent is ALSO in the set rides along
 // with it (it's already carried as part of that ancestor's subtree), so only the outermost
@@ -65,9 +56,7 @@ function snappedDelta(drag: Drag, dx: number, dy: number): Pt {
   }
   const fp = parentOf(act);
   const inBox = !!(fp && isSection(fp));
-  const ax = inBox ? fp!.x : 0, ay = inBox ? fp!.y : 0;
-  const g = gridSnap();
-  const grid = { x: snapTo(s.x + dx - ax, g) + ax - s.x, y: snapTo(s.y + dy - ay, g) + ay - s.y };
+  const grid = gridDelta(s, { x: dx, y: dy }, inBox ? fp! : { x: 0, y: 0 }, gridSnap());
   // Smart guides (features/guides.ts) win over the grid on an axis where something lines up with the
   // RAW pointer position — read before the grid rounds it, or a 20px step would jump right past a
   // 6px pull. Off while ⌥ is held, over a pile or within an open fan: the card is going INTO another
@@ -138,7 +127,12 @@ function flushDragPaint(): void {
     ui.autoPanRAF = requestAnimationFrame(autoPanStep);
   }
 }
+
+// The edge band (px) where auto-pan ramps in, and its top speed (px per frame).
+const PAN_BAND = 56, PAN_MAX = 16;
+
 function stopAutoPan(): void { if (ui.autoPanRAF){ cancelAnimationFrame(ui.autoPanRAF); ui.autoPanRAF = null; } }
+
 function autoPanStep(): void {
   ui.autoPanRAF = null;
   const drag = ui.drag;
@@ -148,28 +142,15 @@ function autoPanStep(): void {
   // Available canvas = the stage. Panning kicks in as the cursor nears its edge, so you can drag a card
   // to somewhere that isn't on screen yet.
   const r = stage.getBoundingClientRect();
-  const right = r.right;
-  const M = 56, MAX = 16;   // edge band (px) and max pan speed (px/section)
   let vx = 0, vy = 0;
-  const x = drag.cx, y = drag.cy;
   // Pan only while the pointer is still INSIDE the browser window: once it crosses out
   // (e.g. a drag heading for another app), scrolling on would carry the map away under it. Nor while it
   // rests on a path crumb in the corner: that is a drop target, not a push against the edge.
-  if (!outsideWindow(x, y) && !document.querySelector('#homeBar .drop-target')){
-    if (x < r.left + M) {
-      vx =  Math.min(1, (r.left + M - x) / M);
-    } else if (x > right - M) {
-      vx = -Math.min(1, (x - (right - M)) / M);
-    }
-    if (y < r.top + M) {
-      vy =  Math.min(1, (r.top + M - y) / M);
-    } else if (y > r.bottom - M) {
-      vy = -Math.min(1, (y - (r.bottom - M)) / M);
-    }
+  if (!outsideWindow(drag.cx, drag.cy) && !document.querySelector('#homeBar .drop-target')){
+    ({ x: vx, y: vy } = edgePanVelocity({ x: drag.cx, y: drag.cy }, r, PAN_BAND, PAN_MAX));
   }
   if (vx || vy){
     cancelViewAnim();
-    vx *= MAX; vy *= MAX;
     state.view.x += vx; state.view.y += vy; applyView();
     // shift the dragged subtree's anchors opposite the pan so the cursor-to-card offset never
     // changes (only `targets` — `start` keeps its own positions for clone/reset).
@@ -180,168 +161,6 @@ function autoPanStep(): void {
     paintFreeEdges();   // redraw edges every auto-pan section so they follow the moving nodes
   }
   ui.autoPanRAF = requestAnimationFrame(autoPanStep);
-}
-// The INNERMOST (deepest-nested) expanded section whose box contains the given screen point, or null.
-// Nested sections overlap and stack by DOM order, so a press can't rely on the browser picking the
-// innermost — this resolves it geometrically. Collapsed sections (rendered as cards) don't count.
-function innermostSectionAt(clientX: number, clientY: number): MindNode | null {
-  const wx = (clientX - state.view.x) / state.view.k, wy = (clientY - state.view.y) / state.view.k;
-  let best: MindNode | null = null, bestDepth = -1;
-  for (const m of state.nodes.values()) {
-    if (!isSection(m) || isHidden(m)) {
-      continue;
-    }
-    if (wx < m.x || wx > m.x + nodeW(m) || wy < m.y || wy > m.y + nodeH(m)) {
-      continue;
-    }
-    const depth = ancestorDepth(m);
-    if (depth > bestDepth) { bestDepth = depth; best = m; }
-  }
-  return best;
-}
-// A two-finger tap is at most this long (longer = a pinch, or a rest), and the two taps of the
-// gesture at most this far apart. Both a shade more generous than the one-finger 300ms: two fingers
-// land and lift less crisply than one.
-const TWO_TAP_MS = 250, TWO_TAP_GAP_MS = 450;
-export function bindNodeDrag(n: MindNode): void {
-  const el = n.el!;
-  // Double-tap on touch -> open the node for editing (mirrors dblclick on desktop, and prevents iOS
-  // double-tap zoom). Folding is the corner chip's job on both — tap the card, tap the chip.
-  // …and a TWO-FINGER double-tap goes IN — the touch spelling of ⌥-double-click, and the reason a
-  // one-finger double-tap gets to keep meaning "edit". `twoDown` is what makes it a TAP rather than a
-  // pinch: a two-finger touchstart is also how a zoom begins, so the gesture only registers once
-  // touchend confirms it was short, and two confirmed taps in quick succession open the node.
-  let lastTouchTap = 0, twoDown = 0, lastTwoTap = 0, tapAt = 0;
-  el.addEventListener('touchend', (e) => {
-    if (twoDown && performance.now() - twoDown < TWO_TAP_MS) {
-      lastTwoTap = performance.now();
-    }
-    twoDown = 0;
-    // A tap that just OPENED this card's editor (features/activate.ts editOnClick, at the pointerup before this) keeps
-    // the browser's emulated mouse events that follow a tap from landing: their mousedown, on the card
-    // rather than in the new textarea, would take the focus straight back out and close it.
-    if (openedSince(n.id, tapAt)) {
-      e.preventDefault();
-    }
-  });
-  el.addEventListener('touchstart', (e) => {
-    // The innermost card owns the tap, exactly as it owns the dblclick (render.ts nodeEl): child cards
-    // are DOM-nested, so without this every ancestor's own counter sees the same two taps and a
-    // double-tap on a child fired activateNode all the way up the chain — renaming the child, then
-    // opening its parent's note editor on top of it.
-    e.stopPropagation();
-    // While editing this node, let the browser handle double-tap normally (word selection) — unless the
-    // first tap is what opened the editor (features/activate.ts editOnClick): that's a double-tap on the card, which
-    // selects ALL of its text, as the dblclick does.
-    const now = performance.now();
-    tapAt = now;
-    if (inPlaceEditOn(n.id)) {
-      if (e.touches.length === 1 && now - lastTouchTap < 300 && openedSince(n.id, lastTouchTap)) {
-        e.preventDefault();
-        selectAllInEditor();
-      }
-      lastTouchTap = 0;
-      return;
-    }
-    // The card's own controls act on a single tap (features/activate.ts isNodeControlAt): a tap there must not also
-    // count toward a double-tap, or the second one would fire the button AND open the card.
-    const t0 = e.touches[0];
-    if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = 0; return; }
-    // Two fingers never count toward the one-finger counter either way — otherwise letting go of a
-    // pinch would leave a half-finished double-tap behind that the next single tap completed.
-    if (e.touches.length === 2) {
-      if (now - lastTwoTap < TWO_TAP_GAP_MS) {
-        e.preventDefault();
-        lastTwoTap = 0; twoDown = 0;
-        activateNode(n, t0?.clientX ?? 0, t0?.clientY ?? 0, { open: true });
-      } else {
-        twoDown = now;
-      }
-      return;
-    }
-    if (e.touches.length === 1 && now - lastTouchTap < 300) {
-      e.preventDefault(); // stop double-tap zoom and synthetic dblclick
-      activateNode(n, t0.clientX, t0.clientY);   // mirror the dblclick handler
-      lastTouchTap = 0;
-      return;
-    }
-    lastTouchTap = now;
-  }, { passive: false });
-  el.addEventListener('pointerdown', (e) => {
-    if (e.button === 2) { e.stopPropagation(); return; }   // right-click = context menu only: no drag/select/rename
-    // A descendant of a locked card can't be selected or dragged at all — only the locked card
-    // itself (checked further below) remains reachable this way.
-    if (hasLockedAncestor(n)) { e.stopPropagation(); return; }
-    const tgt = e.target as HTMLElement;
-    // A section's title is a folder TAB hanging OUTSIDE its box, above the top border (styles.css).
-    // A press there is a press on the section ITSELF: it must take the ordinary card path below —
-    // click selects (and renames once it is selected), a drag moves the section — so both section-specific
-    // intercepts further down exempt it. `.node` scoping keeps it to this section's OWN tab.
-    const onOwnTitle = tgt.closest('.node') === el && !!tgt.closest('.title-row');
-    if (tgt.closest('input.taskbox') && isLockedEffective(n)) { e.stopPropagation(); e.preventDefault(); return; }  // locked: no task toggling
-    if (tgt.closest('a.lk, input.taskbox, .img-zoom')) { e.stopPropagation(); return; }  // let links/checkboxes/zoom click, not drag
-    // Alt-press over an inline body image (on a plain card) rips THAT image out — extraction rides
-    // its own preview (features/image-extract.ts), not the card drag. Image-only cards drag whole.
-    if (e.altKey && e.button === 0 && !isImageCard(n) && !isSection(n) && !isLockedEffective(n)) {
-      const img = bodyImageAt(el, e.clientX, e.clientY);
-      if (img && img.dataset.path) {
-        e.stopPropagation();
-        try { el.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
-        startImageExtractDrag(n, img, e.clientX, e.clientY);
-        return;
-      }
-    }
-    // Nested sections overlap and stack by DOM order (not nesting), so the section that received this
-    // press may be an OUTER one. Prefer the INNERMOST section under the pointer: hand the gesture off
-    // to it by re-firing the press on its element (its own handler then finds itself innermost and
-    // proceeds). Only when the pressed node is an (expanded) section — a card on top, or a collapsed
-    // section (which is just a card), is always taken as-is — and so is a press on this section's own
-    // title tab, which hangs outside its box (so innermostSectionAt, a pure box hit-test, would
-    // otherwise hand every nested section's tab press to the parent section the tab overlaps).
-    if (isSection(n) && !onOwnTitle) {
-      const inner = innermostSectionAt(e.clientX, e.clientY);
-      if (inner && inner !== n && inner.el) {
-        e.stopPropagation();
-        inner.el.dispatchEvent(new PointerEvent('pointerdown', {
-          bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY,
-          button: e.button, buttons: e.buttons, pointerId: e.pointerId, pointerType: e.pointerType,
-          isPrimary: e.isPrimary, altKey: e.altKey, shiftKey: e.shiftKey, metaKey: e.metaKey, ctrlKey: e.ctrlKey }));
-        return;
-      }
-    }
-    // Close an editor open on a DIFFERENT node (tap-outside on touch where blur may not fire)
-    if (ui.bodyEdit && ui.bodyEdit.id !== n.id) {
-      endBodyEdit();
-    }
-    if (ui.titleEdit && ui.titleEdit.id !== n.id) {
-      endTitleEdit();
-    }
-
-    // A plain press on a STACK's pile fans it out or lifts its top card off (features/stacks.ts). Its pin and
-    // its name tab are the stack's own handles, and take the ordinary path below: select, move it whole.
-    if (isStack(n) && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey
-        && !tgt.closest('.stack-pin, .title-row')) {
-      e.stopPropagation();
-      beginPileGesture(n, e);
-      return;
-    }
-    // while this node is being edited, let clicks place the caret — don't start a drag
-    if (inPlaceEditOn(n.id)) { e.stopPropagation(); return; }
-    // A drag inside an UNSELECTED (expanded) section rubber-band-selects the cards INSIDE it rather
-    // than moving the section — you move the section from its interior only once it's selected. A
-    // no-move click selects the section (endMarquee). ⌘/Ctrl-click still falls through to the normal
-    // add-to-selection toggle. Its title TAB is the exception (onOwnTitle): the tab is the section's
-    // own handle, so pressing it always takes the card path — a press there selects and drags the
-    // section itself, the way a card's title does, rather than rubber-banding its contents.
-    if (isSection(n) && !n.collapsed && !onOwnTitle && !state.sel.has(n.id) && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
-      e.stopPropagation();
-      beginMarqueeFromNode(e, n.id);
-      return;
-    }
-    e.stopPropagation();
-    try { el.setPointerCapture(e.pointerId); } catch { /* no active pointer (e.g. synthetic) */ }
-    beginDrag(n, e);
-  });
 }
 
 // Press-and-hold the whole multi-selection from the frame's empty interior (features/sel-frame.ts): the
@@ -360,7 +179,7 @@ export function startSelectionDrag(e: PointerEvent): void {
 // Open a drag gesture on `n` from a press. Dragging a card that's part of a multi-selection moves the
 // WHOLE selection at once; otherwise just this card's subtree. `active` is the node dragged/dropped;
 // `targets` are the nodes that follow the cursor (or, after a Shift-clone, just the clone).
-function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
+export function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
   const multi = state.sel.has(n.id) && state.sel.size > 1;
   // A locked member of a multi-selection stays put — only its unlocked companions get dragged
   // (pressing directly ON a locked card is handled separately in dragPointerMove, which pins the
@@ -414,6 +233,7 @@ function beginDrag(n: MindNode, e: PointerEvent, fromFrame = false): void {
     }
   }
 }
+
 // Body of a drag pointermove, operating on the live ui.drag (the node that owns the gesture is
 // whatever drag.n is). Shared by the per-card handler and the ghost-card "drag a new note" flow.
 function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean; shiftKey: boolean }): void {
@@ -459,6 +279,7 @@ function dragPointerMove(e: { clientX: number; clientY: number; altKey: boolean;
     ui.dragRAF = requestAnimationFrame(flushDragPaint);
   }
 }
+
 // Body of a drag pointerup: commit the move/reparent (or handle a plain click). Operates on the
 // live ui.drag. Shared by the per-card handler and the ghost-card flow.
 function dragPointerUp(): void {
@@ -547,7 +368,8 @@ function dragPointerUp(): void {
           if (!r) {
             continue;
           }
-          const f = group !== undefined ? group : sectionAt(r.x + nodeW(r) / 2, r.y + nodeH(r) / 2, moving);
+          const c = centreOf(nodeRect(r));
+          const f = group !== undefined ? group : sectionAt(c.x, c.y, moving);
           const np = f?.id ?? detachParentId();
           if (np !== r.parent) {
             reparentOnly(rootId, np);
@@ -582,6 +404,7 @@ function dragPointerUp(): void {
       editOnClick(drag.n, drag.cx, drag.cy, drag.touch);
     }
 }
+
 // Begin a programmatic drag of an already-created node from a screen point, as if the user had
 // pressed down on it there. Used by the ghost-card "drag a new note" flow so a freshly-made card
 // rides the cursor through the exact same move/drop machinery as an existing
@@ -596,11 +419,14 @@ export function startNodeDrag(n: MindNode, clientX: number, clientY: number): vo
   if (n.el){ n.el.style.willChange = 'transform'; n.el.classList.add('dragging', 'grabbed'); }
   document.body.classList.add('grabbing');
 }
+
 // Forward a move/up from an external (ghost-card) drag into the shared drag machinery.
 export function feedDragMove(clientX: number, clientY: number): void {
   dragPointerMove({ clientX, clientY, altKey:false, shiftKey:false });
 }
+
 export function commitDrag(): void { dragPointerUp(); }
+
 // Abort the live drag with no commit: clear the drop highlight and any
 // compositor transforms, then forget the gesture. The caller is responsible for the dragged node.
 export function abortDrag(): void {
@@ -622,6 +448,7 @@ export function abortDrag(): void {
   ui.drag = null;
   document.body.classList.remove('grabbing');
 }
+
 // Cancel the live drag AND put everything back where the gesture started, OS-style snap-back:
 // Shift-clones are removed (they never existed), every dragged card returns to its start
 // position, and the pending undo step nets out. Shared by the released-outside-the-window
@@ -641,6 +468,7 @@ export function cancelDragRestore(): void {
   relayout();   // no new cards to measure — one layout + paint suffices
   commitStep();   // nothing changed → the pending step nets out and is discarded
 }
+
 // Bring the Shift-clone state in line with the live `drag.shift` flag. Shift down (and moved past
 // the threshold) leaves a clone of each dragged card at its start spot and drags the COPIES away;
 // Shift released before drop deletes the clones and reverts to plain-moving the originals.
@@ -683,6 +511,7 @@ function applyDragClone(): void {
     paintAll();
   }
 }
+
 // Snap the dragged subtree (and drop-target / edges) to the current cursor without a pointer move —
 // used when a modifier toggles mid-drag, so the result is reflected instantly while the mouse is still.
 function dragFollow(): void {
@@ -696,6 +525,7 @@ function dragFollow(): void {
   }
   paintFreeEdges();   // modifier changed mid-drag — always repaint (infrequent)
 }
+
 // Update the detach preview the instant Alt is pressed/released mid-drag, even if the pointer
 // isn't moving: repaint the dragged subtree (its colour previews the detached result) and re-resolve
 // the drop target — ⌥ doesn't only mean "detach", it's also what turns a drop onto a card into a
@@ -711,255 +541,6 @@ function paintDetachPreview(): void {
     }
   }
   dragFollow();
-}
-
-// The section a drop lands in: for a MULTI-selection the one under the pointer, so the whole group goes
-// where you aim it; for one card the one its centre is in. Null = the top level (or the open section).
-function dropSection(drag: NonNullable<typeof ui.drag>, dragged: MindNode): MindNode | null {
-  const skip = new Set(drag.targets.keys());
-  if (drag.selRoots.length > 1) {
-    const p = screenToWorld(drag.cx, drag.cy);
-    return sectionAt(p.x, p.y, skip);
-  }
-  return sectionAt(dragged.x + nodeW(dragged) / 2, dragged.y + nodeH(dragged) / 2, skip);
-}
-
-// ---------- the drop preview ----------
-// What a release right now would do, shown while it's still a choice: with ⌥ held over a plain card,
-// a MERGE into it (a dashed outline on that card); otherwise the section the dragged card would land in
-// lights up — only when that's a change, i.e. the card is about to go INTO a section it isn't in yet.
-// `drag.dropTarget` records the resolved new parent (null = the top level) for effectiveColor, so an
-// inheriting card previews the colour it's about to take.
-function updateDropTarget(dragged: MindNode, e: { clientX: number; clientY: number }): void {
-  const drag = ui.drag;
-  if (!drag) {
-    return;
-  }
-  const sub = new Set(drag.targets.keys());
-  clearDropTarget();
-  let fuse: string | null = null;
-  const mergeDrag = drag.alt && drag.selRoots.length > 0
-    && drag.selRoots.every(id => { const m = state.nodes.get(id); return !!m && canMerge(m); });
-  if (mergeDrag) {
-    // the CARD under the pointer (what may take a merge: utils/model.ts takesDrop), first hit wins
-    const wx = (e.clientX - state.view.x) / state.view.k, wy = (e.clientY - state.view.y) / state.view.k;
-    for (const [id, m] of state.nodes) {
-      if (sub.has(id) || isHidden(m) || m.type !== 'card') {
-        continue;
-      }
-      if (wx >= m.x && wx <= m.x + nodeW(m) && wy >= m.y && wy <= m.y + nodeH(m)) {
-        if (takesDrop(m)) {
-          fuse = id;
-        }
-        break;
-      }
-    }
-  }
-
-  // What else a release right now would do — the FIRST of these that applies: a card of the open fan dragged
-  // within it takes another place in the pile; over a stack, or held over a card long enough, the cards go
-  // onto a pile (features/stacks.ts); over a crumb or a folded pill they're filed (chuteAt); else they land by the
-  // drop rule (dropSection).
-  let insert: FanInsert | null = null, pile: Drag['pile'] = null, chute: ReturnType<typeof chuteAt> = null;
-  let f: MindNode | null = null, target: string | null;
-  if (fuse) {
-    target = dragged.parent;
-  } else if ((insert = fanSlot(drag, e.clientX, e.clientY))) {
-    target = dragged.parent;
-  } else if ((pile = pileTarget(drag, e.clientX, e.clientY, sub))) {
-    target = pile.make ? state.nodes.get(pile.id)!.parent : pile.id;
-  } else if ((chute = chuteAt(e.clientX, e.clientY, sub))) {
-    target = chute.parent;
-  } else {
-    f = dropSection(drag, dragged);
-    target = f?.id ?? detachParentId();
-  }
-  const changed = drag.dropTarget !== target;
-  drag.dropTarget = target; drag.cardMerge = fuse; drag.chute = chute; drag.pile = pile; drag.fanSlot = insert?.slot ?? null;
-  armPileHover(drag);
-  if (changed) {
-    for (const id of sub) {
-      const m = state.nodes.get(id);
-      if (m) {
-        paintNode(m);
-      }
-    }
-  }
-  if (fuse) {
-    markDrop(state.nodes.get(fuse)!.el, 'drop-merge');
-  } else if (insert) {
-    showFanInsert(insert);
-  } else if (pile) {
-    markDrop(state.nodes.get(pile.id)!.el, 'drop-pile');
-  } else if (chute) {
-    markDrop(chute.el, 'drop-target');
-  } else if (f && f.id !== dragged.parent) {
-    markDrop(f.el, 'drop-target');
-  }
-}
-
-// The ONE element wearing a drop hint, remembered so that clearing it — which every frame of a drag
-// does first — is not a search of the whole document.
-let dropMark: Element | null = null;
-
-function markDrop(el: Element | null | undefined, cls: string): void {
-  if (el) {
-    el.classList.add(cls);
-    dropMark = el;
-  }
-}
-function clearDropTarget(): void {
-  dropMark?.classList.remove('drop-target', 'drop-merge', 'drop-pile');
-  dropMark = null;
-  showFanInsert(null);
-}
-
-// The pointer resting on a card ARMS a stack after PILE_HOVER_MS, whether or not the mouse moves again in
-// the meantime: re-ask then, so the target lifts while the card is simply held there.
-let pileTimer = 0;
-
-function armPileHover(drag: Drag): void {
-  window.clearTimeout(pileTimer);
-  if (!drag.pileHover || drag.pile) {
-    return;
-  }
-  const wait = PILE_HOVER_MS - (performance.now() - drag.pileHover.since);
-  pileTimer = window.setTimeout(() => {
-    if (ui.drag === drag && drag.moved) {
-      updateDropTarget(drag.active, { clientX: drag.cx, clientY: drag.cy });
-    }
-  }, Math.max(0, wait) + 10);
-}
-// What the POINTER is over that files a drop somewhere off the canvas: a crumb of the open-section path
-// (out to that level, beside the section you came out of) or a folded section's pill (into it). The
-// pointer decides rather than the card's centre: both are small targets you aim at.
-function chuteAt(cx: number, cy: number, sub: Set<string>): (Chute & { el: HTMLElement }) | null {
-  const over = (el: Element): boolean => {
-    const r = el.getBoundingClientRect();
-    return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
-  };
-
-  // the CURRENT crumb is where the cards already are; `…` has no single level
-  for (const el of document.querySelectorAll<HTMLElement>('#homeBar .sc-crumb[data-depth]:not(.sc-cur)')) {
-    if (over(el)) {
-      const d = Number(el.dataset.depth);
-      const parent = d ? scope.stack[d - 1]?.rootId ?? null : null;
-      const p = parent ? state.nodes.get(parent) : null;
-      return p && isLockedEffective(p) ? null : { parent, beside: scope.stack[d]?.rootId, el };
-    }
-  }
-  for (const m of state.nodes.values()) {
-    if (m.type === 'section' && m.collapsed && m.el && !sub.has(m.id) && !isHidden(m) && !isLockedEffective(m) && over(m.el)) {
-      return { parent: m.id, el: m.el };
-    }
-  }
-  return null;
-}
-// File the dragged roots into a chute's section (or the top level). Into a folded section they join its
-// cards in a column of their own beside them (arrange.ts arrangeSections, the inbox's rule) — reading its
-// folder first if it was never read; out through a crumb they land in a column right of the section they
-// came out of. Either way they leave the canvas you're looking at, so the toast says where they went.
-function fileAway(roots: string[], chute: Chute): void {
-  const p = chute.parent ? state.nodes.get(chute.parent) ?? null : null;
-  const go = (): void => {
-    const ids = roots.filter(id => {
-      const r = state.nodes.get(id);
-      return !!r && (r.parent === chute.parent || reparentOnly(id, chute.parent));
-    });
-    if (!ids.length) {
-      remeasure(); commitStep();
-      return;
-    }
-    const beside = chute.beside ? state.nodes.get(chute.beside) : null;
-    if (p?.collapsed) {
-      touch(p.id, ...ids.flatMap(id => subtreeIds(id)));
-      arrangeSections([p], new Set(ids));
-    } else if (beside) {
-      // shortcut: the column may overlap whatever already sits right of that section; ⌃⌥T tidies it.
-      let y = beside.y;
-      for (const id of ids) {
-        const r = state.nodes.get(id)!;
-        moveSubtreeTo(r, beside.x + nodeW(beside) + SPACING, y);
-        y += nodeH(r) + SPACING;
-      }
-    }
-    setSelectionSet([]);
-    setStatus(`Moved ${ids.length > 1 ? `${ids.length} cards` : `“${nodeLabel(state.nodes.get(ids[0])!)}”`} to “${p ? nodeLabel(p) : 'the top level'}”`);
-    relayout();
-    flashArrived(ids);
-    scheduleSave(); commitStep();
-  };
-  if (!(p && afterReading([p.id], go, false))) {
-    go();
-  }
-}
-// A section COLLECTS what it covers — the drop rule run from the section's side, FigJam-style. After a section
-// is moved, resized or made, every card whose centre is now in it belongs to it (sectionAt: the
-// innermost section wins, so a card sitting in a smaller section inside it stays there), and every card of
-// its own whose centre is now OUTSIDE it goes to whatever it's over instead (a shrink lets go of what
-// it no longer covers, rather than hiding it under the clip). A SECTION is collected only when its whole
-// box is inside — by its centre alone, a big section could be swallowed by a small one laid across it.
-// Locked and hidden things stay where they are. Returns the ids it reparented. It never resizes a section.
-export function settleSections(sectionIds: Iterable<string>): string[] {
-  const moved: string[] = [];
-  for (const id of sectionIds) {
-    const f = state.nodes.get(id);
-    if (!f || !collectsCards(f)) {
-      continue;
-    }
-    const b = containerBox(f);
-    const inside = (m: MindNode): boolean => m.x >= b.x && m.y >= b.y && m.x + nodeW(m) <= b.x + b.w && m.y + nodeH(m) <= b.y + b.h;
-    // let go of its own cards that left it…
-    for (const k of childrenOf(f.id)) {
-      if (isHidden(k) || isLockedEffective(k) || centreInSection(k, f)) {
-        continue;
-      }
-      const to = sectionAt(k.x + nodeW(k) / 2, k.y + nodeH(k) / 2, new Set(subtreeIds(k.id)));
-      if (reparentOnly(k.id, to?.id ?? detachParentId())) {
-        moved.push(k.id);
-      }
-    }
-    // …and take in what it now covers.
-    for (const n of state.nodes.values()) {
-      if (n === f || n.parent === f.id || isHidden(n) || isLockedEffective(n)) {
-        continue;
-      }
-      if (isAncestor(n.id, f.id) || isAncestor(f.id, n.id)) {
-        continue;   // its own sections, or inside it already
-      }
-      if (n.type === 'section' ? !inside(n) : !centreInSection(n, f)) {
-        continue;
-      }
-      if (sectionAt(n.x + nodeW(n) / 2, n.y + nodeH(n) / 2, new Set(subtreeIds(n.id))) !== f) {
-        continue;
-      }
-      if (reparentOnly(n.id, f.id)) {
-        moved.push(n.id);
-      }
-    }
-  }
-  return moved;
-}
-// Move one card into a section, or out to the top level (null). Mutates the parent only — no paint or
-// status; dragPointerUp settles the canvas once for the whole dragged group. Refuses a locked card or
-// section, and a section into its own contents. Returns whether it moved.
-function reparentOnly(childId: string, newParentId: string | null): boolean {
-  const child = state.nodes.get(childId);
-  const newParent = newParentId ? state.nodes.get(newParentId) : null;
-  if (!child || childId === newParentId || (newParentId && !newParent)) {
-    return false;
-  }
-  if (isLockedEffective(child) || (newParent && isLockedEffective(newParent))) {
-    return false;
-  }
-  if (newParent && isAncestor(childId, newParent.id)) {
-    return false;   // would create a cycle
-  }
-  touch(childId, child.parent, newParentId);
-  child.parent = newParentId;
-  // The parent is the note's FOLDER, so a reparent moves the file (the save works out where); the offset is the board's.
-  child.dirty = true;
-  return true;
 }
 
 export function installDragModifiers(): void {

@@ -28,6 +28,8 @@ import { hydrateImages } from './images.js';
 import { selectedIds, setSelectionSet } from './selection.js';
 import { fitSectionToContent, SECTION_FIT_PAD } from './float-bar.js';
 import { scheduleSave } from '../data/save.js';
+import { reorderedPile } from '../utils/fan.js';
+import { contains, inflate } from '../utils/rect.js';
 
 // How long a dragged card rests on another before letting go makes the two a stack. A quick pass over a
 // card is just a pass: the cards overlap, as they always have.
@@ -334,7 +336,7 @@ function pileNear(cx: number, cy: number, skip: Set<string>): boolean {
     if (skip.has(n.id) || !canPile(n) || isHidden(n)) {
       continue;
     }
-    if (p.x >= n.x - PILE_REACH && p.x <= n.x + nodeW(n) + PILE_REACH && p.y >= n.y - PILE_REACH && p.y <= n.y + nodeH(n) + PILE_REACH) {
+    if (contains(inflate({ x: n.x, y: n.y, w: nodeW(n), h: nodeH(n) }, PILE_REACH), p)) {
       return true;
     }
   }
@@ -407,8 +409,7 @@ export function reorderPile(id: string, slot: number): boolean {
   if (!k || !isStack(s)) {
     return false;
   }
-  const order = pileKids(s!).map(m => m.id).filter(x => x !== id);
-  order.splice(Math.min(slot, order.length), 0, id);
+  const order = reorderedPile(pileKids(s!).map(m => m.id), id, slot);
   touch(s!.id);
   s!.kidOrder = order;
   return true;

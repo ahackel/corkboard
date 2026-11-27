@@ -12,7 +12,8 @@ import { mutate } from './mutate.js';
 import { subtreesBox, isSection } from '../view/layout.js';
 import { createProperties, type PropertyControls } from './properties.js';
 import { startInlineEdit, startBodyEdit, editSectionTitle } from './inline-edit.js';
-import { settleSections } from './drag.js';
+import { settleSections } from './drop.js';
+import { fitAround } from '../utils/placement.js';
 import { duplicateSelection, deleteSelection, deleteNode, deleteSelectionKeepChildren, mkNode, nextSectionTitle } from './crud.js';
 import { exportSelection, shareSelection, canShareFiles, copySelection, copyFormatted, cutSelection } from './clipboard.js';
 import { pasteFromClipboard } from './attachments.js';
@@ -58,15 +59,15 @@ let props: PropertyControls;
 // (data/persistence.ts).
 // The section's label hangs outside the box (above it), so the margin is the same on all four sides.
 export const SECTION_FIT_PAD = 16;
+const MIN_SECTION_SIZE = { w: MIN_SECTION_W, h: MIN_SECTION_H };
+
 export function fitSectionToContent(n: MindNode, orDefault = false): void {
-  const snapStep = gridSnap();
-  const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
-  const { x0, y0, x1, y1 } = subtreesBox(childrenOf(n.id));
-  if (!isFinite(x0)) { if (orDefault) { n.w = SECTION_W; n.h = SECTION_H; } return; }
-  n.x = snap(x0 - SECTION_FIT_PAD);
-  n.y = snap(y0 - SECTION_FIT_PAD);
-  n.w = Math.max(MIN_SECTION_W, snap(x1 + SECTION_FIT_PAD - n.x));
-  n.h = Math.max(MIN_SECTION_H, snap(y1 + SECTION_FIT_PAD - n.y));
+  const fit = fitAround(subtreesBox(childrenOf(n.id)), SECTION_FIT_PAD, gridSnap(), MIN_SECTION_SIZE);
+  if (fit) {
+    Object.assign(n, fit);
+  } else if (orDefault) {
+    n.w = SECTION_W; n.h = SECTION_H;
+  }
 }
 // FIT — the float bar's ↔, ⌥⇧⌘R and the menu's "Resize to fit": every selected section hugs its cards
 // (fitSectionToContent), every selected card drops its authored height — a minimum it was dragged out to,
@@ -150,15 +151,10 @@ export function groupSelectionIntoSection(): void {
 
   let sectionId = '';
   mutate([], () => {
-    const { x0, y0, x1, y1 } = subtreesBox(nodes);
-    const snapStep = gridSnap();
-    const snap = (v: number): number => Math.round(v / snapStep) * snapStep;
-    const fx = isFinite(x0) ? snap(x0 - SECTION_FIT_PAD) : 0;
-    const fy = isFinite(y0) ? snap(y0 - SECTION_FIT_PAD) : 0;
-    const fw = isFinite(x1) ? Math.max(MIN_SECTION_W, snap(x1 + SECTION_FIT_PAD - fx)) : SECTION_W;
-    const fh = isFinite(y1) ? Math.max(MIN_SECTION_H, snap(y1 + SECTION_FIT_PAD - fy)) : SECTION_H;
+    const fit = fitAround(subtreesBox(nodes), SECTION_FIT_PAD, gridSnap(), MIN_SECTION_SIZE)
+      ?? { x: 0, y: 0, w: SECTION_W, h: SECTION_H };
     const section = mkNode({
-      x: fx, y: fy, w: fw, h: fh, parent: parentId,
+      ...fit, parent: parentId,
       // A section is one kind that keeps a required title: its folder tab is the only thing you can
       // grab it by, and a blank tab reads as broken.
       title: nextSectionTitle(), type: 'section',

@@ -29,7 +29,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `core/ui-state.ts` — the mutable `ui` holder for live interaction state (drag/edit/pan/marquee/
   pinch), `paintTick`, and the ONE spelling of "busy" (`canvasMoving`/`isBusy`). Mutate in place, never reassign.
 - `utils/` — pure helpers: `markdown.ts`, `md-edit.ts` (editor keys, the Format menu, `EDIT_COMMANDS`), `md-table.ts` (table keys, paste, Edit Table), `frontmatter.ts` (`parseMd`/`serializeMd`), `model.ts`
-  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`, …
+  (`parentOf`/`ancestors`/`isHidden`/`nodeLabel`/`withKids`), `filenames.ts` (slug/rename/link fixup, `pathKey`), `tags.ts` (Obsidian tags), `paste-list.ts`, `guides.ts` (smart-guide geometry), `edge-route.ts` (line routing), `ink.ts`, `motion.ts` (e2e-only motion-off switch), `time-ago.ts`, `zip.ts`, `idb.ts`, `dom.ts` (`keys()`: the one spelling of a shortcut), `num.ts`; the gestures' PURE geometry, unit-tested: `rect.ts` (`deepestAt`), `drag-geometry.ts`, `resize-geometry.ts`, `placement.ts` (Fit, next slot, paste), `fan.ts`, `merge-notes.ts`, …
 - `store/` — the swappable I/O boundary, one concern per file: `opfs.ts` (default), `fsa.ts`,
   `idb-store.ts`, `note.ts` (ONE file = a one-card map), `handle-store.ts`, `tree.ts` (what a load reads), `recents.ts`, `maps.ts`, `watch.ts`, `persist.ts`, `types.ts`, `index.ts`.
 - `data/` (acyclic, see "`data/` never imports the UI") — `active-store.ts` (the open `store`), `persistence.ts` (`useStore`, switching maps), `load.ts` (`loadFromDir`), `read.ts` (listing → nodes, `readFolder`), `arrange.ts`, `note-names.ts` (`keepsName`), `save.ts`
@@ -37,7 +37,7 @@ and at most a pointer here. If an entry here grows past a couple of lines, move 
 - `view/` — `camera.ts`, `layout.ts` (section geometry, the drop test `sectionAt`, `holderOf`), `geometry.ts` (`nodeW`/`nodeH`, sizes,
   grid snap), `color.ts` (palette, `colorFill`), `free-edges.ts`, `grid.ts`, `icons.ts`.
 - `nav/` — where you ARE: `url-state.ts` (the hash), `scope.ts` (open sections), `sections.ts` (opening/leaving), `focus.ts`.
-- `features/` — the interactive subsystems, sharing state via `ui`: drag, gestures, inline-edit, crud, selection, fold,
+- `features/` — the interactive subsystems, sharing state via `ui`: drag (the engine), drop (where a release lands, `settleSections`), node-press (what a press starts), gestures, inline-edit, crud, selection, fold,
   resize, sel-frame (the multi-selection frame), stacks, text-drag, attachments, clipboard, search, guides, float-bar, edge-tools/edge-bar (lines), palette, context-menu, tags, history, …
   `mutate.ts` is the one-shot edit runner. `commands.ts` holds every keyboard shortcut and `paletteCommands`, ⌘P's ONLY list of every action — add new ones there.
 - `main.ts` — the entry ONLY: each module's `install…()` in a deliberate order (NO module wires itself up on import), the data hooks, `boot()` (`boot.ts`: local-first boot, the home screen). Nothing imports it.

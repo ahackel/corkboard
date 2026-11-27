@@ -8,16 +8,16 @@ import { ui, type Pt } from '../core/ui-state.js';
 import { childrenOf } from '../utils/model.js';
 import { orderedKids } from './layout.js';
 import { nodeW, nodeH, NODE_W } from './geometry.js';
+import { gridCells, fanArc, fanInsertAt, type FanInsert, type Size, type Spot } from '../utils/fan.js';
+
+export type { FanInsert };
 
 // Up to this many cards fan out in an ARC over the pile, the Dock's fan; more open as a GRID over it.
 export const FAN_ARC_MAX = 8;
 const FAN_GAP = 16;
 
-// How far the arc's ends dip below its middle, and how far they tilt (degrees).
-const ARC_DIP = 18, ARC_TILT = 6;
-
-// How far the whole fan sits above the pile's top edge — a little lift, so the cards read as raised, no more.
-const FAN_LIFT = 20;
+// The arc sits a little above the pile (lift), its ends dipping and tilting out (degrees).
+const FAN_ARC = { gap: FAN_GAP, lift: 20, dip: 18, tilt: 6 };
 
 // A stack's cards, BOTTOM first: the pile's order is its child order (board.json `order`), the last on top.
 export function pileKids(s: MindNode): MindNode[] {
@@ -49,21 +49,12 @@ export function pileX(s: MindNode, k: MindNode): number {
   return s.x + (pileW(s) - nodeW(k)) / 2;
 }
 
-// Cards in a GRID: ⌈√n⌉ columns as wide as the widest card, each row as tall as its tallest, `gap` apart.
-// Each card's top-left as an offset from the grid's own, and the grid's size. Shared by the fan's grid and by
-// Unstack / Turn into section (features/stacks.ts). Heights are measured, so the cards must be painted.
+// Cards in a GRID (utils/fan.ts gridCells), shared by the fan's grid and by Unstack / Turn into section
+// (features/stacks.ts). Heights are measured, so the cards must be painted.
+const sizeOf = (k: MindNode): Size => ({ w: nodeW(k), h: nodeH(k) });
+
 export function gridOf(cards: MindNode[], gap: number): { at: Pt[]; w: number; h: number } {
-  const cols = Math.ceil(Math.sqrt(cards.length));
-  const colW = Math.max(...cards.map(nodeW)) + gap;
-  const at: Pt[] = [];
-  let y = 0, w = 0;
-  for (let i = 0; i < cards.length; i += cols) {
-    const row = cards.slice(i, i + cols);
-    row.forEach((_, j) => at.push({ x: j * colW, y }));
-    w = Math.max(w, row.length * colW - gap);
-    y += Math.max(...row.map(nodeH)) + gap;
-  }
-  return { at, w, h: Math.max(0, y - gap) };
+  return gridCells(cards.map(sizeOf), gap);
 }
 
 // The tilt of each card in the open fan, in degrees — set as its `--tilt` by features/stacks.ts syncFan.
@@ -101,27 +92,15 @@ export function layStacks(): boolean {
   return stacks;
 }
 
-// Where each card of a FANNED stack shows, the top card first: an arc for a handful — a hand of cards held up
-// over the pile, side by side so each reads whole, the middle FAN_LIFT above the pile's top and the ends a
-// little lower — and a grid centred on the pile for
-// more.
-interface Spot extends Pt { tilt: number }
-
+// Where each card of a FANNED stack shows, the top card first: an arc for a handful, a grid centred on the
+// pile for more.
 function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
   const shown = kids.slice().reverse();
   const out = new Map<string, Spot>();
   const cx = s.x + pileW(s) / 2;
   if (shown.length <= FAN_ARC_MAX) {
-    const step = Math.max(...shown.map(nodeW)) + FAN_GAP;
-    const last = shown.length - 1;
-    shown.forEach((k, i) => {
-      const t = last ? (i / last) * 2 - 1 : 0;   // -1 at the left end, +1 at the right
-      out.set(k.id, {
-        x: cx + (i - last / 2) * step - nodeW(k) / 2,
-        y: s.y - FAN_LIFT + t * t * ARC_DIP,   // the cards SPREAD, and rise only a little
-        tilt: t * ARC_TILT,
-      });
-    });
+    const arc = fanArc(shown.map(nodeW), cx, s.y, FAN_ARC);
+    shown.forEach((k, i) => out.set(k.id, arc[i]));
     return out;
   }
   const g = gridOf(shown, FAN_GAP);
@@ -130,28 +109,9 @@ function fanSpots(s: MindNode, kids: MindNode[]): Map<string, Spot> {
   return out;
 }
 
-// Where a card dragged within the fan would go: the GAP beside the fanned card nearest the pointer — before
-// it or after it, by which half of it the pointer is over. `slot` is that place as an index into the pile
-// without the dragged card (bottom first, what reorderPile splices at); `x`/`y`/`h` are the insertion line,
-// down the middle of the gap. Null when the pointer is nowhere near the fan.
-export interface FanInsert { slot: number; x: number; y: number; h: number }
+// Where a card dragged within the fan would go (utils/fan.ts fanInsertAt). Null when the pointer is nowhere
+// near the fan.
 export function fanSlotAt(s: MindNode, p: Pt, dragged: string): FanInsert | null {
-  const order = pileKids(s).filter(k => k.id !== dragged);
-  const shown = order.slice().reverse();   // as laid out: the top card first
-  let best = -1, bestD = Infinity;
-  shown.forEach((k, j) => {
-    const inside = p.x >= k.x - FAN_GAP && p.x <= k.x + nodeW(k) + FAN_GAP && p.y >= k.y - FAN_GAP && p.y <= k.y + nodeH(k) + FAN_GAP;
-    const d = Math.hypot(p.x - (k.x + nodeW(k) / 2), p.y - (k.y + nodeH(k) / 2));
-    if (inside && d < bestD) { bestD = d; best = j; }
-  });
-  if (best < 0) {
-    return null;
-  }
-  const c = shown[best];
-  const after = p.x > c.x + nodeW(c) / 2;
-  return {
-    slot: order.length - (best + (after ? 1 : 0)),
-    x: after ? c.x + nodeW(c) + FAN_GAP / 2 : c.x - FAN_GAP / 2,
-    y: c.y, h: nodeH(c),
-  };
+  const shown = pileKids(s).filter(k => k.id !== dragged).reverse();
+  return fanInsertAt(shown.map(k => ({ x: k.x, y: k.y, ...sizeOf(k) })), p, FAN_GAP);
 }

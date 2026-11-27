@@ -8,7 +8,8 @@
 import { state, isStack, type MindNode } from '../core/state.js';
 import { childrenOf, isHidden, parentOf, ancestors, isLockedEffective, subtreeIds } from '../utils/model.js';
 import { isScopeRoot, pruneScope, scopeRect } from '../nav/scope.js';
-import { layoutH, nodeH, nodeW, SECTION_BORDER } from './geometry.js';
+import { layoutH, nodeH, nodeRect, nodeW, SECTION_BORDER } from './geometry.js';
+import { centreOf, contains, deepestAt } from '../utils/rect.js';
 import { layStacks } from './pile.js';
 import { firstLineLabel } from '../utils/frontmatter.js';
 
@@ -145,20 +146,9 @@ export function holderOf(id: string | null | undefined): string | null {
 export function collectsCards(m: MindNode): boolean {
   return isSection(m) && !isHidden(m) && !isScopeRoot(m) && !isLockedEffective(m);
 }
+
 export function sectionAt(x: number, y: number, skip: Set<string>): MindNode | null {
-  let best: MindNode | null = null, bestDepth = -1;
-  for (const m of state.nodes.values()) {
-    if (skip.has(m.id) || !collectsCards(m)) {
-      continue;
-    }
-    const b = containerBox(m);
-    if (x < b.x || x > b.x + b.w || y < b.y || y > b.y + b.h) {
-      continue;
-    }
-    const d = ancestorDepth(m);
-    if (d > bestDepth) { bestDepth = d; best = m; }
-  }
-  return best;
+  return deepestAt(state.nodes.values(), { x, y }, m => skip.has(m.id) || !collectsCards(m) ? null : containerBox(m), ancestorDepth);
 }
 // A section's INTERIOR rect (absolute world coords, inside its border — its label hangs outside, above) — the single source of truth for "where does this section's content go". Shared by
 // render.ts's sectionContentEl (the real DOM clipping wrapper) and the edge painter's clip-path, so the
@@ -197,9 +187,7 @@ export function centreInSection(child: MindNode, section: MindNode): boolean {
   if (isScopeRoot(section)) {
     return true;
   }
-  const cx = child.x + nodeW(child)/2, cy = child.y + nodeH(child)/2;
-  const b = containerBox(section);
-  return cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h;
+  return contains(containerBox(section), centreOf(nodeRect(child)));
 }
 // Move a node so its bounds top-left lands at (x,y), carrying its whole subtree with it — what a bare
 // `n.x = …` assignment can't do (it would leave a section's children behind, outside the box).

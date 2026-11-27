@@ -9,7 +9,7 @@ import { labelScale } from './view/camera.js';
 import { applyLayouts, hostSection, sectionInterior, isSection, sectionLabelled, sectionName } from './view/layout.js';
 import { paintFreeEdges } from './view/free-edges.js';
 import { endTitleEdit, onTitleInput, onTitleKeydown, syncOpenEditor } from './features/inline-edit.js';
-import { bindNodeDrag } from './features/drag.js';
+import { bindNodeDrag } from './features/node-press.js';
 import { paintPile, syncFan, STACK_DEFAULT_COLOR } from './features/stacks.js';
 import { refreshSearch, searchHitsIn, searchTags, toggleSearchTag } from './features/search.js';
 import { bindCardFileDrag } from './features/clipboard.js';

@@ -6,9 +6,10 @@ import { ui } from '../core/ui-state.js';
 import { touch, commitStep } from './history.js';
 import { snapTo } from '../utils/num.js';
 import { guideResize, hideGuides } from './guides.js';
+import { sidesOf, resizeProbe, resizeEdges, foldsToIcon } from '../utils/resize-geometry.js';
 import { paintNode, relayout } from '../render.js';
 import { paintFreeEdges } from '../view/free-edges.js';
-import { settleSections } from './drag.js';
+import { settleSections } from './drop.js';
 import { syncFloatBar } from './float-bar.js';
 import { syncSelFrame, memberEdgeResize } from './sel-frame.js';
 import { trackPointer } from '../utils/dom.js';
@@ -128,10 +129,11 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   const aspect = img ? imageAspect(n) : null;   // width/height — locked while dragging an image card
   // Live geometry, not (n.w ?? boxDefaultW): boxDefaultH falls back to SECTION_H for anything that
   // isn't an image/query, so a plain card would start from a bogus 279px-tall box.
-  const left0 = n.x, top0 = n.y, right0 = n.x + nodeW(n), bottom0 = n.y + nodeH(n);
+  const e0 = { left: n.x, top: n.y, right: n.x + nodeW(n), bottom: n.y + nodeH(n) };
   const sx = e.clientX, sy = e.clientY;
   ui.resizingId = n.id; n.el?.classList.add('resizing');   // its tags step aside while its edge moves (paintNode keeps it)
-  const west = dir.includes('w'), east = dir.includes('e'), north = dir.includes('n'), south = dir.includes('s');
+  const sides = sidesOf(dir);
+  const { west, north, south } = sides;
   touch(n.id);
   let lastDx = 0, lastDy = 0;
   let subtreeRAF: number | null = null;
@@ -140,59 +142,15 @@ function startNodeResize(e: PointerEvent, n: MindNode, dir: SectionDir): void {
   // on every move, so the box steps between grid sizes under the pointer instead of taking one up at
   // the end. One snapping rule for everything the pointer moves.
   const snap = (v: number): number => snapTo(v, g);
-  // Apply the current drag delta, keeping the non-dragged edges fixed. We snap the SIZE (not the
-  // edges) to the grid so a box's w/h are always multiples of the snap — the moving edge derives
-  // from the fixed opposite edge minus the snapped size. Free (unsnapped) while dragging; snapped
-  // on release. Clamped to the min size (also grid multiples).
+  // The SIZE snaps (not the edges), so a box's w/h stay grid multiples (utils/resize-geometry.ts).
   const resize = (round: (v: number) => number): void => {
-    let left = left0, right = right0, top = top0, bottom = bottom0;
+    const d = { x: lastDx, y: lastDy };
+    const probe = resizeProbe(e0, sides, d, aspect);
+    const pull = guideResize(n, probe.box, probe.edges);
+    const { left, top, right, bottom } = resizeEdges(e0, sides, d, pull, { minW, minH, aspect, round });
+    // An image card scaled down to icon size FOLDS, live; its authored w/h stay the size it unfolds to.
     if (aspect) {
-      // Image card: whichever axis the user is actually dragging drives the size (grid-snapped);
-      // the other axis is DERIVED from the image's own aspect ratio rather than dragged/snapped
-      // independently. A corner drags both — drive by whichever axis implies the bigger relative
-      // change, so the drag feels proportionate regardless of which corner is grabbed.
-      const w0 = right0 - left0, h0 = bottom0 - top0;
-      const hasX = east || west, hasY = north || south;
-      const wRaw = w0 + (east ? lastDx : -lastDx), hRaw = h0 + (south ? lastDy : -lastDy);
-      const byWidth = hasX && (!hasY || Math.abs(wRaw - w0) * h0 >= Math.abs(hRaw - h0) * w0);
-
-      // Smart guides pull the DRIVING edge only (the other follows the aspect) and win over the grid.
-      const rw = byWidth ? wRaw : hRaw * aspect, rh = byWidth ? wRaw / aspect : hRaw;
-      const pull = guideResize(n, { x: west ? right0 - rw : left0, y: north ? bottom0 - rh : top0, w: rw, h: rh },
-                               byWidth ? { x: west ? 'lo' : 'hi' } : { y: north ? 'lo' : 'hi' });
-      let w: number, h: number;
-      if (byWidth) {
-        w = Math.max(minW, pull.x != null ? wRaw + (east ? pull.x : -pull.x) : round(wRaw));
-        h = Math.max(minH, w / aspect);
-      } else {
-        h = Math.max(minH, pull.y != null ? hRaw + (south ? pull.y : -pull.y) : round(hRaw));
-        w = Math.max(minW, h * aspect);
-      }
-      left = west ? right0 - w : left0;  right = left + w;
-      top  = north ? bottom0 - h : top0; bottom = top + h;
-    } else {
-      // Smart guides pull the DRAGGED edge (features/guides.ts), read off the RAW pointer like a move's,
-      // and win over the grid on an axis where they line something up; the grid has the other axis.
-      const pull = guideResize(n, {
-        x: west ? left0 + lastDx : left0, y: north ? top0 + lastDy : top0,
-        w: (east ? right0 + lastDx : right0) - (west ? left0 + lastDx : left0),
-        h: (south ? bottom0 + lastDy : bottom0) - (north ? top0 + lastDy : top0),
-      }, { x: west ? 'lo' : east ? 'hi' : undefined, y: north ? 'lo' : south ? 'hi' : undefined });
-      const px = pull.x ?? 0, py = pull.y ?? 0;
-      const rx = pull.x != null ? (v: number): number => v : round, ry = pull.y != null ? (v: number): number => v : round;
-      if (east)  { const w = Math.max(minW, rx(right0 + lastDx + px - left0));  right = left0 + w; }
-      if (west)  { const w = Math.max(minW, rx(right0 - (left0 + lastDx + px))); left = right0 - w; }
-      if (south) { const h = Math.max(minH, ry(bottom0 + lastDy + py - top0));   bottom = top0 + h; }
-      if (north) { const h = Math.max(minH, ry(bottom0 - (top0 + lastDy + py))); top = bottom0 - h; }
-    }
-    // An image card FOLDS by being scaled down and unfolds by being scaled up — the third fold
-    // control beside the chip and `X`, and the only one that is also a size. The threshold is the icon
-    // itself: once the SHORT axis is down to IMAGE_FOLD the card is icon-sized, so it becomes one, and
-    // dragging back out past that restores it. Live, so the icon appears and goes under the cursor.
-    // While folded the authored w/h are left ALONE — they're the size it comes back to, whether that's
-    // this same drag reversing or the chip unfolding it tomorrow.
-    if (aspect) {
-      const fold = Math.min(right - left, bottom - top) <= IMAGE_FOLD;
+      const fold = foldsToIcon({ left, top, right, bottom }, IMAGE_FOLD);
       if (fold !== n.collapsed) {
         n.collapsed = fold;
       }
