@@ -21,6 +21,9 @@ function innermostSectionAt(clientX: number, clientY: number): MindNode | null {
 
 const DOUBLE_TAP_MS = 300;
 
+// Not 0: performance.now() starts at page load, so a first tap that soon would count as a double.
+const NO_TAP = -Infinity;
+
 // Longer is a pinch. Two fingers land and lift less crisply than one, hence the wider gap.
 const TWO_TAP_MS = 250, TWO_TAP_GAP_MS = 450;
 
@@ -28,7 +31,7 @@ export function bindNodeDrag(n: MindNode): void {
   const el = n.el!;
   // A double-tap edits (as dblclick); a TWO-FINGER double-tap opens (as ⌥-dblclick). A two-finger tap
   // only counts once touchend confirms it was short, since a pinch starts the same way.
-  let lastTouchTap = 0, twoDown = 0, lastTwoTap = 0, tapAt = 0;
+  let lastTouchTap = NO_TAP, twoDown = 0, lastTwoTap = NO_TAP, tapAt = 0;
   el.addEventListener('touchend', (e) => {
     if (twoDown && performance.now() - twoDown < TWO_TAP_MS) {
       lastTwoTap = performance.now();
@@ -50,17 +53,18 @@ export function bindNodeDrag(n: MindNode): void {
         e.preventDefault();
         selectAllInEditor();
       }
-      lastTouchTap = 0;
+      lastTouchTap = NO_TAP;
       return;
     }
     // A tap on a card control must not count toward a double-tap.
     const t0 = e.touches[0];
-    if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = 0; return; }
+    if (t0 && isNodeControlAt(t0.clientX, t0.clientY)) { lastTouchTap = NO_TAP; return; }
     // Two fingers never count toward the one-finger double-tap, or a pinch would leave half of one.
     if (e.touches.length === 2) {
       if (now - lastTwoTap < TWO_TAP_GAP_MS) {
         e.preventDefault();
-        lastTwoTap = 0; twoDown = 0;
+        lastTwoTap = NO_TAP;
+        twoDown = 0;
         activateNode(n, t0?.clientX ?? 0, t0?.clientY ?? 0, { open: true });
       } else {
         twoDown = now;
@@ -70,7 +74,7 @@ export function bindNodeDrag(n: MindNode): void {
     if (e.touches.length === 1 && now - lastTouchTap < DOUBLE_TAP_MS) {
       e.preventDefault(); // stop double-tap zoom and synthetic dblclick
       activateNode(n, t0.clientX, t0.clientY);
-      lastTouchTap = 0;
+      lastTouchTap = NO_TAP;
       return;
     }
     lastTouchTap = now;
